@@ -47,7 +47,6 @@ jobs:
         {
           "build": "true",
           "pyspark": "true",
-          "sparkr": "true",
           "tpcds-1g": "true",
           "docker-integration-tests": "true",
           "yarn": "true",

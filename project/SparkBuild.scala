@@ -254,7 +254,7 @@ object SparkBuild extends PomBuild {
   // `(Compile / compile)` -- a violation in one module would otherwise abort
   // compile for that module and every transitive dependent, cascading style
   // failures into every job that recompiles those sources (Build modules,
-  // Documentation generation, Java 21/25 Maven build, sparkr, ...). Each
+  // Documentation generation, Java 21/25 Maven build, ...). Each
   // cascaded job then surfaces only a generic "exit code 1" with no file/line.
   // After decoupling, the dedicated lint job is the single place style
   // violations surface, with file/line annotations from `dev/scalastyle`.
@@ -487,10 +487,6 @@ object SparkBuild extends PomBuild {
   enable(KubernetesIntegrationTests.settings)(kubernetesIntegrationTests)
 
   enable(YARN.settings)(yarn)
-
-  if (profiles.contains("sparkr")) {
-    enable(SparkR.settings)(core)
-  }
 
   /**
    * Adds the ability to run the spark shell directly from SBT without building an assembly
@@ -1251,12 +1247,6 @@ object KubernetesIntegrationTests {
             s"$sparkHome/resource-managers/kubernetes/docker/src/main/dockerfiles/spark/Dockerfile")
         val pyDockerFile = sys.props.getOrElse("spark.kubernetes.test.pyDockerFile",
             s"$bindingsDir/python/Dockerfile")
-        var rDockerFile = sys.props.getOrElse("spark.kubernetes.test.rDockerFile",
-            s"$bindingsDir/R/Dockerfile")
-        val excludeTags = sys.props.getOrElse("test.exclude.tags", "").split(",")
-        if (excludeTags.exists(_.equalsIgnoreCase("r"))) {
-          rDockerFile = ""
-        }
         val extraOptions = if (javaImageTag.isDefined) {
           Seq("-b", s"java_image_tag=${javaImageTag.get}")
         } else {
@@ -1265,8 +1255,7 @@ object KubernetesIntegrationTests {
         val cmd = Seq(dockerTool,
           "-r", imageRepo,
           "-t", imageTag.getOrElse("dev"),
-          "-p", pyDockerFile,
-          "-R", rDockerFile) ++
+          "-p", pyDockerFile) ++
           (if (deployMode != Some("minikube")) Seq.empty else Seq("-m")) ++
           extraOptions :+
           "build"
@@ -1643,26 +1632,6 @@ object PySparkAssembly {
     }
   }
 
-}
-
-object SparkR {
-  import scala.sys.process.Process
-
-  val buildRPackage = taskKey[Unit]("Build the R package")
-  lazy val settings = Seq(
-    buildRPackage := {
-      val postfix = if (File.separator == "\\") ".bat" else ".sh"
-      val command = baseDirectory.value / ".." / "R" / s"install-dev$postfix"
-      Process(command.toString).!!
-    },
-    (Compile / compile) := (Def.taskDyn {
-      val c = (Compile / compile).value
-      Def.task {
-        (Compile / buildRPackage).value
-        c
-      }
-    }).value
-  )
 }
 
 object Unidoc {

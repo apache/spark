@@ -81,7 +81,7 @@ function resolve_file {
 # uploads all of the current directory to the daemon, and it can get pretty big with dev
 # builds that contain test log files and other artifacts.
 #
-# Three build contexts are created, one for each image: base, pyspark, and sparkr. For them
+# Two build contexts are created, one for each image: base and pyspark. For them
 # to have the desired effect, the docker command needs to be executed inside the appropriate
 # context directory.
 #
@@ -119,11 +119,6 @@ function create_dev_build_context {(
   cp -r "python/lib" "$PYSPARK_CTX/python/lib"
   cp -r "python/pyspark" "$PYSPARK_CTX/python/pyspark"
 
-  local R_CTX="$CTX_DIR/sparkr"
-  mkdir -p "$R_CTX/kubernetes"
-  cp -r "resource-managers/kubernetes/docker/src/main/dockerfiles" \
-    "$R_CTX/kubernetes/dockerfiles"
-  cp -r "R" "$R_CTX/R"
 )}
 
 function img_ctx_dir {
@@ -171,7 +166,6 @@ function build {
 
   local BASEDOCKERFILE=${BASEDOCKERFILE:-"kubernetes/dockerfiles/spark/Dockerfile"}
   local PYDOCKERFILE=${PYDOCKERFILE:-false}
-  local RDOCKERFILE=${RDOCKERFILE:-false}
   local ARCHS=${ARCHS:-"--platform linux/amd64,linux/arm64"}
 
   (cd $(img_ctx_dir base) && docker build $NOCACHEARG "${BUILD_ARGS[@]}" \
@@ -199,26 +193,11 @@ function build {
           -f "$PYDOCKERFILE" .)
       fi
   fi
-
-  if [ "${RDOCKERFILE}" != "false" ]; then
-    (cd $(img_ctx_dir sparkr) && docker build $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
-      -t $(image_ref spark-r) \
-      -f "$RDOCKERFILE" .)
-    if [ $? -ne 0 ]; then
-      error "Failed to build SparkR Docker image, please refer to Docker build output for details."
-    fi
-    if [ "${CROSS_BUILD}" != "false" ]; then
-      (cd $(img_ctx_dir sparkr) && docker buildx build $ARCHS $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" --push --provenance=false \
-        -t $(image_ref spark-r) \
-        -f "$RDOCKERFILE" .)
-    fi
-  fi
 }
 
 function push {
   docker_push "spark"
   docker_push "spark-py"
-  docker_push "spark-r"
 }
 
 function usage {
@@ -235,8 +214,6 @@ Options:
   -f file               (Optional) Dockerfile to build for JVM based Jobs. By default builds the Dockerfile shipped with Spark.
   -p file               (Optional) Dockerfile to build for PySpark Jobs. Builds Python dependencies and ships with Spark.
                         Skips building PySpark docker image if not specified.
-  -R file               (Optional) Dockerfile to build for SparkR Jobs. Builds R dependencies and ships with Spark.
-                        Skips building SparkR docker image if not specified.
   -r repo               Repository address.
   -t tag                Tag to apply to the built image, or to identify the image to be pushed.
   -m                    Use minikube's Docker daemon.
@@ -288,18 +265,16 @@ REPO=
 TAG=
 BASEDOCKERFILE=
 PYDOCKERFILE=
-RDOCKERFILE=
 NOCACHEARG=
 BUILD_PARAMS=
 SPARK_UID=
 CROSS_BUILD="false"
-while getopts f:p:R:mr:t:Xnb:u: option
+while getopts f:p:mr:t:Xnb:u: option
 do
  case "${option}"
  in
  f) BASEDOCKERFILE=$(resolve_file ${OPTARG});;
  p) PYDOCKERFILE=$(resolve_file ${OPTARG});;
- R) RDOCKERFILE=$(resolve_file ${OPTARG});;
  r) REPO=${OPTARG};;
  t) TAG=${OPTARG};;
  n) NOCACHEARG="--no-cache";;

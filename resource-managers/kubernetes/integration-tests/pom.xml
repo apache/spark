@@ -195,7 +195,6 @@
             <spark.kubernetes.test.serviceAccountName>${spark.kubernetes.test.serviceAccountName}</spark.kubernetes.test.serviceAccountName>
             <spark.kubernetes.test.jvmImage>${spark.kubernetes.test.jvmImage}</spark.kubernetes.test.jvmImage>
             <spark.kubernetes.test.pythonImage>${spark.kubernetes.test.pythonImage}</spark.kubernetes.test.pythonImage>
-            <spark.kubernetes.test.rImage>${spark.kubernetes.test.rImage}</spark.kubernetes.test.rImage>
           </systemProperties>
           <tagsToExclude>${test.exclude.tags},${test.default.exclude.tags}</tagsToExclude>
           <tagsToInclude>${test.include.tags}</tagsToInclude>

@@ -684,8 +684,11 @@ HIVE_PROFILES="-Phive -Phive-thriftserver"
 # Profiles for publishing snapshots and release to Maven Central
 # We use Apache Hive 2.3 for publishing
 PUBLISH_PROFILES="$BASE_PROFILES $HIVE_PROFILES -Pspark-ganglia-lgpl -Pkinesis-asl -Pcredential-aws -Phadoop-cloud -Pjvm-profiler"
-# Profiles for building binary releases
-BASE_RELEASE_PROFILES="$BASE_PROFILES -Psparkr"
+# Profiles for building binary releases. SparkR was removed in Spark 5.0.0.
+BASE_RELEASE_PROFILES="$BASE_PROFILES"
+if [[ ! $SPARK_VERSION > "4.99" ]]; then
+  BASE_RELEASE_PROFILES="$BASE_RELEASE_PROFILES -Psparkr"
+fi
 
 if [[ $JAVA_VERSION < "1.8." ]] && [[ $SPARK_VERSION < "4.0" ]]; then
   echo "Java version $JAVA_VERSION is less than required 1.8 for 2.2+"
@@ -843,7 +846,10 @@ if [[ "$1" == "package" ]]; then
   fi
 
   declare -A BINARY_PKGS_EXTRA
-  if [[ $SPARK_VERSION > "3.5.99" ]]; then
+  if [[ $SPARK_VERSION > "4.99" ]]; then
+    # SparkR was removed in Spark 5.0.0.
+    BINARY_PKGS_EXTRA["hadoop3"]="withpip,withconnect"
+  elif [[ $SPARK_VERSION > "3.5.99" ]]; then
     # Since 4.0, we publish a new distribution with Spark Connect enable.
     BINARY_PKGS_EXTRA["hadoop3"]="withpip,withr,withconnect"
   else
@@ -884,7 +890,10 @@ if [[ "$1" == "package" ]]; then
     echo "Copying release tarballs"
     cp spark-* "svn-spark/${DEST_DIR_NAME}-bin/"
     cp pyspark* "svn-spark/${DEST_DIR_NAME}-bin/"
-    cp SparkR* "svn-spark/${DEST_DIR_NAME}-bin/"
+    # SparkR was removed in Spark 5.0.0.
+    if [[ ! $SPARK_VERSION > "4.99" ]]; then
+      cp SparkR* "svn-spark/${DEST_DIR_NAME}-bin/"
+    fi
     svn add "svn-spark/${DEST_DIR_NAME}-bin"
 
     cd svn-spark

@@ -75,11 +75,14 @@ git config user.email "$GIT_EMAIL"
 
 # Create release version
 $MVN versions:set -DnewVersion=$RELEASE_VERSION | grep -v "no value" # silence logs
-if [[ $RELEASE_VERSION != *"preview"* ]]; then
-  # Set the release version in R/pkg/DESCRIPTION
-  sed -i".tmp1" 's/Version.*$/Version: '"$RELEASE_VERSION"'/g' R/pkg/DESCRIPTION
-else
-  sed -i".tmp1" 's/-SNAPSHOT/'"-$(cut -d "-" -f 2 <<< $RELEASE_VERSION)"'/g' R/pkg/R/sparkR.R
+# SparkR was removed in Spark 5.0.0. Older branches still ship it.
+if [[ -f R/pkg/DESCRIPTION ]]; then
+  if [[ $RELEASE_VERSION != *"preview"* ]]; then
+    # Set the release version in R/pkg/DESCRIPTION
+    sed -i".tmp1" 's/Version.*$/Version: '"$RELEASE_VERSION"'/g' R/pkg/DESCRIPTION
+  else
+    sed -i".tmp1" 's/-SNAPSHOT/'"-$(cut -d "-" -f 2 <<< $RELEASE_VERSION)"'/g' R/pkg/R/sparkR.R
+  fi
 fi
 # Set the release version in docs
 sed -i".tmp1" 's/SPARK_VERSION:.*$/SPARK_VERSION: '"$RELEASE_VERSION"'/g' docs/_config.yml
@@ -94,7 +97,9 @@ git tag $RELEASE_TAG
 $MVN versions:set -DnewVersion=$NEXT_VERSION | grep -v "no value" # silence logs
 # Remove -SNAPSHOT before setting the R version as R expects version strings to only have numbers
 R_NEXT_VERSION=`echo $NEXT_VERSION | sed 's/-SNAPSHOT//g'`
-sed -i".tmp5" 's/Version.*$/Version: '"$R_NEXT_VERSION"'/g' R/pkg/DESCRIPTION
+if [[ -f R/pkg/DESCRIPTION ]]; then
+  sed -i".tmp5" 's/Version.*$/Version: '"$R_NEXT_VERSION"'/g' R/pkg/DESCRIPTION
+fi
 # Write out the R_NEXT_VERSION to PySpark version info we use dev0 instead of SNAPSHOT to be closer
 # to PEP440.
 sed -i".tmp6" 's/__version__: str = .*$/__version__: str = "'"$R_NEXT_VERSION.dev0"'"/' python/pyspark/version.py

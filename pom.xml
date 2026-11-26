@@ -3681,9 +3681,6 @@
       <id>parquet-provided</id>
     </profile>
     <profile>
-      <id>sparkr</id>
-    </profile>
-    <profile>
       <id>jjwt-provided</id>
     </profile>
     <!-- use org.openlabtesting.leveldbjni on aarch64 platform except macOS -->

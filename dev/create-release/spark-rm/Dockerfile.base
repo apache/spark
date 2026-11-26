@@ -18,7 +18,8 @@
 # Base image for building Spark releases. Based on Ubuntu 22.04.
 # This image contains common tools shared across all Spark versions:
 # - Build tools (gcc, make, etc.)
-# - R with pinned package versions
+# - R with pinned package versions (SparkR was removed in Spark 5.0.0, but older branches
+#   still build it)
 # - Ruby with bundler
 # - TeX for documentation
 # - Node.js for documentation
