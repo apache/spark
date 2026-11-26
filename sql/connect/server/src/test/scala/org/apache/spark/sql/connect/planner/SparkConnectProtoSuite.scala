@@ -1153,6 +1153,40 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     }
   }
 
+  // A streaming join keeps the key column of both sides, so a restarted query keeps the schema
+  // of its state. Fails if a Connect streaming join gets one column per name.
+  test("joinAsOf with using columns keeps both key columns for a streaming input in Connect") {
+    val streamingLeft = proto.Relation
+      .newBuilder()
+      .setRead(
+        proto.Read
+          .newBuilder()
+          .setIsStreaming(true)
+          .setDataSource(proto.Read.DataSource.newBuilder().setFormat("rate")))
+      .build()
+    val right = createLocalRelationProto(
+      attrs =
+        Seq(AttributeReference("value", LongType)(), AttributeReference("ts", TimestampType)()),
+      data = Seq.empty)
+    val relation = proto.Relation
+      .newBuilder()
+      .setAsOfJoin(
+        proto.AsOfJoin
+          .newBuilder()
+          .setLeft(streamingLeft)
+          .setRight(right)
+          .setLeftAsOf("timestamp".protoAttr)
+          .setRightAsOf("ts".protoAttr)
+          .addUsingColumns("value")
+          .setJoinType("left")
+          .setAllowExactMatches(true)
+          .setDirection("backward"))
+      .build()
+    val analyzed = spark.sessionState.executePlan(transform(relation)).analyzed
+    assert(analyzed.isStreaming)
+    assert(analyzed.output.map(_.name) == Seq("timestamp", "value", "value", "ts"))
+  }
+
   gridTest("joinAsOf with using columns returns one column per name in Connect")(for {
     singlePass <- Seq(false, true)
     sortMerge <- Seq(false, true)

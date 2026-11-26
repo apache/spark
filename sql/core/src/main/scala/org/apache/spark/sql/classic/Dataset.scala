@@ -843,10 +843,22 @@ class Dataset[T] private[sql](
       tolerance: Column,
       allowExactMatches: Boolean,
       direction: String): DataFrame = {
-    // An empty list means a join with no equality condition.
-    joinAsOfInternal(other, leftAsOf, rightAsOf, null,
-      if (usingColumns.isEmpty) None else Some(usingColumns), joinType,
-      tolerance, allowExactMatches, direction)
+    // A streaming join keeps the key column of both sides, so the state of an existing query
+    // keeps its schema when it restarts from its checkpoint.
+    if (isStreaming || other.isStreaming || sparkSession.sessionState.conf.getConf(
+        SQLConf.LEGACY_DATAFRAME_AS_OF_JOIN_KEEP_BOTH_USING_COLUMNS)) {
+      val joinConditions = usingColumns.map { name =>
+        this(name) === other(name)
+      }
+      val joinCondition = joinConditions.reduceOption(_ && _).orNull
+      joinAsOf(other, leftAsOf, rightAsOf, joinCondition, joinType,
+        tolerance, allowExactMatches, direction)
+    } else {
+      // An empty list means a join with no equality condition.
+      joinAsOfInternal(other, leftAsOf, rightAsOf, null,
+        if (usingColumns.isEmpty) None else Some(usingColumns), joinType,
+        tolerance, allowExactMatches, direction)
+    }
   }
 
   // Moves each column of a key from its Dataset's plan onto the same column of its join input.

@@ -290,6 +290,31 @@ class DataFrameAsOfJoinSuite extends SharedSparkSession
       }
   }
 
+  // Fails if the legacy flag no longer gives the old output: the key column of both sides.
+  gridTest("usingColumns with the legacy flag equals the join on key equality")(asOfConfs) {
+    case (singlePass, sortMerge, ansi) =>
+      withAsOfConf(singlePass, sortMerge, ansi) {
+        withSQLConf(SQLConf.LEGACY_DATAFRAME_AS_OF_JOIN_KEEP_BOTH_USING_COLUMNS.key -> "true") {
+          val (trades, quotes) = prepareTradesQuotes()
+          for (joinType <- Seq("inner", "left")) {
+            withClue(s"$joinType: ") {
+              val df = usingJoin(trades, quotes, Seq("sym", "ex"), joinType)
+              val equality = trades.joinAsOf(
+                quotes, trades.col("ts"), quotes.col("ts"),
+                joinExprs = trades.col("sym") === quotes.col("sym") &&
+                  trades.col("ex") === quotes.col("ex"),
+                joinType = joinType, tolerance = null, allowExactMatches = true,
+                direction = "backward")
+              assert(df.columns.toSeq ==
+                Seq("ts", "sym", "ex", "qty", "ts", "sym", "ex", "bid"))
+              assert(df.schema == equality.schema)
+              assert(sortedRows(df) == sortedRows(equality))
+            }
+          }
+        }
+      }
+  }
+
   // Fails with AMBIGUOUS_REFERENCE if the output keeps the key of both sides.
   gridTest("usingColumns, a parent selects, filters and groups by the key")(asOfConfs) {
     case (singlePass, sortMerge, ansi) =>

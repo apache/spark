@@ -3138,8 +3138,8 @@ class DataFrame:
         [Row(a=1, left_val='a', right_val=1),
          Row(a=5, left_val='b', right_val=6)]
 
-        A join on column names returns each of these columns once, first, as in SQL
-        ``ASOF JOIN ... USING``.
+        A batch join on column names returns each of these columns once, first, as in SQL
+        ``ASOF JOIN ... USING``. A join with a streaming side keeps the column of both sides.
 
         >>> left_k = spark.createDataFrame([(1, "x"), (5, "y")], ["a", "k"])
         >>> right_k = spark.createDataFrame([(1, "x", 1), (3, "y", 2)], ["a", "k", "v"])
