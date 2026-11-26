@@ -930,23 +930,43 @@ object RemoveNoopUnion extends Rule[LogicalPlan] {
  */
 object LimitPushDown extends Rule[LogicalPlan] {
 
-  private def stripGlobalLimitIfPresent(plan: LogicalPlan): LogicalPlan = {
+  // A GlobalLimit over unordered rows can keep any of them, so a smaller LocalLimit can replace it.
+  // Over a global Sort it keeps the top rows, but a LocalLimit keeps the first rows of each
+  // partition, so it stays. A caller that only needs to know whether `plan` is empty can drop it.
+  private def stripGlobalLimitIfPresent(
+      plan: LogicalPlan,
+      keepOrderedLimit: Boolean = true): LogicalPlan = {
     plan match {
+      case GlobalLimit(_, child)
+          if keepOrderedLimit && child.containsPattern(SORT) && outputsGlobalSortOrder(child) =>
+        plan
       case GlobalLimit(_, child) => child
       case _ => plan
     }
   }
 
-  private def maybePushLocalLimit(limitExp: Expression, plan: LogicalPlan): LogicalPlan = {
+  // Whether `plan` outputs the rows of a global Sort in the sort order.
+  private def outputsGlobalSortOrder(plan: LogicalPlan): Boolean = plan match {
+    case s: Sort => s.global
+    case p: OrderPreservingUnaryNode => outputsGlobalSortOrder(p.child)
+    // A Python UDF evaluation returns each row in the order it read it.
+    case p: BaseEvalPython => outputsGlobalSortOrder(p.child)
+    case _ => false
+  }
+
+  private def maybePushLocalLimit(
+      limitExp: Expression,
+      plan: LogicalPlan,
+      keepOrderedLimit: Boolean = true): LogicalPlan = {
     (limitExp, plan.maxRowsPerPartition) match {
       case (IntegerLiteral(newLimit), Some(childMaxRows)) if newLimit < childMaxRows =>
         // If the child has a cap on max rows per partition and the cap is larger than
         // the new limit, put a new LocalLimit there.
-        LocalLimit(limitExp, stripGlobalLimitIfPresent(plan))
+        LocalLimit(limitExp, stripGlobalLimitIfPresent(plan, keepOrderedLimit))
 
       case (_, None) =>
         // If the child has no cap, put the new LocalLimit.
-        LocalLimit(limitExp, stripGlobalLimitIfPresent(plan))
+        LocalLimit(limitExp, stripGlobalLimitIfPresent(plan, keepOrderedLimit))
 
       case _ =>
         // Otherwise, don't put a new LocalLimit.
@@ -1015,9 +1035,10 @@ object LimitPushDown extends Rule[LogicalPlan] {
     // Merge offset value and limit value into LocalLimit and pushes down LocalLimit through Offset.
     case LocalLimit(le, Offset(oe, grandChild)) =>
       Offset(oe, LocalLimit(Add(le, oe), grandChild))
-    // Push down local limit 1 if join type is LeftSemiOrAnti and join condition is empty.
+    // Push down local limit 1 if join type is LeftSemiOrAnti and join condition is empty. Only
+    // whether the right side is empty matters, so its GlobalLimit can go even over a Sort.
     case j @ Join(_, right, LeftSemiOrAnti(_), None, _) if !right.maxRows.exists(_ <= 1) =>
-      j.copy(right = maybePushLocalLimit(Literal(1, IntegerType), right))
+      j.copy(right = maybePushLocalLimit(Literal(1, IntegerType), right, keepOrderedLimit = false))
     // Push down limits through Python UDFs.
     case LocalLimit(le, udf: BatchEvalPython) =>
       LocalLimit(le, udf.copy(child = maybePushLocalLimit(le, udf.child)))

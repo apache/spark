@@ -17,14 +17,16 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Add, GenericInternalRow}
+import org.apache.spark.sql.catalyst.expressions.{Add, AttributeReference, GenericInternalRow, PythonUDF}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.types.IntegerType
 
 class LimitPushdownSuite extends PlanTest {
 
@@ -354,6 +356,83 @@ class LimitPushdownSuite extends PlanTest {
 
       comparePlans(Optimize.execute(originalQuery1), originalQuery1)
       comparePlans(Optimize.execute(originalQuery2), originalQuery2)
+    }
+  }
+
+  // A GlobalLimit over a global Sort keeps the top rows. A LocalLimit keeps the first rows of each
+  // partition, so it cannot replace that GlobalLimit.
+  private def top5 = testRelation.orderBy($"a".asc).limit(5)
+
+  test("SPARK-62092: Union keeps the GlobalLimit over a global Sort") {
+    val originalQuery = Union(top5, testRelation2).limit(3)
+    val correctAnswer =
+      Limit(3, Union(LocalLimit(3, top5), LocalLimit(3, testRelation2))).analyze
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
+  }
+
+  test("SPARK-62092: outer join keeps the GlobalLimit over a global Sort on the outer side") {
+    val condition = Some("x.a".attr === "y.a".attr)
+    comparePlans(
+      Optimize.execute(top5.subquery("x").join(y, LeftOuter, condition).limit(3).analyze),
+      Limit(3, LocalLimit(3, top5.subquery("x")).join(y, LeftOuter, condition)).analyze)
+    comparePlans(
+      Optimize.execute(x.join(top5.subquery("y"), RightOuter, condition).limit(3).analyze),
+      Limit(3, x.join(LocalLimit(3, top5.subquery("y")), RightOuter, condition)).analyze)
+  }
+
+  test("SPARK-62092: the GlobalLimit stays when a Project or Filter sits above the Sort") {
+    val projected = testRelation.orderBy($"a".asc).select($"a", $"b").limit(5)
+    val filtered = testRelation.orderBy($"a".asc).where($"b" > 0).limit(5)
+    Seq(
+      (projected, testRelation2.select($"d", $"e")),
+      (filtered, testRelation2)).foreach { case (child, other) =>
+      comparePlans(
+        Optimize.execute(Union(child, other).limit(3).analyze),
+        Limit(3, Union(LocalLimit(3, child), LocalLimit(3, other))).analyze)
+    }
+  }
+
+  test("SPARK-62092: Python UDF input keeps the GlobalLimit over a global Sort") {
+    val child = top5.analyze
+    val udf = PythonUDF("pythonUDF", null, IntegerType, Seq(child.output.head),
+      PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
+    val result = AttributeReference("f", IntegerType)()
+    comparePlans(
+      Optimize.execute(Limit(3, BatchEvalPython(Seq(udf), child.output, Seq(result), child))
+        .analyze),
+      Limit(3, BatchEvalPython(
+        Seq(udf), child.output, Seq(result), LocalLimit(3, child))).analyze)
+  }
+
+  test("SPARK-62092: the GlobalLimit stays when a Python UDF sits between the limit and the Sort") {
+    val sorted = testRelation.orderBy($"a".asc).analyze
+    val udf = PythonUDF("pythonUDF", null, IntegerType, Seq(sorted.output.head),
+      PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
+    val result = AttributeReference("f", IntegerType)()
+    def evalPython(child: LogicalPlan): LogicalPlan =
+      BatchEvalPython(Seq(udf), sorted.output, Seq(result), child)
+    // The UDF rule also puts a LocalLimit under the UDF.
+    val kept = GlobalLimit(5, LocalLimit(5, evalPython(LocalLimit(5, sorted))))
+    comparePlans(
+      Optimize.execute(Union(Limit(5, evalPython(sorted)), Limit(5, evalPython(sorted)))
+        .limit(3).analyze),
+      Limit(3, Union(LocalLimit(3, kept), LocalLimit(3, kept))).analyze)
+  }
+
+  test("SPARK-62092: the GlobalLimit is still removed over a local Sort") {
+    val localSort = testRelation.sortBy($"a".asc).limit(5)
+    comparePlans(
+      Optimize.execute(Union(localSort, testRelation2).limit(3).analyze),
+      Limit(3, Union(
+        LocalLimit(3, testRelation.sortBy($"a".asc)),
+        LocalLimit(3, testRelation2))).analyze)
+  }
+
+  test("SPARK-62092: only emptiness of a LEFT SEMI/ANTI right side matters, so its limit goes") {
+    Seq(LeftSemi, LeftAnti).foreach { joinType =>
+      comparePlans(
+        Optimize.execute(x.join(top5, joinType).analyze),
+        x.join(LocalLimit(1, testRelation.orderBy($"a".asc)), joinType).analyze)
     }
   }
 }
