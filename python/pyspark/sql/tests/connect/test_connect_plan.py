@@ -1254,6 +1254,16 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         with self.assertRaises(ValueError):
             wo.command(None)
 
+    def test_write_operation_error_mode_aliases(self):
+        wo = WriteOperation(self.connect.readTable("name")._plan)
+        for mode in ("error", "errorifexists", "default", "ErrorIfExists"):
+            with self.subTest(mode=mode):
+                wo.mode = mode
+                self.assertEqual(
+                    wo.command(None).write_operation.mode,
+                    proto.WriteOperation.SaveMode.SAVE_MODE_ERROR_IF_EXISTS,
+                )
+
     def test_column_regexp(self):
         # SPARK-41438: test colRegex
         df = self.connect.readTable(table_name=self.tbl_name)

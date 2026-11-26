@@ -2243,7 +2243,7 @@ class WriteOperation(LogicalPlan):
                 plan.write_operation.mode = proto.WriteOperation.SaveMode.SAVE_MODE_APPEND
             elif wm == "overwrite":
                 plan.write_operation.mode = proto.WriteOperation.SaveMode.SAVE_MODE_OVERWRITE
-            elif wm == "error":
+            elif wm in ("error", "errorifexists", "default"):
                 plan.write_operation.mode = proto.WriteOperation.SaveMode.SAVE_MODE_ERROR_IF_EXISTS
             elif wm == "ignore":
                 plan.write_operation.mode = proto.WriteOperation.SaveMode.SAVE_MODE_IGNORE
