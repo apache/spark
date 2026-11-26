@@ -27,7 +27,6 @@ import scala.util.Success
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparableWrapper}
 import org.apache.spark.sql.connector.catalog.functions.Reducer
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -1307,9 +1306,14 @@ object KeyedPartitioning {
   }
 
   def supportsExpressions(expressions: Seq[Expression]): Boolean = {
-    def isSupportedTransform(transform: TransformExpression): Boolean = {
-      transform.children.size == 1 && isReference(transform.children.head)
-    }
+    // Exactly one column argument, a plain column reference, and an identity
+    // (`TransformExpression.functionId`): a partitioning by a transform that cannot be told apart
+    // from another could be merged with one's, e.g. by a union.
+    def isSupportedTransform(transform: TransformExpression): Boolean =
+      transform.functionId.isDefined && (transform.columnSlots match {
+        case Seq(col) => isReference(col)
+        case _ => false
+      })
 
     @tailrec
     def isReference(e: Expression): Boolean = e match {
@@ -2440,9 +2444,9 @@ case class KeyedShuffleSpec(
   }
 
   /**
-   * Whether every argument of `transform` is a bare column. `isExpressionCompatible` asks it of
-   * both sides before it compares anything, `canCreatePartitioning` asks it of a template, and
-   * `rebuiltOver` asserts it.
+   * Whether every argument of `transform` other than its literal parameters is a bare column.
+   * `isExpressionCompatible` asks it of both sides before it compares anything,
+   * `canCreatePartitioning` asks it of a template, and `rebuiltOver` asserts it.
    *
    * `keyPositions` pairs two sides up by the column each expression references. That pairing
    * describes one key space when the argument is the column itself. `bucket(4, b + 1)` is a
@@ -2456,7 +2460,7 @@ case class KeyedShuffleSpec(
    * can overflow.
    */
   private def argumentsAreColumns(transform: TransformExpression): Boolean =
-    transform.children.forall(_.isInstanceOf[Attribute])
+    transform.columnSlots.forall(_.isInstanceOf[Attribute])
 
   /**
    * Whether Spark can evaluate `transform`, see `TransformExpression.evaluableFunction`. An
@@ -2480,25 +2484,27 @@ case class KeyedShuffleSpec(
   }
 
   /**
-   * `transform`, whose arguments are bare columns, with each replaced by `key`, which may be any
-   * expression. Any other argument would lose what surrounds its column, e.g. the `+ 1` of
-   * `bucket(4, b + 1)`.
+   * `transform`, whose arguments other than its literal parameters are bare columns, with each
+   * replaced by `key`, which may be any expression. Any other argument would lose what surrounds
+   * its column, e.g. the `+ 1` of `bucket(4, b + 1)`.
    */
   private def rebuiltOver(transform: TransformExpression, key: Expression)
       : TransformExpression = {
     assert(argumentsAreColumns(transform), s"Cannot rebuild $transform over $key")
-    transform.copy(children = transform.children.map(_ => key))
+    transform.rewriteColumnSlots(_ => key)
   }
 
   /**
-   * The arguments of a transform with their one column replaced by a placeholder of its type, or
-   * `None` when they reference other than one column or are not deterministic, or `expression` is
-   * not a transform. Two transforms with the same function and shape are the same function of
-   * their columns, so a join that pairs the columns up pairs the keys up too.
+   * The arguments of a transform other than its literal parameters, each with its column replaced
+   * by a placeholder (`TransformExpression.expressionShape`, the normalization identity uses too),
+   * or `None` when they reference other than one column between them, one has no shape, or
+   * `expression` is not a transform. Two transforms with the same function and shape are the same
+   * function of their columns, so a join that pairs the columns up pairs the keys up too.
    */
   private def argumentShape(expression: Expression): Option[Seq[Expression]] = expression match {
-    case t: TransformExpression if t.references.size == 1 && t.deterministic =>
-      Some(t.children.map(QueryPlan.normalizeExpressions(_, t.references.toSeq)))
+    case t: TransformExpression if t.references.size == 1 =>
+      val shapes = t.columnSlots.map(TransformExpression.expressionShape)
+      if (shapes.forall(_.isDefined)) Some(shapes.flatten) else None
     case _ => None
   }
 
@@ -2515,10 +2521,9 @@ case class KeyedShuffleSpec(
 
   /**
    * Compute the reducers for both sides of a join between this shuffle spec and `other`, in a
-   * single pass over the two sides' partition expressions. A pair's reducer lookups
-   * (`TransformExpression.reducers`) are shared between the two directions: the reverse lookup a
-   * direction needs to detect a single-side reduce is exactly the other direction's reducer, so
-   * this materializes each catalog `Reducer` once per direction.
+   * single pass over the two sides' partition expressions. A pair's reducers come from one call,
+   * `TransformExpression.pairReducers`, which decides both directions together: the reverse lookup
+   * a direction needs to detect a single-side reduce is exactly the other direction's reducer.
    * <p>
    * A [[Reducer]] exists for a partition expression of one side if it is 'reducible' on the
    * corresponding partition expression of the other side. If a side's value is returned, there
@@ -2549,9 +2554,10 @@ case class KeyedShuffleSpec(
           if TransformExpression.hasReducedKeys(e1) || TransformExpression.hasReducedKeys(e2) =>
         (None, None)
 
+      // A reducer in one direction with no answer from the other makes the pair not reducible,
+      // and so does a side with no identity, see `pairReducers`.
       case (e1: TransformExpression, e2: TransformExpression) =>
-        val thisReducer = e1.reducers(e2)
-        val otherReducer = e2.reducers(e1)
+        val (thisReducer, otherReducer) = e1.pairReducers(e2)
 
         val thisResult = thisReducer.map { reducer =>
           if (otherReducer.isEmpty) {
@@ -2691,14 +2697,19 @@ case class KeyedShuffleSpec(
           .map((_, Option.empty[Throwable]))
           .orElse(t.isEvaluableQuietly match {
             case Success(true) => None
-            case evaluable => Some((t.children.head, evaluable.failed.toOption))
+            // The key the transform was rebuilt over is its column argument; its other children
+            // are literal parameters.
+            case evaluable => Some((t.columnSlots.head, evaluable.failed.toOption))
           })
           .foreach { case (key, cause) =>
             // `name()` and `inputTypes()` are connector code, which must not replace this error.
             val functionClass = t.function.getClass.getName
             val name = TransformExpression.orElse(t.function.name(), functionClass)
             throw QueryExecutionErrors.storagePartitionJoinKeyTypeMismatchError(
-              t.numBucketsOpt.fold(name)(n => s"$name($n)"),
+              t.literalChildren.map(_.sql) match {
+                case Seq() => name
+                case params => s"$name(${params.mkString(", ")})"
+              },
               columnType,
               TransformExpression.orElse(t.function.inputTypes().toSeq, Nil),
               key,

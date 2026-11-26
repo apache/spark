@@ -148,10 +148,12 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       findExpressionAndTrackLineageDown(key, plan).flatMap {
         case (column: Attribute, scan: DataSourceV2ScanRelation) =>
           scan.keyGroupedPartitioning.collect {
-            case Seq(t @ TransformExpression(_, Seq(child), _, _, _))
-                if child.semanticEquals(column) && t.function.isDeterministic &&
-                  t.evaluableFunction.isDefined =>
-              t.copy(children = Seq(key))
+            // A transform's literal parameters, e.g. a bucket count, are children too, so match
+            // its one column argument and rebuild over `key` keeping them.
+            case Seq(t: TransformExpression)
+                if t.columnSlots.size == 1 && t.columnSlots.head.semanticEquals(column) &&
+                  t.function.isDeterministic && t.evaluableFunction.isDefined =>
+              t.rewriteColumnSlots(_ => key)
           }
         case _ => None
       }

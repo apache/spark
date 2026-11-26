@@ -23,12 +23,13 @@ import org.apache.spark.{SparkArithmeticException, SparkException, SparkFunSuite
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, TypeCoercion}
+import org.apache.spark.sql.catalyst.encoders.{ExamplePoint, ExamplePointUDT}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData, IntervalUtils}
-import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, ScalarFunction}
+import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, Reducer, ReducibleFunction, ScalarFunction}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{ArrayType, BinaryType, DataType, DataTypeTestUtils, DateType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, IntegerType, LongType, MapType, ShortType, StringType, StructType, TimestampFamily, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType, TimeType, UserDefinedType, VarcharType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, DataType, DataTypeTestUtils, DateType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, MapType, ShortType, StringType, StructField, StructType, TimestampFamily, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType, TimeType, UserDefinedType, VarcharType, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
 
 class TransformExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -58,7 +59,7 @@ class TransformExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   private val b = AttributeReference("b", IntegerType)()
 
   private def bucket(function: BoundFunction, child: Expression, numBuckets: Int = 4) =
-    TransformExpression(function, Seq(child), Some(numBuckets))
+    TransformExpression(function, Seq(Literal(numBuckets), child))
 
   test("SPARK-58769: expression equality follows the function's own equals") {
     // Spark does not derive transform identity itself -- it defers to the connector, because only
@@ -84,8 +85,9 @@ class TransformExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("SPARK-58769: the two comparisons agree for a function that follows the contract") {
     // `equals` is the finer comparison and the canonical name the coarser one, so a function that
     // overrides both answers both consistently. They still differ in what they take into account:
-    // `isSameFunction` ignores the arguments, because a join compares bucket(4, left.id) against
-    // bucket(4, right.id) and recovers the positions separately, while equality does not.
+    // `isSameFunction` ignores which column an argument is, because a join compares
+    // bucket(4, left.id) against bucket(4, right.id) and recovers the positions separately, while
+    // equality does not. It still compares the literals and the arguments' shapes.
     val left = bucket(new ComparableFunction, a)
     val right = bucket(new ComparableFunction, b)
     assert(left.function ne right.function, "the fixture must use distinct function instances")
@@ -124,6 +126,198 @@ class TransformExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(!left.hasSameReducedKeys(b12), "an unreduced side never shares one")
     assert(!b12.hasSameReducedKeys(left))
     assert(!b12.hasSameReducedKeys(b8), "nor do two unreduced ones")
+  }
+
+  test("SPARK-50593: a floating point parameter leaves a transform with no identity") {
+    // `Literal` equals 0.0 and -0.0, and every NaN, while a function can tell them apart. So a
+    // transform with such a parameter is not the same as any other, itself included.
+    val fn = new NamedFunction("test.scale")
+    def t(p: Any, dataType: DataType): TransformExpression =
+      TransformExpression(fn, Seq(a, Literal(p, dataType)))
+    assert(t(0.0, DoubleType).functionId.isEmpty && t(0.0f, FloatType).functionId.isEmpty)
+    assert(t(1.5, DoubleType).functionId.isEmpty, "the type decides, not the value")
+    val nested = Literal.create(Seq(0.0), ArrayType(DoubleType))
+    assert(TransformExpression(fn, Seq(a, nested)).functionId.isEmpty)
+    // Also behind a UDT, whose values are stored as its underlying type.
+    val point = new ExamplePointUDT
+    val udtParam = Literal.create(point.serialize(new ExamplePoint(0.0, 1.0)), point)
+    assert(TransformExpression(fn, Seq(a, udtParam)).functionId.isEmpty)
+    assert(!t(0.0, DoubleType).isSameFunction(t(-0.0, DoubleType)))
+    assert(!t(1.5, DoubleType).isSameFunction(t(1.5, DoubleType)))
+    assert(t(2, IntegerType).isSameFunction(t(2, IntegerType)), "other types keep their identity")
+    // Nor is it reduced, whichever entry point asks: the connector is never asked about it.
+    var asked = 0
+    val reducible = new ScalarFunction[Int] with ReducibleFunction[Int, Int] {
+      override def inputTypes(): Array[DataType] = Array(IntegerType, DoubleType)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "test.reducible_scale"
+      override def canonicalName(): String = name()
+      override def reducer(
+          thisParams: Array[org.apache.spark.sql.connector.expressions.Literal[_]],
+          otherFunction: ReducibleFunction[_, _],
+          otherParams: Array[org.apache.spark.sql.connector.expressions.Literal[_]])
+          : Reducer[Int, Int] = { asked += 1; null }
+    }
+    def r(p: Double): TransformExpression =
+      TransformExpression(reducible, Seq(a, Literal(p, DoubleType)))
+    assert(r(0.0).pairReducers(r(-0.0)) == ((None, None)) && r(0.0).reducers(r(-0.0)).isEmpty)
+    assert(asked == 0)
+  }
+
+  test("SPARK-50593: a transform is not rebuilt over a literal") {
+    // A literal child reads as a parameter, so a column argument rebuilt as one would leave the
+    // transform with no column; that fails with a clear error rather than later.
+    val e = intercept[SparkException](bucket(new NamedFunction("test.bucket"), a)
+      .rewriteColumnSlots(_ => Literal(1)))
+    assert(e.getCondition == "INTERNAL_ERROR" && e.getMessage.contains("over the literal 1"), e)
+  }
+
+  test("SPARK-50593: rewriting a reduced transform's column keeps its partner's shape in step") {
+    // A broadcast join's key expansion, or an alias projection, rewrites a reduced member's column
+    // through withNewChildren. Both sides of one reduce are rewritten the same way, so they must
+    // still share a key space, and a member over the expression must not share one with a member
+    // over the column.
+    val fn = new NamedFunction("test.bucket")
+    val x = AttributeReference("x", IntegerType)()
+    val z = AttributeReference("z", IntegerType)()
+    val left = bucket(fn, a, 8).reducedTogetherWith(bucket(fn, b, 12))
+    val right = bucket(fn, b, 12).reducedTogetherWith(bucket(fn, a, 8))
+    assert(left.hasSameReducedKeys(right), "test setup")
+    def over(t: TransformExpression, from: Expression, to: Expression): TransformExpression =
+      t.transform { case e if e == from => to }.asInstanceOf[TransformExpression]
+    val leftPlusOne = over(left, a, Add(x, Literal(1)))
+    val rightPlusOne = over(right, b, Add(z, Literal(1)))
+    assert(leftPlusOne.hasSameReducedKeys(rightPlusOne))
+    assert(!leftPlusOne.hasSameReducedKeys(right))
+  }
+
+  test("SPARK-50593: hasSameReducedKeys discriminates non-bucket (truncate-style) reductions") {
+    // Truncate reductions onto different key spaces must not compare equal: 3 with 5 lands on
+    // lcm 15, and 7 with 11 on lcm 77. They would if identity ignored the width.
+    val fn = new NamedFunction("test.truncate")
+    def truncate(width: Int): TransformExpression = bucket(fn, a, width)
+
+    val trunc3x5 = truncate(3).reducedTogetherWith(truncate(5))
+    val trunc5x3 = truncate(5).reducedTogetherWith(truncate(3))
+    val trunc7x11 = truncate(7).reducedTogetherWith(truncate(11))
+
+    assert(trunc3x5.hasSameReducedKeys(trunc5x3), "the two sides of one reduce share their space")
+    assert(!trunc3x5.hasSameReducedKeys(trunc7x11),
+      "different truncate widths must reduce onto different key spaces")
+    assert(!trunc7x11.hasSameReducedKeys(trunc3x5), "and symmetrically")
+  }
+  test("SPARK-50593: transform identity is per-argument-position, not a bag of literals") {
+    // `KeyedPartitioning.supportsExpressions` requires one *column* child, not one child, so a
+    // multi-argument transform reaches identity comparison. If identity collected only the literal
+    // values and dropped their positions, `truncate(col, 2)` and `truncate(2, col)` would share a
+    // TransformFunctionId: `isSameFunction` would answer true, `isCompatible` would short-circuit
+    // on it, and `sameArgumentLayout` -- the guard that exists for exactly this -- would never run,
+    // because it only executes inside `reducerOutcome`. The pair would then be treated as lined up
+    // as it stands and joined with no reduce, pairing partitions that do not hold the same rows.
+    val fn = new NamedFunction("test.truncate")
+    val colThenLit = TransformExpression(fn, Seq(a, Literal(2)))
+    val litThenCol = TransformExpression(fn, Seq(Literal(2), b))
+
+    assert(colThenLit.functionId != litThenCol.functionId,
+      "a literal in a different argument position is a different identity")
+    assert(!colThenLit.isSameFunction(litThenCol),
+      "differing argument layouts are not the same function")
+    assert(!litThenCol.isSameFunction(colThenLit), "and symmetrically")
+    assert(!colThenLit.isCompatible(litThenCol),
+      "isCompatible must not short-circuit two differing layouts into compatible")
+
+    // Same layout, different column: still the same function -- column identity is reconciled
+    // separately, through `keyPositions`.
+    assert(colThenLit.isSameFunction(TransformExpression(fn, Seq(b, Literal(2)))))
+    // Same layout, different literal: still distinguished.
+    assert(!colThenLit.isSameFunction(TransformExpression(fn, Seq(a, Literal(3)))))
+    // A zero-argument transform is unaffected.
+    val days = new NamedFunction("test.days")
+    assert(TransformExpression(days, Seq(a)).isSameFunction(TransformExpression(days, Seq(b))))
+
+    // Nested transforms are compared recursively: the same outer function and literal over a
+    // different inner transform is not the same function, although both literal lists are [4].
+    val years = new NamedFunction("test.years")
+    val outer = new NamedFunction("test.bucket")
+    val overYears = bucket(outer, TransformExpression(years, Seq(a)))
+    val overDays = bucket(outer, TransformExpression(days, Seq(a)))
+    assert(!overYears.isSameFunction(overDays), "nested transforms must be compared recursively")
+    assert(overYears.isSameFunction(bucket(outer, TransformExpression(years, Seq(b)))),
+      "the same nested function over a different column is still the same function")
+
+    // An expression argument is compared by its shape: `a + 1` and `b + 1` are the same function of
+    // their columns, while `a + 1` and `a + 2`, or `a + 1` and a bare column, are not.
+    assert(bucket(outer, Add(a, Literal(1))).isSameFunction(bucket(outer, Add(b, Literal(1)))))
+    assert(!bucket(outer, Add(a, Literal(1))).isSameFunction(bucket(outer, Add(a, Literal(2)))))
+    assert(!bucket(outer, Add(a, Literal(1))).isSameFunction(bucket(outer, a)))
+  }
+
+  test("SPARK-50593: hasSameReducedKeys tells nested transforms apart, like isSameFunction") {
+    // A nested transform is part of the identity, so bucket(4, years(c)) and bucket(4, days(c))
+    // reduce onto different key spaces, just as isSameFunction tells them apart.
+    val outer = new NamedFunction("test.bucket")
+    val years = new NamedFunction("test.years")
+    val days = new NamedFunction("test.days")
+    val partner = bucket(outer, a, 8)
+    val overYears = bucket(outer, TransformExpression(years, Seq(a)))
+    val overDays = bucket(outer, TransformExpression(days, Seq(a)))
+
+    assert(!overYears.isSameFunction(overDays))
+    assert(!overYears.reducedTogetherWith(partner)
+      .hasSameReducedKeys(overDays.reducedTogetherWith(partner)),
+      "a different nested transform is a different reduced key space")
+    assert(overYears.reducedTogetherWith(partner)
+      .hasSameReducedKeys(
+        bucket(outer, TransformExpression(years, Seq(b))).reducedTogetherWith(partner)),
+      "the same nested transform over another column is the same key space")
+  }
+
+  test("SPARK-50593: a transform with an argument over two columns has no identity") {
+    val fn = new NamedFunction("test.bucket")
+    val plusOne = bucket(fn, Add(a, b))
+    assert(plusOne.functionId.isEmpty)
+    assert(!plusOne.isSameFunction(plusOne), "never the same, not even as itself")
+    // Nesting one inside a transform takes the identity away from the outer one too.
+    val nested = bucket(fn, TransformExpression(fn, Seq(Add(a, b))))
+    assert(nested.functionId.isEmpty)
+    // One column, however wrapped, has an identity.
+    assert(bucket(fn, Add(a, a)).functionId.isDefined)
+
+    // Recording a reduce needs an identity on both sides: reducedWith stores the partner's, and
+    // silently skipping the mark would report reduced keys as raw. So it fails loudly.
+    val ok = bucket(fn, a, 8)
+    Seq(() => plusOne.reducedTogetherWith(ok), () => ok.reducedTogetherWith(plusOne)).foreach { f =>
+      val e = intercept[SparkException](f())
+      assert(e.getMessage.contains("without an identity"))
+    }
+  }
+
+  test("SPARK-50593: isSameFunction and hasSameReducedKeys agree on every pair") {
+    // The two questions are answered from one value, `functionId`. Pin that they cannot drift:
+    // for every pair of transforms that have an identity, "same function" and "reduced onto the
+    // same key space with the same partner" must give the same answer.
+    val bucketFn = new NamedFunction("test.bucket")
+    val truncFn = new NamedFunction("test.truncate")
+    val years = new NamedFunction("test.years")
+    val days = new NamedFunction("test.days")
+    val s = AttributeReference("s", StructType(Seq(StructField("f", IntegerType))))()
+    val shapes: Seq[TransformExpression] = Seq(
+      bucket(bucketFn, a, 4), bucket(bucketFn, b, 4), bucket(bucketFn, a, 8),
+      TransformExpression(truncFn, Seq(a, Literal(2))),
+      TransformExpression(truncFn, Seq(Literal(2), b)),
+      TransformExpression(truncFn, Seq(a, Literal(3))),
+      bucket(bucketFn, GetStructField(s, 0)),
+      bucket(bucketFn, TransformExpression(years, Seq(a))),
+      bucket(bucketFn, TransformExpression(days, Seq(b))),
+      TransformExpression(years, Seq(a)), TransformExpression(days, Seq(a)))
+    assert(shapes.forall(_.functionId.isDefined), "the fixture needs identities throughout")
+    val partner = bucket(bucketFn, a, 16)
+    for (x <- shapes; y <- shapes) {
+      val sameFunction = x.isSameFunction(y)
+      val sameKeys =
+        x.reducedTogetherWith(partner).hasSameReducedKeys(y.reducedTogetherWith(partner))
+      assert(sameFunction == sameKeys, s"disagree on $x vs $y: $sameFunction vs $sameKeys")
+    }
   }
 
   test("SPARK-60027: eval casts only a narrower numeric argument to the function's input type") {
@@ -168,7 +362,7 @@ class TransformExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       bucket(intBucket, Literal(7L)),
       bucket(longBucket, Literal("7")),
       TransformExpression(longBucket, Seq(Literal(7L))),
-      TransformExpression(longBucket, Seq(Literal(7L), Literal(7L)), Some(4))
+      TransformExpression(longBucket, Seq(Literal(4), Literal(7L), Literal(7L)))
     ).foreach { transform =>
       assert(transform.evaluableFunction.isEmpty, transform)
       intercept[SparkException](transform.eval(InternalRow.empty))
@@ -296,7 +490,7 @@ class TransformExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         DayTimeIntervalType(0, 1), 5L, structField, false)
     ).foreach { case (what, argumentType, declared, value, read, taken) =>
       val argument = BoundReference(0, argumentType, nullable = true)
-      val transform = TransformExpression(function(declared)(read), Seq(argument), Some(4))
+      val transform = bucket(function(declared)(read), argument)
       assert(transform.evaluableFunction.isDefined == taken, what)
       if (taken) {
         val unsafe = UnsafeProjection.create(Seq(argument)).apply(InternalRow(value))
@@ -424,10 +618,10 @@ class TransformExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       marked.toString)
     assert(!transform.toString.contains("None") && !transform.toString.contains("false"),
       transform.toString)
-    // A set `reducedWith` prints as master printed it.
+    // A set `reducedWith` prints the partner's identity, its name and argument shapes.
     val reduced = transform.reducedTogetherWith(bucket(new NamedFunction("other"), a, 2))
-    assert(reduced.toString.endsWith(", Some(TransformFunctionId(other,Some(2))))"),
-      reduced.toString)
+    assert(reduced.toString.endsWith(
+      ", Some(TransformFunctionId(other,List(Param(2), ColumnRef))))"), reduced.toString)
   }
 
   test("SPARK-60027: cogroup keys are stored alike when their key rows compare alike") {
@@ -778,8 +972,9 @@ class TransformExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     val appender = new LogAppender("a method that cannot be invoked over cast arguments")
     appender.setThreshold(Level.DEBUG)
     withLogAppender(appender, loggerNames = transformLogger, level = Some(Level.DEBUG)) {
-      assert(TransformExpression(withInvoke, Seq(BoundReference(0, ShortType, nullable = true),
-        BoundReference(1, udt, nullable = true)), Some(4)).evaluableFunction.isEmpty)
+      assert(TransformExpression(withInvoke, Seq(Literal(4),
+        BoundReference(0, ShortType, nullable = true),
+        BoundReference(1, udt, nullable = true))).evaluableFunction.isEmpty)
     }
     val info = appender.loggingEvents.filter(_.getLevel == Level.INFO)
       .map(_.getMessage.getFormattedMessage)
@@ -879,9 +1074,11 @@ class TransformExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-60541: a transform whose keys a join reduced generates no code") {
     // The call no longer computes such keys, so it must not run in the generated path either.
+    // `reducedTogetherWith` records a partner only for a transform of a column, which a bound
+    // input is not, so the partner is set directly.
     val input = BoundReference(0, IntegerType, nullable = true)
     val reduced = bucket(InvokeBucketFunction, input, 12)
-      .reducedTogetherWith(bucket(InvokeBucketFunction, input, 8))
+      .copy(reducedWith = bucket(InvokeBucketFunction, a, 8).functionId)
     checkError(
       exception = intercept[SparkException](reduced.genCode(new CodegenContext)),
       condition = "INTERNAL_ERROR",

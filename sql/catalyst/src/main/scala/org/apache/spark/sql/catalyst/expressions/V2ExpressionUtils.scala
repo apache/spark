@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils.fromAttributes
 import org.apache.spark.sql.connector.catalog.{FunctionCatalog, Identifier}
 import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.connector.catalog.functions.ScalarFunction.MAGIC_METHOD_NAME
-import org.apache.spark.sql.connector.expressions.{BucketTransform, Cast => V2Cast, Expression => V2Expression, FieldReference, GeneralScalarExpression, IdentityTransform, Literal => V2Literal, NamedReference, NamedTransform, NullOrdering => V2NullOrdering, SortDirection => V2SortDirection, SortOrder => V2SortOrder, SortValue, Transform}
+import org.apache.spark.sql.connector.expressions.{BucketTransform, Cast => V2Cast, Expression => V2Expression, GeneralScalarExpression, IdentityTransform, Literal => V2Literal, LogicalExpressions, NamedReference, NamedTransform, NullOrdering => V2NullOrdering, SortDirection => V2SortDirection, SortOrder => V2SortOrder, SortValue, Transform}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue}
 import org.apache.spark.sql.connector.read.{SampleMethod => V2SampleMethod}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
@@ -140,7 +140,8 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
         toCatalystOpt(child, query, funCatalogOpt).map { catalystChild =>
           SortOrder(catalystChild, toCatalyst(direction), toCatalyst(nullOrdering), Seq.empty)
         }
-      case ref: FieldReference =>
+      // Any NamedReference, not only FieldReference: resolveRef reads only fieldNames.
+      case ref: NamedReference =>
         Some(resolveRef[NamedExpression](ref, query))
       case _ =>
         throw new AnalysisException(
@@ -155,22 +156,44 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       funCatalogOpt: Option[FunctionCatalog] = None): Option[Expression] = trans match {
     case IdentityTransform(ref) =>
       Some(resolveRef[NamedExpression](ref, query))
-    case BucketTransform(numBuckets, refs, sorted)
-        if sorted.isEmpty && refs.length == 1 && refs.forall(_.isInstanceOf[NamedReference]) =>
-      val resolvedRefs = refs.map(r => resolveRef[NamedExpression](r, query))
-      // Create a dummy reference for `numBuckets` here and use that, together with `refs`, to
-      // look up the V2 function.
-      val numBucketsRef = AttributeReference("numBuckets", IntegerType, nullable = false)()
-      funCatalogOpt.flatMap { catalog =>
-        loadV2FunctionOpt(catalog, "bucket", Seq(numBucketsRef) ++ resolvedRefs).map { bound =>
-          TransformExpression(bound, resolvedRefs, Some(numBuckets))
-        }
-      }
+    // A sorted bucket with no sort columns is a bucket, so it resolves as
+    // `bucket(numBuckets, col)`. With sort columns it stays `sorted_bucket`.
+    case SortFreeBucket(bucket) =>
+      toCatalystTransformOpt(bucket, query, funCatalogOpt)
+    // Bucket resolves here too, so its count is a Literal child like any other parameter.
     case NamedTransform(name, args) =>
       val catalystArgs = args.map(toCatalyst(_, query, funCatalogOpt))
       funCatalogOpt.flatMap { catalog =>
         loadV2FunctionOpt(catalog, name, catalystArgs).map { bound =>
-          TransformExpression(bound, catalystArgs)
+          TransformExpression(bound, catalystArgs, fromBucketTransform = isBucketTransform(trans))
+        }
+      }
+  }
+
+  /**
+   * Whether `trans` is a V2 `bucket(numBuckets, col)`: an integer count, then one column. See
+   * `TransformExpression.fromBucketTransform`.
+   */
+  private def isBucketTransform(trans: Transform): Boolean = trans match {
+    case NamedTransform("bucket", Seq(count: V2Literal[_], _: NamedReference)) =>
+      count.dataType == IntegerType
+    case _ => false
+  }
+
+  /**
+   * A `sorted_bucket` with no sort columns, as the `bucket(numBuckets, col)` it is. The name is
+   * checked first: `BucketTransform` casts the arguments of any `bucket` to column references, so
+   * reading a `bucket` over a nested transform through it would throw.
+   */
+  private object SortFreeBucket {
+    def unapply(trans: Transform): Option[Transform] =
+      if (trans.name != "sorted_bucket") {
+        None
+      } else {
+        trans match {
+          case BucketTransform(numBuckets, Seq(ref), Seq()) =>
+            Some(LogicalExpressions.bucket(numBuckets, Array(ref)))
+          case _ => None
         }
       }
   }

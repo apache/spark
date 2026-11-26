@@ -29,7 +29,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, LogicalPlan, U
 import org.apache.spark.sql.catalyst.plans.physical.RangePartitioning
 import org.apache.spark.sql.catalyst.trees.TreePattern.PER_PARTITION_RUNTIME_FILTER_SUBQUERY
 import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryCatalystRuntimeFilterCatalog, InMemoryTableCatalog}
-import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, BucketFunction, LongDaysFunction, ScalarFunction, UnboundBucketFunction, UnboundFunction, UnboundIntBucketFunction, UnboundPhysicalDaysFunction}
+import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, BucketFunction, LongDaysFunction, ScalarFunction, UnboundBucketFunction, UnboundFunction, UnboundIntBucketFunction, UnboundPhysicalDaysFunction, UnboundTruncateFunction}
+import org.apache.spark.sql.connector.expressions.Expressions
 import org.apache.spark.sql.connector.expressions.Expressions.{bucket, days, identity}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.{ProjectExec, SparkPlan}
@@ -696,6 +697,30 @@ class PerPartitionRuntimeFilterSuite extends KeyGroupedPartitioningSuiteBase {
       checkAnswer(df, Seq(Row(1), Row(2), Row(3)))
       assert(executedSemiJoins(df.queryExecution.executedPlan).isEmpty,
         df.queryExecution.executedPlan)
+    }
+  }
+
+  Seq(true, false).foreach { adaptive =>
+    test("a transform with a literal parameter gets a per-partition bloom filter " +
+        s"(AQE $adaptive)") {
+      // `truncate(id, 4)` reports its partitioning like `bucket` does, so a join over it gets a
+      // per-partition semi join that stays without a shuffle. The 6 rows of `dim` truncate to 3
+      // partition keys. Unlike a bucket, a truncate gives no cap on its partition keys, as `days`
+      // gives none.
+      catalog.createFunction(Identifier.of(Array.empty, "truncate"), UnboundTruncateFunction)
+      val truncate = Array[Transform](
+        Expressions.apply("truncate", Expressions.column("id"), Expressions.literal(4)))
+      createTables(idType = IntegerType, factPartitioning = truncate, dimPartitioning = truncate)
+      withSQLConf(ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString) {
+        withoutGlobalBloomFilter("dim") {
+          val df = join()
+          assert(perPartitionSemiJoins(df).size == 1, df.queryExecution.optimizedPlan)
+          checkAnswer(df, expectedRows)
+          val plan = df.queryExecution.executedPlan
+          assert(executedSemiJoins(plan).size == 1, plan)
+          assert(executedShuffles(plan).isEmpty, plan)
+        }
+      }
     }
   }
 

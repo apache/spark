@@ -135,6 +135,17 @@ class V2ExpressionUtilsSuite extends SparkFunSuite {
       parameters = Map("expr" -> "DATE_TRUNC('MONTH', a)"))
   }
 
+  test("SPARK-50593: a transform argument may be any NamedReference") {
+    // A connector can report its own NamedReference rather than Spark's FieldReference. Bucket
+    // columns now resolve through toCatalystOpt, so it resolves any of them, as the removed bucket
+    // arm did; resolving reads only fieldNames.
+    val a = AttributeReference("a", StringType)()
+    val custom = new NamedReference {
+      override def fieldNames(): Array[String] = Array("a")
+    }
+    assert(V2ExpressionUtils.toCatalystOpt(custom, LocalRelation(a)).contains(a))
+  }
+
   test("SPARK-59721: resolveRefOpt returns None for an unresolvable reference") {
     val plan = LocalRelation(AttributeReference("a", StringType)())
     assert(V2ExpressionUtils.resolveRefOpt(FieldReference("a"), plan).isDefined)
@@ -159,5 +170,15 @@ class V2ExpressionUtilsSuite extends SparkFunSuite {
       },
       condition = "AMBIGUOUS_REFERENCE",
       parameters = Map("name" -> "`a`", "referenceNames" -> "[`a`, `a`]"))
+  }
+
+  test("SPARK-50593: a bucket over a nested transform is not taken for a sorted bucket") {
+    // Only a `sorted_bucket` with no sort columns is rewritten to `bucket`. Reading a `bucket`
+    // through the bucket extractor would cast its nested argument to a column reference.
+    val query = LocalRelation(AttributeReference("ts", IntegerType)())
+    val nested = LogicalExpressions.apply("bucket", LogicalExpressions.literal(4),
+      LogicalExpressions.identity(FieldReference("ts")))
+    // No function catalog, so nothing resolves `bucket`; the point is that this does not throw.
+    assert(V2ExpressionUtils.toCatalystTransformOpt(nested, query).isEmpty)
   }
 }

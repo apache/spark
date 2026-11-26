@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.plans.physical.{
 import org.apache.spark.sql.catalyst.statsEstimation.StatsTestPlan
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.connector.catalog.functions.BucketFunction
+import org.apache.spark.sql.connector.catalog.functions.{BucketFunction, IntegerTruncateFunction}
 import org.apache.spark.sql.execution.{
   FilterExec, InputAdapter, LocalLimitExec, ProjectExec, QueryExecution, ScalarSubquery, SortExec,
   SparkPlan, SparkStrategy, StampUnionDecisions, SubqueryExec, UnaryExecNode, UnionConfSnapshot,
@@ -3789,12 +3789,52 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
     }
   }
 
+  test("SPARK-50593: a union's children share a layout with a literal parameter only at " +
+      "one width") {
+    // `truncate(id, 3)` and `truncate(id, 5)` are different transforms, so a union of the two is
+    // not one key space, while a union of two `truncate(id, 3)` scans is.
+    withKeyedLayouts {
+      val a = attr("id")
+      val b = attr("id")
+      def truncate(width: Int, id: Attribute): TransformExpression =
+        TransformExpression(IntegerTruncateFunction, Seq(id, Literal(width)))
+      def parentOver(leftWidth: Int, rightWidth: Int): (UnionExec, SparkPlan) = {
+        val union = UnionExec(Seq(
+          leaf(a, KeyedPartitioning(Seq(truncate(leftWidth, a)),
+            Seq(InternalRow(0), InternalRow(15)))),
+          leaf(b, KeyedPartitioning(Seq(truncate(rightWidth, b)),
+            Seq(InternalRow(15), InternalRow(0))))))
+        (union, TestPartitioningPlan(children = Seq(ensureShuffle(hash(a, 2), union)),
+          required = Seq(clustered(a)), output = Seq(a)))
+      }
+      withSQLConf(SQLConf
+          .PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_PARTITION_KEYS_SUBSET_OF_CLUSTER_KEYS_ENABLED
+          .key -> "true") {
+        val (union, same) = parentOver(3, 3)
+        val result = pushDown(same)
+        val grouped = result.children.head.asInstanceOf[GroupPartitionsExec]
+        assert(grouped.child.children === union.children)
+        assert(grouped.outputPartitioning ===
+          KeyedPartitioning(Seq(truncate(3, a)), Seq(InternalRow(0), InternalRow(15))))
+        assert(ValidateRequirements.validate(result))
+
+        val (differentUnion, different) = parentOver(3, 5)
+        val differentResult = pushDown(different)
+        assert(!differentResult.exists {
+          case g: GroupPartitionsExec => g.child.children == differentUnion.children
+          case _ => false
+        }, differentResult)
+        assert(ValidateRequirements.validate(differentResult))
+      }
+    }
+  }
+
   test("SPARK-61785: a transform domain that coarsens its key needs permission") {
     withKeyedLayouts {
       val a = attr("id")
       val b = attr("id")
       def bucket(id: Attribute): TransformExpression =
-        TransformExpression(BucketFunction, Seq(id), Some(2))
+        TransformExpression(BucketFunction, Seq(Literal(2), id), fromBucketTransform = true)
       val left = leaf(a,
         KeyedPartitioning(Seq(bucket(a)), Seq(InternalRow(0), InternalRow(1))))
       val right = leaf(b,
@@ -4414,7 +4454,8 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
           children = Seq(ensureShuffle(hash(a, 2), UnionExec(Seq(leaf(a, target), leaf(b))))),
           required = Seq(clustered(a)), output = Seq(a))
       def bucket(argument: Expression): KeyedPartitioning =
-        KeyedPartitioning(Seq(TransformExpression(BucketFunction, Seq(argument), Some(2))),
+        KeyedPartitioning(Seq(TransformExpression(
+          BucketFunction, Seq(Literal(2), argument), fromBucketTransform = true)),
           Seq(InternalRow(0), InternalRow(1)))
       // A transform over a bare column is a template `EnsureRequirements` shuffles onto.
       val plain = parent(bucket(a))

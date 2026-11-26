@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeSet, Empty2Null, Expression, NamedExpression, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeSet, Empty2Null, Expression, NamedExpression, SortOrder, TransformExpression}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -69,9 +69,24 @@ trait AliasAwareOutputExpression extends SQLConfHelper {
    */
   protected def projectExpression(expr: Expression): LazyList[Expression] = {
     val outputSet = AttributeSet(outputExpressions.map(_.toAttribute))
+    // A transform's literal parameters say what it computes, so they are not aliasable values,
+    // e.g. `2 AS w` would otherwise turn `truncate(data, 2)` into `truncate(d, w)`. Any other
+    // literal maps to its alias, as a cached `repartition(a, lit(0))` projected through `0 AS z`
+    // needs. Kept by identity, since `multiTransformDown` also rewrites the children of what an
+    // arm returns, so a check on the node's type alone would still reach the parameter one level
+    // down.
+    val transforms = expr.collect { case t: TransformExpression => t }
+    val params: java.util.Set[Expression] = if (transforms.isEmpty) {
+      java.util.Set.of[Expression]()
+    } else {
+      val ps = java.util.Collections.newSetFromMap(
+        new java.util.IdentityHashMap[Expression, java.lang.Boolean])
+      transforms.foreach(_.literalChildren.foreach(ps.add))
+      ps
+    }
     expr.multiTransformDown {
-      // Mapping with aliases
-      case e: Expression if aliasMap.contains(e.canonicalized) =>
+      // Mapping with aliases.
+      case e: Expression if !params.contains(e) && aliasMap.contains(e.canonicalized) =>
         aliasMap(e.canonicalized).toSeq ++ (if (e.containsChild.nonEmpty) Seq(e) else Seq.empty)
 
       // Prune if we encounter an attribute that we can't map and it is not in output set.

@@ -19,11 +19,11 @@ package org.apache.spark.sql.catalyst
 
 import org.apache.spark.{SparkException, SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, BindReferences, DirectShufflePartitionID, Expression, GetStructField, SortOrder, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, BindReferences, DirectShufflePartitionID, Expression, GetStructField, Literal, SortOrder, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
-import org.apache.spark.sql.connector.catalog.functions.{FlipLowBitFunction, NonScalarBucketFunction, Reducer, ReducibleFunction, ScalarFunction}
+import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, FlipLowBitFunction, NonScalarBucketFunction, Reducer, ReducibleFunction, ScalarFunction}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, CharType, DataType, DateType, DayTimeIntervalType, DecimalType, DoubleType, IntegerType, LongType, MapType, ShortType, StringType, StructType, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType, TimeType, VarcharType, YearMonthIntervalType}
 
@@ -73,6 +73,16 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
         null
       }
   }
+
+  /**
+   * `fn(numBuckets, argument)` as a scan resolves a V2 `bucket` transform, marked as one, see
+   * `TransformExpression.fromBucketTransform`.
+   */
+  private def bucketTransform(
+      fn: BoundFunction,
+      numBuckets: Int,
+      argument: Expression): TransformExpression =
+    TransformExpression(fn, Seq(Literal(numBuckets), argument), fromBucketTransform = true)
 
   test("SPARK-59289: createShuffleSpec keeps a member that only satisfies after a projection") {
     val a = AttributeReference("a", IntegerType)()
@@ -679,8 +689,8 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     // other child cannot be shuffled onto them. This replaces SPARK-59120's data-type proxy,
     // which both bucket transforms pass, since the reduced keys keep their `IntegerType`.
     val a = $"a".int
-    val bucket12 = TransformExpression(TestBucketFunction, Seq(a), Some(12))
-    val bucket8 = TransformExpression(TestBucketFunction, Seq(a), Some(8))
+    val bucket12 = bucketTransform(TestBucketFunction, 12, a)
+    val bucket8 = bucketTransform(TestBucketFunction, 8, a)
     // `builtWith` types the key row, `declared` is what the partitioning reports, so the two can be
     // made to disagree the way `createPartitioning` does.
     def divergingSpec(
@@ -740,7 +750,7 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
       ("inherited produceResult", inheritedBucket, false)
     ).foreach {
       case (name, fn, evaluable) =>
-        val bucket = spec(TransformExpression(fn, Seq(a), Some(4)))
+        val bucket = spec(bucketTransform(fn, 4, a))
         withSQLConf(
             SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
             SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
@@ -809,7 +819,7 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
       val name = s"${declared.mkString("(", ", ", ")")} over $columnType"
       val column = AttributeReference("k", columnType)()
       val bucket = spec(
-        TransformExpression(bucketFunction(declared: _*), Seq(column), Some(4)), InternalRow(1))
+        bucketTransform(bucketFunction(declared: _*), 4, column), InternalRow(1))
       // The key is a placeholder: compatibility compares partition keys only when they are unknown.
       val identity = spec(column, InternalRow(1))
       withSQLConf(
@@ -881,7 +891,7 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     val nonScalar = NonScalarBucketFunction
     val a = $"a".int
     val spec = KeyedShuffleSpec(KeyedPartitioning(
-      Seq(TransformExpression(nonScalar, Seq(a), Some(4))), Seq(InternalRow(1))),
+      Seq(bucketTransform(nonScalar, 4, a)), Seq(InternalRow(1))),
       ClusteredDistribution(Seq(a)))
     withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
       assert(spec.canCreatePartitioning && !spec.canEvaluatePartitioning)
@@ -905,7 +915,7 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     }
     val a = $"a".int
     val spec = KeyedShuffleSpec(KeyedPartitioning(
-      Seq(TransformExpression(function, Seq(a), Some(4))), Seq(InternalRow(1))),
+      Seq(bucketTransform(function, 4, a)), Seq(InternalRow(1))),
       ClusteredDistribution(Seq(a)))
     withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
       assert(spec.canCreatePartitioning && spec.canEvaluatePartitioning)
@@ -946,7 +956,7 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
       val k = AttributeReference("k", columnType)()
       val r = AttributeReference("r", keyType)()
       val spec = KeyedShuffleSpec(KeyedPartitioning(
-        Seq(TransformExpression(fn, Seq(k), Some(4))), Seq(InternalRow(1))),
+        Seq(bucketTransform(fn, 4, k)), Seq(InternalRow(1))),
         ClusteredDistribution(Seq(k)))
       withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
         assert(spec.canCreatePartitioning && spec.canEvaluatePartitioning, s"$columnType")
@@ -979,7 +989,7 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
       val k = AttributeReference("k", transformType)()
       val a = AttributeReference("a", identityType)()
       val bucket = KeyedShuffleSpec(KeyedPartitioning(
-        Seq(TransformExpression(structBucket(transformType), Seq(k), Some(4))),
+        Seq(bucketTransform(structBucket(transformType), 4, k)),
         Seq(InternalRow(1))), ClusteredDistribution(Seq(k)))
       val identity = KeyedShuffleSpec(KeyedPartitioning(Seq(a), Seq(InternalRow(InternalRow(5)))),
         ClusteredDistribution(Seq(a)))
@@ -1003,7 +1013,7 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     def spec(expressions: Expression*): KeyedShuffleSpec = KeyedShuffleSpec(
       KeyedPartitioning(expressions, Seq(InternalRow.fromSeq(expressions.map(_ => 1)))),
       distribution)
-    val bucketA = TransformExpression(TestBucketFunction, Seq(a), Some(4))
+    val bucketA = bucketTransform(TestBucketFunction, 4, a)
 
     withSQLConf(
         SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
@@ -1154,10 +1164,10 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
 
   test("areKeysCompatible: unknown partition keys require the same partition functions") {
     // A stand-in for a connector partition function such as `bucket`.
-    // `TransformExpression.isSameFunction` compares its canonical name and bucket count. An
-    // identity-vs-transform pair also asks whether Spark can evaluate it, so it declares the
-    // bucket count and the value and implements `produceResult`, rather than relying on the
-    // mixin forwarder to the default one.
+    // `TransformExpression.isSameFunction` compares its canonical name and argument shapes,
+    // literal parameters included. An identity-vs-transform pair also asks whether Spark can
+    // evaluate it, so it declares the bucket count and the value and implements `produceResult`,
+    // rather than relying on the mixin forwarder to the default one.
     val bucketFn = new ScalarFunction[Int] {
       override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
       override def resultType(): DataType = IntegerType
@@ -1167,7 +1177,7 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
         Math.floorMod(input.getLong(1), input.getInt(0).toLong).toInt
     }
     def bucket(numBuckets: Int, expr: Expression): TransformExpression =
-      TransformExpression(bucketFn, Seq(expr), Some(numBuckets))
+      bucketTransform(bucketFn, numBuckets, expr)
 
     val a = $"a".long
     val distribution = ClusteredDistribution(Seq(a))
@@ -1237,8 +1247,8 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
       // The same for two reducible transforms that differ in their bucket count: a reducer exists,
       // so the pair is admitted for the reduce path, and the two key lists can still coincide.
       val bucketFn = new FakeBucket
-      val bucket8 = TransformExpression(bucketFn, Seq(a), Some(8))
-      val bucket4 = TransformExpression(bucketFn, Seq(a), Some(4))
+      val bucket8 = bucketTransform(bucketFn, 8, a)
+      val bucket4 = bucketTransform(bucketFn, 4, a)
       assert(spec(bucket8).areKeysCompatible(spec(bucket4), allowReduce = true),
         "a reducer reconciles the two bucket counts, so the pair stays admissible")
       assert(!spec(bucket8).isCompatibleWith(spec(bucket4)),
@@ -1296,7 +1306,7 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
         KeyedPartitioning(Seq(expression), Seq(InternalRow(0L), InternalRow(1L))),
         ClusteredDistribution(expression.references.toSeq))
     def bucket(numBuckets: Int, argument: Expression): TransformExpression =
-      TransformExpression(fn, Seq(argument), Some(numBuckets))
+      bucketTransform(fn, numBuckets, argument)
     def spec(numBuckets: Int, argument: Expression): KeyedShuffleSpec =
       keyed(bucket(numBuckets, argument))
     // Whether the two sides of one reduce, `bucket(8, left)` with `bucket(4, right)`, pair up.
@@ -1371,7 +1381,7 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     // reference two columns. No single cluster key stands for it.
     val a = $"a".long
     val b = $"b".long
-    Seq(a + b, TransformExpression(new FakeBucket, Seq(a + b), Some(4))).foreach { e =>
+    Seq(a + b, bucketTransform(new FakeBucket, 4, a + b)).foreach { e =>
       val twoColumns = KeyedShuffleSpec(
         KeyedPartitioning(Seq(e), Seq(InternalRow(0L), InternalRow(1L))),
         ClusteredDistribution(Seq(a, b)))
@@ -1471,7 +1481,7 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     def bucketSpec(numBuckets: Int, hasUnknown: Boolean): KeyedShuffleSpec =
       KeyedShuffleSpec(
         KeyedPartitioning(
-          Seq(TransformExpression(fn, Seq(a), Some(numBuckets))),
+          Seq(bucketTransform(fn, numBuckets, a)),
           Seq(InternalRow(0L), InternalRow(1L)))
           .withLayout(_.copy(unknownKeysOrigin = Option.when(hasUnknown)(HASH_ROUTING))),
         ClusteredDistribution(Seq(a)))
@@ -1705,7 +1715,7 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
       override def resultType(): DataType = named
       override def reduce(value: Int): InternalRow = InternalRow(value)
     }
-    val transform = TransformExpression(TestBucketFunction, Seq($"a".int), Some(4))
+    val transform = bucketTransform(TestBucketFunction, 4, $"a".int)
     val partitioning = KeyedPartitioning(Seq($"a".int), Seq(InternalRow(1), InternalRow(2)))
 
     val (reducedDataTypes, reducedKeys) =
