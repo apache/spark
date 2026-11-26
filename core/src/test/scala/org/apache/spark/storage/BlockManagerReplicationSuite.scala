@@ -409,10 +409,11 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
       i => makeBlockManager(storeSize, s"store$i", isOffHeapEnabled = true)
     }
 
-    storageLevels.foreach { storageLevel =>
+    storageLevels.zipWithIndex.foreach { case (storageLevel, index) =>
       // Put the block into one of the stores
+      // Block removal is asynchronous, so repeated storage levels need distinct block IDs.
       val blockId = TestBlockId(
-        "block-with-" + storageLevel.description.replace(" ", "-").toLowerCase(Locale.ROOT))
+        s"block-$index-with-" + storageLevel.description.replace(" ", "-").toLowerCase(Locale.ROOT))
       val testValue = Array.fill[Byte](blockSize)(1)
       stores(0).putSingle(blockId, testValue, storageLevel)
 
