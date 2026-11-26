@@ -475,6 +475,52 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
       rel.join(right, Inner, Some($"s".isNotNull)).analyze)
   }
 
+  test("SPARK-62393: rewrite EqualNullSafe with TrueLiteral in predicate positions") {
+    val i = UnresolvedAttribute("i")
+    Seq(
+      (i > 10, i > 10 && i.isNotNull, i <= 10 || i.isNull),
+      ((i > 10) && (i < 20),
+        i > 10 && i < 20 && i.isNotNull,
+        i <= 10 || i.isNull || i >= 20),
+      ((i > 10) || (i < 5),
+        i.isNotNull && (i > 10 || i < 5),
+        i.isNull || (i <= 10 && i >= 5)),
+      (In(i, Seq(Literal(1), Literal(2))),
+        In(i, Seq(Literal(1), Literal(2))) && i.isNotNull,
+        !In(i, Seq(Literal(1), Literal(2))) || i.isNull),
+      (InSet(i, Set(1, 2)),
+        InSet(i, Set(1, 2)) && i.isNotNull,
+        !InSet(i, Set(1, 2)) || i.isNull)
+    ).foreach { case (cond, isTrue, isNotTrue) =>
+      Seq(cond <=> TrueLiteral, TrueLiteral <=> cond).foreach { eqTrue =>
+        testFilter(originalCond = eqTrue, expectedCond = isTrue)
+        testFilter(originalCond = !eqTrue, expectedCond = isNotTrue)
+      }
+    }
+    Seq(
+      i + 1 > 10,
+      In(i, Seq(Literal(1), Literal(null, IntegerType))),
+      InSet(i, Set(1, null)),
+      (i > 10) && (i + 1 > 10)
+    ).foreach { cond =>
+      testFilter(originalCond = cond <=> TrueLiteral, expectedCond = cond <=> TrueLiteral)
+      testFilter(originalCond = !(cond <=> TrueLiteral), expectedCond = !(cond <=> TrueLiteral))
+    }
+  }
+
+  test("SPARK-62393: rewrite a string predicate compared with true") {
+    val rel = LocalRelation($"s".string)
+    val cond = $"s".contains("a")
+    Seq(cond <=> TrueLiteral, TrueLiteral <=> cond).foreach { eqTrue =>
+      comparePlans(
+        Optimize.execute(rel.where(eqTrue).analyze),
+        rel.where(cond && $"s".isNotNull).analyze)
+      comparePlans(
+        Optimize.execute(rel.where(!eqTrue).analyze),
+        rel.where(!cond || $"s".isNull).analyze)
+    }
+  }
+
   test("do not rewrite LIKE when not a match-all pattern or not a predicate position") {
     val rel = LocalRelation($"s".string, $"i".int)
 
