@@ -18,31 +18,50 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, ExpressionSet, NamedExpression}
-import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
+import org.apache.spark.sql.catalyst.planning.ExtractAllEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, LeftSemiOrAnti, RightOuter}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 
 /**
  * A visitor pattern for traversing a [[LogicalPlan]] tree and propagate the distinct attributes.
  */
 object DistinctKeyVisitor extends LogicalPlanVisitor[Set[ExpressionSet]] {
 
+  /**
+   * The join keys that a side's distinct keys are compared with to decide whether the side is
+   * unique on them. A key cast to a STRING of its own collation, as a comparison of a CHAR or
+   * VARCHAR column with a STRING adds, is unique where the column is.
+   */
+  def joinKeySet(keys: Seq[Expression]): ExpressionSet =
+    ExpressionSet(keys.map(CharVarcharUtils.stripCastToPlainString))
+
   private def projectDistinctKeys(
       keys: Set[ExpressionSet], projectList: Seq[NamedExpression]): Set[ExpressionSet] = {
     val outputSet = ExpressionSet(projectList.map(_.toAttribute))
-    val aliases = projectList.collect {
-      // TODO: Expand distinctKeys for redundant aliases on the same expression
-      case alias: Alias if alias.child.deterministic => alias.child.canonicalized -> alias
+    val deterministicAliases = projectList.collect {
+      case alias: Alias if alias.child.deterministic => alias
+    }
+    // TODO: Expand distinctKeys for redundant aliases on the same expression
+    val aliases = deterministicAliases.map(alias => alias.child.canonicalized -> alias).toMap
+
+    // An alias of a cast to a STRING of the same collation is distinct where the cast child is.
+    // The keys are mapped once with the aliases above and once with these taking precedence.
+    val castAliases = deterministicAliases.flatMap { alias =>
+      val child = CharVarcharUtils.stripCastToPlainString(alias.child)
+      if (child eq alias.child) None else Some(child.canonicalized -> alias)
     }.toMap
     if (aliases.isEmpty) {
       keys.filter(_.subsetOf(outputSet))
     } else {
-      val aliasedDistinctKeys = keys.map(_.map(_.transform {
-        case expr: Expression =>
-          aliases.get(expr.canonicalized).map(_.toAttribute).getOrElse(expr)
-      }))
-      aliasedDistinctKeys.collect {
+      def aliasedDistinctKeys(map: Map[Expression, Alias]): Set[ExpressionSet] =
+        keys.map(_.map(_.transform {
+          case expr: Expression =>
+            map.get(expr.canonicalized).map(_.toAttribute).getOrElse(expr)
+        }))
+      val mappings = if (castAliases.isEmpty) Seq(aliases) else Seq(aliases, aliases ++ castAliases)
+      mappings.flatMap(aliasedDistinctKeys).collect {
         case es: ExpressionSet if es.subsetOf(outputSet) => ExpressionSet(es)
-      } ++ keys.filter(_.subsetOf(outputSet))
+      }.toSet ++ keys.filter(_.subsetOf(outputSet))
     }
   }
 
@@ -103,10 +122,10 @@ object DistinctKeyVisitor extends LogicalPlanVisitor[Set[ExpressionSet]] {
     p match {
       case Join(_, _, LeftSemiOrAnti(_), _, _) =>
         p.left.distinctKeys
-      case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, left, right, _)
+      case ExtractAllEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, left, right, _)
           if left.distinctKeys.nonEmpty || right.distinctKeys.nonEmpty =>
-        val rightJoinKeySet = ExpressionSet(rightKeys)
-        val leftJoinKeySet = ExpressionSet(leftKeys)
+        val rightJoinKeySet = joinKeySet(rightKeys)
+        val leftJoinKeySet = joinKeySet(leftKeys)
         joinType match {
           case Inner if left.distinctKeys.exists(_.subsetOf(leftJoinKeySet)) &&
             right.distinctKeys.exists(_.subsetOf(rightJoinKeySet)) =>

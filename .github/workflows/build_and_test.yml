@@ -81,6 +81,7 @@ jobs:
     # `ubuntu-slim` is lighter than `ubuntu-latest`.
     # Please see https://docs.github.com/en/actions/how-tos/write-workflows/choose-where-workflows-run/choose-the-runner-for-a-job#standard-github-hosted-runners-for-public-repositories
     runs-on: ubuntu-slim
+    timeout-minutes: 10
     env:
       GITHUB_PREV_SHA: ${{ github.event.before }}
     outputs:
@@ -103,6 +104,9 @@ jobs:
       uses: ./.github/actions/checkout-and-sync
       with:
         ref: ${{ inputs.branch }}
+    # Test sparktestsupport before relying on it below, even if only its tests changed.
+    - name: Test sparktestsupport
+      run: python3 -m unittest discover -s dev/sparktestsupport/tests -t dev
     - name: Check all modules
       id: set-outputs
       run: |
@@ -113,6 +117,7 @@ jobs:
           pandas=`./dev/is-changed.py -m $pyspark_pandas_modules`
           pyspark_periodic=`./dev/is-changed.py -m pyspark-periodic`
           pyspark_connect_old_client="$pyspark"
+          lint_python=true
           if [[ "${{ github.repository }}" != 'apache/spark' ]]; then
             yarn=`./dev/is-changed.py -m yarn`
             kubernetes=`./dev/is-changed.py -m kubernetes`
@@ -120,13 +125,14 @@ jobs:
             # must run when either the Kubernetes support or the credential-aws module
             # (including its integration-tests module, mapped to credential-aws) changes.
             oidc_e2e=`./dev/is-changed.py -m kubernetes,credential-aws`
-            sparkr=`./dev/is-changed.py -m sparkr`
             tpcds=`./dev/is-changed.py -m sql`
             docker=`./dev/is-changed.py -m docker-integration-tests`
+            rust_sdk=`./dev/is-changed.py -m rust-sdk`
             # Skip PySpark, SparkR, TPC-DS when only static UI resources (JS/CSS/HTML) changed.
             # These tests are unaffected by UI static resource modifications.
             # Also we only run the very slow transpile changes when that logic changes
             transpile=false
+            sparkr=false
             static_only=false
             changed_files=$(git diff --name-only "$APACHE_SPARK_REF" HEAD 2>/dev/null)
             if [ -n "$changed_files" ]; then
@@ -142,6 +148,28 @@ jobs:
                   *transpile*) transpile=true; break ;;
                 esac
               done
+              # The scheduled builds cover SparkR. On PRs, run SparkR tests only when the files
+              # of the `sparkr` module or its Scala backend change, not when only its
+              # dependencies such as `hive` and `mllib` change.
+              for f in $changed_files; do
+                case "$f" in
+                  R/*|dev/spark-test-image/sparkr/*) sparkr=true; break ;;
+                  core/src/main/scala/org/apache/spark/api/r/*) sparkr=true; break ;;
+                  sql/core/src/main/scala/org/apache/spark/sql/api/r/*) sparkr=true; break ;;
+                  mllib/src/main/scala/org/apache/spark/ml/r/*) sparkr=true; break ;;
+                esac
+              done
+              # Run the Python linter only when the files it checks, its configurations, its
+              # tools, or its steps in this workflow change.
+              lint_python=false
+              for f in $changed_files; do
+                case "$f" in
+                  *.py|*.pyi|*/tests/typing/*) lint_python=true; break ;;
+                  pyproject.toml|python/mypy.ini) lint_python=true; break ;;
+                  dev/lint-python|dev/spark-test-image/lint/*) lint_python=true; break ;;
+                  .github/workflows/build_and_test.yml) lint_python=true; break ;;
+                esac
+              done
             fi
             if [ "$static_only" = "true" ]; then
               pyspark=false
@@ -153,7 +181,9 @@ jobs:
             buf=true
             ui=true
             docs=true
-            java25=true
+            # The scheduled Java 25 builds cover the whole build. On PRs, run this job only
+            # when the native data source tests, which are skipped before Java 22, are affected.
+            java25=`./dev/is-changed.py -m "sql,connect"`
           else
             pyspark_periodic=false
             pyspark_connect_old_client=false
@@ -164,12 +194,13 @@ jobs:
             sparkr=false
             tpcds=false
             docker=false
+            rust_sdk=false
             buf=false
             ui=false
             docs=false
             java25=false
           fi
-          build=`./dev/is-changed.py -m "core,unsafe,kvstore,avro,utils,utils-java,config,network-common,network-shuffle,repl,launcher,examples,sketch,variant,api,catalyst,hive-thriftserver,mllib-local,mllib,graphx,streaming,sql-kafka-0-10,streaming-kafka-0-10,streaming-kinesis-asl,credential-aws,kubernetes,hadoop-cloud,spark-ganglia-lgpl,profiler,protobuf,yarn,connect,sql,hive,pipelines"`
+          build=`./dev/is-changed.py -m "core,unsafe,kvstore,avro,utils,utils-java,config,network-common,network-shuffle,repl,launcher,examples,sketch,variant,api,catalyst,hive-thriftserver,mllib-local,mllib,graphx,graph,streaming,sql-kafka-0-10,streaming-kafka-0-10,streaming-kinesis-asl,credential-aws,kubernetes,hadoop-cloud,spark-ganglia-lgpl,profiler,protobuf,yarn,connect,sql,hive,pipelines"`
           build_core_utils=`./dev/is-changed.py -m "core,unsafe,kvstore,utils,utils-java,config,network-common,network-shuffle,sketch,variant,launcher"`
           precondition="
             {
@@ -183,6 +214,7 @@ jobs:
               \"tpcds-1g\": \"$tpcds\",
               \"docker-integration-tests\": \"$docker\",
               \"lint\" : \"true\",
+              \"lint-python\" : \"$lint_python\",
               \"java25\" : \"$java25\",
               \"docs\" : \"$docs\",
               \"yarn\" : \"$yarn\",
@@ -190,6 +222,7 @@ jobs:
               \"oidc-e2e\" : \"$oidc_e2e\",
               \"buf\" : \"$buf\",
               \"ui\" : \"$ui\",
+              \"rust-sdk\" : \"$rust_sdk\",
               \"transpile\": \"$transpile\",
             }"
           echo $precondition # For debugging
@@ -294,7 +327,7 @@ jobs:
           - >-
             api, catalyst, hive-thriftserver
           - >-
-            mllib-local, mllib, graphx, profiler, pipelines, repl, examples
+            mllib-local, mllib, graphx, graph, profiler, pipelines, repl, examples
           - >-
             streaming, sql-kafka-0-10, streaming-kafka-0-10, streaming-kinesis-asl,
             credential-aws, kubernetes, hadoop-cloud, spark-ganglia-lgpl, protobuf, connect, avro
@@ -334,7 +367,13 @@ jobs:
             java: ${{ inputs.java }}
             hadoop: ${{ inputs.hadoop }}
             hive: hive2.3
-            excluded-tags: org.apache.spark.tags.ExtendedSQLTest,org.apache.spark.tags.SlowSQLTest
+            included-tags: org.apache.spark.tags.DataSourceV2Test
+            comment: "- DSv2 tests"
+          - modules: sql
+            java: ${{ inputs.java }}
+            hadoop: ${{ inputs.hadoop }}
+            hive: hive2.3
+            excluded-tags: org.apache.spark.tags.ExtendedSQLTest,org.apache.spark.tags.SlowSQLTest,org.apache.spark.tags.DataSourceV2Test
             comment: "- other tests"
         exclude:
           - modules: ${{ fromJson(needs.precondition.outputs.required).yarn != 'true' && 'yarn' }}
@@ -438,6 +477,7 @@ jobs:
       fromJson(needs.precondition.outputs.required).docs == 'true' ||
       fromJson(needs.precondition.outputs.required).sparkr == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     permissions:
       packages: write
     steps:
@@ -816,6 +856,7 @@ jobs:
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).buf == 'true'
     name: Protobuf breaking change detection and Python CodeGen check
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
     - name: Bootstrap composite actions
       uses: actions/checkout@v7
@@ -874,6 +915,9 @@ jobs:
       with:
         java-version: ${{ inputs.java }}
         free-disk-space: container
+    - name: Agent instruction files check
+      if: hashFiles('dev/agent_docs_lint.py') != ''
+      run: python3.12 ./dev/agent_docs_lint.py --strict
     - name: License test
       run: ./dev/check-license
     - name: Dependencies test
@@ -918,22 +962,29 @@ jobs:
       run: ./dev/lint-java
     - name: Spark connect jvm client mima check
       run: ./dev/connect-jvm-client-mima-check
+    # The callers that pass `jobs` without `lint-python`, e.g. scheduled builds, run these steps.
     - name: List Python packages
+      if: fromJson(needs.precondition.outputs.required).lint-python != 'false'
       shell: 'script -q -e -c "bash {0}"'
       run: |
         lsb_release -a
         python3.12 --version
         python3.12 -m pip list
     - name: Python linter
+      if: fromJson(needs.precondition.outputs.required).lint-python != 'false'
       shell: 'script -q -e -c "bash {0}"'
       run: |
         PYTHON_EXECUTABLE=python3.12 ./dev/lint-python
     - name: JS linter
-      run: ./dev/lint-js
-    - name: Install R linter dependencies and SparkR
-      run: ./R/install-dev.sh
+      env:
+        SKIP_SCALA_BUILD: true
+        SKIP_MIMA: true
+      run: ./dev/run-tests --modules lint-js
     - name: R linter
-      run: ./dev/lint-r
+      env:
+        SKIP_SCALA_BUILD: true
+        SKIP_MIMA: true
+      run: ./dev/run-tests --modules lint-r
 
   java25:
     needs: [precondition]
@@ -1422,3 +1473,33 @@ jobs:
           cd ui-test
           npm install --save-dev
           node --experimental-vm-modules node_modules/.bin/jest
+
+  rust-sdk:
+    needs: [precondition]
+    if: fromJson(needs.precondition.outputs.required).rust-sdk == 'true'
+    name: Run Rust SDK tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # The rust-version of the workspace. A fixed toolchain also keeps the new lints of a later
+      # clippy or rustdoc from failing a change that does not touch Rust, such as one to the header.
+      RUSTUP_TOOLCHAIN: '1.85'
+    steps:
+    - name: Bootstrap composite actions
+      uses: actions/checkout@v7
+    - name: Checkout and sync Spark repository
+      uses: ./.github/actions/checkout-and-sync
+      with:
+        ref: ${{ needs.precondition.outputs.head_sha }}
+    - name: Install Rust
+      run: |
+        rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal --no-self-update \
+          --component clippy,rustfmt
+    - name: Build, test, and lint the SDK and its examples
+      working-directory: sql/native/rust
+      run: |
+        cargo build --workspace --locked
+        cargo test --workspace --locked
+        cargo clippy --workspace --all-targets --locked -- -D warnings
+        cargo fmt --all -- --check
+        RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-deps --locked

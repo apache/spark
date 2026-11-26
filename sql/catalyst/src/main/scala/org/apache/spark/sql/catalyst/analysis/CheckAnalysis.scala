@@ -27,13 +27,14 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, ListAgg}
 import org.apache.spark.sql.catalyst.optimizer.InlineCTE
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, PLAN_EXPRESSION, UNRESOLVED_WINDOW_EXPRESSION}
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils, TypeUtils, WriteDistributionAndOrdering}
-import org.apache.spark.sql.connector.catalog.{CatalogManager, LookupCatalog, SupportsPartitionManagement}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StoredExpressionText, StringUtils, TypeUtils}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, LookupCatalog}
+import org.apache.spark.sql.connector.catalog.constraints.Check
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -45,7 +46,6 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
   protected def conf: org.apache.spark.sql.internal.SQLConf
 
-  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   /**
    * Override to provide additional checks for correct analysis.
@@ -68,26 +68,16 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
       messageParameters = messageParameters)
   }
 
-  /**
-   * Search path shown in TABLE_OR_VIEW_NOT_FOUND for DDL (e.g. ALTER TABLE, COMMENT ON TABLE).
-   * Contains system.session and the current catalog namespace only. Not from SQLConf.
-   */
-  private def ddlSearchPathForError(catalogPath: Seq[String]): Seq[String] = {
-    val sessionPath = Seq(
-      CatalogManager.SYSTEM_CATALOG_NAME,
-      CatalogManager.SESSION_NAMESPACE)
-    Seq(toSQLId(sessionPath), toSQLId(catalogPath))
-  }
+  /** Search path for a DDL target in a not-found error. */
+  private def ddlSearchPathForError(catalogPath: Seq[String]): Seq[String] =
+    NotFoundErrorSearchPath.ddl(catalogPath, errors = this)
 
-  /**
-   * Formats [[CatalogManager.sqlResolutionPathEntries]] with [[toSQLId]]
-   * for TABLE_OR_VIEW_NOT_FOUND error messages.
-   */
-  private def fullSearchPathForError(catalogPath: Seq[String]): Seq[String] = {
-    val catalog = catalogPath.head
-    val ns = catalogPath.tail.toSeq
-    catalogManager.sqlResolutionPathEntries(catalog, ns).map(toSQLId)
-  }
+  /** Configured SQL resolution scopes for a not-found error. */
+  private def fullSearchPathForError(catalogPath: Seq[String]): Seq[String] =
+    NotFoundErrorSearchPath.full(
+      catalogManager = catalogManager,
+      catalogPath = catalogPath,
+      errors = this)
 
   /**
    * Catalog + namespace path for error messages. When resolving inside a view body,
@@ -100,28 +90,13 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     else (currentCatalog.name +: catalogManager.currentNamespace).toSeq
   }
 
-  /**
-   * Search path for TABLE_OR_VIEW_NOT_FOUND when the command targets only temp views
-   * (e.g. DROP TEMPORARY VIEW). Contains system.session only.
-   */
-  private def tempViewOnlySearchPathForError(): Seq[String] = {
-    Seq(toSQLId(Seq(
-      CatalogManager.SYSTEM_CATALOG_NAME,
-      CatalogManager.SESSION_NAMESPACE)))
-  }
-
-  /**
-   * Search path for TABLE_OR_VIEW_NOT_FOUND on unresolved relations in SELECT/DML/INSERT/time
-   * travel. Three-part `system.session.name` resolves only to session temp views, so only that
-   * scope is listed. Other names use [[fullSearchPathForError]] (sqlResolutionPathEntries order).
-   */
-  private def searchPathForUnresolvedRelation(multipartIdentifier: Seq[String]): Seq[String] = {
-    if (CatalogManager.isFullyQualifiedSystemSessionViewName(multipartIdentifier)) {
-      tempViewOnlySearchPathForError()
-    } else {
-      fullSearchPathForError(catalogPathForError)
-    }
-  }
+  /** Search path for an unresolved query relation. */
+  private def searchPathForUnresolvedRelation(multipartIdentifier: Seq[String]): Seq[String] =
+    NotFoundErrorSearchPath.forUnresolvedRelation(
+      catalogManager = catalogManager,
+      multipartIdentifier = multipartIdentifier,
+      catalogPath = catalogPathForError,
+      errors = this)
 
   /**
    * Returns the first UnresolvedTableOrView in the plan tree, if any.
@@ -144,6 +119,10 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     dt.existsRecursively(_.isInstanceOf[VariantType])
   }
 
+  protected def hasFileType(dt: DataType): Boolean = {
+    dt.existsRecursively(_.isInstanceOf[FileType])
+  }
+
   protected def mapColumnInSetOperation(plan: LogicalPlan): Option[Attribute] = plan match {
     case _: Intersect | _: Except | _: Distinct =>
       plan.output.find(a => hasMapType(a.dataType))
@@ -160,10 +139,28 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     case _ => None
   }
 
+  protected def fileColumnInSetOperation(plan: LogicalPlan): Option[Attribute] = plan match {
+    case _: Intersect | _: Except | _: Distinct =>
+      plan.output.find(a => hasFileType(a.dataType))
+    case d: Deduplicate =>
+      d.keys.find(a => hasFileType(a.dataType))
+    case d: DeduplicateWithinWatermark =>
+      d.keys.find(a => hasFileType(a.dataType))
+    case _ => None
+  }
+
   protected def variantExprInPartitionExpression(plan: LogicalPlan): Option[Expression] =
     plan match {
       case r: RepartitionByExpression =>
         r.partitionExpressions.find(e => hasVariantType(e.dataType))
+      case _ => None
+    }
+
+  // Covers both REPARTITION / DISTRIBUTE BY and the REBALANCE hint.
+  protected def fileExprInPartitionExpression(plan: LogicalPlan): Option[Expression] =
+    plan match {
+      case r: HasPartitionExpressions =>
+        r.partitionExpressions.find(e => hasFileType(e.dataType))
       case _ => None
     }
 
@@ -342,6 +339,8 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     // Check MATERIALIZED CTE relations on the original plan, as `inlinedPlan` has them inlined.
     // This runs after `checkAnalysis0`, so that resolution errors are reported first.
     MaterializedCTECheck(plan)
+    // So are the lookup sides of external lookup joins that read MATERIALIZED CTEs.
+    CheckExternalLookupJoin.checkKeptCTEs(plan)
     plan.setAnalyzed()
   }
 
@@ -463,17 +462,11 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
         }
 
       case u: UnresolvedTableOrView =>
-        val catalogPath = catalogPathForError
-        val searchPath = u.tableNotFoundSearchPathMode match {
-          case UnresolvedTableOrViewSearchPathMode.QueryLike =>
-            if (CatalogManager.isFullyQualifiedSystemSessionViewName(u.multipartIdentifier)) {
-              tempViewOnlySearchPathForError()
-            } else {
-              fullSearchPathForError(catalogPath)
-            }
-          case UnresolvedTableOrViewSearchPathMode.Ddl =>
-            ddlSearchPathForError(catalogPath)
-        }
+        val searchPath = NotFoundErrorSearchPath.forUnresolvedTableOrView(
+          catalogManager = catalogManager,
+          unresolvedTableOrView = u,
+          catalogPath = catalogPathForError,
+          errors = this)
         u.tableNotFound(u.multipartIdentifier, searchPath)
 
       case u: UnresolvedRelation =>
@@ -498,27 +491,18 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
         throw SparkException.internalError(
           s"V2Reference should be resolved during analysis: ${r.name}")
 
+      // ResolveGapFill runs only in the Resolution batch. With the gate on, an input that
+      // resolves in a later batch leaves the node here.
+      case _: UnresolvedGapFill =>
+        throw QueryCompilationErrors.gapFillNotSupportedError()
+
       case u: UnresolvedInlineTable
           if !SQLConf.get.getConf(SQLConf.INLINE_TABLE_NON_FOLDABLE_EXPRESSIONS_ENABLED) &&
             unresolvedInlineTableContainsScalarSubquery(u) =>
         throw QueryCompilationErrors.inlineTableContainsScalarSubquery(u)
 
       case command: V2PartitionCommand =>
-        command.table match {
-          case r @ ResolvedTable(_, _, table, _) => table match {
-            case t: SupportsPartitionManagement =>
-              if (t.partitionSchema.isEmpty) {
-                r.failAnalysis(
-                  errorClass = "INVALID_PARTITION_OPERATION.PARTITION_SCHEMA_IS_EMPTY",
-                  messageParameters = Map("name" -> toSQLId(r.name)))
-              }
-            case _ =>
-              r.failAnalysis(
-                errorClass = "INVALID_PARTITION_OPERATION.PARTITION_MANAGEMENT_IS_UNSUPPORTED",
-                messageParameters = Map("name" -> toSQLId(r.name)))
-          }
-          case _ =>
-        }
+        PartitionSpecResolution.validate(command, this)
 
       case o: OverwriteByExpression if o.deleteExpr.exists(_.isInstanceOf[SubqueryExpression]) =>
         o.deleteExpr.failAnalysis (
@@ -987,66 +971,31 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
             }
 
           case create: V2CreateTablePlan =>
-            val references = create.partitioning.flatMap(_.references).toSet
-            val badReferences = references.map(_.fieldNames).flatMap { column =>
-              create.tableSchema.findNestedField(column.toImmutableArraySeq) match {
-                case Some(_) =>
-                  None
-                case _ =>
-                  Some(column.quoted)
-              }
+            CreateTableValidation.validateV2CreateTablePlan(create, SQLConf.get)
+            val constraints = create match {
+              case CreateTable(_, _, _, s: TableSpec, _, _, _) => s.constraints
+              case ReplaceTable(_, _, _, s: TableSpec, _, _, _) => s.constraints
+              case _ => Nil
+            }
+            constraints.foreach {
+              case c: Check => failIfSessionDependent(c.predicateSql, create)
+              case _ =>
             }
 
-            if (badReferences.nonEmpty) {
-              create.failAnalysis(
-                errorClass = "UNSUPPORTED_FEATURE.PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED",
-                messageParameters = Map(
-                  "cols" -> badReferences.map(r => toSQLId(r)).mkString(", ")))
-            }
-
-            // PreprocessTableCreation keeps a reference to a missing column as is, so this is the
-            // only check that rejects it, also for analyzers that do not run that rule.
-            val badOrderingReferences = WriteDistributionAndOrdering.unknownReferences(
-              create.tableSchema, create.writeOrdering)
-
-            if (badOrderingReferences.nonEmpty) {
-              create.failAnalysis(
-                errorClass = "WRITE_ORDERING_WITH_UNKNOWN_COLUMN",
-                messageParameters = Map(
-                  "cols" -> badOrderingReferences.map(parts => toSQLId(parts)).mkString(", ")))
-            }
-
-            create.tableSchema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
-            TypeUtils.failUnsupportedDataType(create.tableSchema, SQLConf.get)
-            SchemaUtils.checkIndeterminateCollationInSchema(create.tableSchema)
-
-            // Validate generated column expressions
-            create.columns.foreach { col =>
-              col.generationExpression.foreach { genExpr =>
-                def unsupportedExpressionError(reason: String): AnalysisException = {
-                  new AnalysisException(
-                    errorClass = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
-                    messageParameters = Map(
-                      "fieldName" -> col.name,
-                      "expressionStr" -> genExpr.originalSQL,
-                      "reason" -> reason
-                    )
-                  )
-                }
-                // Only built-in functions are allowed in generated columns. Functions that are
-                // not built-in already fail earlier in analysis: unknown functions with
-                // UNRESOLVED_ROUTINE and persistent SQL functions with UNSUPPORTED_SQL_UDF_USAGE.
-                // Here we only need to reject user-defined functions (Scala/Python/Java/Hive UDFs
-                // and v2 catalog functions, all of which are `UserDefinedExpression`), which
-                // resolve successfully.
-                genExpr.child.foreach {
-                  case udf: UserDefinedExpression =>
-                    throw unsupportedExpressionError(
-                      s"failed to resolve `${udf.name}` to a built-in function")
-                  case _ =>
-                }
-                genExpr.validate(col.name, col.dataType, create.columns)
-              }
+          // A view can hold a FILE without a qualifier, which a table cannot store. When the
+          // target and source are both in the session catalog, `ResolveSessionCatalog` has
+          // already rewritten this into `CreateTableLikeCommand`, which checks the source when
+          // it runs.
+          case CreateTableLike(_: ResolvedIdentifier, source, _, _, _, _, _) =>
+            source match {
+              case ResolvedTable(_, _, table, _) =>
+                TypeUtils.checkNoUnknownFileTypeWrite(
+                  CatalogV2Util.v2ColumnsToStructType(table.columns))
+              case view: ResolvedPersistentView =>
+                TypeUtils.checkNoUnknownFileTypeWrite(view.info.schema)
+              case ResolvedTempView(_, metadata) =>
+                TypeUtils.checkNoUnknownFileTypeWrite(metadata.schema)
+              case _ =>
             }
 
           case write: V2WriteCommand if write.resolved =>
@@ -1060,9 +1009,10 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
           case a: AddCheckConstraint =>
             a.checkConstraint.failIfCallsUserDefinedFunction()
+            failIfSessionDependent(a.checkConstraint.condition, a.checkConstraint.child)
 
           case alter: AlterTableCommand =>
-            checkAlterTableCommand(alter)
+            AlterTableValidation.validate(alter, this)
 
           case c: CreateVariable
               if c.resolved && c.defaultExpr.child.containsPattern(PLAN_EXPRESSION) =>
@@ -1075,8 +1025,27 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               varName,
               c.defaultExpr.originalSQL)
 
-          case c: Call if c.resolved && c.bound && c.checkArgTypes().isFailure =>
+          case c: Call if c.resolved =>
+            if (!c.bound) {
+              val readingChild = c.args.map {
+                case NamedArgumentExpression(_, value) => value
+                case arg => arg
+              }.filter(_.references.nonEmpty)
+              // A rule such as `TimeWindowing` put an operator under the CALL for these arguments.
+              if (readingChild.nonEmpty) {
+                val invalidExprSqls = (readingChild ++
+                  PlanHelper.specialExpressionsInUnsupportedOperator(c)).map(toSQLExpr).distinct
+                c.failAnalysis(
+                  errorClass = "UNSUPPORTED_EXPR_FOR_OPERATOR",
+                  messageParameters = Map(
+                    "operator" -> c.nodeName,
+                    "invalidExprSqls" -> invalidExprSqls.mkString(", ")))
+              }
+              throw SparkException.internalError(
+                s"CALL is resolved but not bound: ${c.procedure.nodeName}")
+            }
             c.checkArgTypes() match {
+              case TypeCheckResult.TypeCheckSuccess =>
               case mismatch: TypeCheckResult.DataTypeMismatch =>
                 c.dataTypeMismatch("CALL", mismatch)
               case _ =>
@@ -1179,6 +1148,14 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               origin = operator.origin
             )
 
+          // FILE is not comparable (it has no defined equality), so it cannot be in a set
+          // operation.
+          case o if fileColumnInSetOperation(o).isDefined =>
+            throw QueryCompilationErrors.unsupportedSetOperationOnFileType(
+              fileCol = fileColumnInSetOperation(o).get,
+              origin = operator.origin
+            )
+
           case o if variantExprInPartitionExpression(o).isDefined =>
             val variantExpr = variantExprInPartitionExpression(o).get
             o.failAnalysis(
@@ -1186,6 +1163,15 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               messageParameters = Map(
                 "expr" -> toSQLExpr(variantExpr),
                 "dataType" -> toSQLType(variantExpr.dataType)))
+
+          // FILE is not comparable, so it cannot be a partitioning/DISTRIBUTE BY key.
+          case o if fileExprInPartitionExpression(o).isDefined =>
+            val fileExpr = fileExprInPartitionExpression(o).get
+            o.failAnalysis(
+              errorClass = "UNSUPPORTED_FEATURE.PARTITION_BY_FILE",
+              messageParameters = Map(
+                "expr" -> toSQLExpr(fileExpr),
+                "dataType" -> toSQLType(fileExpr.dataType)))
 
           case o if o.expressions.exists(!_.deterministic) &&
             !operatorAllowsNonDeterministicExpressions(o) &&
@@ -1247,6 +1233,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
         NanosTimestampSubtractionCheck.checkOperator(operator)
     }
     checkCollectedMetrics(plan)
+    checkFileTypeInUserDefinedRoutines(plan)
     extendedCheckRules.foreach(_(plan))
     plan.foreachUp {
       case o if !o.resolved =>
@@ -1259,6 +1246,33 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
       case o if o.expressions.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
         checkNotContainingLCA(o.expressions, o)
       case _ =>
+    }
+  }
+
+  /**
+   * Checks that the [[UserDefinedExpression]]s in a query declare only a plain FILE in their
+   * return type, as [[TypeUtils.checkNoQualifierInRegisteredRoutineReturnType]] does when a
+   * routine is registered. This covers routines whose signature is not checked when they are
+   * created, such as UDFs that are not registered and UDAF classes registered with
+   * `CREATE FUNCTION ... AS`. SQL functions are checked by `CREATE FUNCTION`. V2 catalog functions
+   * are covered only when they are bound as an [[ApplyFunctionExpression]]. A non-scalar Python
+   * UDF is skipped, as its data type is the schema of the rows it returns. As in
+   * `checkAnalysis0`, sub-plans that are already analyzed are skipped, as they were checked when
+   * they were analyzed.
+   */
+  private def checkFileTypeInUserDefinedRoutines(plan: LogicalPlan): Unit = {
+    def check(operator: LogicalPlan): Unit = if (!operator.analyzed) {
+      operator.expressions.foreach(_.foreach {
+        case udf: PythonUDF if !PythonUDF.isScalarPythonUDF(udf) =>
+        case routine: UserDefinedExpression
+            if routine.dataType.existsRecursively(_.isInstanceOf[FileType]) =>
+          TypeUtils.checkNoQualifierInRegisteredRoutineReturnType(routine.dataType, routine.name)
+        case _ =>
+      })
+      operator.children.foreach(check)
+    }
+    if (SQLConf.get.isFileTypeEnabled) {
+      check(plan)
     }
   }
 
@@ -1313,114 +1327,19 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
   }
 
   /**
-   * Validates the options used for alter table commands after table and columns are resolved.
+   * Fails a DDL with a CHECK condition that the parser reads differently under the settings a
+   * later write reads it with. This covers a condition with a predicate too, because a connector
+   * may store only the text. The comparison takes the ANSI value of the session, so a write can
+   * still analyze an accepted condition differently, such as with an implicit cast under ANSI
+   * mode, or fail to resolve it.
    */
-  private def checkAlterTableCommand(alter: AlterTableCommand): Unit = {
-    def checkColumnNotExists(op: String, fieldNames: Seq[String], struct: StructType): Unit = {
-      if (struct.findNestedField(
-          fieldNames, includeCollections = true, alter.conf.resolver).isDefined) {
-        alter.failAnalysis(
-          errorClass = "FIELD_ALREADY_EXISTS",
-          messageParameters = Map(
-            "op" -> op,
-            "fieldNames" -> toSQLId(fieldNames),
-            "struct" -> toSQLType(struct)))
-      }
-    }
-
-    def checkColumnNameDuplication(colsToAdd: Seq[QualifiedColType]): Unit = {
-      SchemaUtils.checkColumnNameDuplication(
-        colsToAdd.map(_.name.quoted),
-        alter.conf.resolver)
-    }
-
-    def checkNoCollationsInMapKeys(colsToAdd: Seq[QualifiedColType]): Unit = {
-      if (!alter.conf.allowCollationsInMapKeys) {
-        colsToAdd.foreach(col => SchemaUtils.checkNoCollationsInMapKeys(col.dataType))
-      }
-    }
-
-    alter match {
-      case AddColumns(table: ResolvedTable, colsToAdd) =>
-        colsToAdd.foreach { colToAdd =>
-          checkColumnNotExists("add", colToAdd.name, table.schema)
-        }
-        checkColumnNameDuplication(colsToAdd)
-        checkNoCollationsInMapKeys(colsToAdd)
-
-      case ReplaceColumns(_: ResolvedTable, colsToAdd) =>
-        checkColumnNameDuplication(colsToAdd)
-        checkNoCollationsInMapKeys(colsToAdd)
-
-      case RenameColumn(table: ResolvedTable, col: ResolvedFieldName, newName) =>
-        checkColumnNotExists("rename", col.path :+ newName, table.schema)
-
-      case AlterColumns(table: ResolvedTable, specs, _) =>
-        AlterColumns.findRepeatedColumn(specs).foreach { name =>
-          alter.failAnalysis(
-            errorClass = "NOT_SUPPORTED_CHANGE_SAME_COLUMN",
-            messageParameters = Map(
-              "table" -> toSQLId(table.name),
-              "fieldName" -> toSQLId(name)))
-        }
-        specs.foreach {
-          case AlterColumnSpec(col: ResolvedFieldName, dataType, nullable, _, _, _, _, _) =>
-            val fieldName = col.name.quoted
-            if (dataType.isDefined) {
-              val field = CharVarcharUtils.getRawType(col.field.metadata)
-                .map(dt => col.field.copy(dataType = dt))
-                .getOrElse(col.field)
-              val newDataType = dataType.get
-              newDataType match {
-                case _: StructType => alter.failAnalysis(
-                  "CANNOT_UPDATE_FIELD.STRUCT_TYPE",
-                  Map("table" -> toSQLId(table.name), "fieldName" -> toSQLId(fieldName)))
-                case _: MapType => alter.failAnalysis(
-                  "CANNOT_UPDATE_FIELD.MAP_TYPE",
-                  Map("table" -> toSQLId(table.name), "fieldName" -> toSQLId(fieldName)))
-                case _: ArrayType => alter.failAnalysis(
-                  "CANNOT_UPDATE_FIELD.ARRAY_TYPE",
-                  Map("table" -> toSQLId(table.name), "fieldName" -> toSQLId(fieldName)))
-                case u: UserDefinedType[_] => alter.failAnalysis(
-                  "CANNOT_UPDATE_FIELD.USER_DEFINED_TYPE",
-                  Map(
-                    "table" -> toSQLId(table.name),
-                    "fieldName" -> toSQLId(fieldName),
-                    "udtSql" -> toSQLType(u)))
-                case _: CalendarIntervalType | _: AnsiIntervalType => alter.failAnalysis(
-                  "CANNOT_UPDATE_FIELD.INTERVAL_TYPE",
-                  Map("table" -> toSQLId(table.name), "fieldName" -> toSQLId(fieldName)))
-                case _ => // update is okay
-              }
-
-              // We don't need to handle nested types here which shall fail before.
-              def canAlterColumnType(from: DataType, to: DataType): Boolean = (from, to) match {
-                case (c1: CharType, c2: CharType) => c1.length == c2.length
-                case (c: CharType, v: VarcharType) => c.length <= v.length
-                case (v1: VarcharType, v2: VarcharType) => v1.length <= v2.length
-                case _ => Cast.canUpCast(from, to)
-              }
-              if (!canAlterColumnType(field.dataType, newDataType)) {
-                alter.failAnalysis(
-                  errorClass = "NOT_SUPPORTED_CHANGE_COLUMN",
-                  messageParameters = Map(
-                    "table" -> toSQLId(table.name),
-                    "originName" -> toSQLId(fieldName),
-                    "originType" -> toSQLType(field.dataType),
-                    "newName" -> toSQLId(fieldName),
-                    "newType" -> toSQLType(newDataType)))
-              }
-            }
-            if (nullable.isDefined) {
-              if (!nullable.get && col.field.nullable) {
-                alter.failAnalysis(
-                  errorClass = "_LEGACY_ERROR_TEMP_2330",
-                  messageParameters = Map("fieldName" -> fieldName))
-              }
-            }
-          case _ =>
-        }
-      case _ =>
+  private def failIfSessionDependent(condition: String, node: TreeNode[_]): Unit = {
+    if (!conf.getConf(SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_CHECK_CONSTRAINT) &&
+        !StoredExpressionText.readsAsInSession(catalogManager.v1SessionCatalog.parser, condition,
+          StoredExpressionText.fixedConf(conf))) {
+      node.failAnalysis(
+        errorClass = "SESSION_DEPENDENT_CHECK_CONSTRAINT",
+        messageParameters = Map("checkCondition" -> condition))
     }
   }
 

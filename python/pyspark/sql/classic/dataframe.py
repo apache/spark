@@ -60,6 +60,10 @@ from pyspark.sql.dataframe import (
 from pyspark.sql.dataframe import (
     DataFrameStatFunctions as ParentDataFrameStatFunctions,
 )
+from pyspark.sql.dataframe import (
+    _validate_approx_quantile_probabilities,
+    _validate_approx_quantile_relative_error,
+)
 from pyspark.sql.functions import builtin as F
 from pyspark.sql.merge import MergeIntoWriter
 from pyspark.sql.pandas.conversion import PandasConversionMixin
@@ -905,7 +909,8 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
             an asof tolerance within this range; must be compatible
             with the merge index.
         allowExactMatches : bool, optional
-            default ``True``.
+            default ``True``. If ``False``, a right row with an equal key is not matched.
+            The ``tolerance`` bound stays inclusive.
         direction : str, optional
             default ``backward``. Must be one of: ``backward``, ``forward``, and ``nearest``.
 
@@ -947,6 +952,14 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         ... ).select(left.a, 'left_val', 'right_val').sort("a").collect()
         [Row(a=1, left_val='a', right_val=1),
          Row(a=5, left_val='b', right_val=6)]
+
+        A join on column names returns each of these columns once, first, as in SQL
+        ``ASOF JOIN ... USING``.
+
+        >>> left_k = spark.createDataFrame([(1, "x"), (5, "y")], ["a", "k"])
+        >>> right_k = spark.createDataFrame([(1, "x", 1), (3, "y", 2)], ["a", "k", "v"])
+        >>> left_k._joinAsOf(right_k, leftAsOfColumn="a", rightAsOfColumn="a", on="k").columns
+        ['k', 'a', 'a', 'v']
         """
         if isinstance(leftAsOfColumn, str):
             leftAsOfColumn = self[leftAsOfColumn]
@@ -1720,47 +1733,10 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
                 )
         col = _to_list(self._sc, cast(List["ColumnOrName"], col))
 
-        if not isinstance(probabilities, (list, tuple)):
-            raise PySparkTypeError(
-                errorClass="NOT_EXPECTED_TYPE",
-                messageParameters={
-                    "arg_name": "probabilities",
-                    "expected_type": "list or tuple",
-                    "arg_type": type(probabilities).__name__,
-                },
-            )
-        if isinstance(probabilities, tuple):
-            probabilities = list(probabilities)
-        for p in probabilities:
-            if not isinstance(p, (float, int)) or p < 0 or p > 1:
-                raise PySparkTypeError(
-                    errorClass="NOT_EXPECTED_TYPE",
-                    messageParameters={
-                        "arg_name": "probabilities",
-                        "expected_type": "list[float, int]",
-                        "arg_type": type(p).__name__,
-                    },
-                )
+        probabilities = _validate_approx_quantile_probabilities(probabilities)
         probabilities = _to_list(self._sc, cast(List["ColumnOrName"], probabilities))
 
-        if not isinstance(relativeError, (float, int)):
-            raise PySparkTypeError(
-                errorClass="NOT_EXPECTED_TYPE",
-                messageParameters={
-                    "expected_type": "float or int",
-                    "arg_name": "relativeError",
-                    "arg_type": type(relativeError).__name__,
-                },
-            )
-        if relativeError < 0:
-            raise PySparkValueError(
-                errorClass="NEGATIVE_VALUE",
-                messageParameters={
-                    "arg_name": "relativeError",
-                    "arg_value": str(relativeError),
-                },
-            )
-        relativeError = float(relativeError)
+        relativeError = _validate_approx_quantile_relative_error(relativeError)
 
         jaq = self._jdf.stat().approxQuantile(col, probabilities, relativeError)
         jaq_list = [list(j) for j in jaq]

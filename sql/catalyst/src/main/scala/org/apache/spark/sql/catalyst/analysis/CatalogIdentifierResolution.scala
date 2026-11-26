@@ -17,14 +17,34 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, LookupCatalog}
+import scala.jdk.CollectionConverters._
+
+import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.plans.logical.ColumnDefinition
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
+import org.apache.spark.sql.catalyst.util.SparkCharVarcharUtils.replaceCharVarcharWithString
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, LookupCatalog, SupportsNamespaces}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
- * Resolves command target names to a [[ResolvedIdentifier]] for [[ResolveCatalogs]].
+ * Resolves command identifiers and namespaces for [[ResolveCatalogs]].
  */
 class CatalogIdentifierResolution(override val catalogManager: CatalogManager)
-    extends LookupCatalog {
+    extends LookupCatalog with SQLConfHelper {
+
+  /** Resolves a command target without column output, preserving its origin and tags. */
+  def resolveUnresolvedIdentifier(
+      unresolvedIdentifier: UnresolvedIdentifier): ResolvedIdentifier = {
+    CurrentOrigin.withOrigin(unresolvedIdentifier.origin) {
+      val resolvedIdentifier = resolveIdentifier(
+        nameParts = unresolvedIdentifier.nameParts,
+        allowTemp = unresolvedIdentifier.allowTemp,
+        columnOutput = Nil)
+      resolvedIdentifier.copyTagsFrom(unresolvedIdentifier)
+      resolvedIdentifier
+    }
+  }
 
   /** A temporary view resolves to [[FakeSystemCatalog]] when `allowTemp` is set. */
   def resolveIdentifier(
@@ -37,6 +57,61 @@ class CatalogIdentifierResolution(override val catalogManager: CatalogManager)
     } else {
       val CatalogAndIdentifier(catalog, identifier) = nameParts
       ResolvedIdentifier(catalog, identifier, columnOutput)
+    }
+  }
+
+  /** Resolves the current catalog and namespace using the caller's catalog lookup when supplied. */
+  def resolveCurrentNamespace(lookupCatalog: LookupCatalog = this): ResolvedNamespace = {
+    ResolvedNamespace(
+      lookupCatalog.currentCatalog,
+      catalogManager.currentNamespace.toImmutableArraySeq)
+  }
+
+  /**
+   * Resolves a namespace name, preserving its origin and tags and loading metadata on request.
+   * Uses the caller's catalog extractor when supplied.
+   */
+  def resolveUnresolvedNamespace(
+      unresolvedNamespace: UnresolvedNamespace,
+      lookupCatalog: LookupCatalog = this): ResolvedNamespace = {
+    CurrentOrigin.withOrigin(unresolvedNamespace.origin) {
+      val resolvedNamespace = unresolvedNamespace match {
+        case UnresolvedNamespace(Seq(), fetchMetadata) =>
+          resolveNamespace(lookupCatalog.currentCatalog, Seq.empty[String], fetchMetadata)
+        case UnresolvedNamespace(
+            lookupCatalog.CatalogAndNamespace(catalog, namespace), fetchMetadata) =>
+          resolveNamespace(catalog, namespace, fetchMetadata)
+      }
+      resolvedNamespace.copyTagsFrom(unresolvedNamespace)
+      resolvedNamespace
+    }
+  }
+
+  /** Converts column definitions to output attributes, honoring CHAR/VARCHAR configuration. */
+  def columnsToOutput(columns: Seq[ColumnDefinition]): Seq[AttributeReference] = {
+    columns.map { col =>
+      val dataType = if (conf.charVarcharFirstClassTypes) {
+        col.dataType
+      } else {
+        replaceCharVarcharWithString(col.dataType)
+      }
+      AttributeReference(col.name, dataType, col.nullable, col.metadata)()
+    }
+  }
+
+  /** Resolves namespace metadata only when requested and supported by the catalog. */
+  private def resolveNamespace(
+      catalog: CatalogPlugin,
+      ns: Seq[String],
+      fetchMetadata: Boolean): ResolvedNamespace = {
+    catalog match {
+      case supportsNS: SupportsNamespaces if fetchMetadata =>
+        ResolvedNamespace(
+          catalog,
+          ns,
+          supportsNS.loadNamespaceMetadata(ns.toArray).asScala.toMap)
+      case _ =>
+        ResolvedNamespace(catalog, ns)
     }
   }
 }

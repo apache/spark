@@ -623,15 +623,9 @@ class SQLQueryTestSuite extends SharedSparkSession
 
   protected def createTestCases(): Seq[TestCase] = {
     listFilesRecursively(new File(inputFilePath)).flatMap { file =>
-      var resultFile = resultFileForInputFile(file)
-      var analyzerResultFile =
+      val resultFile = resultFileForInputFile(file)
+      val analyzerResultFile =
         file.getAbsolutePath.replace(inputFilePath, analyzerGoldenFilePath) + ".out"
-      // JDK-4511638 changes 'toString' result of Float/Double
-      // JDK-8282081 changes DataTimeFormatter 'F' symbol
-      if (Utils.isJavaVersionAtLeast21) {
-        if (new File(resultFile + ".java21").exists()) resultFile += ".java21"
-        if (new File(analyzerResultFile + ".java21").exists()) analyzerResultFile += ".java21"
-      }
       val absPath = file.getAbsolutePath
       val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
 
@@ -937,6 +931,9 @@ class SQLQueryTestSuite extends SharedSparkSession
       val sortedWindowQuery = "SELECT a, b, SUM(b) OVER (ORDER BY a) AS cumulative_sum FROM " +
         "t1 ORDER BY a, b;"
 
+      val describeTableQuery = "EXECUTE IMMEDIATE 'DESCRIBE t1'"
+      val describeColumnQuery = "EXECUTE IMMEDIATE 'DESCRIBE t1 a'"
+
       assert(!isSemanticallySorted(spark.sql(unsortedSelectQuery).logicalPlan))
       assert(!isSemanticallySorted(spark.sql(unsortedJoinQuery).logicalPlan))
       assert(!isSemanticallySorted(spark.sql(unsortedDistinctQuery).logicalPlan))
@@ -947,6 +944,8 @@ class SQLQueryTestSuite extends SharedSparkSession
       assert(isSemanticallySorted(spark.sql(sortedAggQuery).logicalPlan))
       assert(isSemanticallySorted(spark.sql(sortedWindowQuery).logicalPlan))
       assert(isSemanticallySorted(spark.sql(sortedDistinctQuery).logicalPlan))
+      assert(isSemanticallySorted(spark.sql(describeTableQuery).queryExecution.analyzed))
+      assert(isSemanticallySorted(spark.sql(describeColumnQuery).queryExecution.analyzed))
     }
   }
 }

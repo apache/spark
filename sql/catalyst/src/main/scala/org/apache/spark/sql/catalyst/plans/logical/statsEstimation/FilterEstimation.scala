@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.types._
 
 object FilterEstimation {
@@ -161,7 +162,10 @@ case class FilterEstimation(
   /**
    * Returns a percentage of rows meeting a single condition in Filter node.
    * Currently we only support binary predicates where one side is a column,
-   * and the other is a literal.
+   * and the other is a literal. A side may also be a column under the read-side padding or check
+   * that a scan wraps a CHAR or VARCHAR column in, which a predicate pushed below the read-side
+   * Project compares, or under a cast to STRING (see `unwrapCharVarcharRead`). It is estimated as
+   * the column itself, as `EstimationUtils.getAliasStats` does above the read-side Project.
    *
    * @param condition a single logical expression
    * @param update a boolean flag to specify if we need to update ColumnStat of a column
@@ -170,7 +174,8 @@ case class FilterEstimation(
    *         It returns None if the condition is not supported.
    */
   def calculateSingleCondition(condition: Expression, update: Boolean): Option[Double] = {
-    condition match {
+    val unpadded = condition.mapChildren(unwrapCharVarcharRead)
+    unpadded match {
       case l: Literal =>
         evaluateLiteral(l)
 
@@ -251,6 +256,20 @@ case class FilterEstimation(
   }
 
   /**
+   * Returns the column under the read-side padding or check that a scan wraps a CHAR or VARCHAR
+   * column in, and under the cast to STRING that a comparison adds when CHAR and VARCHAR are
+   * first-class types (see `CharVarcharUtils.stripCastToPlainString`). The column's distinct
+   * count is used as it is, as `EstimationUtils.getAliasStats` keeps it.
+   */
+  private def unwrapCharVarcharRead(e: Expression): Expression = {
+    CharVarcharUtils.stripCastToPlainString(e) match {
+      case CharVarcharUtils.ReadSidePaddingOrCheck(attr: Attribute, _, _) => attr
+      case attr: Attribute => attr
+      case _ => e
+    }
+  }
+
+  /**
    * Returns a percentage of rows meeting "IS NULL" or "IS NOT NULL" condition.
    *
    * @param attr an Attribute (or a column)
@@ -318,12 +337,12 @@ case class FilterEstimation(
     }
 
     attr.dataType match {
-      case _: NumericType | DateType | TimestampType | BooleanType =>
+      case dt if canConvertToDouble(dt) =>
         evaluateBinaryForNumeric(op, attr, literal, update)
-      case _: StringType | BinaryType =>
+      case _ =>
         // TODO: It is difficult to support other binary comparisons for String/Binary
         // type without min/max and advanced statistics like histogram.
-        logDebug("[CBO] No range comparison statistics for String/Binary type " + attr)
+        logDebug("[CBO] No range comparison statistics for " + attr)
         None
     }
   }
@@ -366,7 +385,8 @@ case class FilterEstimation(
 
     if (!valueInRange) return Some(0.0)
 
-    val percent = if (colStat.histogram.isDefined) {
+    val useHistogram = colStat.histogram.isDefined && canEstimateWithHistogram(attr.dataType)
+    val percent = if (useHistogram) {
       if (colStat.hasMinMaxStats) {
         Some(computeEqualityPossibilityByHistogram(literal, colStat))
       } else {
@@ -440,7 +460,7 @@ case class FilterEstimation(
 
     // use [min, max] to filter the original hSet
     dataType match {
-      case _: NumericType | BooleanType | DateType | TimestampType =>
+      case _ if canConvertToDouble(dataType) =>
         if (ndv.toDouble == 0) {
           return Some(0.0)
         }
@@ -470,7 +490,7 @@ case class FilterEstimation(
         }
 
       // We assume the whole set since there is no min/max information for String/Binary type
-      case _: StringType | BinaryType =>
+      case _ =>
         if (ndv.toDouble == 0)  {
           return Some(0.0)
         }
@@ -713,10 +733,10 @@ case class FilterEstimation(
     }
 
     attrLeft.dataType match {
-      case _: StringType | BinaryType =>
+      case dt if !canConvertToDouble(dt) =>
         // TODO: It is difficult to support other binary comparisons for String/Binary
         // type without min/max and advanced statistics like histogram.
-        logDebug("[CBO] No range comparison statistics for String/Binary type " + attrLeft)
+        logDebug("[CBO] No range comparison statistics for " + attrLeft)
         return None
       case _ =>
         if (!colStatsMap.hasMinMaxStats(attrLeft)) {

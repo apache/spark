@@ -21,7 +21,7 @@ name: "Build / Python-only (Python 3.12, MacOS26)"
 
 on:
   schedule:
-    - cron: '0 23 */2 * *'
+    - cron: '17 21 * * 5'
   workflow_dispatch:
 
 jobs:

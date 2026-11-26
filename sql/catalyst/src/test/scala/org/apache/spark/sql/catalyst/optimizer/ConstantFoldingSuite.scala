@@ -342,6 +342,46 @@ class ConstantFoldingSuite extends PlanTest {
     }
   }
 
+  test("SPARK-60868: Do not fold the size of CreateArray over a LEGACY cast that can fail") {
+    val t = LocalRelation($"i".int, $"d".dayTimeInterval())
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      Seq(
+        // These cannot fail: a LEGACY cast as in SPARK-37392, and a TRY cast that returns null.
+        Cast($"i", StringType) -> true,
+        Cast($"d", ByteType, evalMode = EvalMode.TRY) -> true,
+        // These fail with CAST_OVERFLOW, EXCEED_LIMIT_LENGTH, and CAST_OVERFLOW in the child.
+        Cast($"d", ByteType) -> false,
+        Cast($"i", VarcharType(2)) -> false,
+        Cast(Cast($"d", ByteType), StringType) -> false).foreach { case (cast, foldable) =>
+        assert(cast.evalMode != EvalMode.ANSI)
+        val query = t.select(Size(CreateArray(Seq(cast))).as("s")).analyze
+        val expected = if (foldable) t.select(Literal(1).as("s")).analyze else query
+        comparePlans(Optimize.execute(query), expected)
+      }
+    }
+  }
+
+  test("Fold the size of CreateArray only over CreateArray and CreateNamedStruct") {
+    val t = LocalRelation($"i".int, $"s".string)
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      Seq[(Expression, Boolean)](
+        CreateArray(Seq($"i", Literal(1))) -> true,
+        CreateNamedStruct(Seq(Literal("f"), $"s")) -> true,
+        // The other expressions marked `NoThrow` are evaluated, although they cannot fail.
+        // SPARK-61667 is to fold them too, and then these become true.
+        ($"i" > 1) -> false,
+        ($"i".isNull || $"s".startsWith("a")) -> false,
+        Coalesce(Seq($"i", Literal(0))) -> false,
+        Length($"s") -> false,
+        CreateArray(Seq($"i" > 1)) -> false).foreach { case (e, foldable) =>
+        assert(e.isInstanceOf[NoThrow], e)
+        val query = t.select(Size(CreateArray(Seq(e))).as("n")).analyze
+        val expected = if (foldable) t.select(Literal(1).as("n")).analyze else query
+        comparePlans(Optimize.execute(query), expected)
+      }
+    }
+  }
+
   test("SPARK-60849: Constant folding test CreateMap") {
     // Building a map deduplicates its keys, so its size can be less than the number of pairs.
     withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {

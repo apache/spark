@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, GlobalTempView, 
 import org.apache.spark.sql.catalyst.analysis.V2Reference
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, TemporaryViewRelation}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, SubqueryExpression, VariableReference}
-import org.apache.spark.sql.catalyst.plans.logical.{AlterViewAs, AnalysisOnlyCommand, CreateTempView, CreateView, CTEInChildren, CTERelationDef, LogicalPlan, Project, View, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterViewAs, AnalysisOnlyCommand, CreateTempView, CreateView, CTEInChildren, CTERelationDef, DefinesView, LogicalPlan, Project, View, WithCTE}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, ViewCatalog}
@@ -89,7 +89,8 @@ case class CreateViewCommand(
   extends RunnableCommand
   with AnalysisOnlyCommand
   with CTEInChildren
-  with CreateTempView {
+  with CreateTempView
+  with DefinesView {
 
   import ViewHelper._
 
@@ -255,7 +256,7 @@ case class AlterViewAsCommand(
     isAnalyzed: Boolean = false,
     referredTempFunctions: Seq[String] = Seq.empty,
     referredTempVariablesUnderIdentifier: Seq[Seq[String]] = Seq.empty)
-  extends RunnableCommand with AnalysisOnlyCommand with CTEInChildren {
+  extends RunnableCommand with AnalysisOnlyCommand with CTEInChildren with DefinesView {
 
   import ViewHelper._
 
@@ -385,11 +386,25 @@ case class AlterViewSchemaBindingCommand(name: TableIdentifier, viewSchemaMode: 
     logDebug(s"Try to uncache ${viewIdent.quotedString} before replacing.")
     CommandUtils.uncacheTableOrView(session, viewIdent)
 
+    // EVOLUTION views no longer store query column names, but names written by older versions
+    // can remain, and may be stale if a schema sync from before SPARK-62261 kept them. Rebuild
+    // such names from the schema when their count differs; names with a matching count may
+    // belong to a column list, so keep them (see the TODO in ViewSyncSchemaToMetaStore).
+    val schemaFieldNames = viewMeta.schema.fieldNames
+    val storedColumnNames = viewMeta.viewQueryColumnNames
+    val queryColumnNames =
+      if (viewMeta.viewSchemaMode == SchemaEvolution && storedColumnNames.nonEmpty &&
+          storedColumnNames.length != schemaFieldNames.length) {
+        schemaFieldNames
+      } else {
+        storedColumnNames.toArray
+      }
+
     val newProperties = generateViewProperties(
       viewMeta.properties,
       session,
-      viewMeta.viewQueryColumnNames.toArray,
-      viewMeta.schema.fieldNames,
+      queryColumnNames,
+      schemaFieldNames,
       viewSchemaMode,
       captureNewPath = false)
 
@@ -1019,9 +1034,8 @@ object CheckViewReferences extends (LogicalPlan => Unit) {
       }
 
     case av: AlterViewAs if av.isAnalyzed =>
-      // No capability check here: `Analyzer.lookupTableOrView(identifier, viewOnly=true)`
-      // already rejects non-ViewCatalog catalogs upstream for `UnresolvedView`, so by the time
-      // an AlterViewAs reaches this rule the catalog is guaranteed to be a ViewCatalog.
+      // `RelationResolution.lookupTableOrView(identifier, viewOnly = true)` rejects catalogs
+      // without view support for `UnresolvedView`, so no capability check is needed here.
       val fullIdent = fullIdentFor(av.child)
       verifyTemporaryObjectsNotExists(
         isTemporary = false, fullIdent, av.query, av.referredTempFunctions,

@@ -82,7 +82,8 @@ object KubernetesTestConf {
       secretEnvNamesToKeyRefs: Map[String, String] = Map.empty,
       secretNamesToMountPaths: Map[String, String] = Map.empty,
       volumes: Seq[KubernetesVolumeSpec] = Seq.empty,
-      authSecret: Option[String] = None): KubernetesExecutorConf = {
+      authSecret: Option[String] = None,
+      sslRpcPasswordEnvs: Map[String, String] = Map.empty): KubernetesExecutorConf = {
     val conf = sparkConf.clone()
 
     setPrefixedConfigs(conf, KUBERNETES_EXECUTOR_LABEL_PREFIX, labels)
@@ -92,7 +93,8 @@ object KubernetesTestConf {
     setPrefixedConfigs(conf, KUBERNETES_EXECUTOR_SECRET_KEY_REF_PREFIX, secretEnvNamesToKeyRefs)
     setVolumeSpecs(conf, KUBERNETES_EXECUTOR_VOLUMES_PREFIX, volumes)
 
-    new KubernetesExecutorConf(conf, APP_ID, EXECUTOR_ID, driverPod, customAuthSecret = authSecret)
+    new KubernetesExecutorConf(conf, APP_ID, EXECUTOR_ID, driverPod, customAuthSecret = authSecret,
+      sslRpcPasswordEnvs = sslRpcPasswordEnvs)
   }
 
   private def setPrefixedConfigs(

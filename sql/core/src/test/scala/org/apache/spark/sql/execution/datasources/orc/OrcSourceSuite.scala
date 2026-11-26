@@ -41,7 +41,7 @@ import org.apache.spark.sql.execution.datasources.orc.OrcCompressionCodec._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
-import org.apache.spark.tags.ExtendedSQLTest
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.util.Utils
 
 case class OrcData(intField: Int, stringField: String)
@@ -1194,7 +1194,7 @@ class OrcSourceV1Suite extends OrcSourceSuite {
       .set(SQLConf.USE_V1_SOURCE_LIST, "orc")
 }
 
-@ExtendedSQLTest
+@DataSourceV2Test
 class OrcSourceV2Suite extends OrcSourceSuite {
   override protected def sparkConf: SparkConf =
     super

@@ -142,7 +142,7 @@ case class InsertAdaptiveSparkPlan(
    */
   private def buildSubqueryMap(plan: SparkPlan): Map[Long, SparkPlan] = {
     val subqueryMap = mutable.HashMap.empty[Long, SparkPlan]
-    if (!plan.containsAnyPattern(SCALAR_SUBQUERY, IN_SUBQUERY, DYNAMIC_PRUNING_SUBQUERY)) {
+    if (!plan.containsAnyPattern(PlanAdaptiveSubqueries.patterns: _*)) {
       return subqueryMap.toMap
     }
     plan.foreach(_.expressions.filter(_.containsPattern(PLAN_EXPRESSION)).foreach(_.foreach {

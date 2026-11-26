@@ -78,6 +78,75 @@ if TYPE_CHECKING:
 __all__ = ["DataFrame", "DataFrameNaFunctions", "DataFrameStatFunctions"]
 
 
+def _validate_approx_quantile_probabilities(probabilities: Any) -> List[float]:
+    """
+    Validate the ``probabilities`` argument of ``DataFrame.approxQuantile``, shared by the
+    classic and Connect implementations so both stay in sync. Returns it as a ``list`` of
+    ``float``, since classic passes it to a JVM method that expects ``Double`` elements.
+    """
+    from pyspark.errors import PySparkTypeError, PySparkValueError
+
+    if not isinstance(probabilities, (list, tuple)):
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "probabilities",
+                "expected_type": "list or tuple",
+                "arg_type": type(probabilities).__name__,
+            },
+        )
+    probabilities = list(probabilities)
+    for p in probabilities:
+        if isinstance(p, bool) or not isinstance(p, (float, int)):
+            raise PySparkTypeError(
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "probabilities",
+                    "expected_type": "list[float, int]",
+                    "arg_type": type(p).__name__,
+                },
+            )
+    for p in probabilities:
+        if not (0 <= p <= 1):
+            raise PySparkValueError(
+                errorClass="VALUE_OUT_OF_BOUNDS",
+                messageParameters={
+                    "arg_name": "probabilities",
+                    "lower_bound": "0",
+                    "upper_bound": "1",
+                    "actual": str(p),
+                },
+            )
+    return [float(p) for p in probabilities]
+
+
+def _validate_approx_quantile_relative_error(relativeError: Any) -> float:
+    """
+    Validate the ``relativeError`` argument of ``DataFrame.approxQuantile``, shared by the
+    classic and Connect implementations so both stay in sync. Returns it as a ``float``.
+    """
+    from pyspark.errors import PySparkTypeError, PySparkValueError
+
+    if isinstance(relativeError, bool) or not isinstance(relativeError, (float, int)):
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "float or int",
+                "arg_name": "relativeError",
+                "arg_type": type(relativeError).__name__,
+            },
+        )
+    if not relativeError >= 0:
+        raise PySparkValueError(
+            errorClass="NEGATIVE_VALUE",
+            messageParameters={
+                "arg_name": "relativeError",
+                "arg_value": str(relativeError),
+            },
+        )
+    return float(relativeError)
+
+
 class DataFrame:
     """A distributed collection of data grouped into named columns.
 
@@ -3025,7 +3094,8 @@ class DataFrame:
             an asof tolerance within this range; must be compatible
             with the merge index.
         allowExactMatches : bool, optional
-            default ``True``.
+            default ``True``. If ``False``, a right row with an equal key is not matched.
+            The ``tolerance`` bound stays inclusive.
         direction : str, optional
             default ``backward``. Must be one of: ``backward``, ``forward``, and ``nearest``.
 
@@ -3067,6 +3137,14 @@ class DataFrame:
         ... ).select(left.a, 'left_val', 'right_val').sort("a").collect()
         [Row(a=1, left_val='a', right_val=1),
          Row(a=5, left_val='b', right_val=6)]
+
+        A join on column names returns each of these columns once, first, as in SQL
+        ``ASOF JOIN ... USING``.
+
+        >>> left_k = spark.createDataFrame([(1, "x"), (5, "y")], ["a", "k"])
+        >>> right_k = spark.createDataFrame([(1, "x", 1), (3, "y", 2)], ["a", "k", "v"])
+        >>> left_k._joinAsOf(right_k, leftAsOfColumn="a", rightAsOfColumn="a", on="k").columns
+        ['k', 'a', 'a', 'v']
         """
         ...
 

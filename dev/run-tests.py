@@ -24,6 +24,7 @@ import subprocess
 import sys
 import tempfile
 from argparse import ArgumentParser
+from collections.abc import Sequence
 from contextlib import contextmanager
 
 import sparktestsupport.modules as modules
@@ -33,6 +34,7 @@ from sparktestsupport.utils import (
     determine_dangling_python_tests,
     determine_modules_for_files,
     determine_modules_to_test,
+    determine_shell_script_test_goals,
     identify_changed_files_from_git_commits,
 )
 
@@ -111,16 +113,6 @@ def run_java_style_checks(build_profiles):
 
 def run_python_style_checks():
     run_cmd([os.path.join(SPARK_HOME, "dev", "lint-python")])
-
-
-def run_sparkr_style_checks():
-    if which("R"):
-        # R style check should be executed after `install-dev.sh`.
-        # Since warnings about `no visible global function definition` appear
-        # without the installation. SEE ALSO: SPARK-9121.
-        run_cmd([os.path.join(SPARK_HOME, "dev", "lint-r")])
-    else:
-        print("Ignoring SparkR style check as R was not found in PATH")
 
 
 def exec_maven(mvn_args=()):
@@ -380,8 +372,16 @@ def run_python_packaging_tests():
     run_cmd(command)
 
 
-def run_build_tests():
-    run_cmd([os.path.join(SPARK_HOME, "dev", "test-dependencies.sh")])
+def run_shell_script_tests(
+    test_modules: Sequence[modules.Module], stage: modules.TestStage
+) -> None:
+    """Run the selected shell script goals for the given stage."""
+    shell_script_test_goals = determine_shell_script_test_goals(test_modules, stage)
+
+    for test_goal in shell_script_test_goals:
+        with titled_block(f"Running {test_goal.path}"):
+            command = [os.path.join(SPARK_HOME, test_goal.path)]
+            run_cmd(command)
 
 
 def run_sparkr_tests():
@@ -473,8 +473,7 @@ def main():
         test_modules = [m for m in modules.all_modules if m.name in str_test_modules]
 
     if not should_only_test_modules or modules.sparkr in test_modules:
-        # If tests modules are specified, we will not run R linter.
-        # SparkR needs the manual SparkR installation.
+        # SparkR tests load the package from R/lib.
         if which("R"):
             with titled_block("Installing SparkR"):
                 run_cmd([os.path.join(SPARK_HOME, "R", "install-dev.sh")])
@@ -596,15 +595,11 @@ def main():
         ):
             with titled_block("Running Python style checks"):
                 run_python_style_checks()
-        if not changed_files or any(
-            f.endswith(".R") or f.endswith("lint-r") or f.endswith(".lintr") for f in changed_files
-        ):
-            with titled_block("Running R style checks"):
-                run_sparkr_style_checks()
 
-    if any(m.should_run_build_tests for m in test_modules):
-        with titled_block("Running build tests"):
-            run_build_tests()
+    run_shell_script_tests(
+        test_modules,
+        modules.TestStage.PRE_BUILD,
+    )
 
     # spark build
     if os.environ.get("SKIP_SCALA_BUILD", "false") != "true":
@@ -664,18 +659,10 @@ def main():
 
 
 def _test():
-    import doctest
+    import unittest
 
-    import sparktestsupport.modules
-    import sparktestsupport.utils
-
-    test_results = (
-        doctest.testmod(sparktestsupport.modules),
-        doctest.testmod(sparktestsupport.utils),
-        doctest.testmod(),
-    )
-    failure_count = sum([num_failures for (num_failures, num_tests) in test_results])
-    if failure_count:
+    tests = unittest.defaultTestLoader.discover("sparktestsupport.tests")
+    if not unittest.TextTestRunner().run(tests).wasSuccessful():
         sys.exit(-1)
 
 

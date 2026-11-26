@@ -32,6 +32,14 @@ Null-field handling inside a struct value therefore follows
 `spark.sql.jsonGenerator.ignoreNullFields`, exactly as `to_json` does; the `ON NULL` clause below
 controls only the top-level object members.
 
+A call without any clause or `FORMAT JSON`, nested or not, resolves like an ordinary function call,
+so a same-named function placed before `system.builtin` in the SQL `PATH`, or a replacement
+injected by a session extension, can own it. Each nested call is resolved on its own, exactly like
+the outer one. Qualifying every level (e.g. `builtin.json_object('a', builtin.json_object('b', 1))`)
+selects the built-in over a function in the `PATH`; adding a clause to every level
+(e.g. `json_object('a' VALUE json_object('b' VALUE 1 NULL ON NULL) NULL ON NULL)`) always selects
+it, even over an extension's replacement.
+
 This is an initial subset of the SQL:2016 `JSON_OBJECT` constructor. It supports the key/value
 members, the value-level `FORMAT JSON` marker, the `{ NULL | ABSENT } ON NULL` clause, and a
 string-type `RETURNING`. The following SQL/JSON clauses are not yet supported:
@@ -76,13 +84,15 @@ JSON_OBJECT ( [ key, value [, key, value] ... ]
     `JSON_OBJECT('a' VALUE JSON_QUERY('{"o":{"x":1}}', '$.o'))` produces `{"a":{"x":1}}`). A
     `JSON_QUERY` with `OMIT QUOTES` returns an ordinary string, so it is quoted like any other value
     (e.g. `JSON_OBJECT('n' VALUE JSON_QUERY('{"n":"Ada"}', '$.n' OMIT QUOTES))` produces
-    `{"n":"Ada"}`). Without `FORMAT JSON`, an ordinary string value is always quoted, even when its
-    contents are themselves valid JSON text (e.g. `JSON_OBJECT('a' VALUE '{"b":1}')` produces
-    `{"a":"{\"b\":1}"}`). Implicit raw splicing applies to the direct syntax above and to the
-    unqualified comma form (e.g. `json_object('a', json_object('b', 1))`, which carries the nested
-    producer through to the built-in and produces `{"a":{"b":1}}`). A qualified or otherwise generic
-    routed call (e.g. `builtin.json_object('a', json_object('b', 1))`) currently quotes the nested
-    result instead, producing `{"a":"{\"b\":1}"}`.
+    `{"n":"Ada"}`). As an exception, a `GROUP BY` alias of a JSON producer stands for that producer
+    and is spliced; other column references, including a lateral column alias, are quoted. Without
+    `FORMAT JSON`, an ordinary string value is always quoted, even when its contents are themselves
+    valid JSON text (e.g. `JSON_OBJECT('a' VALUE '{"b":1}')` produces `{"a":"{\"b\":1}"}`).
+    Implicit raw splicing applies to the direct syntax above, to the
+    unqualified comma form (e.g. `json_object('a', json_object('b', 1))`), and to a qualified or
+    otherwise generic routed call (e.g. `builtin.json_object('a', json_object('b', 1))`); each
+    produces `{"a":{"b":1}}` when Spark's built-in owns every call (see above; an extension's
+    replacement can still own a qualified call).
 
 * **FORMAT JSON**
 

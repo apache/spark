@@ -49,7 +49,7 @@ import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.BinaryOutputStyle
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
-import org.apache.spark.tags.ExtendedSQLTest
+import org.apache.spark.tags.DataSourceV2Test
 
 abstract class CSVSuite
   extends SharedSparkSession
@@ -4306,6 +4306,22 @@ abstract class CSVSuite
     }
   }
 
+  test("SPARK-59546: unusable timeFormat does not break CSV inference") {
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      withTempDir { dir =>
+        val path = s"${dir.getCanonicalPath}/time_infer.csv"
+        Seq("time", "plain").toDF("value").coalesce(1).write.text(path)
+        val df = spark.read
+          .option("header", "true")
+          .option("inferSchema", "true")
+          .option("timeFormat", "EEE HH:mm")
+          .csv(path)
+        assert(df.schema("time").dataType === StringType)
+        checkAnswer(df, Seq(Row("plain")))
+      }
+    }
+  }
+
   // Writes `data` to `file` compressed with `codec` (a short name; "" means no compression), using
   // Spark's built-in Zstandard codec for zstd (which Hadoop may not be compiled with) and Hadoop's
   // CompressionCodecFactory otherwise. The file name intentionally does NOT carry the codec's
@@ -4526,7 +4542,7 @@ class CSVv1Suite extends CSVSuite {
   }
 }
 
-@ExtendedSQLTest
+@DataSourceV2Test
 class CSVv2Suite extends CSVSuite {
   override protected def sparkConf: SparkConf =
     super

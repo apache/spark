@@ -3678,6 +3678,25 @@ class XmlSuite
     }
   }
 
+  test("SPARK-59546: unusable timeFormat does not break XML inference") {
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      val xml = "<ROW><time>plain</time></ROW>"
+      val options = baseOptions + ("timeFormat" -> "EEE HH:mm")
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        Seq(xml).toDF("value").coalesce(1).write.text(path)
+        // If an exception escaped schema inference, the Dataset[String] read would produce a
+        // corrupt record, as would the multi-line file read with the legacy parser; with the
+        // default parser, the multi-line file read would fail the query.
+        Seq(readData(xml, None, options), spark.read.options(options).xml(path)).foreach { df =>
+          assert(df.schema("time").dataType === StringType)
+          assert(!df.schema.fieldNames.contains("_corrupt_record"))
+          checkAnswer(df, Seq(Row("plain")))
+        }
+      }
+    }
+  }
+
   test("validate XML Options") {
     assert(XmlOptions.getAllOptions.size == 33)
     // Please add validation on any new XML options here
@@ -3909,7 +3928,7 @@ object XmlSuiteDebugFileSystem {
   }
 
   def open() : Unit = {
-    val threadId = Thread.currentThread().getId
+    val threadId = Thread.currentThread().threadId
     // assert that there are no open files for this executor
     assert(openCounterPerThread.getOrDefault(threadId, 0) == 0)
     openCounterPerThread.put(threadId, 1)
@@ -3917,7 +3936,7 @@ object XmlSuiteDebugFileSystem {
   }
 
   def close(): Unit = {
-    val threadId = Thread.currentThread().getId
+    val threadId = Thread.currentThread().threadId
     if (openCounterPerThread.get(threadId) == 1) {
       openCounterPerThread.put(threadId, 0)
     }

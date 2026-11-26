@@ -429,6 +429,15 @@ class SparkSession:
 
     table.__doc__ = PySparkSession.table.__doc__
 
+    def getOrCreateDataFrame(
+        self, path: str, create: Callable[[], ParentDataFrame]
+    ) -> ParentDataFrame:
+        raise PySparkNotImplementedError(
+            errorClass="NOT_IMPLEMENTED", messageParameters={"feature": "getOrCreateDataFrame"}
+        )
+
+    getOrCreateDataFrame.__doc__ = PySparkSession.getOrCreateDataFrame.__doc__
+
     @property
     def read(self) -> "DataFrameReader":
         return DataFrameReader(self)
@@ -1171,6 +1180,18 @@ class SparkSession:
 
     addArtifact = addArtifacts
 
+    def listFiles(self) -> List[str]:
+        # LIST FILES and LIST ARCHIVES do not list the artifacts of the other sessions of the
+        # server since Spark 4.5.
+        return [row[0] for row in self.sql("LIST FILES").collect()]
+
+    listFiles.__doc__ = PySparkSession.listFiles.__doc__
+
+    def listArchives(self) -> List[str]:
+        return [row[0] for row in self.sql("LIST ARCHIVES").collect()]
+
+    listArchives.__doc__ = PySparkSession.listArchives.__doc__
+
     def _cache_local_relation(
         self,
         local_relation: LocalRelation,
@@ -1472,6 +1493,8 @@ def _test() -> None:
     # Spark Connect does not support to set master together.
     pyspark.sql.connect.session.SparkSession.__doc__ = None
     del pyspark.sql.connect.session.SparkSession.Builder.master.__doc__
+    # Classic only.
+    del pyspark.sql.connect.session.SparkSession.getOrCreateDataFrame.__doc__
 
     failure_count, test_count = doctest.testmod(
         pyspark.sql.connect.session,

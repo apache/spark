@@ -121,7 +121,7 @@ trait BinaryArrayExpressionWithImplicitCast
   since = "1.5.0",
   group = "collection_funcs")
 case class Size(child: Expression, legacySizeOfNull: Boolean)
-  extends UnaryExpression with ExpectsInputTypes {
+  extends UnaryExpression with ExpectsInputTypes with NoThrow {
 
   def this(child: Expression) = this(child, SQLConf.get.legacySizeOfNull)
 
@@ -331,7 +331,7 @@ case class ArraysZip(children: Seq[Expression], names: Seq[Expression])
         case (e: NamedExpression, _) => NamePlaceholder
         case (g: GetStructField, _) => Literal(g.extractFieldName)
         case (g: GetArrayStructFields, _) => Literal(g.field.name)
-        case (g: GetMapValue, _) => Literal(g.key)
+        case (GetMapValue(_, StringLiteral(key)), _) => Literal(key)
         case (_, idx) => Literal(idx.toString)
       })
   }
@@ -5632,15 +5632,9 @@ case class ArrayInsert(
     }
   }
 
-  private lazy val positivePos = if (second.foldable) {
-    val pos = second.eval().asInstanceOf[Int]
-    if (pos > 0) {
-      Some(pos)
-    } else {
-      None
-    }
-  } else {
-    None
+  private lazy val positivePos = ExprUtils.tryEvalFoldable(second) match {
+    case Some(pos: Int) if pos > 0 => Some(pos)
+    case _ => None
   }
 
   override def eval(input: InternalRow): Any = {

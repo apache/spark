@@ -17,16 +17,19 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, ExpressionWithUnresolvedIdentifier}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, ExprId, NamedExpression}
-import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, ExpressionWithUnresolvedIdentifier, SimpleAnalyzer, StoredExpressionFunctions}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, ExprId, Literal, NamedExpression}
+import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.DatetimeType
 
 /**
- * Reads the SQL text of a generation expression stored with a table, independently of the
- * settings of the session that reads it.
+ * Reads and analyzes the SQL text of an expression stored with a table, such as a generation
+ * expression or a CHECK condition, independently of the writing session. A generation
+ * expression falls back to the session for SQL text that the fixed settings cannot resolve.
  */
 object StoredExpressionText {
 
@@ -34,8 +37,9 @@ object StoredExpressionText {
    * The settings a stored text is read under. The session time zone, case sensitivity, timestamp
    * type and decimal precision loss stay with the given session, because the settings of the DDL
    * are not known here and pinning them would silently change existing tables of a deployment that
-   * sets them. Any other config that the parsing or the analysis reads takes its default value,
-   * also one that a function reads while it is built, such as
+   * sets them. So does `spark.sql.timeType.enabled`, which decides whether the TIME type is
+   * supported, not how a text reads. Any other config that the parsing or the analysis reads takes
+   * its default value, also one that a function reads while it is built, such as
    * `spark.sql.legacy.negativeIndexInArrayInsert`. With
    * `spark.sql.legacy.useCurrentConfigsForGeneratedColumn`, these are the settings of the session.
    */
@@ -43,16 +47,22 @@ object StoredExpressionText {
     if (session.useCurrentSQLConfigsForGeneratedColumn) {
       session.clone()
     } else {
-      val c = new SQLConf
-      Analyzer.retainResolutionConfigsForAnalysis(newConf = c, existingConf = session)
-      c.setConfString(SQLConf.ANSI_ENABLED.key, "true")
-      c.setConfString(SQLConf.SESSION_LOCAL_TIMEZONE.key, session.sessionLocalTimeZone)
-      c.setConfString(SQLConf.CASE_SENSITIVE.key, session.caseSensitiveAnalysis.toString)
-      c.setConf(SQLConf.TIMESTAMP_TYPE, session.getConf(SQLConf.TIMESTAMP_TYPE))
-      c.setConf(
-        SQLConf.DECIMAL_OPERATIONS_ALLOW_PREC_LOSS, session.decimalOperationsAllowPrecisionLoss)
-      c
+      fixedConf(session)
     }
+  }
+
+  /** The fixed ANSI settings, also for modeled expressions when the legacy flag is enabled. */
+  private[sql] def fixedConf(session: SQLConf): SQLConf = {
+    val c = new SQLConf
+    Analyzer.retainResolutionConfigsForAnalysis(newConf = c, existingConf = session)
+    c.setConfString(SQLConf.ANSI_ENABLED.key, "true")
+    c.setConfString(SQLConf.SESSION_LOCAL_TIMEZONE.key, session.sessionLocalTimeZone)
+    c.setConfString(SQLConf.CASE_SENSITIVE.key, session.caseSensitiveAnalysis.toString)
+    c.setConf(SQLConf.TIMESTAMP_TYPE, session.getConf(SQLConf.TIMESTAMP_TYPE))
+    c.setConf(
+      SQLConf.DECIMAL_OPERATIONS_ALLOW_PREC_LOSS, session.decimalOperationsAllowPrecisionLoss)
+    c.setConf(SQLConf.TIME_TYPE_ENABLED, session.isTimeTypeEnabled)
+    c
   }
 
   /**
@@ -65,21 +75,24 @@ object StoredExpressionText {
    * Parses `text` under [[conf]] with the ANSI value of the active session, for a text that
    * [[conf]] cannot resolve and the session analyzes. Only its ANSI behavior follows the session.
    */
-  def parseWithSessionAnsi(text: String): Expression = parse(confWithSessionAnsi(SQLConf.get), text)
+  def parseWithSessionAnsi(text: String): Expression =
+    parse(withSessionAnsi(conf(SQLConf.get)), text)
 
   private def parse(c: SQLConf, text: String): Expression = {
-    try {
+    val parsed = try {
       SQLConf.withExistingConf(c) {
         CatalystSqlParser.parseExpression(text)
       }
     } catch {
       case _: ParseException => CatalystSqlParser.parseExpression(text)
     }
+    // Neither the SQL path nor a temporary function of the session can shadow a built-in function.
+    StoredExpressionFunctions.qualifyBuiltinFunctions(parsed)
   }
 
-  private def confWithSessionAnsi(session: SQLConf): SQLConf = {
-    val c = conf(session)
-    c.setConfString(SQLConf.ANSI_ENABLED.key, session.ansiEnabled.toString)
+  /** Sets the ANSI value of the active session in `c`, and returns `c`. */
+  private def withSessionAnsi(c: SQLConf): SQLConf = {
+    c.setConfString(SQLConf.ANSI_ENABLED.key, SQLConf.get.ansiEnabled.toString)
     c
   }
 
@@ -95,36 +108,82 @@ object StoredExpressionText {
       inSession: => E,
       input: Seq[Attribute],
       analyzer: LogicalPlan => LogicalPlan): E = {
+    val analyzed = try {
+      expressionFromPlan(expr, analyzePlan(expr, input, analyzer, conf(SQLConf.get)))
+    } catch {
+      case _: AnalysisException => None
+    }
+    analyzed.getOrElse(inSession)
+  }
+
+  /**
+   * Analyzes a modeled expression under fixed ANSI settings and reports errors without fallback.
+   */
+  def analyzeStrict[E <: Expression](
+      expr: E,
+      input: Seq[Attribute],
+      analyzer: LogicalPlan => LogicalPlan): E = {
+    val plan = analyzePlan(expr, input, analyzer, fixedConf(SQLConf.get))
+    // Check under the session's representation settings, including first-class CHAR/VARCHAR.
+    SimpleAnalyzer.checkAnalysis(plan)
+    expressionFromPlan(expr, plan).getOrElse {
+      throw SparkException.internalError(s"Expected a scalar stored expression, but got $plan")
+    }
+  }
+
+  private def analyzePlan(
+      expr: Expression,
+      input: Seq[Attribute],
+      analyzer: LogicalPlan => LogicalPlan,
+      settings: SQLConf): LogicalPlan = {
     val named = expr match {
       case n: NamedExpression => n
       case e => Alias(e, "value")()
     }
-    val analyzed = try {
-      SQLConf.withExistingConf(conf(SQLConf.get)) {
-        analyzer(Project(Seq(named), LocalRelation(input)))
-      } match {
-        case Project(Seq(a), _: LocalRelation) if a.resolved => Some(a)
-        case _ => None
-      }
-    } catch {
-      case _: AnalysisException => None
+    SQLConf.withExistingConf(settings) {
+      analyzer(Project(Seq(named), LocalRelation(input)))
     }
-    analyzed.map {
-      case Alias(child, _) if !expr.isInstanceOf[NamedExpression] => child
-      case a => a
-    }.getOrElse(inSession).asInstanceOf[E]
+  }
+
+  private def expressionFromPlan[E <: Expression](expr: E, plan: LogicalPlan): Option[E] = {
+    plan match {
+      case Project(Seq(a), _: LocalRelation) if a.resolved =>
+        val expression = a match {
+          case Alias(child, _) if !expr.isInstanceOf[NamedExpression] => child
+          case other => other
+        }
+        Some(expression.asInstanceOf[E])
+      case _ => None
+    }
   }
 
   /**
    * Whether `text` reads the same under [[conf]] as it does in the active session. The comparison
    * uses the ANSI value of the session, so that it is about how the text reads.
    */
-  def readsAsInSession(text: String): Boolean = {
-    val fixed = confWithSessionAnsi(SQLConf.get)
-    val parsedInSession = CatalystSqlParser.parseExpression(text)
+  def readsAsInSession(text: String): Boolean =
+    sameReading(CatalystSqlParser, text, conf(SQLConf.get), normalize)
+
+  /**
+   * Whether `parser` reads `text` the same under `fixed` as it does in the active session. `fixed`
+   * takes the ANSI value of the session. The values of datetime literals are not compared, since
+   * the parser reads the clock for a special value such as `TIMESTAMP 'now'`, and the settings
+   * that a datetime literal depends on, such as the session time zone, are those of the session.
+   */
+  def readsAsInSession(parser: ParserInterface, text: String, fixed: SQLConf): Boolean =
+    sameReading(parser, text, fixed, e => normalize(e).transform {
+      case Literal(_, dataType: DatetimeType) => Literal(null, dataType)
+    })
+
+  private def sameReading(
+      parser: ParserInterface,
+      text: String,
+      fixed: SQLConf,
+      normalize: Expression => Expression): Boolean = {
+    val parsedInSession = parser.parseExpression(text)
     try {
-      val parsed = SQLConf.withExistingConf(fixed) {
-        CatalystSqlParser.parseExpression(text)
+      val parsed = SQLConf.withExistingConf(withSessionAnsi(fixed)) {
+        parser.parseExpression(text)
       }
       normalize(parsed) == normalize(parsedInSession)
     } catch {

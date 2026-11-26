@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.tags.ExtendedSQLTest
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.util.Utils
 
 /**
@@ -34,7 +34,7 @@ import org.apache.spark.util.Utils
  * themselves. [[NativeDataSourceSuite]] tests the rest in local mode, where the executors use the
  * packages of the driver.
  */
-@ExtendedSQLTest
+@DataSourceV2Test
 class NativeDataSourceClusterSuite extends QueryTest {
   import NativeDataSourceTestUtils._
 
@@ -69,9 +69,10 @@ class NativeDataSourceClusterSuite extends QueryTest {
     }
   }
 
+  // The executors append the calls that the order of the calls rules out to the same file.
   private def nativeTest(name: String)(f: => Unit): Unit = test(name) {
     assume(toolchain.isDefined, "A C++ compiler and Java 22 or later are required.")
-    try f finally SparkSession.setActiveSession(spark)
+    try checkingOrderOfCalls(f) finally SparkSession.setActiveSession(spark)
   }
 
   // Like Python data sources, native data sources are found in the active session.
