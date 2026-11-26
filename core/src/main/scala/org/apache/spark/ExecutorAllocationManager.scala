@@ -903,7 +903,7 @@ private[spark] class ExecutorAllocationManager(
       allocationManager.synchronized {
         stageAttemptToNumRunningTask(stageAttempt) =
           stageAttemptToNumRunningTask.getOrElse(stageAttempt, 0) + 1
-        // If this is the last pending task, mark the scheduler queue as empty
+        // Do not recreate pending-task state for completed stage attempts on late task starts.
         if (stageAttemptToNumTasks.contains(stageAttempt)) {
           if (taskStart.taskInfo.speculative) {
             stageAttemptToSpeculativeTaskIndices.getOrElseUpdate(stageAttempt,
@@ -915,6 +915,7 @@ private[spark] class ExecutorAllocationManager(
               new mutable.HashSet[Int]) += taskIndex
           }
         }
+        // If this is the last pending task, mark the scheduler queue as empty
         if (!hasPendingTasks) {
           allocationManager.onSchedulerQueueEmpty()
         }
