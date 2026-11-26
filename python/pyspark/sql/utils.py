@@ -40,6 +40,7 @@ from pyspark.errors import (  # noqa: F401
     PySparkImportError,
     PySparkNotImplementedError,
     PySparkRuntimeError,
+    PySparkValueError,
     PythonException,
     QueryExecutionException,
     SparkUpgradeException,
@@ -113,7 +114,10 @@ def to_storage_level(name: str) -> StorageLevel:
         "OFF_HEAP": StorageLevel.OFF_HEAP,
     }
     if name not in levels:
-        raise ValueError(f"Invalid storage level: {name}")
+        raise PySparkValueError(
+            errorClass="VALUE_NOT_ALLOWED",
+            messageParameters={"arg_name": "name", "allowed_values": str(list(levels))},
+        )
     return levels[name]
 
 
