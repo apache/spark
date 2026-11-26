@@ -222,6 +222,15 @@ class QueryExecutionSuite extends SharedSparkSession {
         messageParameters = Map("dataSourceType" -> "XXX")))
     assert(qe.toString.contains("org.apache.spark.sql.AnalysisException"))
 
+    // Planning may fail before the UI can build SparkPlanInfo. Listeners still need the end event.
+    withSQLConf(SQLConf.UI_EXPLAIN_MODE.key -> "none") {
+      val df = spark.range(1)
+      val captured = org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured(spark) {
+        intercept[AnalysisException](df.collect())
+      }
+      assert(captured == Seq(df.queryExecution))
+    }
+
     // Throw an Error - this should not be captured.
     spark.experimental.extraStrategies = Seq[SparkStrategy](
       (_: LogicalPlan) => throw new Error("error"))

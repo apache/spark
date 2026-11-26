@@ -1488,6 +1488,18 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val DISTRIBUTED_PIPELINED_SHUFFLE_ENABLED =
+    buildConf("spark.sql.shuffle.distributedPipelined.enabled")
+      .internal()
+      .doc("When enabled at planning time, a single-source batch job can pipeline single-reader " +
+        "hash shuffles across executors. Readers must drain their input. All stages must fit in " +
+        "available slots. A task failure aborts the group. Spark uses ordinary shuffle if AQE or " +
+        "spark.dynamicAllocation.enabled is on. Spark also warns when AQE is on. Experimental.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val LOCAL_PIPELINED_SHUFFLE_ENABLED = buildConf("spark.sql.shuffle.localPipelined.enabled")
     .internal()
     .doc("When true in local mode, eligible shuffle exchanges use the in-process channel " +

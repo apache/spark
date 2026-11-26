@@ -842,9 +842,7 @@ class IncrementalExecution(
           case s: ShuffleExchangeExec if onStreamingPath && !s.pipelined =>
             // A bare case-class copy does not carry the node's tags, which is where the logical
             // link lives, so copy them over the way the tree transforms do.
-            val marked = s.copy(pipelined = true)
-            marked.copyTagsFrom(s)
-            (marked, true)
+            (s.withPipelinedShuffle, true)
           case other => (other, onStreamingPath)
         }
     }
