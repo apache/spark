@@ -26,7 +26,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.StreamingJoinHelper
 import org.apache.spark.sql.catalyst.analysis.WidenStatefulOpNullability
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, GenericInternalRow, JoinedRow, Literal, Predicate, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, GenericInternalRow, JoinedRow, Literal, Predicate, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -765,9 +765,9 @@ case class StreamingSymmetricHashJoinExec(
         (_, _) => false
       }
 
-    // V4 range scan for time-interval joins (SPARK-55147). Extracts constant interval
-    // offsets from the join condition using getStateValueWatermark(eventWatermark=0).
-    // The -1 eviction adjustment widens range by ~1ms/side; postJoinFilter handles exact bounds.
+    // V4 range scan for time-interval joins (SPARK-55147). Takes the offsets of the other side's
+    // event time from the comparisons of the join condition that give them exactly; see
+    // StreamingJoinHelper.getRangeScanOffsets. postJoinFilter handles exact bounds.
     private[this] val scanRangeOffsets: Option[(Long, Long)] = {
       val isV4TimeIntervalJoin = stateFormatVersion >= 4 && (stateWatermarkPredicate match {
         case Some(_: JoinStateValueWatermarkPredicate) => true
@@ -786,19 +786,14 @@ case class StreamingSymmetricHashJoinExec(
         // Bounds on other columns cannot limit this scan. If either event-time bound is
         // missing, scan all rows for the join key.
         val thisEventTime = WatermarkSupport.findEventTimeColumn(
-          thisSideAttrs, !allowMultipleStatefulOperators).toSeq
+          thisSideAttrs, !allowMultipleStatefulOperators)
         val otherEventTime = WatermarkSupport.findEventTimeColumn(
-          otherSideAttrs, !allowMultipleStatefulOperators).toSeq
-        val lowerBoundMs = StreamingJoinHelper.getStateValueWatermark(
-          AttributeSet(otherEventTime), AttributeSet(thisEventTime), condition.full, Some(0L))
-        val upperBoundMs = StreamingJoinHelper.getStateValueWatermark(
-          AttributeSet(thisEventTime), AttributeSet(otherEventTime), condition.full, Some(0L))
-
-        (lowerBoundMs, upperBoundMs) match {
-          case (Some(lower), Some(upper)) =>
-            Some((lower * 1000L, -upper * 1000L)) // ms -> us
-          case _ => None
-        }
+          otherSideAttrs, !allowMultipleStatefulOperators)
+        for {
+          thisTime <- thisEventTime
+          otherTime <- otherEventTime
+          offsets <- StreamingJoinHelper.getRangeScanOffsets(condition.full, thisTime, otherTime)
+        } yield offsets
       }
     }
 
