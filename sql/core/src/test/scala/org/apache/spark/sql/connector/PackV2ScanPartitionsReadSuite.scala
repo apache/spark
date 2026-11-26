@@ -41,7 +41,7 @@ import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEShuf
 import org.apache.spark.sql.execution.aggregate.{BaseAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, FileScan, PackScanPartitionsExec}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeLike, PipelinedShuffleTestSession, ReusedExchangeExec, ShuffleExchangeExec}
-import org.apache.spark.sql.execution.joins.SortMergeJoinExec
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.functions.{broadcast, expr, udf}
 import org.apache.spark.sql.internal.SQLConf
@@ -345,6 +345,97 @@ class PackV2ScanPartitionsReadSuite extends KeyGroupedPartitioningSuiteBase {
             assert(exchange.child.children.head.exists(_.isInstanceOf[SortAggregateExec]))
             assert(rowsPerPackedTask(df) === Seq(3, 3))
           }
+          assert(meetsRequirements(plan))
+        }
+      }
+    }
+  }
+
+  // Six one-row inputs of 100 bytes, sorted by name, which pack into two tasks of three.
+  private def populateOrderedByName(): Unit = {
+    createTable(items, itemsColumns, Array.empty, Array(
+      sort(FieldReference("name"), SortDirection.ASCENDING)))
+    (1 to 6).foreach { i =>
+      sql(s"INSERT INTO testcat.ns.$items VALUES ($i, 'n${i % 2}', 1.0, NULL)")
+    }
+  }
+
+  test("SPARK-60265: partition-dependent expressions below the node keep the input's partition") {
+    populateOrderedByName()
+    // The partial sort aggregate reads the scan's ordering through the project, so the node goes
+    // above the aggregate, and the project runs once per input below it. The built-in expression
+    // sees the input's partition there, and the UDF that reads the task's sees the packed task.
+    val taskPartition = udf(() => TaskContext.getPartitionId()).asNondeterministic()
+    withSQLConf(enabled -> "true") {
+      val df = spark.table(s"testcat.ns.$items")
+        .select($"name", expr("spark_partition_id()").as("pid"), taskPartition().as("tid"))
+        .groupBy("name").agg(expr("collect_set(pid)"), expr("collect_set(tid)"))
+      val rows = df.collect()
+      val plan = df.queryExecution.executedPlan
+      withClue(plan.treeString) {
+        val exchange = collect(plan) { case s: ShuffleExchangeExec => s }.head
+        assert(exchange.child.isInstanceOf[PackScanPartitionsExec])
+        assert(rows.flatMap(_.getSeq[Int](1)).toSet === (0 until 6).toSet)
+        assert(rows.flatMap(_.getSeq[Int](2)).toSet === Set(0, 1))
+      }
+    }
+  }
+
+  test("SPARK-60265: the node goes above a broadcast hash join whose streamed side's order " +
+      "an operator above it reads") {
+    populateOrderedByName()
+    createTable(purchases, purchasesColumns, Array.empty)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      (1 to 6).map(i => s"($i, 1.0, NULL)").mkString(", "))
+    for (adaptive <- Seq(false, true)) {
+      withSQLConf(enabled -> "true", SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString) {
+        // The join keeps the streamed scan's ordering, which the partial sort aggregate above it
+        // reads, so the node goes above the aggregate, with the join below it.
+        val df = sql(s"SELECT /*+ BROADCAST(p) */ i.name, size(collect_list(i.id)) " +
+          s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p ON i.id = p.item_id " +
+          "GROUP BY i.name")
+        checkAnswer(df, Seq(Row("n0", 3), Row("n1", 3)))
+        val plan = df.queryExecution.executedPlan
+        withClue(plan.treeString) {
+          val exchange = collect(plan) { case s: ShuffleExchangeExec => s }.head
+          assert(exchange.child.isInstanceOf[PackScanPartitionsExec])
+          val packed = exchange.child.children.head
+          assert(packed.exists(_.isInstanceOf[SortAggregateExec]))
+          assert(packed.exists(_.isInstanceOf[BroadcastHashJoinExec]))
+          assert(rowsPerPackedTask(df) === Seq(3, 3))
+          assert(meetsRequirements(plan))
+        }
+      }
+    }
+  }
+
+  test("SPARK-60265: the node goes above a global sort that a keyed scan's layout satisfies") {
+    createTable(items, itemsColumns, Array(identity("id")))
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      (1 to 6).map(i => s"($i, 'n${i % 2}', 1.0, NULL)").mkString(", "))
+    for (adaptive <- Seq(false, true)) {
+      withSQLConf(enabled -> "true", SQLConf.V2_BUCKETING_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_SORTING_ENABLED.key -> "true",
+          SQLConf.REMOVE_REDUNDANT_SORTS_ENABLED.key -> "false",
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString) {
+        // The keyed scan's layout satisfies the sort's ordered distribution, so no range shuffle
+        // sits below the sort, and the node goes above it. The scan's ordering satisfies the sort
+        // too, so it stays only with RemoveRedundantSorts off.
+        val df = spark.table(s"testcat.ns.$items").orderBy("id").groupBy("name")
+          .agg(expr("size(collect_list(id))"))
+        // checkAnswer would compare the rows in order, because of the sort.
+        assert(df.collect().map(row => (row.getString(0), row.getInt(1))).sorted.toSeq ===
+          Seq(("n0", 3), ("n1", 3)))
+        val plan = df.queryExecution.executedPlan
+        withClue(plan.treeString) {
+          assert(collect(plan) { case s: ShuffleExchangeExec => s }.size === 1)
+          val nodes = packNodes(plan)
+          assert(nodes.size === 1)
+          assert(nodes.head.child.exists {
+            case s: SortExec => s.global
+            case _ => false
+          })
+          assert(rowsPerPackedTask(df) === Seq(3, 3))
           assert(meetsRequirements(plan))
         }
       }

@@ -375,7 +375,10 @@ size is unknown. If any input of a scan reports no size, Spark leaves the scan's
 unless `spark.sql.sources.v2.scanPartitionPacking.maxPartitionNum` is set, in which case Spark
 groups them by count. Partitions that runtime filtering emptied still join a neighboring task.
 When packing by size gives more tasks than that setting, Spark packs the
-inputs again to approach it, as `spark.sql.files.maxPartitionNum` does for files.
+inputs again to approach it, as `spark.sql.files.maxPartitionNum` does for files. A packed task
+prefers the host that more of its inputs prefer than any other host or, when no host is ahead, the
+hosts of the first of its inputs that reports any, so inputs that prefer other hosts can be read
+remotely.
 See [DataSource V2 Scan Partition Packing](sql-performance-tuning.html#datasource-v2-scan-partition-packing)
 for size limits, opening costs and parallelism settings. Packing uses the existing inputs and
 reader factory; the connector does not need to implement a separate packed scan.

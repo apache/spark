@@ -331,7 +331,7 @@ class PackV2ScanPartitionsSuite extends KeyGroupedPartitioningSuiteBase {
     }
   }
 
-  test("SPARK-60265: AQE reads the shuffle of a packed keyed scan in full where a join needs it") {
+  test("SPARK-60265: the SPARK-59671 query keeps every cross-split match with packing") {
     // The query of "SPARK-59671: an AQE local read over a split scan does not lose matches",
     // which the packing re-run of KeyGroupedPartitioningSuite excludes: its setup expects the
     // scan's keyed layout to reach a local read, and over a packed shuffle it does not. The
@@ -369,10 +369,10 @@ class PackV2ScanPartitionsSuite extends KeyGroupedPartitioningSuiteBase {
         assert(packedTables(plan).contains("lrt"))
         assert(collect(plan) { case j: BroadcastHashJoinExec => j }.size === 2)
         // Both narrow sides broadcast at runtime, and their shuffles are read locally to build
-        // the broadcasts. A local read over the wide side's packed shuffle would report no
-        // partitioning, while the sort merge join above needs it hash partitioned, so AQE reads
-        // that shuffle in full: no read sits over it. The local reads, over the unkeyed narrow
-        // sides, report no keyed layout either.
+        // the broadcasts. The wide side packs into one mapper here, so a local read over its
+        // shuffle could not read one mapper per task, and AQE reads it in full: no read sits over
+        // it. The next test makes the node's layout decide that. The local reads, over the unkeyed
+        // narrow sides, report no keyed layout either.
         assert(collect(plan) { case j: SortMergeJoinExec => j }.size === 1)
         val reads = collect(plan) { case r: AQEShuffleReadExec => r }
         assert(reads.forall(_.isLocalRead))
@@ -382,6 +382,53 @@ class PackV2ScanPartitionsSuite extends KeyGroupedPartitioningSuiteBase {
           PartitioningCollection.flatten(r.outputPartitioning)
             .forall(!_.isInstanceOf[KeyedPartitioning])
         })
+      }
+    }
+  }
+
+  test("SPARK-60265: a local read over a packed shuffle reports no keyed layout") {
+    // A grouped keyed scan packed into two mappers and read through two reducers, so a local read
+    // over its shuffle reads one mapper per task and reports the layout of the shuffle's input.
+    // The node makes that unknown, the sort merge join above needs the shuffle's hash layout, and
+    // AQE keeps the full read. Were the node to pass the scan's keyed layout up, the read would
+    // claim four key groups over two partitions.
+    val idCols = Array(Column.create("id", IntegerType), Column.create("data", StringType))
+    createTable("lrt", idCols, Array(identity("id")))
+    createTable("lrs1", idCols, Array.empty[Transform])
+    createTable("lrs2", idCols, Array.empty[Transform])
+    val pad = "x" * 4096
+    sql("INSERT INTO testcat.ns.lrt VALUES " + (1 to 4).map(i => s"($i, 't$i$pad')").mkString(", "))
+    Seq("lrs1", "lrs2").foreach { table =>
+      sql(s"INSERT INTO testcat.ns.$table VALUES " +
+        (1 to 4).map(i => s"($i, 's$i')").mkString(", "))
+    }
+    withSQLConf(enabled -> "true", minPartitionNum -> "1",
+        SQLConf.V2_SCAN_PARTITION_PACKING_MAX_PARTITION_BYTES.key -> "200",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> "1k",
+        SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
+      val df = sql(
+        """
+          |SELECT substring(a.data, 1, 2), substring(b.data, 1, 2)
+          |FROM (SELECT t1.id AS id, t1.data AS data FROM testcat.ns.lrt t1
+          |      JOIN testcat.ns.lrs1 s1 ON t1.id = s1.id) a
+          |JOIN (SELECT t2.id AS id, t2.data AS data FROM testcat.ns.lrt t2
+          |      JOIN testcat.ns.lrs2 s2 ON t2.id = s2.id) b
+          |ON a.id = b.id
+          |""".stripMargin)
+      checkAnswer(df, (1 to 4).map(i => Row(s"t$i", s"t$i")))
+      val plan = df.queryExecution.executedPlan
+      withClue(plan.treeString) {
+        assert(collect(plan) { case j: BroadcastHashJoinExec => j }.size === 2)
+        assert(collect(plan) { case j: SortMergeJoinExec => j }.size === 1)
+        val lrtNodes =
+          packNodes(plan).filter(collectScans(_).exists(_.table.name().endsWith("lrt")))
+        assert(lrtNodes.nonEmpty && lrtNodes.forall(_.execute().getNumPartitions == 2))
+        val reads = collect(plan) { case r: AQEShuffleReadExec => r }
+        assert(reads.forall(_.isLocalRead))
+        assert(reads.flatMap(collectScans).map(_.table.name().split('.').last).sorted ===
+          Seq("lrs1", "lrs2"))
       }
     }
   }

@@ -741,11 +741,14 @@ there that take the partition index, such as `spark_partition_id()`, see the pac
 The operators below the node, if any, run as they do without packing, once per input, and
 `spark_partition_id()` there sees the input's index. Code that reads `TaskContext.partitionId()`,
 such as a UDF, sees the packed task's index wherever it runs, and so does the shuffle, so a
-round-robin repartition can place rows differently. Packing can reduce useful parallelism, and fewer
-map tasks limit how finely AQE can split a skewed shuffle partition, for skew joins and rebalances
-alike. Under AQE, a local shuffle read with one mapper per task over a packed shuffle no longer
-reports the scan's keyed layout, so where an operator needs that layout, AQE keeps the full shuffle
-read. The default is off; connectors that already size their inputs need not enable it.
+round-robin repartition can place rows differently. A task that packs several inputs prefers the
+host that more of them prefer than any other host or, when no host is ahead, the hosts of the first
+of them that reports any, so inputs that prefer other hosts can be read remotely. Packing can reduce
+useful parallelism, and fewer map tasks limit how finely AQE can split a skewed shuffle partition,
+for skew joins and rebalances alike. Under AQE, a local shuffle read with one mapper per task over a
+packed shuffle no longer reports the scan's keyed layout, so where an operator needs that layout,
+AQE keeps the full shuffle read. The default is off; connectors that already size their inputs need
+not enable it.
 
 <table class="spark-config">
   <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>

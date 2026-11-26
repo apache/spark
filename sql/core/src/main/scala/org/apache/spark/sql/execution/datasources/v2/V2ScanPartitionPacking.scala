@@ -37,6 +37,12 @@ case class V2ScanPartitionPacking(
     minPartitionNum: Option[Int],
     maxPartitionNum: Option[Int]) extends Logging {
 
+  // As the session configuration checks them, for a policy built directly.
+  require(maxPartitionBytes > 0, "The maximum partition size must be positive.")
+  require(openCostInBytes >= 0, "The opening cost must be non-negative.")
+  require(minPartitionNum.forall(_ > 0), "The minimum partition count must be positive.")
+  require(maxPartitionNum.forall(_ > 0), "The maximum partition count must be positive.")
+
   /**
    * Group adjacent inputs by estimated size as `FilePartition` groups files, but in the scan's
    * order and never splitting an input. Each input costs its size plus the opening cost for each

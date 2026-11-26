@@ -3687,7 +3687,10 @@ object SQLConf {
         "file-based V2 sources are left to the spark.sql.files.* settings. If any input of a " +
         "scan reports no valid size, its inputs are grouped only when " +
         "spark.sql.sources.v2.scanPartitionPacking.maxPartitionNum is set. Inputs that runtime " +
-        "filtering emptied always join a neighboring task. Off by default, " +
+        "filtering emptied always join a neighboring task. A packed task prefers the host that " +
+        "more of its inputs prefer than any other host or, when no host is ahead, the hosts of " +
+        "the first of its inputs that reports any, so inputs that prefer other hosts can be " +
+        "read remotely. Off by default, " +
         "because packing can reduce useful parallelism and limit how finely AQE can split " +
         "skewed shuffle partitions.")
       .version("4.5.0")
