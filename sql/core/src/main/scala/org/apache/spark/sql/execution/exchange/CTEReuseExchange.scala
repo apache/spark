@@ -41,9 +41,11 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
  *    `ReuseExchangeAndSubquery` then reuses the canonically-equal copies via
  *    [[ReusedExchangeExec]], and `VerifyCTEReuse` confirms it held.
  *
- * @param cteId    The plan-reuse id of the shared body: every reference of one forced definition
- *                 carries it, and forced definitions whose deterministic bodies are canonically
- *                 equal share it. It is not the CTERelationDef id that plans print.
+ * @param cteId    The plan-reuse id of the shared body, which every reference of one sealed
+ *                 definition carries. Sealed definitions whose deterministic bodies are
+ *                 canonically equal share it, and so does a sealed definition whose body only
+ *                 selects another sealed definition. It is not the CTERelationDef id that plans
+ *                 print.
  * @param subplan  The [[ShuffleExchangeLike]] over the shared subplan. Its logical link
  *                 points to a private clone of [[CTEReuseRelation.sharedSubplan]] that the
  *                 planning strategy made, so the inner AQE re-optimizes its own copy of the

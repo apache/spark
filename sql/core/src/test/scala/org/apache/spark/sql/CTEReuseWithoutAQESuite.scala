@@ -22,10 +22,11 @@ import org.apache.logging.log4j.Level
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, DynamicPruningExpression, DynamicPruningSubquery}
-import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, CTEReuseRelation, LogicalPlan, RepartitionByExpression, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, CTEReuseRelation, LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{BaseSubqueryExec, FileSourceScanExec, QueryExecution, ReusedSubqueryExec, SparkPlan}
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.exchange.{CTEReuseExchange, Exchange, LOCAL_SHUFFLE_FOR_CTE, REBALANCE_PARTITIONS_BY_NONE, ReusedExchangeExec, ShuffleExchangeExec, VerifyCTEReuse}
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.functions.udf
@@ -1135,54 +1136,58 @@ class CTEReuseWithoutAQESuite
     }
   }
 
+  // Asserts that `m` is sealed together with `f`, whose body only selects it: the three
+  // references share one plan-reuse id, and the executed plan runs one live shuffle of `m`'s
+  // body, the CTE reuse shuffle that the other copies reuse, and no plain shuffle of it.
+  private def assertRetainedSealedWithForced(df: DataFrame): Unit = {
+    val reuses = df.queryExecution.optimizedPlan.collectWithSubqueries {
+      case r: CTEReuseRelation => r
+    }
+    assert(reuses.size == 3 && reuses.map(_.cteId).distinct.size == 1,
+      s"Expected m to be sealed with f under one id:\n${df.queryExecution.optimizedPlan}")
+    assertCTEReuseApplied(df)
+    val executed = df.queryExecution.executedPlan
+    assert(liveCTEShuffles(df).size == 1,
+      s"Expected one live CTE reuse shuffle:\n${executed.treeString}")
+    val plainShuffles = executed.collectWithSubqueries {
+      case s: ShuffleExchangeExec if s.shuffleOrigin == REBALANCE_PARTITIONS_BY_NONE => s
+    }
+    assert(plainShuffles.isEmpty,
+      s"Expected no plain shuffle of the MATERIALIZED body:\n${executed.treeString}")
+  }
+
   test("a forced CTE that only selects a MATERIALIZED CTE read directly shares its shuffle") {
     withCTEReuseNoAQE {
-      // Only `f` is forced. Its body lowers to `m`'s own lowered root; `m`'s body must still run
-      // once, under one shuffle that the copy inside `f`'s shared body and the direct reference
-      // `c` both read, so all three see the same value for each id. The UDF returns a fresh value
-      // on every call, so a second evaluation of `m`'s body shows, which rand() with its fixed
-      // seed would hide. The ids are not nullable and every column is read, so no filter or
-      // projection is pushed into `f`'s body, which stays a bare reference to `m`.
+      // Only `f` is forced. Its body lowers to `m`'s own lowered root, so `m` is sealed together
+      // with `f`, and `m`'s body runs once, under one shuffle that every reference of both reads,
+      // so all three see the same value for each id. The UDF returns a fresh value on every call,
+      // so a second evaluation of `m`'s body shows, which rand() with its fixed seed would hide.
+      // The ids are not nullable and every column is read, so no filter or projection is pushed
+      // into `f`'s body, which stays a bare reference to `m`.
       spark.udf.register("retained_cte_uuid",
         udf(() => java.util.UUID.randomUUID().toString).asNondeterministic())
-      val analyzed = spark.sql(
+      val df = sqlWithForcedCTEs(
         """WITH m AS MATERIALIZED (SELECT id, retained_cte_uuid() AS r FROM range(1, 6)),
           |  f AS (SELECT * FROM m)
           |SELECT a.id, a.r = b.r AS ab, a.r = c.r AS ac
           |FROM f a JOIN f b ON a.id = b.id JOIN m c ON a.id = c.id
-          |""".stripMargin).queryExecution.analyzed
-      val df = classic.Dataset.ofRows(spark, analyzed.transformWithSubqueries {
-        case d: CTERelationDef if (d.child match {
-          case a: SubqueryAlias => a.alias == "f"
-          case _ => false
-        }) => d.copy(forceSkipInline = true)
-      })
-      val reuses = df.queryExecution.optimizedPlan.collectWithSubqueries {
-        case r: CTEReuseRelation => r
-      }
-      assert(reuses.size == 2,
-        s"Expected the forced CTE to be sealed:\n${df.queryExecution.optimizedPlan}")
+          |""".stripMargin, names = Set("f"))
       checkAnswer(df, (1L to 5L).map(Row(_, true, true)))
-      assertCTEReuseApplied(df)
-      // The shared body wraps `m`'s plain repartition instead of stamping it with the reuse id.
-      reuses.foreach { r =>
-        assert(r.sharedSubplan.children.exists {
-          case inner: RepartitionByExpression => !inner.isForPlanReuse
-          case _ => false
-        }, s"Expected the shared body to wrap m's plain repartition:\n${r.sharedSubplan}")
-      }
-      // One live shuffle of `m`'s body, which the other copy reuses.
-      val executed = df.queryExecution.executedPlan
-      val bodyShuffles = executed.collectWithSubqueries {
-        case s: ShuffleExchangeExec if s.shuffleOrigin == REBALANCE_PARTITIONS_BY_NONE => s
-      }
-      val reusedBody = executed.collectWithSubqueries {
-        case r @ ReusedExchangeExec(_, s: ShuffleExchangeExec)
-            if s.shuffleOrigin == REBALANCE_PARTITIONS_BY_NONE => r
-      }
-      assert(bodyShuffles.size == 1 && reusedBody.nonEmpty,
-        s"Expected one live shuffle of the MATERIALIZED body, reused by its other copy:\n" +
-          executed.treeString)
+      assertRetainedSealedWithForced(df)
+    }
+  }
+
+  test("a forced CTE that only selects a deterministic MATERIALIZED CTE shuffles it once") {
+    withCTEReuseNoAQE {
+      // The reads are combined with UNION ALL, so no consumer requires a distribution and the
+      // only shuffles are those of the CTE lowering.
+      val df = sqlWithForcedCTEs(
+        """WITH m AS MATERIALIZED (SELECT id, id * 2 AS w FROM range(1, 6)),
+          |  f AS (SELECT * FROM m)
+          |SELECT * FROM f UNION ALL SELECT * FROM f UNION ALL SELECT * FROM m
+          |""".stripMargin, names = Set("f"))
+      checkAnswer(df, Seq.fill(3)((1L to 5L).map(i => Row(i, i * 2))).flatten)
+      assertRetainedSealedWithForced(df)
     }
   }
 
@@ -1492,6 +1497,30 @@ class CTEReuseWithoutAQESuite
           case r: CTEReuseRelation => r
         }.nonEmpty)
         assert(df.inputFiles.toSet == plain)
+
+        // A sealed CTE nested inside another sealed CTE's body: `inner_cte` is read twice inside
+        // `outer_cte`'s body, and `outer_cte` twice by the main query, so the table is scanned
+        // only inside the nested shared body.
+        val nested = sqlWithForcedCTEReuse(
+          """WITH inner_cte AS (SELECT id, v, rand() AS r FROM reuse_src),
+            |  outer_cte AS (
+            |    SELECT i1.id, i1.r FROM inner_cte i1 JOIN inner_cte i2 ON i1.id = i2.id)
+            |SELECT o1.id FROM outer_cte o1 JOIN outer_cte o2 ON o1.id = o2.id
+            |""".stripMargin)
+        val optimized = nested.queryExecution.optimizedPlan
+        val outerRefs = optimized.collectWithSubqueries { case r: CTEReuseRelation => r }
+        assert(outerRefs.size == 2 && outerRefs.map(_.cteId).distinct.size == 1,
+          s"Expected the outer CTE to be sealed:\n${optimized.treeString}")
+        val outerBody = outerRefs.head.sharedSubplan
+        val innerRefs = outerBody.collectWithSubqueries { case r: CTEReuseRelation => r }
+        assert(innerRefs.size == 2 && innerRefs.map(_.cteId).distinct.size == 1 &&
+          innerRefs.head.cteId != outerRefs.head.cteId,
+          s"Expected the inner CTE to be sealed inside the outer body:\n${outerBody.treeString}")
+        assert(Seq(optimized, outerBody).forall(_.collect {
+          case l: LogicalRelation => l
+        }.isEmpty), s"Expected the table to be scanned only inside the nested shared body:\n" +
+          outerBody.treeString)
+        assert(nested.inputFiles.toSet == plain)
       }
     }
   }

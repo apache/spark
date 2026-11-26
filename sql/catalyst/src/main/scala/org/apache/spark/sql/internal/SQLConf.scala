@@ -7645,9 +7645,9 @@ object SQLConf {
         "spark.sql.cteReuse.failOnMissWithoutAQE, thrown. Such a definition can also pin its " +
         "partitioning. An ordinary retained or user MATERIALIZED CTE, like a forceSkipInline " +
         "CTE read once, keeps a plain repartition, unless its deterministic body equals the " +
-        "body of such a sealed CTE: it is then sealed with it and shares its single " +
-        "materialization. When false, forceSkipInline definitions are lowered like any other " +
-        "retained CTE.")
+        "body of such a sealed CTE, or such a sealed CTE's body only selects it: it is then " +
+        "sealed with it and shares its single materialization. When false, forceSkipInline " +
+        "definitions are lowered like any other retained CTE.")
       .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf

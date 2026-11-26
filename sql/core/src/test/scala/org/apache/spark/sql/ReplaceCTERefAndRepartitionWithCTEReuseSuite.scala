@@ -1001,54 +1001,53 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
     assertAllRefsShareOneNonzeroId(collectCTEReuseRelations(result), refCount = 4)
   }
 
-  test("a forced CTE that only selects a retained CTE read elsewhere wraps that CTE's root") {
+  test("a forced CTE that only selects a retained CTE read elsewhere is sealed with it") {
     // `forced`'s body is a reference that keeps `retained`'s output, so it lowers to `retained`'s
-    // own lowered root. When the plan also reads `retained` directly, stamping that root with a
-    // plan-reuse id would give the two copies of `retained`'s body different canonical forms, so
-    // `forced` seals a new repartition above the unchanged root instead.
+    // own lowered root. When the plan also reads `retained` directly, `retained` is sealed
+    // together with `forced`: every reference of both reads `retained`'s root, stamped in place,
+    // so `retained`'s rows are shuffled once. A non-deterministic body shares the id too, because
+    // both definitions read the very same body rather than equal copies of it.
     val base = rel
-    val nondeterministic = Project(base.output :+ Alias(Rand(Literal(42L)), "r")(), base)
     Seq(
-      "plain body" ->
-        (nondeterministic, RepartitionByExpression(Seq.empty, nondeterministic, None)),
-      "REPARTITION(n) root" -> {
-        val root = Repartition(3, shuffle = true, nondeterministic)
-        (root, root)
-      },
-      "rebalance root" -> {
-        val root = RebalancePartitions(nondeterministic.output.take(1), nondeterministic)
-        (root, root)
-      }).foreach { case (name, (body, retainedRoot)) =>
-      val retained = CTERelationDef(body, materialized = Some(true))
-      val forced = CTERelationDef(refTo(retained), forceSkipInline = true)
-      val plan = WithCTE(
-        Union(Seq(refTo(forced), refTo(forced), refTo(retained))), Seq(retained, forced))
-      val result = runReuseRules(plan)
-      val reuses = collectCTEReuseRelations(result)
-      assertAllRefsShareOneNonzeroId(reuses, refCount = 2)
-      reuses.foreach { r =>
-        val root = sharedRoot(r)
-        assert(root.child == retainedRoot && r.partitioning == sealedRootPartitioning(body),
-          s"$name: expected the retained root wrapped, keeping its partitioning:\n" +
-            r.sharedSubplan.treeString)
-      }
-      // The direct reference keeps the retained CTE's plain lowering, the same plan the forced
-      // CTE's shared body wraps, so the two copies of the retained body stay canonically equal.
-      val direct = result.collect {
-        case r: RepartitionOperation => r
-        case r: RebalancePartitions => r
-      }
-      assert(direct == Seq(retainedRoot),
-        s"$name: expected the plain lowering for the direct reference:\n${result.treeString}")
+      "deterministic" -> Project(base.output :+ Alias(Literal(1), "r")(), base),
+      "non-deterministic" -> Project(base.output :+ Alias(Rand(Literal(42L)), "r")(), base)
+    ).foreach { case (kind, inner) =>
+      Seq(
+        "plain body" -> inner,
+        "REPARTITION(n) root" -> Repartition(3, shuffle = true, inner),
+        "rebalance root" -> RebalancePartitions(inner.output.take(1), inner)
+      ).foreach { case (name, body) =>
+        withClue(s"$kind $name: ") {
+          val retained = CTERelationDef(body, materialized = Some(true))
+          val forced = CTERelationDef(refTo(retained), forceSkipInline = true)
+          def query(defs: Seq[CTERelationDef]): LogicalPlan =
+            WithCTE(Union(Seq(refTo(forced), refTo(forced), refTo(retained))), defs)
+          val result = runReuseRules(query(Seq(retained, forced)))
+          val reuses = collectCTEReuseRelations(result)
+          assertAllRefsShareOneNonzeroId(reuses, refCount = 3)
+          reuses.foreach { r =>
+            assert(sharedRoot(r).child == inner && r.partitioning == sealedRootPartitioning(body),
+              s"expected the retained root stamped in place:\n${r.sharedSubplan.treeString}")
+          }
+          assert(numRepartitionLike(result) == 0,
+            s"expected no plain copy of the retained body:\n${result.treeString}")
 
-      // Read only through the forced CTE, the retained root has one copy and is stamped in place.
-      val onlyThrough = runReuseRules(
-        WithCTE(Union(Seq(refTo(forced), refTo(forced))), Seq(retained, forced)))
-      val onlyThroughReuses = collectCTEReuseRelations(onlyThrough)
-      assertAllRefsShareOneNonzeroId(onlyThroughReuses, refCount = 2)
-      onlyThroughReuses.foreach { r =>
-        assert(sharedRoot(r).child == nondeterministic,
-          s"$name: expected the retained root stamped in place:\n${r.sharedSubplan.treeString}")
+          // Read only through the forced CTE, the retained root has one copy and is stamped in
+          // place.
+          val onlyThrough = runReuseRules(
+            WithCTE(Union(Seq(refTo(forced), refTo(forced))), Seq(retained, forced)))
+          val onlyThroughReuses = collectCTEReuseRelations(onlyThrough)
+          assertAllRefsShareOneNonzeroId(onlyThroughReuses, refCount = 2)
+          onlyThroughReuses.foreach { r =>
+            assert(sharedRoot(r).child == inner,
+              s"expected the retained root stamped in place:\n${r.sharedSubplan.treeString}")
+          }
+
+          // With the flag off, `forced` is lowered as if it were not forced.
+          assert(runReuseRules(query(Seq(retained, forced)), enabled = false) ==
+            runReuseRules(
+              query(Seq(retained, forced.copy(forceSkipInline = false))), enabled = false))
+        }
       }
     }
   }

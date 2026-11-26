@@ -29,7 +29,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
-import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, CTEReuseRelation, LogicalPlan, RepartitionByExpression, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, CTEReuseRelation, LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.{ApplyColumnarRulesAndInsertTransitions, ColumnarToRowExec, EmptyRelationExec, FileSourceScanExec, LeafExecNode, SQLExecution}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
@@ -626,8 +626,9 @@ class CTEReuseWithAQESuite
     // the CTE from the level below, with two refs per level to trigger
     // CTE reuse. This exercises nested inner AQEs materializing on the
     // CTE thread pool and checks that six levels of nesting complete with
-    // correct results. At most six materializations block at once, so the
-    // test does not show that either pool avoids exhaustion.
+    // correct results, with every level sealed and read through one shared
+    // inner AQE. At most six materializations block at once, so the test
+    // does not show that either pool avoids exhaustion.
     withCTEReuseEnabled {
       withTable("deep_src") {
         sql("CREATE TABLE deep_src (id INT) USING parquet")
@@ -661,8 +662,18 @@ class CTEReuseWithAQESuite
         val aqe = df.queryExecution.executedPlan
           .asInstanceOf[AdaptiveSparkPlanExec]
 
-        assert(aqe.context.cteAQERegistry.nonEmpty,
-          "Expected cteAQERegistry to contain inner AQE(s)")
+        // Every level is sealed and its references share one inner plan: the registry holds one
+        // inner plan per level, and the CTE reuse stages, nested ones included, read exactly
+        // those.
+        val registered = aqe.context.cteAQERegistry.values.toSeq
+        assert(registered.size == numLevels,
+          s"Expected $numLevels inner AQEs in cteAQERegistry, got ${registered.size}:\n$aqe")
+        val stages = collectWithSubqueries(aqe) { case s: CTEReuseQueryStageExec => s }
+        val readPlans = stages.map(s => System.identityHashCode(s.innerAQE)).distinct
+        assert(readPlans.size == numLevels &&
+          readPlans.toSet == registered.map(System.identityHashCode).toSet,
+          s"Expected the CTE reuse stages to read the $numLevels registered inner AQEs, got " +
+            s"${readPlans.size} for ${stages.size} stages:\n$aqe")
       }
     }
   }
@@ -975,12 +986,12 @@ class CTEReuseWithAQESuite
 
   test("a forced CTE that only selects a MATERIALIZED CTE read directly shares its shuffle") {
     withCTEReuseEnabled {
-      // `f`'s body lowers to `m`'s own lowered root. `m`'s body must still run once, under one
-      // shuffle that the copy inside `f`'s shared body and the direct reference `c` both read, so
-      // all three see the same value for each id. The UDF returns a fresh value on every call, so a
-      // second evaluation of `m`'s body shows, which rand() with its fixed seed would hide. The ids
-      // are not nullable and every column is read, so no filter or projection is pushed into `f`'s
-      // body, which stays a bare reference to `m`.
+      // `f`'s body lowers to `m`'s own lowered root, so `m` is sealed together with `f`: every
+      // reference of both reads one shared inner plan, so all three see the same value for each
+      // id, and `m`'s rows are shuffled once. The UDF returns a fresh value on every call, so a
+      // second evaluation of `m`'s body shows, which rand() with its fixed seed would hide. The
+      // ids are not nullable and every column is read, so no filter or projection is pushed into
+      // `f`'s body, which stays a bare reference to `m`.
       spark.udf.register("retained_cte_uuid",
         udf(() => java.util.UUID.randomUUID().toString).asNondeterministic())
       val df = sqlWithForcedCTEs(
@@ -990,31 +1001,24 @@ class CTEReuseWithAQESuite
           |FROM f a JOIN f b ON a.id = b.id JOIN m c ON a.id = c.id
           |""".stripMargin, names = Set("f"))
       val reuses = collectCTEReuseRelations(df)
-      assert(reuses.size == 2,
-        s"Expected the forced CTE to be sealed:\n${df.queryExecution.optimizedPlan}")
+      assert(reuses.size == 3 && reuses.map(_.cteId).distinct.size == 1,
+        s"Expected m to be sealed with f under one id:\n${df.queryExecution.optimizedPlan}")
       checkAnswer(df, (1L to 5L).map(Row(_, true, true)))
-      assertInnerAQEShared(df)
-      // The shared body wraps `m`'s plain repartition instead of stamping it with the reuse id.
-      reuses.foreach { r =>
-        assert(r.sharedSubplan.children.exists {
-          case inner: RepartitionByExpression => !inner.isForPlanReuse
-          case _ => false
-        }, s"Expected the shared body to wrap m's plain repartition:\n${r.sharedSubplan}")
-      }
-      // `m`'s plain shuffle appears in the inner plan, under the CTE reuse shuffle, and in the
-      // main query for `c`, and both stages read one shuffle: the second reuses the first.
+      // Every CTE reuse stage reads the one shared inner plan. Two of the three references are
+      // broadcast to the joins, and AQE reuses one broadcast for the other, so there can be
+      // fewer stages than references.
       val executed = df.queryExecution.executedPlan
-      val innerPlans = collectWithSubqueries(executed) {
-        case s: CTEReuseQueryStageExec => s.innerAQE
-      }.distinct
-      val bodyShuffles = (executed +: innerPlans).flatMap(p => collectWithSubqueries(p) {
+      val stages = collectWithSubqueries(executed) { case s: CTEReuseQueryStageExec => s }
+      assertInnerAQEShared(df)
+      // No plain shuffle of `m`'s body is left, in the main query or in the inner plan.
+      val innerPlans = stages.map(_.innerAQE).distinct
+      val plainShuffles = (executed +: innerPlans).flatMap(p => collectWithSubqueries(p) {
         case s: ShuffleQueryStageExec
             if s.shuffle.shuffleOrigin == REBALANCE_PARTITIONS_BY_NONE => s.shuffle
       })
-      assert(bodyShuffles.size >= 2 &&
-        bodyShuffles.map(System.identityHashCode).distinct.size == 1,
-        s"Expected both copies of the MATERIALIZED body to read one shuffle, got:\n" +
-          bodyShuffles.mkString("\n"))
+      assert(plainShuffles.isEmpty,
+        s"Expected no plain shuffle of the MATERIALIZED body, got:\n" +
+          plainShuffles.mkString("\n"))
     }
   }
 

@@ -58,7 +58,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.status.{AppStatusStore, ElementTrackingStore}
-import org.apache.spark.util.{AccumulatorMetadata, JsonProtocol, LongAccumulator, MetricUtils, SerializableConfiguration, Utils}
+import org.apache.spark.util.{AccumulatorContext, AccumulatorMetadata, JsonProtocol, LongAccumulator, MetricUtils, SerializableConfiguration, Utils}
 import org.apache.spark.util.kvstore.InMemoryStore
 
 
@@ -510,6 +510,102 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
 
     assert(listener.noLiveData())
     assert(statusStore.execution(executionId).get.completionTime.nonEmpty)
+  }
+
+  test("adaptive metric update after onExecutionEnd keeps the stored execution") {
+    val statusStore = createStatusStore()
+    val listener = statusStore.listener.get
+
+    val executionId = 0
+    val df = createTestDataFrame
+    val submissionTime = System.currentTimeMillis()
+    listener.onOtherEvent(SparkListenerSQLExecutionStart(
+      executionId,
+      Some(executionId),
+      "test",
+      "test",
+      df.queryExecution.toString,
+      SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
+      submissionTime,
+      Map.empty))
+    listener.onJobStart(SparkListenerJobStart(
+      jobId = 0,
+      time = System.currentTimeMillis(),
+      stageInfos = Seq(createStageInfo(0, 0)),
+      createProperties(executionId)))
+    listener.onJobEnd(SparkListenerJobEnd(
+      jobId = 0,
+      time = System.currentTimeMillis(),
+      JobSucceeded))
+    listener.onOtherEvent(SparkListenerSQLExecutionEnd(
+      executionId, System.currentTimeMillis(), errorMessage = Some("Oops")))
+    assert(listener.noLiveData())
+    val ended = statusStore.execution(executionId).get
+
+    // An adaptive plan that outlives its execution, such as a shared inner CTE plan that its
+    // query abandoned, can post this after the execution ended.
+    val lateMetric =
+      SQLPlanMetric("late metric", AccumulatorContext.newId(), MetricUtils.SUM_METRIC)
+    listener.onOtherEvent(SparkListenerSQLAdaptiveSQLMetricUpdates(executionId, Seq(lateMetric)))
+
+    assert(listener.noLiveData())
+    val stored = statusStore.execution(executionId).get
+    assert(stored.description == "test")
+    assert(stored.physicalPlanDescription == ended.physicalPlanDescription)
+    assert(stored.submissionTime == submissionTime)
+    assert(stored.completionTime.nonEmpty && stored.completionTime == ended.completionTime)
+    assert(stored.errorMessage == Some("Oops"))
+    assertJobs(Some(stored), completed = Seq(0))
+    assert(stored.metricValues == ended.metricValues)
+    assert(stored.metrics.contains(lateMetric))
+  }
+
+  test("adaptive metric update of a running execution adds its metrics") {
+    val statusStore = createStatusStore()
+    val listener = statusStore.listener.get
+
+    val executionId = 0
+    val df = createTestDataFrame
+    listener.onOtherEvent(SparkListenerSQLExecutionStart(
+      executionId,
+      Some(executionId),
+      "test",
+      "test",
+      df.queryExecution.toString,
+      SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
+      System.currentTimeMillis(),
+      Map.empty))
+    val metric =
+      SQLPlanMetric("adaptive metric", AccumulatorContext.newId(), MetricUtils.SUM_METRIC)
+    listener.onOtherEvent(SparkListenerSQLAdaptiveSQLMetricUpdates(executionId, Seq(metric)))
+    assert(!listener.noLiveData())
+
+    listener.onJobStart(SparkListenerJobStart(
+      jobId = 0,
+      time = System.currentTimeMillis(),
+      stageInfos = Seq(createStageInfo(0, 0)),
+      createProperties(executionId)))
+    listener.onStageSubmitted(SparkListenerStageSubmitted(createStageInfo(0, 0)))
+    listener.onTaskStart(SparkListenerTaskStart(0, 0, createTaskInfo(0, 0)))
+    listener.onTaskEnd(SparkListenerTaskEnd(
+      stageId = 0,
+      stageAttemptId = 0,
+      taskType = "",
+      reason = null,
+      createTaskInfo(0, 0, accums = Map(metric.accumulatorId -> 7L)),
+      new ExecutorMetrics,
+      null))
+    listener.onStageCompleted(SparkListenerStageCompleted(createStageInfo(0, 0)))
+    listener.onJobEnd(SparkListenerJobEnd(
+      jobId = 0,
+      time = System.currentTimeMillis(),
+      JobSucceeded))
+    listener.onOtherEvent(SparkListenerSQLExecutionEnd(
+      executionId, System.currentTimeMillis()))
+
+    assert(listener.noLiveData())
+    assert(statusStore.execution(executionId).get.description == "test")
+    assert(statusStore.executionMetrics(executionId).get(metric.accumulatorId) == Some("7"))
   }
 
   test("handle one execution with multiple jobs") {

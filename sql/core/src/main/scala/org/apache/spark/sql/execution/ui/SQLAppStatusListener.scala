@@ -84,32 +84,7 @@ class SQLAppStatusListener(
 
     val executionId = executionIdString.toLong
     val jobId = event.jobId
-    val exec = Option(liveExecutions.get(executionId))
-      .orElse {
-        try {
-          // Should not overwrite the kvstore with new entry, if it already has the SQLExecution
-          // data corresponding to the execId.
-          val sqlStoreData = kvstore.read(classOf[SQLExecutionUIData], executionId)
-          val executionData = new LiveExecutionData(executionId)
-          executionData.rootExecutionId = sqlStoreData.rootExecutionId
-          executionData.queryId = sqlStoreData.queryId
-          executionData.description = sqlStoreData.description
-          executionData.details = sqlStoreData.details
-          executionData.physicalPlanDescription = sqlStoreData.physicalPlanDescription
-          executionData.modifiedConfigs = sqlStoreData.modifiedConfigs
-          executionData.addMetrics(sqlStoreData.metrics)
-          executionData.submissionTime = sqlStoreData.submissionTime
-          executionData.completionTime = sqlStoreData.completionTime
-          executionData.jobs = sqlStoreData.jobs
-          executionData.stages = sqlStoreData.stages
-          executionData.metricsValues = sqlStoreData.metricValues
-          executionData.endEvents.set(sqlStoreData.jobs.size + 1)
-          liveExecutions.put(executionId, executionData)
-          Some(executionData)
-        } catch {
-          case _: NoSuchElementException => None
-        }
-      }.getOrElse(getOrCreateExecution(executionId))
+    val exec = getOrRestoreExecution(executionId)
 
     // Record the accumulator IDs and metric types for the stages of this job, so that the code
     // that keeps track of the metrics knows which accumulators to look at.
@@ -393,7 +368,9 @@ class SQLAppStatusListener(
   private def onAdaptiveSQLMetricUpdate(event: SparkListenerSQLAdaptiveSQLMetricUpdates): Unit = {
     val SparkListenerSQLAdaptiveSQLMetricUpdates(executionId, sqlPlanMetrics) = event
 
-    val exec = getOrCreateExecution(executionId)
+    // An adaptive plan that outlives its execution, such as a shared inner CTE plan that its query
+    // dropped or abandoned, can post this after the execution ended.
+    val exec = getOrRestoreExecution(executionId)
     exec.addMetrics(sqlPlanMetrics)
     update(exec)
   }
@@ -447,6 +424,43 @@ class SQLAppStatusListener(
   private def getOrCreateExecution(executionId: Long): LiveExecutionData = {
     liveExecutions.computeIfAbsent(executionId,
       (_: Long) => new LiveExecutionData(executionId))
+  }
+
+  /**
+   * The live entry of `executionId`. When the execution has already ended and is no longer live,
+   * the entry is rebuilt from its stored record with all of its end events counted, so that a
+   * late event does not overwrite that record with a blank running entry: the next `update`
+   * writes the record back and stops tracking the execution again, unless the event added a job.
+   * A new entry is created only when nothing is stored.
+   */
+  private def getOrRestoreExecution(executionId: Long): LiveExecutionData = {
+    Option(liveExecutions.get(executionId))
+      .orElse {
+        try {
+          // Should not overwrite the kvstore with new entry, if it already has the SQLExecution
+          // data corresponding to the execId.
+          val sqlStoreData = kvstore.read(classOf[SQLExecutionUIData], executionId)
+          val executionData = new LiveExecutionData(executionId)
+          executionData.rootExecutionId = sqlStoreData.rootExecutionId
+          executionData.queryId = sqlStoreData.queryId
+          executionData.description = sqlStoreData.description
+          executionData.details = sqlStoreData.details
+          executionData.physicalPlanDescription = sqlStoreData.physicalPlanDescription
+          executionData.modifiedConfigs = sqlStoreData.modifiedConfigs
+          executionData.addMetrics(sqlStoreData.metrics)
+          executionData.submissionTime = sqlStoreData.submissionTime
+          executionData.completionTime = sqlStoreData.completionTime
+          executionData.errorMessage = sqlStoreData.errorMessage
+          executionData.jobs = sqlStoreData.jobs
+          executionData.stages = sqlStoreData.stages
+          executionData.metricsValues = sqlStoreData.metricValues
+          executionData.endEvents.set(sqlStoreData.jobs.size + 1)
+          liveExecutions.put(executionId, executionData)
+          Some(executionData)
+        } catch {
+          case _: NoSuchElementException => None
+        }
+      }.getOrElse(getOrCreateExecution(executionId))
   }
 
   private def update(exec: LiveExecutionData, force: Boolean = false): Unit = {

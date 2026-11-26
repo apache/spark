@@ -84,9 +84,11 @@ case class PlanCTEReuse(adaptiveExecutionContext: AdaptiveExecutionContext)
           re.subplan, isSubquery = true) match {
           case aqe: AdaptiveSparkPlanExec => aqe
           case _ =>
-            // AQE not applicable (should not happen: the subplan roots at a LOCAL_SHUFFLE_FOR_CTE
-            // shuffle and isSubquery bypasses shouldApplyAQE). Back the whole query off AQE via
-            // InsertAdaptiveSparkPlan's catch, which runs the non-AQE unwrap path.
+            // applyInternal returns the subplan without an inner AQE when the subplan does not
+            // support adaptive execution, or when a subquery or nested CTE reference in the body
+            // cannot be planned adaptively, a back-off it catches itself. Carry that back-off to
+            // InsertAdaptiveSparkPlan's catch, which runs the whole query without AQE, through the
+            // non-AQE unwrap path.
             throw CTEAdaptiveNotSupportedException(re.subplan.logicalLink.orNull)
         }
         registry.putIfAbsent(re.cteId, innerAQE)
