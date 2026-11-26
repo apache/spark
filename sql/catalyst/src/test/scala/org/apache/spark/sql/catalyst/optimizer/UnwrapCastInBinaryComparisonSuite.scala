@@ -31,8 +31,9 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelper {
 
@@ -444,6 +445,245 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
     doTest(tsLit2, timePartsAllZero = false)
     val tsNTZLit2 = Literal.create(tsNTZ.withSecond(30), TimestampNTZType)
     doTest(tsNTZLit2, timePartsAllZero = false)
+  }
+
+  test("SPARK-62378: Support unwrap date type to string type") {
+    val maxDateLit = Literal.create(LocalDate.of(9999, 12, 31), DateType)
+    // The range-predicate rewrite only applies when fromExp is an Attribute (see
+    // unwrapStringToDate's doc), so it needs a genuine AttributeReference here -- unlike f7 (a
+    // BoundReference, used for everything else in this file), g is Unevaluable until bound, so
+    // these range-predicate assertions compare plan structure only (evaluate = false).
+    val g: AttributeReference = testRelation.output(6).asInstanceOf[AttributeReference]
+
+    // DateType's [0001-01-01, 9999-12-31] contract is not enforced anywhere (e.g. DateAdd does
+    // unchecked Int arithmetic), so the unwrap must guard against out-of-range column values at
+    // runtime. Outside the range, Cast(Date, String) gains a sign prefix. For years <= 0, the
+    // formatted string always sorts before in-range literals, matching date order. For years
+    // >= 10000, however, the '+' prefix sorts before in-range digits, flipping the comparison.
+    // The range guard thus only needs to protect against years >= 10000 (g > maxDateLit).
+    def boundedRewrite(rewritten: Expression, original: Predicate): Expression = {
+      original match {
+        case _: LessThan | _: LessThanOrEqual =>
+          Or(GreaterThan(g, maxDateLit), rewritten)
+        case _: GreaterThan | _: GreaterThanOrEqual =>
+          And(LessThanOrEqual(g, maxDateLit), rewritten)
+      }
+    }
+
+    val dateToStrCastAttr = Cast(g, StringType)
+    val dateLit = Literal.create(LocalDate.of(2023, 1, 1), DateType)
+
+    assertEquivalent(dateToStrCastAttr > "2023-01-01",
+      boundedRewrite(g > dateLit, dateToStrCastAttr > "2023-01-01"), evaluate = false)
+    assertEquivalent(dateToStrCastAttr >= "2023-01-01",
+      boundedRewrite(g >= dateLit, dateToStrCastAttr >= "2023-01-01"), evaluate = false)
+    assertEquivalent(dateToStrCastAttr < "2023-01-01",
+      boundedRewrite(g < dateLit, dateToStrCastAttr < "2023-01-01"), evaluate = false)
+    assertEquivalent(dateToStrCastAttr <= "2023-01-01",
+      boundedRewrite(g <= dateLit, dateToStrCastAttr <= "2023-01-01"), evaluate = false)
+
+    // Literal-on-the-left is canonicalized to Cast-on-the-left by unwrapCast's generic `swap`
+    // before this case ever runs, and `swap` has no case for `If`, so the resulting plan keeps
+    // the canonicalized (not the original) orientation on both branches.
+    assertEquivalent("2023-01-01" >= dateToStrCastAttr,
+      boundedRewrite(g <= dateLit, dateToStrCastAttr <= "2023-01-01"), evaluate = false)
+
+    // Unlike the range predicates above, `=`/`<=>` need no Attribute restriction or runtime range
+    // guard: day-count equality between `fromExp` and the literal's decoded value agrees with
+    // string equality between their `Cast(_, StringType)` forms regardless of DateType's
+    // documented range or fromExp's shape, since that formatting stays injective outside the
+    // range -- it just stops being order-preserving -- and the rewrite embeds fromExp only once.
+    // So this keeps using f7 (a BoundReference, not an Attribute) and can check runtime
+    // evaluation too.
+    val dateToStrCast = Cast(f7, StringType)
+    assertEquivalent(dateToStrCast === "2023-01-01", f7 === dateLit)
+    assertEquivalent(dateToStrCast <=> "2023-01-01", f7 <=> dateLit)
+
+    // A non-canonical literal (missing zero-padding) can still parse to a valid date, but
+    // string-ordering it against canonical date strings is not equivalent to date-ordering it.
+    // These fail the round-trip check before fromExp's shape is even considered, so f7 is fine.
+    val nonCanonical = dateToStrCast <= "2023-1-1"
+    assertEquivalent(nonCanonical, nonCanonical, evaluate = false)
+
+    val unparseable = dateToStrCast <= "foobar"
+    assertEquivalent(unparseable, unparseable, evaluate = false)
+
+    val nullLit = dateToStrCast <= Literal.create(null, StringType)
+    assertEquivalent(nullLit, nullLit, evaluate = false)
+  }
+
+  test("SPARK-62378: range guard is unsound under legacy time parser policy") {
+    // The range-guard rewrite assumes: for ANY date outside DateType's documented
+    // [0001-01-01, 9999-12-31] range, Cast(date, String) sorts before EVERY in-range, canonical
+    // date string, regardless of the out-of-range date's actual magnitude. Under the default
+    // (CORRECTED/EXCEPTION) formatter that holds, because every out-of-range year gets a '+'/'-'
+    // sign prefix, and '+'/'-' (0x2B/0x2D) sort (ASCII) before any digit (0x30-0x39).
+    //
+    // Under `spark.sql.legacy.timeParserPolicy=LEGACY`, Cast(date, String) instead uses
+    // `java.text.SimpleDateFormat("yyyy-MM-dd")`, whose "yyyy" pattern does not sign-prefix or
+    // truncate -- it just prints however many digits the year needs. A big enough out-of-range
+    // year (e.g. 99999) then formats as a plain digit string that can sort AFTER an in-range
+    // literal, breaking the invariant the rewrite depends on. This is why unwrapStringToDate must
+    // return None entirely under LEGACY, rather than only guarding the range predicates.
+    val bigYearDays = LocalDate.of(99999, 1, 1).toEpochDay.toInt
+    val bigYearRow = create_row(null, null, null, null, null, null, bigYearDays, null)
+
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> LegacyBehaviorPolicy.LEGACY.toString) {
+      val formatted = Cast(f7, StringType, ansiEnabled = false).eval(bigYearRow)
+      assert(formatted === UTF8String.fromString("99999-01-01"),
+        "precondition: LEGACY must not sign-prefix out-of-range years")
+
+      // Ground truth: "99999-01-01" does not sort before "2024-01-01" ('9' > '2'), so the
+      // original (un-rewritten) predicate is false for this row.
+      val original = Cast(f7, StringType) < "2024-01-01"
+      assert(original.eval(bigYearRow) == false)
+
+      // What the range-guard rewrite would produce if it fired here: it assumes every
+      // out-of-range column value makes `<` trivially true, via `f7 > maxDateLit`.
+      val maxDateLit =
+        Literal(SparkDateTimeUtils.localDateToDays(LocalDate.of(9999, 12, 31)), DateType)
+      val dateLit = Literal(SparkDateTimeUtils.localDateToDays(LocalDate.of(2024, 1, 1)), DateType)
+      val wouldBeRewritten = Or(GreaterThan(f7, maxDateLit), LessThan(f7, dateLit))
+      assert(wouldBeRewritten.eval(bigYearRow) == true)
+
+      // The two disagree -- proving the rewrite would be unsound here -- so the rule must skip
+      // it entirely under LEGACY, which it does: the optimized plan is left untouched.
+      assert(original.eval(bigYearRow) != wouldBeRewritten.eval(bigYearRow))
+      assertEquivalent(original, original, evaluate = false)
+    }
+  }
+
+  test("SPARK-62378: range predicates require fromExp to be an Attribute") {
+    // The range-predicate rewrite embeds `fromExp` twice (once in the range guard, once more
+    // in the rewritten comparison), so it only applies when `fromExp` is an Attribute --
+    // cheap and safe to re-read. A non-Attribute fromExp like `DateAdd(f7, 1)` is left untouched
+    // for the range predicates, but `=`/`<=>` embed `fromExp` only once either way and still
+    // rewrite.
+    val computedDate = DateAdd(f7, Literal(1))
+    val dateToStrCast = Cast(computedDate, StringType)
+    val dateLit = Literal.create(LocalDate.of(2023, 1, 1), DateType)
+
+    val gt = dateToStrCast > "2023-01-01"
+    assertEquivalent(gt, gt)
+    val lte = dateToStrCast <= "2023-01-01"
+    assertEquivalent(lte, lte)
+
+    assertEquivalent(dateToStrCast === "2023-01-01", computedDate === dateLit)
+    assertEquivalent(dateToStrCast <=> "2023-01-01", computedDate <=> dateLit)
+  }
+
+  test("SPARK-62378: range-predicate rewrite's runtime guard is correct for an " +
+    "out-of-range column value") {
+    // The range-predicate rewrite only fires for an Attribute fromExp, so build the plan with a
+    // genuine AttributeReference (g), then bind both the original and optimized conditions back
+    // to BoundReferences (matching testRelation's schema order) so `.eval(row)` works below.
+    val g: AttributeReference = testRelation.output(6).asInstanceOf[AttributeReference]
+    val dateToStrCast = Cast(g, StringType)
+    val original = dateToStrCast <= "2024-01-01"
+    val optimized = Optimize.execute(testRelation.where(original).analyze)
+      .asInstanceOf[Filter].condition
+    val boundOriginal = BindReferences.bindReference(original, testRelation.output)
+    val boundOptimized = BindReferences.bindReference(optimized, testRelation.output)
+
+    // date_add(DATE'9999-12-31', 100) is allowed by Spark (DateAdd does unchecked Int
+    // arithmetic), landing in year ~10000; Cast(Date, String) then formats it as the
+    // non-fixed-width "+10000-04-09", which sorts lexicographically BEFORE "2024-01-01"
+    // despite being chronologically after it.
+    val outOfRangeDays = LocalDate.of(9999, 12, 31).plusDays(100).toEpochDay.toInt
+    val outOfRangeRow = create_row(null, null, null, null, null, null, outOfRangeDays, null)
+    assert(boundOriginal.eval(outOfRangeRow) == true)
+    checkEvaluation(boundOptimized, boundOriginal.eval(outOfRangeRow), outOfRangeRow)
+
+    val inRangeDays = LocalDate.of(2023, 1, 1).toEpochDay.toInt
+    val inRangeRow = create_row(null, null, null, null, null, null, inRangeDays, null)
+    checkEvaluation(boundOptimized, boundOriginal.eval(inRangeRow), inRangeRow)
+
+    val nullRow = create_row(null, null, null, null, null, null, null, null)
+    checkEvaluation(boundOptimized, boundOriginal.eval(nullRow), nullRow)
+  }
+
+  test("SPARK-62378: falls back when the literal is outside DateType's documented " +
+    "[0001-01-01, 9999-12-31] range") {
+    // '+10000-04-09' parses to a valid Date (year 10000) and, unlike dates within the documented
+    // range, round-trips back through Cast(Date, String) to the exact same string, so it passes
+    // unwrapStringToDate's canonicality check. But its day-count sorts AFTER every in-range date,
+    // while its formatted string ('+10000-04-09') sorts BEFORE every in-range, canonical date
+    // string (ASCII '+' < '0'-'9'). A range-predicate rewrite that only checks fromExp's range
+    // (not the literal's) would therefore flip the comparison's result for an in-range column --
+    // e.g. "2024-01-01" <= "+10000-04-09" is false by string order, but 2024-01-01 <= DATE
+    // '10000-04-09' is true by date order. The rewrite must decline to fire in this case.
+    val g: AttributeReference = testRelation.output(6).asInstanceOf[AttributeReference]
+    val dateToStrCast = Cast(g, StringType)
+    val outOfRangeLit = "+10000-04-09"
+
+    for (original <- Seq(
+        dateToStrCast < outOfRangeLit,
+        dateToStrCast <= outOfRangeLit,
+        dateToStrCast > outOfRangeLit,
+        dateToStrCast >= outOfRangeLit)) {
+      // No rewrite at all: the optimized plan keeps the original Cast-based comparison.
+      assertEquivalent(original, original, evaluate = false)
+    }
+
+    val boundOriginal = BindReferences.bindReference(
+      dateToStrCast <= outOfRangeLit, testRelation.output)
+    val inRangeDays = LocalDate.of(2024, 1, 1).toEpochDay.toInt
+    val inRangeRow = create_row(null, null, null, null, null, null, inRangeDays, null)
+    assert(boundOriginal.eval(inRangeRow) == false)
+  }
+
+  test("SPARK-62378: falls back when the literal's year is <= 0") {
+    // '-0005-01-01' round-trips through Cast(Date, String) exactly (like '+10000-04-09' above),
+    // but unlike that over-range case, a negative-year literal alone doesn't break order against
+    // an in-range column -- it only breaks order against another negative-year, out-of-range
+    // column: "-0010-01-01" < "-0005-01-01" by date order (year -10 is earlier), but
+    // "-0010-01-01" > "-0005-01-01" by string order (same '-' prefix, then digit-magnitude
+    // comparison: "0010" > "0005"). So the rewrite must decline for negative-year literals too,
+    // not just over-range ones -- this is why `literalInRange` checks the literal's lower bound.
+    val g: AttributeReference = testRelation.output(6).asInstanceOf[AttributeReference]
+    val dateToStrCast = Cast(g, StringType)
+    val outOfRangeLit = "-0005-01-01"
+
+    for (original <- Seq(
+        dateToStrCast < outOfRangeLit,
+        dateToStrCast <= outOfRangeLit,
+        dateToStrCast > outOfRangeLit,
+        dateToStrCast >= outOfRangeLit)) {
+      assertEquivalent(original, original, evaluate = false)
+    }
+
+    val boundOriginal = BindReferences.bindReference(
+      dateToStrCast < outOfRangeLit, testRelation.output)
+    val alsoOutOfRangeDays = LocalDate.of(-10, 1, 1).toEpochDay.toInt
+    val alsoOutOfRangeRow = create_row(null, null, null, null, null, null, alsoOutOfRangeDays, null)
+    // Ground truth: "-0010-01-01" does not sort before "-0005-01-01" ('1' > '0' at the first
+    // differing digit), so the original predicate is false for this row.
+    assert(boundOriginal.eval(alsoOutOfRangeRow) == false)
+
+    // What a max-bound-only `literalInRange` would (wrongly) produce: `g > maxDateLit` is false
+    // (g is very negative), but `g < literalDate` is true (year -10 is chronologically before
+    // year -5) -- the opposite of the correct answer above.
+    val maxDateLit =
+      Literal(SparkDateTimeUtils.localDateToDays(LocalDate.of(9999, 12, 31)), DateType)
+    val literalDate = Literal(LocalDate.of(-5, 1, 1).toEpochDay.toInt, DateType)
+    val wouldBeRewritten = Or(GreaterThan(g, maxDateLit), LessThan(g, literalDate))
+    val boundWouldBeRewritten = BindReferences.bindReference(wouldBeRewritten, testRelation.output)
+    assert(boundWouldBeRewritten.eval(alsoOutOfRangeRow) == true)
+    assert(boundOriginal.eval(alsoOutOfRangeRow) != boundWouldBeRewritten.eval(alsoOutOfRangeRow))
+  }
+
+  test("SPARK-62378: needs no range guard for `=`/`<=>` outside DateType's " +
+    "documented [0001-01-01, 9999-12-31] range") {
+    val dateToStrCast = Cast(f7, StringType)
+    val outOfRangeDays = LocalDate.of(9999, 12, 31).plusDays(100).toEpochDay.toInt
+    val outOfRangeRow = create_row(null, null, null, null, null, null, outOfRangeDays, null)
+
+    for (original <- Seq(dateToStrCast === "2024-01-01", dateToStrCast <=> "2024-01-01")) {
+      val optimized = Optimize.execute(testRelation.where(original).analyze)
+        .asInstanceOf[Filter].condition
+      assert(original.eval(outOfRangeRow) == false)
+      checkEvaluation(optimized, original.eval(outOfRangeRow), outOfRangeRow)
+    }
   }
 
   test("SPARK-46502: Support unwrap timestamp_ntz to timestamp type") {

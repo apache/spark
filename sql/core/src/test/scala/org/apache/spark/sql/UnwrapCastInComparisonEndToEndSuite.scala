@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.time.LocalDateTime
 
 import org.apache.spark.sql.catalyst.expressions.IntegralLiteralTestUtils.{negativeInt, positiveInt}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.Decimal
 
@@ -261,6 +262,55 @@ class UnwrapCastInComparisonEndToEndSuite extends SharedSparkSession {
         df.where("cast(ts as date) <= date'2023-01-02'"), Seq(ts1, ts2, ts3).map(Row(_)))
       checkAnswer(
         df.where("cast(ts as date) = date'2023-01-01'"), Seq(ts1, ts2).map(Row(_)))
+    }
+  }
+
+  test("SPARK-62378: Support unwrap date type to string type") {
+    withTable(t) {
+      val d1 = java.sql.Date.valueOf("2023-06-15")
+      val d2 = java.sql.Date.valueOf("2024-01-01")
+      Seq(d1, d2).toDF("d").write.saveAsTable(t)
+      val df = spark.table(t)
+
+      checkAnswer(df.where("cast(d as string) = '2023-06-15'"), Row(d1))
+      checkAnswer(df.where("cast(d as string) <= '2023-06-15'"), Row(d1))
+      checkAnswer(df.where("cast(d as string) > '2023-06-15'"), Row(d2))
+
+      // A string literal spelling a year >= 10000 (with an explicit sign) is a legal,
+      // round-trip-canonical Date literal, but its decoded value falls outside DateType's
+      // documented [0001-01-01, 9999-12-31] range. Unlike canonical in-range date strings,
+      // "yyyy-MM-dd", its formatted form gains a sign prefix that sorts (as a string) BEFORE
+      // every in-range date string, even though it is chronologically AFTER all of them. The
+      // optimizer must not rewrite these comparisons using only the column's range (both d1
+      // and d2 are in-range): doing so would silently flip the result relative to the original
+      // string comparison.
+      checkAnswer(df.where("cast(d as string) <= '+10000-04-09'"), Seq.empty)
+      checkAnswer(df.where("cast(d as string) < '+10000-04-09'"), Seq.empty)
+      checkAnswer(df.where("cast(d as string) >= '+10000-04-09'"), Seq(Row(d1), Row(d2)))
+      checkAnswer(df.where("cast(d as string) > '+10000-04-09'"), Seq(Row(d1), Row(d2)))
+    }
+  }
+
+  test("SPARK-62378: rewrite stays sound when the Cast(Date,String) is inserted implicitly " +
+      "by the legacy datetimeToString type-coercion flag") {
+    // With ANSI disabled and this legacy flag enabled, TypeCoercion resolves a DateType column
+    // compared to a String literal by inserting Cast(dateCol, StringType) itself -- the exact
+    // shape this rule's rewrite matches -- even though neither side of the SQL has an explicit
+    // CAST. The rewrite's soundness only depends on that Cast node's shape, not on how it was
+    // produced, so it must still hold here.
+    withSQLConf(
+        SQLConf.ANSI_ENABLED.key -> "false",
+        SQLConf.LEGACY_CAST_DATETIME_TO_STRING.key -> "true") {
+      withTable(t) {
+        val d1 = java.sql.Date.valueOf("2023-06-15")
+        val d2 = java.sql.Date.valueOf("2024-01-01")
+        Seq(d1, d2).toDF("d").write.saveAsTable(t)
+        val df = spark.table(t)
+
+        checkAnswer(df.where("d = '2023-06-15'"), Row(d1))
+        checkAnswer(df.where("d <= '2023-06-15'"), Row(d1))
+        checkAnswer(df.where("d > '2023-06-15'"), Row(d2))
+      }
     }
   }
 

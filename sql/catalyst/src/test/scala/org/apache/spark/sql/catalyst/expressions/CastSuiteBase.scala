@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils.microsToDuration
 import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils._
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, yearMonthIntervalTypes}
 import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
@@ -3105,5 +3105,29 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     val maxNanos = Literal.create(LocalTime.of(23, 59, 59, 999999999), TimeType(9))
     checkEvaluation(cast(maxNanos, IntegerType), 86399)
     checkEvaluation(cast(maxNanos, LongType), 86399L)
+  }
+
+  test("SPARK-62378: cast date to string sign-prefixes out-of-range years, policy-dependent") {
+    // UnwrapCastInBinaryComparison's DateType -> StringType optimizer rewrite relies on
+    // Cast(Date, String) sign-prefixing every out-of-range year (outside DateType's documented
+    // [0001-01-01, 9999-12-31]) under the default (EXCEPTION/CORRECTED) formatter, and skips the
+    // rewrite entirely under spark.sql.legacy.timeParserPolicy=LEGACY because that invariant
+    // doesn't hold there (see UnwrapCastInBinaryComparisonSuite). Go through Cast itself (via
+    // checkEvaluation, which also covers codegen) so a future change can't silently break that
+    // invariant without a test failing.
+    val cases = Seq(
+      (LocalDate.of(2021, 1, 1), "2021-01-01", "2021-01-01"),
+      (LocalDate.of(20021, 1, 1), "+20021-01-01", "20021-01-01"),
+      (LocalDate.of(-20021, 1, 1), "-20021-01-01", "20022-01-01"))
+
+    LegacyBehaviorPolicy.values.foreach { policy =>
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> policy.toString) {
+        cases.foreach { case (date, expected, legacyExpected) =>
+          val dateLiteral = Literal.create(localDateToDays(date), DateType)
+          val expectedStr = if (policy == LegacyBehaviorPolicy.LEGACY) legacyExpected else expected
+          checkEvaluation(cast(dateLiteral, StringType), expectedStr)
+        }
+      }
+    }
   }
 }
