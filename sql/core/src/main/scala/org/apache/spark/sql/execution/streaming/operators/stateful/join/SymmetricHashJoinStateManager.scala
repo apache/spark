@@ -295,8 +295,6 @@ class SymmetricHashJoinStateManagerV4(
     }
   }
 
-  // TODO(SPARK-61986): A NULL window struct join key still throws a NullPointerException here;
-  //   SPARK-61986 keeps rows whose watermarked join key is NULL out of the state.
   private val extractEventTimeFnFromKey: UnsafeRow => Option[Long] = { row =>
     joinKeyOrdinalForWatermark.map { idx =>
       val attr = keyAttributes(idx)
