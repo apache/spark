@@ -3113,9 +3113,6 @@ abstract class StreamingLeftSemiJoinBase extends StreamingJoinSuite {
   }
 
   test("left semi join stores every evicted right row under a bound with a truncating cast") {
-    // The V4 range scan reads the left row's time window without the truncation of the casts, so
-    // it misses the match this test expects.
-    assume(spark.sessionState.conf.getConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION) < 4)
     withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
       val leftInput = MemoryStream[(Int, Long)]
       val rightInput = MemoryStream[(Int, Long)]
