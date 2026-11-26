@@ -50,7 +50,7 @@ import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHash
 import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
 import org.apache.spark.sql.execution.ui.SparkPlanGraphNode
 import org.apache.spark.sql.execution.window.{Final, Partial, WindowGroupLimitExec, WindowGroupLimitMode}
-import org.apache.spark.sql.functions.{col, max}
+import org.apache.spark.sql.functions.{coalesce, col, max}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig
@@ -13117,8 +13117,7 @@ class KeyGroupedPartitioningSuite
       val byLeft = checkpointed.groupBy("lk").count()
       checkAnswer(byLeft, Seq(Row(1, 1L), Row(2, 1L), Row(null, 2L)))
       assert(allExchanges(byLeft.queryExecution.executedPlan).size == 1)
-      val byMerged = checkpointed.groupBy(
-        org.apache.spark.sql.functions.coalesce(col("lk"), col("rk"))).count()
+      val byMerged = checkpointed.groupBy(coalesce(col("lk"), col("rk"))).count()
       checkAnswer(byMerged, Seq(Row(1, 1L), Row(2, 1L), Row(3, 1L), Row(4, 1L)))
       assert(allExchanges(byMerged.queryExecution.executedPlan).isEmpty)
       assert(satisfiesRequirements(byMerged.queryExecution.executedPlan))
