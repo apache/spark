@@ -13111,7 +13111,8 @@ class KeyGroupedPartitioningSuite
       val ps = keyedPartitioningsOf(collect(checkpointed.queryExecution.executedPlan) {
         case r: RDDScanExec => r
       })
-      assert(ps.size == 2 && ps.forall(_.numPartitions > 1), checkpointed.queryExecution)
+      // LogicalRDD.fromDataset retains only the first partitioning alternative.
+      assert(ps.size == 1 && ps.head.numPartitions == 4, checkpointed.queryExecution)
 
       // The recorded claim must not simplify coalesce(lk, rk) to the formerly non-nullable lk.
       val byLeft = checkpointed.groupBy("lk").count()
