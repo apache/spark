@@ -747,10 +747,6 @@ private[spark] class ApplicationMaster(
       // of files to add to PYTHONPATH, which Client.scala already handles, so it's empty.
       userArgs = Seq(args.primaryPyFile, "") ++ userArgs
     }
-    if (args.primaryRFile != null &&
-        (args.primaryRFile.endsWith(".R") || args.primaryRFile.endsWith(".r"))) {
-      // TODO(davies): add R dependencies here
-    }
 
     val mainMethod = userClassLoader.loadClass(args.userClass)
       .getMethod("main", classOf[Array[String]])

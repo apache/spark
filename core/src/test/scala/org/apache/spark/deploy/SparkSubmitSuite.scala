@@ -32,8 +32,6 @@ import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark._
 import org.apache.spark.TestUtils
-import org.apache.spark.TestUtils.JavaSourceFromString
-import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.SparkSubmit._
 import org.apache.spark.deploy.history.EventLogFileReader
 import org.apache.spark.internal.Logging
@@ -136,6 +134,13 @@ class SparkSubmitSuite
   test("handle binary specified but not class") {
     val jar = TestUtils.createJarWithClasses(Seq("SparkSubmitClassA"))
     testPrematureExit(Array(jar.toString()), "No main class")
+  }
+
+  test("SPARK-62387: reject R applications") {
+    Seq("app.R", "app.r", "sparkr-shell").foreach { res =>
+      val e = intercept[SparkException](new SparkSubmitArguments(Seq(res)))
+      assert(e.getMessage.contains("SparkR was removed in Apache Spark 5.0.0"), res)
+    }
   }
 
   test("handles arguments with --key=val") {
@@ -896,66 +901,6 @@ class SparkSubmitSuite
         "--conf", s"spark.jars.ivySettings=${emptyIvySettings.getAbsolutePath()}",
         unusedJar.toString,
         "my.great.lib.MyLib", "my.great.dep.MyLib")
-      runSparkSubmit(args)
-    }
-  }
-
-  // TODO(SPARK-9603): Building a package is flaky on Jenkins Maven builds.
-  // See https://gist.github.com/shivaram/3a2fecce60768a603dac for an error log
-  ignore("correctly builds R packages included in a jar with --packages") {
-    assume(RUtils.isRInstalled, "R isn't installed on this machine.")
-    assume(RUtils.isSparkRInstalled, "SparkR is not installed in this build.")
-    val main = MavenCoordinate("my.great.lib", "mylib", "0.1")
-    val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
-    val rScriptDir = Seq(
-      sparkHome, "R", "pkg", "tests", "fulltests", "packageInAJarTest.R").mkString(File.separator)
-    assert(new File(rScriptDir).exists)
-    IvyTestUtils.withRepository(main, None, None, withR = true) { repo =>
-      val args = Seq(
-        "--name", "testApp",
-        "--master", "local-cluster[2,1,1024]",
-        "--packages", main.toString,
-        "--repositories", repo,
-        "--conf", s"spark.jars.ivySettings=${emptyIvySettings.getAbsolutePath()}",
-        "--verbose",
-        "--conf", "spark.ui.enabled=false",
-        rScriptDir)
-      runSparkSubmit(args)
-    }
-  }
-
-  test("include an external JAR in SparkR") {
-    assume(RUtils.isRInstalled, "R isn't installed on this machine.")
-    val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
-    assume(RUtils.isSparkRInstalled, "SparkR is not installed in this build.")
-    val rScriptDir =
-      Seq(sparkHome, "R", "pkg", "tests", "fulltests", "jarTest.R").mkString(File.separator)
-    assert(new File(rScriptDir).exists)
-
-    // compile a small jar containing a class that will be called from R code.
-    withTempDir { tempDir =>
-      val srcDir = new File(tempDir, "sparkrtest")
-      Utils.createDirectory(srcDir)
-      val excSource = new JavaSourceFromString(new File(srcDir, "DummyClass").toURI.getPath,
-        """package sparkrtest;
-        |
-        |public class DummyClass implements java.io.Serializable {
-        |  public static String helloWorld(String arg) { return "Hello " + arg; }
-        |  public static int addStuff(int arg1, int arg2) { return arg1 + arg2; }
-        |}
-      """.
-          stripMargin)
-      val excFile = TestUtils.createCompiledClass("DummyClass", srcDir, excSource, Seq.empty)
-      val jarFile = new File(tempDir, "sparkRTestJar-%s.jar".format(System.currentTimeMillis()))
-      val jarURL = TestUtils.createJar(Seq(excFile), jarFile, directoryPrefix = Some("sparkrtest"))
-
-      val args = Seq(
-        "--name", "testApp",
-        "--master", "local",
-        "--jars", jarURL.toString,
-        "--verbose",
-        "--conf", "spark.ui.enabled=false",
-        rScriptDir)
       runSparkSubmit(args)
     }
   }

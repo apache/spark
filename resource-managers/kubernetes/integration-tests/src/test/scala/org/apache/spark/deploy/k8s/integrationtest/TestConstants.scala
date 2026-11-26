@@ -29,7 +29,6 @@ object TestConstants {
   val CONFIG_KEY_KUBE_SVC_ACCOUNT = "spark.kubernetes.test.serviceAccountName"
   val CONFIG_KEY_IMAGE_JVM = "spark.kubernetes.test.jvmImage"
   val CONFIG_KEY_IMAGE_PYTHON = "spark.kubernetes.test.pythonImage"
-  val CONFIG_KEY_IMAGE_R = "spark.kubernetes.test.rImage"
   val CONFIG_KEY_IMAGE_TAG = "spark.kubernetes.test.imageTag"
   val CONFIG_KEY_IMAGE_TAG_FILE = "spark.kubernetes.test.imageTagFile"
   val CONFIG_KEY_IMAGE_REPO = "spark.kubernetes.test.imageRepo"

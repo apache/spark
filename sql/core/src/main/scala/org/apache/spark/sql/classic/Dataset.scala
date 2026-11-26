@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.classic
 
-import java.io.{ByteArrayOutputStream, CharArrayWriter, DataOutputStream}
+import java.io.{CharArrayWriter, DataOutputStream}
 import java.util
 
 import scala.collection.mutable.{ArrayBuffer, HashSet}
@@ -33,8 +33,6 @@ import org.apache.spark.annotation.{DeveloperApi, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
 import org.apache.spark.api.python.{PythonRDD, SerDeUtil}
-import org.apache.spark.api.r.RRDD
-import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.sql.{AnalysisException, Column, Encoder, Encoders, Observation, Row, SQLContext, TableArg, TypedColumn}
@@ -1587,25 +1585,6 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new `DataFrame` that contains the result of applying a serialized R function
-   * `func` to each partition.
-   */
-  private[sql] def mapPartitionsInR(
-      func: Array[Byte],
-      packageNames: Array[Byte],
-      broadcastVars: Array[Broadcast[Object]],
-      schema: StructType): DataFrame = {
-    val rowEncoder: ExpressionEncoder[Row] = if (isUnTyped) {
-      exprEnc.asInstanceOf[ExpressionEncoder[Row]]
-    } else {
-      ExpressionEncoder(schema)
-    }
-    Dataset.ofRows(
-      sparkSession,
-      MapPartitionsInR(func, packageNames, broadcastVars, schema, rowEncoder, logicalPlan))
-  }
-
-  /**
    * Applies a Scalar iterator Pandas UDF to each partition. The user-defined function
    * defines a transformation: `iter(pandas.DataFrame)` -> `iter(pandas.DataFrame)`.
    * Each partition is each iterator consisting of DataFrames as batches.
@@ -2267,63 +2246,6 @@ class Dataset[T] private[sql](
     val iter: Iterator[Array[Byte]] = new SerDeUtil.AutoBatchedPickler(
       rows.iterator.map(toJava))
     PythonRDD.serveIterator(iter, "serve-GetRows")
-  }
-
-  /**
-   * Collect a Dataset as Arrow batches and serve stream to SparkR. It sends
-   * arrow batches in an ordered manner with buffering. This is inevitable
-   * due to missing R API that reads batches from socket directly. See ARROW-4512.
-   * Eventually, this code should be deduplicated by `collectAsArrowToPython`.
-   */
-  private[sql] def collectAsArrowToR(): Array[Any] = {
-    val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
-
-    RRDD.serveToStream("serve-Arrow") { outputStream =>
-      withAction("collectAsArrowToR", queryExecution) { plan =>
-        val buffer = new ByteArrayOutputStream()
-        val out = new DataOutputStream(outputStream)
-        val batchWriter =
-          new ArrowBatchStreamWriter(
-            schema, buffer, timeZoneId, errorOnDuplicatedFieldNames = true, largeVarTypes = false)
-        val arrowBatchRdd = toArrowBatchRdd(plan)
-        val numPartitions = arrowBatchRdd.partitions.length
-
-        // Store collection results for worst case of 1 to N-1 partitions
-        val results = new Array[Array[Array[Byte]]](Math.max(0, numPartitions - 1))
-        var lastIndex = -1  // index of last partition written
-
-        // Handler to eagerly write partitions to Python in order
-        def handlePartitionBatches(index: Int, arrowBatches: Array[Array[Byte]]): Unit = {
-          // If result is from next partition in order
-          if (index - 1 == lastIndex) {
-            batchWriter.writeBatches(arrowBatches.iterator)
-            lastIndex += 1
-            // Write stored partitions that come next in order
-            while (lastIndex < results.length && results(lastIndex) != null) {
-              batchWriter.writeBatches(results(lastIndex).iterator)
-              results(lastIndex) = null
-              lastIndex += 1
-            }
-            // After last batch, end the stream
-            if (lastIndex == results.length) {
-              batchWriter.end()
-              val batches = buffer.toByteArray
-              out.writeInt(batches.length)
-              out.write(batches)
-            }
-          } else {
-            // Store partitions received out of order
-            results(index - 1) = arrowBatches
-          }
-        }
-
-        sparkSession.sparkContext.runJob(
-          arrowBatchRdd,
-          (ctx: TaskContext, it: Iterator[Array[Byte]]) => it.toArray,
-          0 until numPartitions,
-          handlePartitionBatches)
-      }
-    }
   }
 
   /**

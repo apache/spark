@@ -137,5 +137,4 @@ object Constants {
   // Application resource types.
   val APP_RESOURCE_TYPE_JAVA = "java"
   val APP_RESOURCE_TYPE_PYTHON = "python"
-  val APP_RESOURCE_TYPE_R = "r"
 }

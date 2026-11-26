@@ -34,7 +34,11 @@ import com.typesafe.tools.mima.core.*
 object MimaExcludes {
 
   // Exclude rules for 5.0.x from 4.5.0 (add 5.0-specific filters below as needed).
-  lazy val v50excludes: Seq[Problem => Boolean] = v45excludes
+  lazy val v50excludes: Seq[Problem => Boolean] = v45excludes ++ Seq(
+    // [SPARK-62387][R] Remove SparkR
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.deploy.RRunner"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.deploy.RRunner$")
+  )
 
   // Exclude rules for 4.5.x from 4.4.0 (add 4.5-specific filters below as needed).
   lazy val v45excludes: Seq[Problem => Boolean] = v44excludes ++ Seq(

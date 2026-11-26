@@ -62,9 +62,9 @@ trait ColumnarToRowTransition extends UnaryExecNode
  * Provides a common executor to translate an [[RDD]] of [[ColumnarBatch]] into an [[RDD]] of
  * [[InternalRow]]. This is inserted whenever such a transition is determined to be needed.
  *
- * The implementation is based off of similar implementations in
- * [[org.apache.spark.sql.execution.python.ArrowEvalPythonExec]] and
- * [[MapPartitionsInRWithArrowExec]]. Eventually this should replace those implementations.
+ * The implementation is based off of a similar implementation in
+ * [[org.apache.spark.sql.execution.python.ArrowEvalPythonExec]]. Eventually this should replace
+ * that implementation.
  */
 case class ColumnarToRowExec(child: SparkPlan)
     extends ColumnarToRowTransition with CodegenSupport with SafeForKWayMerge {

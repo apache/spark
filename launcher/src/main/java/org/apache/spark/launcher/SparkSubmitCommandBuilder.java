@@ -31,8 +31,7 @@ import static org.apache.spark.launcher.CommandBuilderUtils.checkState;
  * driver-side options and special parsing behavior needed for the special-casing certain internal
  * Spark applications.
  * <p>
- * This class has also some special features to aid launching shells (pyspark and sparkR) and also
- * examples.
+ * This class has also some special features to aid launching the pyspark shell and also examples.
  */
 class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
@@ -49,20 +48,6 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
    * This is the actual resource name that identifies the PySpark shell to SparkSubmit.
    */
   static final String PYSPARK_SHELL_RESOURCE = "pyspark-shell";
-
-  /**
-   * Name of the app resource used to identify the SparkR shell. The command line parser expects
-   * the resource name to be the very first argument to spark-submit in this case.
-   *
-   * NOTE: this cannot be "sparkr-shell" since that identifies the SparkR shell to SparkSubmit
-   * (see sparkR.R), and can cause this code to enter into an infinite loop.
-   */
-  static final String SPARKR_SHELL = "sparkr-shell-main";
-
-  /**
-   * This is the actual resource name that identifies the SparkR shell to SparkSubmit.
-   */
-  static final String SPARKR_SHELL_RESOURCE = "sparkr-shell";
 
   /**
    * Name of app resource used to identify examples. When running examples, args[0] should be
@@ -136,12 +121,6 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
           submitArgs = args.subList(1, args.size());
           break;
 
-        case SPARKR_SHELL:
-          this.allowsMixedArguments = true;
-          appResource = SPARKR_SHELL;
-          submitArgs = args.subList(1, args.size());
-          break;
-
         case RUN_EXAMPLE:
           isExample = true;
           appResource = findExamplesAppJar();
@@ -184,8 +163,6 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     }
     if (PYSPARK_SHELL.equals(appResource) && !isSpecialCommand) {
       return buildPySparkShellCommand(env);
-    } else if (SPARKR_SHELL.equals(appResource) && !isSpecialCommand) {
-      return buildSparkRCommand(env);
     } else {
       return buildSparkSubmitCommand(env);
     }
@@ -438,29 +415,6 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     }
 
     return pyargs;
-  }
-
-  private List<String> buildSparkRCommand(Map<String, String> env) throws IOException {
-    if (!appArgs.isEmpty() && (appArgs.get(0).endsWith(".R") || appArgs.get(0).endsWith(".r"))) {
-      System.err.println(
-        "Running R applications through 'sparkR' is not supported as of Spark 2.0.\n" +
-        "Use ./bin/spark-submit <R file>");
-      System.exit(-1);
-    }
-    // When launching the SparkR shell, store the spark-submit arguments in the SPARKR_SUBMIT_ARGS
-    // env variable.
-    appResource = SPARKR_SHELL_RESOURCE;
-    constructEnvVarArgs(env, "SPARKR_SUBMIT_ARGS", true);
-
-    // Set shell.R as R_PROFILE_USER to load the SparkR package when the shell comes up.
-    String sparkHome = System.getenv("SPARK_HOME");
-    env.put("R_PROFILE_USER",
-            join(File.separator, sparkHome, "R", "lib", "SparkR", "profile", "shell.R"));
-
-    List<String> args = new ArrayList<>();
-    args.add(firstNonEmpty(conf.get(SparkLauncher.SPARKR_R_SHELL),
-      System.getenv("SPARKR_DRIVER_R"), "R"));
-    return args;
   }
 
   private void constructEnvVarArgs(

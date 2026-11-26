@@ -16,10 +16,12 @@
  */
 package org.apache.spark.deploy.k8s.features
 
+import scala.annotation.nowarn
 import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model.ContainerBuilder
 
+import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
@@ -35,6 +37,7 @@ import org.apache.spark.launcher.SparkLauncher
 private[spark] class DriverCommandFeatureStep(conf: KubernetesDriverConf)
   extends KubernetesFeatureConfigStep with Logging {
 
+  @nowarn("cat=deprecation")
   override def configurePod(pod: SparkPod): SparkPod = {
     conf.mainAppResource match {
       case JavaMainAppResource(res) =>
@@ -44,10 +47,11 @@ private[spark] class DriverCommandFeatureStep(conf: KubernetesDriverConf)
         configureForPython(pod, res)
 
       case RMainAppResource(res) =>
-        configureForR(pod, res)
+        throw rApplicationNotSupported(res)
     }
   }
 
+  @nowarn("cat=deprecation")
   override def getAdditionalPodSystemProperties(): Map[String, String] = {
     val appType = conf.mainAppResource match {
       case JavaMainAppResource(_) =>
@@ -56,8 +60,8 @@ private[spark] class DriverCommandFeatureStep(conf: KubernetesDriverConf)
       case PythonMainAppResource(_) =>
         APP_RESOURCE_TYPE_PYTHON
 
-      case RMainAppResource(_) =>
-        APP_RESOURCE_TYPE_R
+      case RMainAppResource(res) =>
+        throw rApplicationNotSupported(res)
     }
 
     Map(APP_RESOURCE_TYPE.key -> appType)
@@ -99,9 +103,9 @@ private[spark] class DriverCommandFeatureStep(conf: KubernetesDriverConf)
     SparkPod(pod.pod, pythonContainer)
   }
 
-  private def configureForR(pod: SparkPod, res: String): SparkPod = {
-    val rContainer = baseDriverContainer(pod, res).build()
-    SparkPod(pod.pod, rContainer)
+  private def rApplicationNotSupported(res: String): SparkException = {
+    new SparkException("R applications are not supported: SparkR was removed in Apache Spark " +
+      s"5.0.0. Use sparklyr to work with Spark from R. Primary resource: '$res'.")
   }
 
   private def baseDriverContainer(pod: SparkPod, resource: String): ContainerBuilder = {

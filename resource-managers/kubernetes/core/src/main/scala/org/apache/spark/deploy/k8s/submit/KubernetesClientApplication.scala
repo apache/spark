@@ -61,8 +61,6 @@ private[spark] object ClientArguments {
         mainAppResource = JavaMainAppResource(Some(primaryJavaResource))
       case Array("--primary-py-file", primaryPythonResource: String) =>
         mainAppResource = PythonMainAppResource(primaryPythonResource)
-      case Array("--primary-r-file", primaryRFile: String) =>
-        mainAppResource = RMainAppResource(primaryRFile)
       case Array("--main-class", clazz: String) =>
         mainClass = Some(clazz)
       case Array("--arg", arg: String) =>

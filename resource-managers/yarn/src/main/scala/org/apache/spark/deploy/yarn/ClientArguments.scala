@@ -28,7 +28,6 @@ private[spark] class ClientArguments(args: Array[String]) extends Logging {
   var userJar: String = null
   var userClass: String = null
   var primaryPyFile: String = null
-  var primaryRFile: String = null
   var userArgs: ArrayBuffer[String] = new ArrayBuffer[String]()
   var verbose: Boolean = false
 
@@ -51,10 +50,6 @@ private[spark] class ClientArguments(args: Array[String]) extends Logging {
           primaryPyFile = value
           args = tail
 
-        case ("--primary-r-file") :: value :: tail =>
-          primaryRFile = value
-          args = tail
-
         case ("--arg") :: value :: tail =>
           userArgs += value
           args = tail
@@ -68,11 +63,6 @@ private[spark] class ClientArguments(args: Array[String]) extends Logging {
         case _ =>
           throw new IllegalArgumentException(getUsageMessage(args))
       }
-    }
-
-    if (primaryPyFile != null && primaryRFile != null) {
-      throw new IllegalArgumentException("Cannot have primary-py-file and primary-r-file" +
-        " at the same time")
     }
 
     if (verbose) {
@@ -90,7 +80,6 @@ private[spark] class ClientArguments(args: Array[String]) extends Logging {
       |                           mode)
       |  --class CLASS_NAME       Name of your application's main class (required)
       |  --primary-py-file        A main Python file
-      |  --primary-r-file         A main R file
       |  --arg ARG                Argument to be passed to your application's main class.
       |                           Multiple invocations are possible, each will be passed in order.
       |  --verbose, -v            Print additional debug output.

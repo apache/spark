@@ -74,7 +74,6 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var verbose: Boolean = false
   var isPython: Boolean = false
   var pyFiles: String = null
-  var isR: Boolean = false
   var action: SparkSubmitAction = null
   val sparkProperties: HashMap[String, String] = new HashMap[String, String]()
   var proxyUser: String = null
@@ -283,7 +282,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       error("Remote cannot be specified with master and/or deploy mode.")
     }
     if (primaryResource == null) {
-      error("Must specify a primary resource (JAR or Python or R file)")
+      error("Must specify a primary resource (JAR or Python file)")
     }
     if (driverMemory != null
         && Try(JavaUtils.byteStringAsBytes(driverMemory)).getOrElse(-1L) <= 0) {
@@ -512,6 +511,10 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     if (opt.startsWith("-")) {
       error(s"Unrecognized option '$opt'.")
     }
+    if (SparkSubmit.isR(opt)) {
+      error("R applications are not supported: SparkR was removed in Apache Spark 5.0.0. " +
+        s"Use sparklyr to work with Spark from R. Primary resource: '$opt'.")
+    }
 
     primaryResource =
       if (!SparkSubmit.isShell(opt) && !SparkSubmit.isInternal(opt)) {
@@ -520,7 +523,6 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         opt
       }
     isPython = SparkSubmit.isPython(opt)
-    isR = SparkSubmit.isR(opt)
     false
   }
 
@@ -533,7 +535,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       logInfo(log"Unknown/unsupported param ${MDC(UNKNOWN_PARAM, unknownParam)}")
     }
     val command = sys.env.getOrElse("_SPARK_CMD_USAGE",
-      """Usage: spark-submit [options] <app jar | python file | R file> [app arguments]
+      """Usage: spark-submit [options] <app jar | python file> [app arguments]
         |Usage: spark-submit --kill [submission ID] --master [spark://...]
         |Usage: spark-submit --status [submission ID] --master [spark://...]
         |Usage: spark-submit run-example [options] example-class [example args]""".stripMargin)

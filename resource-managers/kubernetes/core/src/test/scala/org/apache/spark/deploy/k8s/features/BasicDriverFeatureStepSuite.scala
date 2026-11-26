@@ -237,8 +237,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
   Seq(
     ("java", JavaMainAppResource(None), None, driverDefault, oldConfigDefault),
     ("python default", PythonMainAppResource(null), None, nonJvm, nonJvm),
-    ("python w/ override", PythonMainAppResource(null), Some(0.9d), 0.9d, nonJvm),
-    ("r default", RMainAppResource(null), None, nonJvm, nonJvm)
+    ("python w/ override", PythonMainAppResource(null), Some(0.9d), 0.9d, nonJvm)
   ).foreach { case (name, resource, factor, expectedFactor, expectedPropFactor) =>
     test(s"memory overhead factor new config: $name") {
       // Choose a driver memory where the default memory overhead is > MEMORY_OVERHEAD_MIN_MIB
@@ -268,8 +267,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
   Seq(
     ("java", JavaMainAppResource(None), None, driverDefault),
     ("python default", PythonMainAppResource(null), None, nonJvm),
-    ("python w/ override", PythonMainAppResource(null), Some(0.9d), 0.9d),
-    ("r default", RMainAppResource(null), None, nonJvm)
+    ("python w/ override", PythonMainAppResource(null), Some(0.9d), 0.9d)
   ).foreach { case (name, resource, factor, expectedFactor) =>
     test(s"memory overhead factor old config: $name") {
       // Choose a driver memory where the default memory overhead is > MEMORY_OVERHEAD_MIN_MIB

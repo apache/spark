@@ -36,7 +36,6 @@ import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 
 import org.apache.spark._
-import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.rest._
 import org.apache.spark.internal.{LogEntry, Logging, LogKeys}
 import org.apache.spark.internal.config._
@@ -299,9 +298,6 @@ private[spark] class SparkSubmit extends Logging {
       case (STANDALONE, CLUSTER) if args.isPython =>
         error("Cluster deploy mode is currently not supported for python " +
           "applications on standalone clusters.")
-      case (STANDALONE, CLUSTER) if args.isR =>
-        error("Cluster deploy mode is currently not supported for R " +
-          "applications on standalone clusters.")
       case (LOCAL, CLUSTER) =>
         error("Cluster deploy mode is not compatible with master \"local\"")
       case (_, CLUSTER) if isShell(args.primaryResource) =>
@@ -373,12 +369,6 @@ private[spark] class SparkSubmit extends Logging {
               mergeFileLists(resolvedMavenCoordinates: _*))
           }
         }
-      }
-
-      // install any R packages that may have been passed through --jars or --packages.
-      // Spark Packages may contain R source code inside the jar.
-      if (args.isR && !SparkStringUtils.isBlank(args.jars)) {
-        RPackageUtils.checkAndBuildRPackage(args.jars, printStream, args.verbose)
       }
     }
 
@@ -541,7 +531,7 @@ private[spark] class SparkSubmit extends Logging {
 
     // At this point, we have attempted to download all remote resources.
     // Now we try to resolve the main class if our primary resource is a JAR.
-    if (args.mainClass == null && !args.isPython && !args.isR) {
+    if (args.mainClass == null && !args.isPython) {
       try {
         val uri = new URI(
           Option(localPrimaryResource).getOrElse(args.primaryResource)
@@ -585,62 +575,6 @@ private[spark] class SparkSubmit extends Logging {
 
     if (localPyFiles != null) {
       sparkConf.set(SUBMIT_PYTHON_FILES, localPyFiles.split(",").toImmutableArraySeq)
-    }
-
-    // In YARN mode for an R app, add the SparkR package archive and the R package
-    // archive containing all of the built R libraries to archives so that they can
-    // be distributed with the job
-    if (args.isR && clusterManager == YARN) {
-      val sparkRPackagePath = RUtils.localSparkRPackagePath
-      if (sparkRPackagePath.isEmpty) {
-        error("SPARK_HOME does not exist for R application in YARN mode.")
-      }
-      val sparkRPackageFile = new File(sparkRPackagePath.get, SPARKR_PACKAGE_ARCHIVE)
-      if (!sparkRPackageFile.exists()) {
-        error(s"$SPARKR_PACKAGE_ARCHIVE does not exist for R application in YARN mode.")
-      }
-      val sparkRPackageURI = Utils.resolveURI(sparkRPackageFile.getAbsolutePath).toString
-
-      // Distribute the SparkR package.
-      // Assigns a symbol link name "sparkr" to the shipped package.
-      args.archives = mergeFileLists(args.archives, sparkRPackageURI + "#sparkr")
-
-      // Distribute the R package archive containing all the built R packages.
-      if (!RUtils.rPackages.isEmpty) {
-        val rPackageFile =
-          RPackageUtils.zipRLibraries(new File(RUtils.rPackages.get), R_PACKAGE_ARCHIVE)
-        if (!rPackageFile.exists()) {
-          error("Failed to zip all the built R packages.")
-        }
-
-        val rPackageURI = Utils.resolveURI(rPackageFile.getAbsolutePath).toString
-        // Assigns a symbol link name "rpkg" to the shipped package.
-        args.archives = mergeFileLists(args.archives, rPackageURI + "#rpkg")
-      }
-    }
-
-    // TODO: Support distributing R packages with standalone cluster
-    if (args.isR && clusterManager == STANDALONE && !RUtils.rPackages.isEmpty) {
-      error("Distributing R packages with standalone cluster is not supported.")
-    }
-
-    // If we're running an R app, set the main class to our specific R runner
-    if (args.isR && deployMode == CLIENT) {
-      if (args.primaryResource == SPARKR_SHELL) {
-        args.mainClass = "org.apache.spark.api.r.RBackend"
-      } else {
-        // If an R file is provided, add it to the child arguments and list of files to deploy.
-        // Usage: RRunner <main R file> [app arguments]
-        args.mainClass = "org.apache.spark.deploy.RRunner"
-        args.childArgs = ArrayBuffer(localPrimaryResource) ++ args.childArgs
-        args.files = mergeFileLists(args.files, args.primaryResource)
-      }
-    }
-
-    if (isYarnCluster && args.isR) {
-      // In yarn-cluster mode for an R app, add primary resource to files
-      // that can be distributed with the job
-      args.files = mergeFileLists(args.files, args.primaryResource)
     }
 
     // Special flag to avoid deprecation warnings at the client
@@ -781,8 +715,8 @@ private[spark] class SparkSubmit extends Logging {
     // Add the application jar automatically so the user doesn't have to call sc.addJar
     // For isKubernetesClusterModeDriver, the jar is already added in the previous spark-submit
     // For YARN cluster mode, the jar is already distributed on each node as "app.jar"
-    // For python and R files, the primary resource is already distributed as a regular file
-    if (!isKubernetesClusterModeDriver && !isYarnCluster && !args.isPython && !args.isR) {
+    // For python files, the primary resource is already distributed as a regular file
+    if (!isKubernetesClusterModeDriver && !isYarnCluster && !args.isPython) {
       var jars = sparkConf.get(JARS)
       if (isUserJar(args.primaryResource)) {
         jars = jars ++ Seq(args.primaryResource)
@@ -827,10 +761,6 @@ private[spark] class SparkSubmit extends Logging {
       if (args.isPython) {
         childArgs += "--primary-py-file" += args.primaryResource
         childArgs += "--class" += "org.apache.spark.deploy.PythonRunner"
-      } else if (args.isR) {
-        val mainFile = new Path(args.primaryResource).getName
-        childArgs += "--primary-r-file" += mainFile
-        childArgs += "--class" += "org.apache.spark.deploy.RRunner"
       } else {
         if (args.primaryResource != SparkLauncher.NO_RESOURCE) {
           childArgs += "--jar" += args.primaryResource
@@ -848,11 +778,7 @@ private[spark] class SparkSubmit extends Logging {
         if (args.isPython) {
           childArgs ++= Array("--primary-py-file", args.primaryResource)
           childArgs ++= Array("--main-class", "org.apache.spark.deploy.PythonRunner")
-        } else if (args.isR) {
-          childArgs ++= Array("--primary-r-file", args.primaryResource)
-          childArgs ++= Array("--main-class", "org.apache.spark.deploy.RRunner")
-        }
-        else {
+        } else {
           childArgs ++= Array("--primary-java-resource", args.primaryResource)
           childArgs ++= Array("--main-class", args.mainClass)
         }
@@ -1124,10 +1050,9 @@ object SparkSubmit extends CommandLineUtils with Logging {
   // Special primary resource names that represent shells rather than application jars.
   private val SPARK_SHELL = "spark-shell"
   private val PYSPARK_SHELL = "pyspark-shell"
-  private val SPARKR_SHELL = "sparkr-shell"
   private val CONNECT_SHELL = "connect-shell"
-  private val SPARKR_PACKAGE_ARCHIVE = "sparkr.zip"
-  private val R_PACKAGE_ARCHIVE = "rpkg.zip"
+  // The primary resource name of the removed SparkR shell, kept only to reject it.
+  private val SPARKR_SHELL = "sparkr-shell"
 
   // Following constants are visible for testing.
   private[deploy] val YARN_CLUSTER_SUBMIT_CLASS =
@@ -1191,14 +1116,14 @@ object SparkSubmit extends CommandLineUtils with Logging {
    * Return whether the given primary resource represents a user jar.
    */
   private[deploy] def isUserJar(res: String): Boolean = {
-    !isShell(res) && !isPython(res) && !isInternal(res) && !isR(res)
+    !isShell(res) && !isPython(res) && !isInternal(res)
   }
 
   /**
    * Return whether the given primary resource represents a shell.
    */
   private[deploy] def isShell(res: String): Boolean = {
-    (res == SPARK_SHELL || res == PYSPARK_SHELL || res == SPARKR_SHELL || res == CONNECT_SHELL)
+    (res == SPARK_SHELL || res == PYSPARK_SHELL || res == CONNECT_SHELL)
   }
 
   /**
@@ -1230,7 +1155,8 @@ object SparkSubmit extends CommandLineUtils with Logging {
   }
 
   /**
-   * Return whether the given primary resource requires running R.
+   * Return whether the given primary resource is an R application. SparkR was removed in
+   * Apache Spark 5.0.0, so SparkSubmitArguments rejects these.
    */
   private[deploy] def isR(res: String): Boolean = {
     res != null && (res.endsWith(".R") || res.endsWith(".r")) || res == SPARKR_SHELL

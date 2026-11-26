@@ -16,9 +16,10 @@
  */
 package org.apache.spark.deploy.k8s.features
 
+import scala.annotation.nowarn
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit._
@@ -98,18 +99,11 @@ class DriverCommandFeatureStepSuite extends SparkFunSuite {
     }
   }
 
-  test("R resource") {
-    val mainResource = "local:/main.R"
-
-    val spec = applyFeatureStep(
-      RMainAppResource(mainResource),
-      appArgs = Array("5", "7", "9"))
-
-    assert(spec.pod.container.getArgs.asScala === List(
-      "driver",
-      "--properties-file", SPARK_CONF_PATH,
-      "--class", KubernetesTestConf.MAIN_CLASS,
-      mainResource, "5", "7", "9"))
+  test("SPARK-62387: reject R resource") {
+    val e = intercept[SparkException] {
+      applyFeatureStep(RMainAppResource("local:/main.R"): @nowarn("cat=deprecation"))
+    }
+    assert(e.getMessage.contains("SparkR was removed in Apache Spark 5.0.0"))
   }
 
   test("SPARK-56303: java resource with Java-friendly factory methods") {
@@ -153,22 +147,6 @@ class DriverCommandFeatureStepSuite extends SparkFunSuite {
     val spec = applyFeatureStep(
       PythonMainAppResource(mainResource),
       conf = sparkConf,
-      appArgs = Array("5", "7", "9"),
-      proxyUser = Some("test.user"))
-
-    assert(spec.pod.container.getArgs.asScala === List(
-      "driver",
-      "--proxy-user", "test.user",
-      "--properties-file", SPARK_CONF_PATH,
-      "--class", KubernetesTestConf.MAIN_CLASS,
-      mainResource, "5", "7", "9"))
-  }
-
-  test("SPARK-25355: R resource args with proxy-user") {
-    val mainResource = "local:/main.R"
-
-    val spec = applyFeatureStep(
-      RMainAppResource(mainResource),
       appArgs = Array("5", "7", "9"),
       proxyUser = Some("test.user"))
 

@@ -157,7 +157,7 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.avro.*"),
 
       // Skip unsupported packages
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.api.*"), // Java, Python, R
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.api.*"), // Java, Python
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.catalyst.*"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.columnar.*"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.connector.*"),

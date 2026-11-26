@@ -786,7 +786,7 @@ private[spark] object Config extends Logging {
       .doc("This sets the resource type internally")
       .version("2.4.1")
       .stringConf
-      .checkValues(Set(APP_RESOURCE_TYPE_JAVA, APP_RESOURCE_TYPE_PYTHON, APP_RESOURCE_TYPE_R))
+      .checkValues(Set(APP_RESOURCE_TYPE_JAVA, APP_RESOURCE_TYPE_PYTHON))
       .createOptional
 
   val KUBERNETES_LOCAL_DIRS_TMPFS =

@@ -1133,27 +1133,17 @@ private[spark] class Client(
       } else {
         Nil
       }
-    val primaryRFile =
-      if (args.primaryRFile != null) {
-        Seq("--primary-r-file", args.primaryRFile)
-      } else {
-        Nil
-      }
     val amClass =
       if (isClusterMode) {
         Utils.classForName("org.apache.spark.deploy.yarn.ApplicationMaster").getName
       } else {
         Utils.classForName("org.apache.spark.deploy.yarn.ExecutorLauncher").getName
       }
-    if (args.primaryRFile != null &&
-        (args.primaryRFile.endsWith(".R") || args.primaryRFile.endsWith(".r"))) {
-      args.userArgs = ArrayBuffer(args.primaryRFile) ++ args.userArgs
-    }
     val userArgs = args.userArgs.flatMap { arg =>
       Seq("--arg", YarnSparkHadoopUtil.escapeForShell(arg))
     }
     val amArgs =
-      Seq(amClass) ++ userClass ++ userJar ++ primaryPyFile ++ primaryRFile ++ userArgs ++
+      Seq(amClass) ++ userClass ++ userJar ++ primaryPyFile ++ userArgs ++
       Seq("--properties-file",
         buildPath(Environment.PWD.$$(), LOCALIZED_CONF_DIR, SPARK_CONF_FILE)) ++
       Seq("--dist-cache-conf",
