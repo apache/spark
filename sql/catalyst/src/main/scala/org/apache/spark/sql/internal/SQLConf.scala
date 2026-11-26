@@ -4419,6 +4419,19 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val STATEFUL_OPERATOR_SHUFFLE_BEFORE_CARTESIAN_PRODUCT_ENABLED =
+    buildConf("spark.sql.streaming.statefulOperator.shuffleBeforeCartesianProduct.enabled")
+      .internal()
+      .doc("When true, a Cartesian product that reads the output of a stateful operator in the " +
+        "same stage reads it through a shuffle instead. A Cartesian product runs one task per " +
+        "pair of input partitions, so without the shuffle each state store partition is loaded " +
+        "by one task per partition of the other input, and those tasks wait on each other for " +
+        "the same state store.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val STATEFUL_OPERATOR_USE_STRICT_DISTRIBUTION =
     buildConf("spark.sql.streaming.statefulOperator.useStrictDistribution")
       .internal()
