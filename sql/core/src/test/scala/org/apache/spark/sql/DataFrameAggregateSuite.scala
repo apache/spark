@@ -4456,10 +4456,19 @@ class DataFrameAggregateSuite extends SharedSparkSession
       val grouped = Seq(("a", Some(-10L)), ("a", Some(0L)), ("a", Some(10L)), ("b", None))
         .toDF("k", "v").groupBy("k").agg(expr(sketchAgg).as("sketch"))
       val quantiles = grouped.selectExpr("k", s"kll_sketch_get_n_$valueType(sketch)",
-        s"$function(sketch, 0.5D)", s"$function(sketch, array(0.0D, 1.0D))")
+        s"$function(sketch, 0.5D)", s"$function(sketch, array(0.0D, 1.0D))",
+        s"$function(sketch, CAST(array() AS ARRAY<DOUBLE>))")
       checkAnswer(quantiles, Seq(
-        Row("a", 3L, 0, Seq(-10, 10)), Row("b", 0L, null, null)))
+        Row("a", 3L, 0, Seq(-10, 10), Seq.empty), Row("b", 0L, null, null, null)))
       assert(quantiles.schema.drop(2).forall(_.nullable))
+      Seq("1.5D", "array(0.5D, -0.5D)").foreach { rank =>
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            grouped.where($"k" === "b").selectExpr(s"$function(sketch, $rank)").collect()
+          },
+          condition = "KLL_SKETCH_INVALID_QUANTILE_RANGE",
+          parameters = Map("functionName" -> toSQLId(function)))
+      }
     }
   }
 
@@ -4478,14 +4487,6 @@ class DataFrameAggregateSuite extends SharedSparkSession
     checkAnswer(noRows.selectExpr(
       s"$function(sketch, 0.5D)", s"$function(sketch, array(0.5D, NULL))",
       s"$function(CAST(NULL AS BINARY), 1.5D)"), Row(null, null, null))
-    Seq("1.5D", "array(0.5D, -0.5D)").foreach { rank =>
-      checkError(
-        exception = intercept[SparkRuntimeException] {
-          noRows.selectExpr(s"$function(sketch, $rank)").collect()
-        },
-        condition = "KLL_SKETCH_INVALID_QUANTILE_RANGE",
-        parameters = Map("functionName" -> toSQLId(function)))
-    }
     Seq("X''", "substr(sketch, 1, 4)").foreach { buffer =>
       checkError(
         exception = intercept[SparkRuntimeException] {
