@@ -31,8 +31,8 @@ import org.apache.spark.annotation.Unstable
  * `"file unknown"` for `FileType()`, except that an external file in a struct field is the plain
  * `"file"`. A bare `"file"` is read as external inside a struct field and as unknown elsewhere.
  *
- * FileType is planned to be physically stored as a struct with the following fields (see
- * `FileType.FIELDS`), but it deliberately does not extend [[StructType]]:
+ * FileType is physically stored as a struct, but it deliberately does not extend [[StructType]].
+ * The struct has the following fields (see `FileType.FIELDS`):
  *   - uri (STRING): the URI of the referenced file, which may be absolute or relative
  *   - offset (BIGINT): the start of the referenced byte range
  *   - size (BIGINT): the length of the referenced byte range
@@ -40,6 +40,8 @@ import org.apache.spark.annotation.Unstable
  *   - checksum (STRING): an algorithm-tagged integrity token for the referenced bytes, e.g.
  *     "MD5:{digest}", or "ETAG:{etag}" for the whole file
  *   - inline (BINARY): the referenced bytes stored inline in the value
+ *
+ * Its external value is [[FileRef]], which has no getter for the inline bytes.
  *
  * FileType may be EXTERNAL (simple references, lifecycle independent of the table) or UNKNOWN
  * (mode not yet determined, such as the result of a cast or of a UDF). Mode is part of type
@@ -52,8 +54,11 @@ import org.apache.spark.annotation.Unstable
  * `xxhash64`, the key of a map built in a query or of a map in the return type of a function, and
  * a partition, bucket, clustering or write-ordering column of a table. Aggregates that
  * deduplicate or hash their input, such as `count(DISTINCT f)`, `collect_set`,
- * `approx_count_distinct` and `mode`, are not rejected yet. Accessing the fields of a FILE, such
- * as `uri`, is planned together with its physical representation.
+ * `approx_count_distinct` and `mode`, are not rejected yet. Accessing the fields of a FILE in
+ * SQL, such as `uri`, is planned. A FILE casts only to a FILE of unknown mode: a cast to STRING
+ * or BINARY, which reads the referenced bytes, is planned as well. A FILE of any mode can be
+ * written to a FILE EXTERNAL column of a table, as the file is external to the table that stores
+ * it.
  *
  * @param mode
  *   the mode for this FileType column
@@ -113,7 +118,8 @@ object FileType {
   /**
    * The struct fields that define the physical layout of FileType. Positional consumers (the
    * `*_INDEX` constants) depend on this order; do not reorder without updating every layer.
-   * `inline` is internal: it is not exposed as a user-facing field.
+   * `inline` is not exposed as a user-facing field: FileRef has no getter for it, but the
+   * canonical JSON form of a value includes it.
    */
   val FIELDS: Array[StructField] = Array(
     StructField("uri", StringType, nullable = true),

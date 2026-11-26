@@ -959,10 +959,15 @@ object TableOutputResolver extends SQLConfHelper with Logging {
         checkCastOverflowInTableInsert(cast, colName)
 
       case StoreAssignmentPolicy.LEGACY =>
-        Cast(expr, expectedType, Option(conf.sessionLocalTimeZone), ansiEnabled = false)
+        val cast =
+          Cast(expr, expectedType, Option(conf.sessionLocalTimeZone), ansiEnabled = false)
+        cast.setTagValue(Cast.BY_TABLE_INSERTION, ())
+        cast
 
       case _ =>
-        Cast(expr, expectedType, Option(conf.sessionLocalTimeZone))
+        val cast = Cast(expr, expectedType, Option(conf.sessionLocalTimeZone))
+        cast.setTagValue(Cast.BY_TABLE_INSERTION, ())
+        cast
     }
   }
 }
