@@ -58,25 +58,40 @@ class RunnerConf(Conf):
 
 def is_method_overridden(reader: Any, name: str) -> bool:
     """
-    Whether `reader` overrides the `DataSourceReader` method `name`, rather than inheriting the
-    default implementation. Used to detect pushdown methods that a reader implements while the
-    corresponding pushdown configuration is disabled, so that they are not silently ignored.
+    Whether `reader` implements the method `name` itself, rather than inheriting the default
+    implementation of a reader base class, `DataSourceReader` or `DataSourceLookupReader`. A
+    reader class may subclass both. False when neither base has such a method. Used to detect
+    pushdown methods that a reader implements while the corresponding pushdown configuration is
+    disabled, so that they are not silently ignored.
     """
-    from pyspark.sql.datasource import DataSourceReader
+    from pyspark.sql.datasource import DataSourceLookupReader, DataSourceReader
 
-    return getattr(getattr(reader, name), "__func__", None) is not getattr(DataSourceReader, name)
+    defaults = [
+        getattr(base, name)
+        for base in (DataSourceReader, DataSourceLookupReader)
+        if hasattr(base, name)
+    ]
+    method = getattr(reader, name, None)
+    if method is None or not defaults:
+        return False
+    # A bound method, or the attribute itself, such as a staticmethod.
+    implementation = getattr(method, "__func__", method)
+    return all(implementation is not default for default in defaults)
 
 
 def check_pushdown_not_disabled(
-    reader: Any, enable_filter_pushdown: bool, enable_limit_pushdown: bool
+    reader: Any, enable_filter_pushdown: bool, enable_limit_pushdown: Optional[bool] = None
 ) -> None:
     """
     Raise `DATA_SOURCE_PUSHDOWN_DISABLED` if `reader` implements a pushdown method while the
     corresponding pushdown configuration is disabled, so that the method is not silently ignored.
+    `pushLimit` is not checked when `enable_limit_pushdown` is None.
 
-    This is shared by both planning workers: `plan_data_source_read` runs it for a plain read,
+    This is shared by the planning workers: `plan_data_source_read` runs it for a plain read,
     and `data_source_pushdown_filters` runs it too, because a filter- or limit-only scan caches
     the read info in that worker and `plan_data_source_read` never runs for such a scan.
+    `plan_data_source_lookup` runs it for a lookup reader, which has no `pushLimit`, so it checks
+    only `pushFilters`: a reader class that also serves batch reads may implement `pushLimit`.
     """
     from pyspark.errors import PySparkAssertionError
 
@@ -84,7 +99,7 @@ def check_pushdown_not_disabled(
         ("pushFilters", "spark.sql.python.filterPushdown.enabled", enable_filter_pushdown),
         ("pushLimit", "spark.sql.python.limitPushdown.enabled", enable_limit_pushdown),
     ):
-        if not enabled and is_method_overridden(reader, method):
+        if enabled is not None and not enabled and is_method_overridden(reader, method):
             raise PySparkAssertionError(
                 errorClass="DATA_SOURCE_PUSHDOWN_DISABLED",
                 messageParameters={
@@ -96,13 +111,24 @@ def check_pushdown_not_disabled(
 
 
 @with_faulthandler
-def worker_run(main: Callable, infile: IO, outfile: IO) -> None:
+def worker_run(
+    main: Callable,
+    infile: IO,
+    outfile: IO,
+    memory_limit_env: str = "PYSPARK_PLANNER_MEMORY_MB",
+) -> None:
+    """
+    Runs `main` in a Python worker that the JVM started for a named module, such as a planner
+    worker on the driver. The memory limit of the worker is read from the environment variable
+    `memory_limit_env`: a planner worker has `PYSPARK_PLANNER_MEMORY_MB`, and a worker that runs
+    in a task, such as the lookup worker, has `PYSPARK_EXECUTOR_MEMORY_MB`.
+    """
     try:
         check_python_version(infile)
 
         start_faulthandler_periodic_traceback()
 
-        memory_limit_mb = int(os.environ.get("PYSPARK_PLANNER_MEMORY_MB", "-1"))
+        memory_limit_mb = int(os.environ.get(memory_limit_env, "-1"))
         setup_memory_limits(memory_limit_mb)
 
         setup_spark_files(infile)

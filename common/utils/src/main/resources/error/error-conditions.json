@@ -2418,6 +2418,11 @@
           "The lookup result cursor returned the input ordinal <ordinal>, but the request had <numParameterRows> parameter rows."
         ]
       },
+      "INVALID_RESULT_TYPE" : {
+        "message" : [
+          "`<method>` returned a value of the type <type>, but it must return <expected>."
+        ]
+      },
       "INVALID_SELECTED_PREDICATE_POSITION" : {
         "message" : [
           "`selectLookupPredicates()` returned the position <position>, but the valid positions are from 0 to <maxPosition>."

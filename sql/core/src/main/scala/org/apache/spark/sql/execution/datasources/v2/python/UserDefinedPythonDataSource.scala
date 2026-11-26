@@ -27,6 +27,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import net.razorvine.pickle.Pickler
 
+import org.apache.spark.SparkException
 import org.apache.spark.api.python._
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.PythonUDF
@@ -34,7 +35,10 @@ import org.apache.spark.sql.catalyst.expressions.variant.VariantExpressionEvalUt
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.connector.expressions.NamedReference
+import org.apache.spark.sql.connector.expressions.filter.{Predicate => V2Predicate}
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
+import org.apache.spark.sql.connector.read.LookupParameter
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -54,6 +58,15 @@ import org.apache.spark.util.ArrayImplicits._
  * @param dataSourceCls The Python data source class.
  */
 case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
+
+  /**
+   * (Driver-side) Which of lookups and batch reads the data source class serves, from a Python
+   * process that looks at the class only, once for the registered class. No data source is
+   * created, so the data source runs no code before Spark creates it for a read or a write, as
+   * without lookups.
+   */
+  private[python] lazy val lookupSupport: PythonDataSourceLookupSupport =
+    new UserDefinedPythonDataSourceLookupSupportRunner(dataSourceCls).runInPython()
 
   /**
    * (Driver-side) Run Python process, and get the pickled Python Data Source
@@ -122,6 +135,32 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
       limit = limit,
       planReadInfo = true
     ).runInPython()
+  }
+
+  /**
+   * (Driver-side) Run Python process to plan a lookup: create the lookup reader, push the
+   * `filters` down to it, select the lookup predicates among the `candidates` and get the maximum
+   * number of parameter rows per request, in the order in which Spark calls a Scala connector.
+   * Returns the planned reader, pickled for the executors, and the planning decisions.
+   *
+   * `filters` are the filters that [[PythonScanBuilder.pushFilters]] received, empty when filter
+   * pushdown is disabled. `candidates` are the predicates that Spark offers to
+   * [[org.apache.spark.sql.connector.read.SupportsExternalLookup.selectLookupPredicates]].
+   * A broken contract of the lookup API that Python finds is reported with the error that Spark
+   * raises for a Scala connector, for the table `tableName`.
+   */
+  def planLookupInPython(
+      tableName: String,
+      pythonResult: PythonDataSourceCreationResult,
+      schema: StructType,
+      filters: Array[Filter],
+      candidates: Array[V2Predicate]): PythonDataSourceLookupPlan = {
+    new UserDefinedPythonDataSourceLookupPlanRunner(
+      tableName,
+      createPythonFunction(pythonResult.dataSource),
+      schema,
+      filters.toImmutableArraySeq,
+      candidates.toImmutableArraySeq).runInPython()
   }
 
   /**
@@ -379,6 +418,42 @@ private class UserDefinedPythonDataSourceRunner(
 }
 
 /**
+ * Which of lookups and batch reads a Python data source class serves.
+ *
+ * @param supportsLookup Whether the data source class implements `lookupReader()`.
+ * @param supportsBatchRead Whether the data source class implements `reader()`.
+ */
+case class PythonDataSourceLookupSupport(supportsLookup: Boolean, supportsBatchRead: Boolean)
+
+/**
+ * A runner that finds out, in a Python process, which of lookups and batch reads a Python data
+ * source class serves. It looks at the class only: no data source is created.
+ */
+private class UserDefinedPythonDataSourceLookupSupportRunner(dataSourceCls: PythonFunction)
+  extends PythonPlannerRunner[PythonDataSourceLookupSupport](dataSourceCls) {
+
+  // See the logic in `pyspark.sql.worker.data_source_lookup_support.py`.
+  override val workerModule = "pyspark.sql.worker.data_source_lookup_support"
+
+  override protected def writeToPython(dataOut: DataOutputStream, pickler: Pickler): Unit = {
+    PythonWorkerUtils.writePythonFunction(dataSourceCls, dataOut)
+  }
+
+  override protected def receiveFromPython(
+      dataIn: DataInputStream): PythonDataSourceLookupSupport = {
+    val supportsLookup = dataIn.readInt()
+    if (supportsLookup == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
+      val msg = PythonWorkerUtils.readUTF(dataIn)
+      throw QueryCompilationErrors.pythonDataSourceError(
+        action = "inspect", tpe = "class", msg = msg)
+    }
+    PythonDataSourceLookupSupport(
+      supportsLookup = supportsLookup != 0,
+      supportsBatchRead = dataIn.readInt() != 0)
+  }
+}
+
+/**
  * @param readInfo The read function and partitions, when the worker planned them. Empty in two
  *                 cases: the filter-pushdown pass deferred planning (limit pushdown enabled), or a
  *                 pushed limit was rejected (the rejecting reader may be mutated). Planning then
@@ -417,6 +492,97 @@ private class UserDefinedPythonDataSourceFilterPushdownRunner(
     planReadInfo: Boolean)
     extends PythonPlannerRunner[PythonFilterPushdownResult](dataSource) {
 
+  private val serializedFilters = new PythonDataSourceFilters(schema, filters)
+
+  // See the logic in `pyspark.sql.worker.data_source_pushdown_filters.py`.
+  override val workerModule = "pyspark.sql.worker.data_source_pushdown_filters"
+
+  override protected def runnerConf: Map[String, String] = {
+    super.runnerConf ++ SQLConf.get.pythonDataSourceProfiler.map(p =>
+      Map(SQLConf.PYTHON_DATA_SOURCE_PROFILER.key -> p)
+    ).getOrElse(Map.empty)
+  }
+
+  def isAnyFilterSupported: Boolean = serializedFilters.nonEmpty
+
+  override protected def writeToPython(dataOut: DataOutputStream, pickler: Pickler): Unit = {
+    // Send Python data source
+    PythonWorkerUtils.writePythonFunction(dataSource, dataOut)
+
+    // Send output schema
+    PythonWorkerUtils.writeUTF(schema.json, dataOut)
+
+    // Send the filters
+    PythonWorkerUtils.writeUTF(serializedFilters.toJson, dataOut)
+
+    // Send the limit, if any. -1 means no limit is pushed down.
+    dataOut.writeInt(limit.getOrElse(-1))
+
+    // Send configurations
+    dataOut.writeInt(SQLConf.get.arrowMaxRecordsPerBatch)
+    dataOut.writeBoolean(SQLConf.get.pythonFilterPushDown)
+    dataOut.writeBoolean(SQLConf.get.pythonLimitPushDown)
+    dataOut.writeBoolean(SQLConf.get.pysparkBinaryAsBytes)
+    // Whether the worker should plan the read function and partitions. The filter-pushdown pass
+    // sets this false while limit pushdown is enabled, because a later limit pass -- or
+    // build-time planning -- will plan once it is known whether a limit is pushed, so
+    // `partitions()`/`read()` never run on a reader whose plan would be discarded.
+    dataOut.writeBoolean(planReadInfo)
+  }
+
+  override protected def receiveFromPython(dataIn: DataInputStream): PythonFilterPushdownResult = {
+    // Whether a read function + partitions follow. Read first so that an exception raised in the
+    // worker (sent as PYTHON_EXCEPTION_THROWN) is surfaced here instead of being misread as data.
+    val hasReadInfo = dataIn.readInt()
+    if (hasReadInfo == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
+      val msg = PythonWorkerUtils.readUTF(dataIn)
+      throw QueryCompilationErrors.pythonDataSourceError(
+        action = "plan",
+        tpe = "read",
+        msg = msg
+      )
+    }
+    // Receive the read function and partitions, when the worker planned them. None follow when the
+    // filter-pushdown pass defers planning (limit pushdown enabled) or when a pushed limit was
+    // rejected; build() (or a later limit pass) then plans them from a fresh reader instead.
+    val readInfo = if (hasReadInfo != 0) {
+      Some(PythonDataSourceReadInfo.receive(dataIn))
+    } else {
+      None
+    }
+
+    // Receive the pushed filters as a list of indices.
+    val numFiltersPushed = dataIn.readInt()
+    val isFilterPushed = ArrayBuffer.fill(filters.length)(false)
+    for (_ <- 0 until numFiltersPushed) {
+      val i = dataIn.readInt()
+      isFilterPushed(serializedFilters.filterIndex(i)) = true
+    }
+
+    // Receive whether the limit was pushed down, sent as 1 or 0.
+    val isLimitPushed = dataIn.readInt() != 0
+
+    PythonFilterPushdownResult(
+      readInfo = readInfo,
+      isFilterPushed = isFilterPushed,
+      isLimitPushed = isLimitPushed
+    )
+  }
+}
+
+/**
+ * The filters that a Python planning worker receives, serialized to the JSON that
+ * `pyspark.sql.worker.data_source_pushdown_filters.read_filters` reads. A filter that Python does
+ * not support is left out, so the worker reports a filter by its position among the serialized
+ * ones, which [[filterIndex]] maps back to its position in `filters`.
+ *
+ * @param schema the schema of the Python data source, which the filters reference
+ * @param filters the filters to send
+ */
+private[python] class PythonDataSourceFilters(
+    schema: StructType,
+    filters: collection.Seq[Filter]) {
+
   private case class SerializedFilter(
       name: String,
       columnPath: collection.Seq[String],
@@ -444,7 +610,7 @@ private class UserDefinedPythonDataSourceFilterPushdownRunner(
     (columnPath, field)
   }
 
-  private val serializedFilters = filters.zipWithIndex.flatMap {
+  private val serialized = filters.zipWithIndex.flatMap {
     case (filter, i) =>
       // Unwrap Not filter
       val (childFilter, isNegated) = filter match {
@@ -504,8 +670,77 @@ private class UserDefinedPythonDataSourceFilterPushdownRunner(
       }
   }
 
-  // See the logic in `pyspark.sql.worker.data_source_pushdown_filters.py`.
-  override val workerModule = "pyspark.sql.worker.data_source_pushdown_filters"
+  def nonEmpty: Boolean = serialized.nonEmpty
+
+  def toJson: String = mapper.writeValueAsString(serialized)
+
+  /** The position in `filters` of the `i`-th serialized filter. */
+  def filterIndex(i: Int): Int = serialized(i).index
+}
+
+/**
+ * The result of planning a lookup in Python, with [[UserDefinedPythonDataSourceLookupPlanRunner]].
+ *
+ * @param reader The planned lookup reader, pickled, which the executors use to look up rows. It
+ *               is empty for a selection that Spark rejects, empty or with a repeated position,
+ *               which Python neither sizes nor pickles, so that Spark reports the selection's
+ *               error, as for a Scala connector.
+ * @param pushedFilterIndexes The positions of the filters that the reader pushes, among the
+ *                            filters that were sent.
+ * @param selectedIndexes The positions of the selected lookup predicates among the candidates, in
+ *                        the order of the reader's selection, which is the order of the fields of
+ *                        a parameter row. Python checks that each is a position of a candidate,
+ *                        and Spark rejects an empty or a duplicate selection.
+ * @param parameterTypes The data type of each field of a parameter row: that of the parameter of
+ *                       each selected predicate, in order.
+ * @param maxParameterRowsPerRequest The maximum number of parameter rows per request, which Spark
+ *                                   checks to be positive, or 0 for a selection that Spark
+ *                                   rejects.
+ */
+case class PythonDataSourceLookupPlan(
+    reader: Array[Byte],
+    pushedFilterIndexes: Seq[Int],
+    selectedIndexes: Seq[Int],
+    parameterTypes: Seq[DataType],
+    maxParameterRowsPerRequest: Int)
+
+/**
+ * Plan a lookup on a Python data source.
+ *
+ * @param tableName the name of the table, for the errors of a broken contract
+ * @param dataSource a Python data source instance
+ * @param schema schema of the Python data source
+ * @param filters the filters to push down to the lookup reader
+ * @param candidates the lookup predicates that Spark offers
+ */
+private class UserDefinedPythonDataSourceLookupPlanRunner(
+    tableName: String,
+    dataSource: PythonFunction,
+    schema: StructType,
+    filters: Seq[Filter],
+    candidates: Seq[V2Predicate])
+    extends PythonPlannerRunner[PythonDataSourceLookupPlan](dataSource) {
+  import UserDefinedPythonDataSourceLookupPlanRunner._
+
+  private val serializedFilters = new PythonDataSourceFilters(schema, filters)
+
+  // Each candidate, and the data type of its parameter. Spark offers each one as a comparison of
+  // a top-level column with a lookup parameter, as `SupportsExternalLookup` documents.
+  private val (serializedCandidates, parameterTypes) = candidates.map { candidate =>
+    candidate.children() match {
+      case Array(column: NamedReference, parameter: LookupParameter)
+          if lookupPredicateNames.contains(candidate.name()) =>
+        val serialized = SerializedLookupCandidate(
+          candidate.name(), column.fieldNames().toImmutableArraySeq, parameter.dataType().json)
+        (serialized, parameter.dataType())
+      case _ =>
+        throw SparkException.internalError(
+          s"Unexpected lookup predicate candidate: ${candidate.describe()}")
+    }
+  }.unzip
+
+  // See the logic in `pyspark.sql.worker.plan_data_source_lookup.py`.
+  override val workerModule = "pyspark.sql.worker.plan_data_source_lookup"
 
   override protected def runnerConf: Map[String, String] = {
     super.runnerConf ++ SQLConf.get.pythonDataSourceProfiler.map(p =>
@@ -513,71 +748,85 @@ private class UserDefinedPythonDataSourceFilterPushdownRunner(
     ).getOrElse(Map.empty)
   }
 
-  def isAnyFilterSupported: Boolean = serializedFilters.nonEmpty
-
   override protected def writeToPython(dataOut: DataOutputStream, pickler: Pickler): Unit = {
     // Send Python data source
     PythonWorkerUtils.writePythonFunction(dataSource, dataOut)
 
-    // Send output schema
+    // Send schema
     PythonWorkerUtils.writeUTF(schema.json, dataOut)
 
-    // Send the filters
-    PythonWorkerUtils.writeUTF(mapper.writeValueAsString(serializedFilters), dataOut)
-
-    // Send the limit, if any. -1 means no limit is pushed down.
-    dataOut.writeInt(limit.getOrElse(-1))
+    // Send the filters and the candidate lookup predicates
+    PythonWorkerUtils.writeUTF(serializedFilters.toJson, dataOut)
+    PythonWorkerUtils.writeUTF(mapper.writeValueAsString(serializedCandidates), dataOut)
 
     // Send configurations
-    dataOut.writeInt(SQLConf.get.arrowMaxRecordsPerBatch)
     dataOut.writeBoolean(SQLConf.get.pythonFilterPushDown)
-    dataOut.writeBoolean(SQLConf.get.pythonLimitPushDown)
-    dataOut.writeBoolean(SQLConf.get.pysparkBinaryAsBytes)
-    // Whether the worker should plan the read function and partitions. The filter-pushdown pass
-    // sets this false while limit pushdown is enabled, because a later limit pass -- or
-    // build-time planning -- will plan once it is known whether a limit is pushed, so
-    // `partitions()`/`read()` never run on a reader whose plan would be discarded.
-    dataOut.writeBoolean(planReadInfo)
   }
 
-  override protected def receiveFromPython(dataIn: DataInputStream): PythonFilterPushdownResult = {
-    // Whether a read function + partitions follow. Read first so that an exception raised in the
-    // worker (sent as PYTHON_EXCEPTION_THROWN) is surfaced here instead of being misread as data.
-    val hasReadInfo = dataIn.readInt()
-    if (hasReadInfo == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
+  override protected def receiveFromPython(dataIn: DataInputStream): PythonDataSourceLookupPlan = {
+    // Receive the pickled lookup reader or an exception raised in Python worker.
+    val length = dataIn.readInt()
+    if (length == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
       throw QueryCompilationErrors.pythonDataSourceError(
-        action = "plan",
-        tpe = "read",
-        msg = msg
-      )
+        action = "plan", tpe = "lookup", msg = msg)
     }
-    // Receive the read function and partitions, when the worker planned them. None follow when the
-    // filter-pushdown pass defers planning (limit pushdown enabled) or when a pushed limit was
-    // rejected; build() (or a later limit pass) then plans them from a fresh reader instead.
-    val readInfo = if (hasReadInfo != 0) {
-      Some(PythonDataSourceReadInfo.receive(dataIn))
-    } else {
-      None
+    // A broken contract of the lookup API, which Python found: the same error as for a Scala
+    // connector, so that the startup check of a streaming query reports it.
+    if (length == LOOKUP_CONTRACT_VIOLATION) {
+      val subclass = PythonWorkerUtils.readUTF(dataIn)
+      val parameters = Seq.fill(dataIn.readInt()) {
+        PythonWorkerUtils.readUTF(dataIn) -> PythonWorkerUtils.readUTF(dataIn)
+      }.toMap
+      // Python reports the position of a candidate that the reader changed, which is described
+      // as Spark offered it, as for a Scala connector.
+      val described = if (subclass == "MODIFIED_CANDIDATES") {
+        parameters + ("predicate" -> candidates(parameters("position").toInt).describe())
+      } else {
+        parameters
+      }
+      throw QueryCompilationErrors.invalidDataSourceExternalLookupError(
+        tableName, subclass, described)
     }
+    val reader = PythonWorkerUtils.readBytes(length, dataIn)
 
-    // Receive the pushed filters as a list of indices.
-    val numFiltersPushed = dataIn.readInt()
-    val isFilterPushed = ArrayBuffer.fill(filters.length)(false)
-    for (_ <- 0 until numFiltersPushed) {
-      val i = dataIn.readInt()
-      isFilterPushed(serializedFilters(i).index) = true
-    }
+    // Receive the pushed filters, as indices, and the positions of the selected candidates.
+    val pushedFilterIndexes =
+      Seq.fill(dataIn.readInt())(serializedFilters.filterIndex(dataIn.readInt()))
+    val selectedIndexes = Seq.fill(dataIn.readInt())(dataIn.readInt())
 
-    // Receive whether the limit was pushed down, sent as 1 or 0.
-    val isLimitPushed = dataIn.readInt() != 0
+    // Receive the maximum number of parameter rows per request.
+    val maxParameterRowsPerRequest = dataIn.readInt()
 
-    PythonFilterPushdownResult(
-      readInfo = readInfo,
-      isFilterPushed = isFilterPushed,
-      isLimitPushed = isLimitPushed
-    )
+    PythonDataSourceLookupPlan(
+      reader = reader,
+      pushedFilterIndexes = pushedFilterIndexes,
+      selectedIndexes = selectedIndexes,
+      parameterTypes = selectedIndexes.map(parameterTypes),
+      maxParameterRowsPerRequest = maxParameterRowsPerRequest)
   }
+}
+
+private object UserDefinedPythonDataSourceLookupPlanRunner {
+  /**
+   * The reply, in place of the planned reader, to a broken contract of the lookup API. It must
+   * match `LOOKUP_CONTRACT_VIOLATION` in `pyspark.sql.worker.plan_data_source_lookup`.
+   */
+  private val LOOKUP_CONTRACT_VIOLATION = -100
+
+  // The names of the predicates that Spark offers as lookup candidates.
+  private val lookupPredicateNames = Set("=", "<=>", "<", "<=", ">", ">=")
+
+  /**
+   * A candidate lookup predicate, as `pyspark.sql.worker.plan_data_source_lookup` reads it: the
+   * name of the predicate, the column it compares, and the JSON of the data type of its parameter.
+   */
+  private case class SerializedLookupCandidate(
+      op: String,
+      columnPath: Seq[String],
+      dataType: String)
+
+  private val mapper = new ObjectMapper().registerModules(DefaultScalaModule)
 }
 
 case class PythonDataSourceReadInfo(

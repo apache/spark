@@ -35,9 +35,16 @@ class PythonScan(
     pushedLimit: Option[Int] = None,
     // Read info computed during filter/limit pushdown, if any. Scoped to this scan so it does not
     // leak across scans that share the same `PythonDataSourceV2` (see `PythonScanBuilder`).
-    readInfo: Option[PythonDataSourceReadInfo] = None
+    readInfo: Option[PythonDataSourceReadInfo] = None,
+    // The lookup planned while the scan was built, for a lookup scan.
+    lookupPlan: Option[PythonDataSourceLookupPlan] = None
 ) extends Scan with SupportsMetadata {
   override def toBatch: Batch = new PythonBatch(ds, shortName, outputSchema, options, readInfo)
+
+  override def toExternalLookup(): ExternalLookup = lookupPlan match {
+    case Some(plan) => new PythonExternalLookup(ds.source, plan, outputSchema)
+    case None => super.toExternalLookup()
+  }
 
   override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
     val runner = PythonMicroBatchStream.createPythonStreamingSourceRunner(
