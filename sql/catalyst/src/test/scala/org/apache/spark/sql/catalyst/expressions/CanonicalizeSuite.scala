@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.MULTI_COMMUTATIVE_OP_OPT_THRESHOLD
-import org.apache.spark.sql.types.{BooleanType, Decimal, DecimalType, DoubleType, IntegerType, LongType, StringType, StructField, StructType, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.types.{BooleanType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, StringType, StructField, StructType, TimestampNTZType, TimestampType}
 
 class CanonicalizeSuite extends SparkFunSuite {
 
@@ -477,6 +477,89 @@ class CanonicalizeSuite extends SparkFunSuite {
           SQLConf.get.setConfString(MULTI_COMMUTATIVE_OP_OPT_THRESHOLD.key,
             default.toString)
         }
+    }
+  }
+
+  test("SPARK-60178: Do not re-associate floating-point and maximum-precision decimal " +
+    "Add/Multiply in canonicalization") {
+    // A DECIMAL(38, 18) sum or product has the maximum precision, so its steps round.
+    Seq(FloatType, DoubleType, DecimalType(DecimalType.MAX_PRECISION, 18)).foreach { dt =>
+      val a = AttributeReference("a", dt)()
+      val b = AttributeReference("b", dt)()
+      val c = AttributeReference("c", dt)()
+      Seq[(Expression, Expression) => Expression](Add(_, _), Multiply(_, _)).foreach { op =>
+        // Commutativity of a single operator still holds.
+        assert(op(a, b).semanticEquals(op(b, a)))
+        assert(op(op(a, b), c).semanticEquals(op(c, op(b, a))))
+        // Re-association can change the floating-point or decimal result.
+        assert(!op(op(a, b), c).semanticEquals(op(a, op(b, c))))
+        assert(!op(op(a, b), c).semanticEquals(op(op(a, c), b)))
+        assert(!op(op(a, b), c).canonicalized.isInstanceOf[MultiCommutativeOp])
+      }
+    }
+
+    // Below the maximum precision every decimal step is exact, so the chain still re-associates.
+    val Seq(x, y, z) = Seq("x", "y", "z").map(AttributeReference(_, DecimalType(10, 2))())
+    assert(Add(Add(x, y), z).semanticEquals(Add(x, Add(y, z))))
+    assert(Multiply(Multiply(x, y), z).semanticEquals(Multiply(x, Multiply(y, z))))
+  }
+
+  test("SPARK-60178: decimal Add/Multiply steps are classified by their uncapped precision") {
+    // Exact steps whose result has exactly 38 digits still re-associate.
+    val Seq(a, b, c) = Seq("a", "b", "c").map(AttributeReference(_, DecimalType(36, 0))())
+    assert(Add(Add(a, b), c).dataType === DecimalType(38, 0))
+    assert(Add(Add(a, b), c).semanticEquals(Add(a, Add(b, c))))
+    val Seq(m, n, o) = Seq("m", "n", "o").map(AttributeReference(_, DecimalType(12, 2))())
+    assert(Multiply(Multiply(m, n), o).dataType === DecimalType(38, 6))
+    assert(Multiply(Multiply(m, n), o).semanticEquals(Multiply(m, Multiply(n, o))))
+
+    // Products of operands below 38 digits can still be capped.
+    val Seq(x, y, z) = Seq("x", "y", "z").map(AttributeReference(_, DecimalType(30, 10))())
+    assert(!Multiply(Multiply(x, y), z).semanticEquals(Multiply(x, Multiply(y, z))))
+
+    // Each step is classified on its own: all steps exact vs. a capped root.
+    val p = AttributeReference("p", DecimalType(37, 0))()
+    val Seq(q, r) = Seq("q", "r").map(AttributeReference(_, DecimalType(10, 0))())
+    assert(Add(p, Add(q, r)).canonicalized.isInstanceOf[MultiCommutativeOp])
+    assert(!Add(Add(p, q), r).canonicalized.isInstanceOf[MultiCommutativeOp])
+  }
+
+  test("SPARK-60178: per-operator canonicalization keeps each operator's eval mode") {
+    val Seq(d1, d2, d3) =
+      Seq("d1", "d2", "d3").map(AttributeReference(_, DecimalType(DecimalType.MAX_PRECISION, 18))())
+    val tryInner = Add(Add(d1, d2, EvalMode.TRY), d3, EvalMode.ANSI)
+    val ansiInner = Add(Add(d1, d2, EvalMode.ANSI), d3, EvalMode.ANSI)
+    assert(!tryInner.semanticEquals(ansiInner))
+    assert(tryInner.semanticEquals(Add(d3, Add(d2, d1, EvalMode.TRY), EvalMode.ANSI)))
+    assert(ansiInner.semanticEquals(Add(d3, Add(d2, d1, EvalMode.ANSI), EvalMode.ANSI)))
+  }
+
+  test("SPARK-60178: legacy setting re-associates floating-point and maximum-precision decimal " +
+    "Add/Multiply in canonicalization") {
+    Seq(DoubleType, DecimalType(DecimalType.MAX_PRECISION, 18)).foreach { dt =>
+      val Seq(a, b, c) = Seq("a", "b", "c").map(AttributeReference(_, dt)())
+      SQLConf.get.setConfString(SQLConf.LEGACY_REASSOCIATE_INEXACT_ARITHMETIC.key, "true")
+      try {
+        assert(Add(Add(a, b), c).semanticEquals(Add(a, Add(b, c))))
+        assert(Multiply(Multiply(a, b), c).semanticEquals(Multiply(a, Multiply(b, c))))
+      } finally {
+        SQLConf.get.unsetConf(SQLConf.LEGACY_REASSOCIATE_INEXACT_ARITHMETIC)
+      }
+    }
+  }
+
+  test("SPARK-60178: canonicalize a deep floating-point Add/Multiply chain") {
+    val columns = (1 to 10000).map(i => AttributeReference(s"c$i", DoubleType)())
+    Seq[(Expression, Expression) => Expression](Add(_, _), Multiply(_, _)).foreach { op =>
+      val leftDeep = columns.reduceLeft[Expression](op)
+      val rightDeep = columns.reduceRight[Expression](op)
+      // The same chains with the two operands of every operator swapped.
+      val leftDeepCommuted = columns.reduceLeft[Expression]((acc, c) => op(c, acc))
+      val rightDeepCommuted = columns.reduceRight[Expression]((c, acc) => op(acc, c))
+      // `semanticEquals` is not used, as `deterministic` recurses once per level.
+      assert(leftDeep.semanticHash() == leftDeepCommuted.semanticHash())
+      assert(rightDeep.semanticHash() == rightDeepCommuted.semanticHash())
+      assert(leftDeep.semanticHash() != rightDeep.semanticHash())
     }
   }
 

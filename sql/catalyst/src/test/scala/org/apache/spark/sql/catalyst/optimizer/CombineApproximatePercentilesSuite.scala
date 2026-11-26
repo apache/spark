@@ -17,17 +17,19 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, Expression, GetArrayItem, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, Expression, GetArrayItem, LeafExpression, Literal}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, ApproximatePercentile}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{DataType, IntegerType}
 
 class CombineApproximatePercentilesSuite extends PlanTest {
 
@@ -229,7 +231,7 @@ class CombineApproximatePercentilesSuite extends PlanTest {
     assertNotCombined(crossDistinctFilter)
   }
 
-  test("do not fuse canonically equivalent but differently evaluated accuracies") {
+  test("fuse differently evaluated floating-point accuracies separately") {
     val firstAccuracy =
       ((Literal(1.0e16) + Literal(-1.0e16)) + Literal(3.0)).cast(IntegerType)
     val secondAccuracy =
@@ -249,11 +251,16 @@ class CombineApproximatePercentilesSuite extends PlanTest {
 
     assert(firstAccuracy.eval() == 3)
     assert(secondAccuracy.eval() == 4)
-    assert(firstAccuracy.canonicalized == secondAccuracy.canonicalized)
-    assertNotCombined(result)
+    assert(firstAccuracy.canonicalized != secondAccuracy.canonicalized)
+    val aggregates = percentileAggregates(result).distinctBy(_.resultId)
+    assert(aggregates.size == 2)
+    val percentiles = aggregates.map(_.aggregateFunction.asInstanceOf[ApproximatePercentile])
+    assert(percentiles.map(_.accuracyExpression.eval()) == Seq(3, 4))
+    assert(percentiles.map(percentageValues) == Seq(Seq(0.5, 0.9), Seq(0.5, 0.9)))
+    assert(ordinals(result) == Seq(Some(0), Some(0), Some(1), Some(1)))
   }
 
-  test("do not fuse canonically equal percentages that evaluate differently") {
+  test("fuse differently evaluated floating-point percentages by evaluated value") {
     val firstPercentage =
       (Literal(1.0e16) + Literal(-1.0e16)) + Literal(0.5)
     val secondPercentage =
@@ -268,8 +275,12 @@ class CombineApproximatePercentilesSuite extends PlanTest {
       Alias(percentile(value, 0.9), "p90")())
     assert(firstPercentage.eval() == 0.5d)
     assert(secondPercentage.eval() == 0.0d)
-    assert(firstPercentage.canonicalized == secondPercentage.canonicalized)
-    assertNotCombined(scalarResult)
+    assert(firstPercentage.canonicalized != secondPercentage.canonicalized)
+    val scalarAggregates = percentileAggregates(scalarResult)
+    assert(scalarAggregates.map(_.resultId).distinct.size == 1)
+    assert(percentageValues(scalarAggregates.head.aggregateFunction
+      .asInstanceOf[ApproximatePercentile]) == Seq(0.5, 0.0, 0.9))
+    assert(ordinals(scalarResult) == Seq(Some(0), Some(1), Some(2)))
 
     val arrayPercentile = new ApproximatePercentile(
       value,
@@ -288,6 +299,46 @@ class CombineApproximatePercentilesSuite extends PlanTest {
     assert(ordinals(arrayResult) == Seq(None, Some(0), Some(1)))
   }
 
+  test("do not fuse canonically equal accuracies that evaluate differently") {
+    val firstAccuracy = CanonicallyEqualValue(Literal(3))
+    val secondAccuracy = CanonicallyEqualValue(Literal(2))
+
+    def percentileWithAccuracy(
+        percentage: Double,
+        accuracy: Expression): AggregateExpression = {
+      new ApproximatePercentile(value, Literal(percentage), accuracy).toAggregateExpression()
+    }
+
+    val result = optimizedAggregate(
+      Alias(percentileWithAccuracy(0.5, firstAccuracy), "first_p50")(),
+      Alias(percentileWithAccuracy(0.5, secondAccuracy), "second_p50")(),
+      Alias(percentileWithAccuracy(0.9, secondAccuracy), "second_p90")(),
+      Alias(percentileWithAccuracy(0.9, firstAccuracy), "first_p90")())
+
+    assert(firstAccuracy.eval() == 3)
+    assert(secondAccuracy.eval() == 2)
+    assert(firstAccuracy.canonicalized == secondAccuracy.canonicalized)
+    assertNotCombined(result)
+  }
+
+  test("do not fuse canonically equal percentages that evaluate differently") {
+    val firstPercentage = CanonicallyEqualValue(Literal(1.0e-8))
+    val secondPercentage = CanonicallyEqualValue(Literal(0.0d))
+    def percentileWithPercentage(percentage: Expression): AggregateExpression = {
+      new ApproximatePercentile(value, percentage, Literal(10000)).toAggregateExpression()
+    }
+
+    val result = optimizedAggregate(
+      Alias(percentileWithPercentage(firstPercentage), "first")(),
+      Alias(percentileWithPercentage(secondPercentage), "second")(),
+      Alias(percentile(value, 0.9), "p90")())
+
+    assert(firstPercentage.eval() == 1.0e-8)
+    assert(secondPercentage.eval() == 0.0d)
+    assert(firstPercentage.canonicalized == secondPercentage.canonicalized)
+    assertNotCombined(result)
+  }
+
   test("preserve existing arrays while combining compatible scalars") {
     val arrayPercentile = new ApproximatePercentile(
       value,
@@ -301,4 +352,20 @@ class CombineApproximatePercentilesSuite extends PlanTest {
     assert(percentileAggregates(result).map(_.resultId).distinct.size == 2)
     assert(result.aggregateExpressions.drop(1).forall(_.exists(_.isInstanceOf[GetArrayItem])))
   }
+}
+
+/**
+ * A foldable value whose canonical form ignores the value, so that two instances are canonically
+ * equal while they evaluate differently. Covers the guards for such expressions independently of
+ * built-in arithmetic, which can still produce them through integral chains in ANSI or TRY mode
+ * (SPARK-62225) and through any chain under
+ * `spark.sql.legacy.canonicalization.reassociateInexactArithmetic`.
+ */
+private case class CanonicallyEqualValue(value: Literal) extends LeafExpression
+  with CodegenFallback {
+  override def dataType: DataType = value.dataType
+  override def nullable: Boolean = false
+  override def foldable: Boolean = true
+  override def eval(input: InternalRow): Any = value.value
+  override lazy val canonicalized: Expression = Literal.default(dataType)
 }
