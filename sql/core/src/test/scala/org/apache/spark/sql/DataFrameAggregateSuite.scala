@@ -4062,6 +4062,19 @@ class DataFrameAggregateSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-62342: sum and avg of large BigInt values in one partition") {
+    val data = Seq(BigInt("500000000000000000"), BigInt("9000000000000000000")).map(Tuple1(_))
+
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        val df = spark.sparkContext.parallelize(data, 1).toDF("v")
+        checkAnswer(
+          df.agg(sum($"v"), avg($"v")),
+          Row(BigDecimal("9500000000000000000"), BigDecimal("4750000000000000000")))
+      }
+    }
+  }
+
   test("SPARK-32761: aggregating multiple distinct CONSTANT columns") {
      checkAnswer(sql("select count(distinct 2), count(distinct 2,3)"), Row(1, 1))
   }
