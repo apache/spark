@@ -1047,6 +1047,44 @@ class CollectionExpressionsSuite
       create_row(Seq[String]("a", null, "b"), ",", null))
   }
 
+  Seq(
+    ("literal", Literal("temp"), "temp"),
+    ("collated literal", Literal.create("temp", StringType("UTF8_LCASE")), "temp"),
+    ("dynamic", BoundReference(0, StringType, nullable = false), "0"),
+    ("foldable", Concat(Seq(Literal("te"), Literal("mp"))), "0"),
+    ("null", Literal.create(null, StringType), "0")
+  ).foreach { case (description, key, fieldName) =>
+    test(s"ArraysZip field names for $description string map keys") {
+      val map = Literal.create(
+        Map("temp" -> Seq(1, 2), "hum" -> Seq(3, 4)),
+        MapType(key.dataType, ArrayType(IntegerType)))
+      val hum = GetMapValue(map, Literal.create("hum", key.dataType))
+      val zipped = ArraysZip(Seq(GetMapValue(map, key), hum))
+      assert(zipped.dataType == ArrayType(new StructType()
+        .add(fieldName, IntegerType)
+        .add("hum", IntegerType), containsNull = false))
+      val expected = if (description == "null") null else Seq(Row(1, 3), Row(2, 4))
+      checkEvaluation(zipped, expected, InternalRow(UTF8String.fromString("temp")))
+    }
+  }
+
+  Seq(
+    Literal(1),
+    Literal(Date.valueOf("2026-01-01")),
+    Literal(Timestamp.valueOf("2026-01-01 12:00:00")),
+    Literal(Array[Byte](1, 2))
+  ).foreach { key =>
+    test(s"ArraysZip field names for ${key.dataType.sql} map keys") {
+      val array = Literal.create(Seq(1, 2), ArrayType(IntegerType))
+      val map = CreateMap(Seq(key, array))
+      val zipped = ArraysZip(Seq(array, GetMapValue(map, key)))
+      assert(zipped.dataType == ArrayType(new StructType()
+        .add("0", IntegerType)
+        .add("1", IntegerType), containsNull = false))
+      checkEvaluation(zipped, Seq(Row(1, 1), Row(2, 2)))
+    }
+  }
+
   test("ArraysZip") {
     val literals = Seq(
       Literal.create(Seq(9001, 9002, 9003, null), ArrayType(IntegerType)),
@@ -2528,6 +2566,36 @@ class CollectionExpressionsSuite
     }
   }
 
+  test("SPARK-60755: ElementAt on CreateArray generates code when the result is not nullable") {
+    val a = BoundReference(0, StringType, nullable = false)
+    val b = BoundReference(1, StringType, nullable = true)
+    val input = create_row("x", null)
+    val field = StructField("f", StringType, nullable = false)
+    val c = BoundReference(0, StructType(Seq(field)), nullable = false)
+    val d = BoundReference(1, StructType(Seq(field)), nullable = true)
+    val inputWithStruct = create_row(create_row("x"), null)
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        // The array can contain NULL, but the selected element cannot.
+        checkEvaluation(ElementAt(CreateArray(Seq(a, b)), Literal(1)), "x", input)
+        checkEvaluation(ElementAt(CreateArray(Seq(a, b)), Literal(-2)), "x", input)
+        val fields = GetArrayStructFields(CreateArray(Seq(c, d)), field, 0, 1, containsNull = true)
+        checkEvaluation(ElementAt(fields, Literal(1)), "x", inputWithStruct)
+        // No element can be NULL.
+        checkEvaluation(ElementAt(CreateArray(Seq(a)), Literal(1)), "x", input)
+        // The index is invalid in every row.
+        checkExceptionInExpression[Exception](
+          ElementAt(CreateArray(Seq(b)), Literal(0)), input, "The index 0 is invalid")
+        if (ansiEnabled) {
+          checkExceptionInExpression[Exception](
+            ElementAt(CreateArray(Seq(b)), Literal(5)), input, "out of bounds")
+        } else {
+          checkEvaluation(ElementAt(CreateArray(Seq(b)), Literal(5)), null, input)
+        }
+      }
+    }
+  }
+
   test("Concat") {
     // Primitive-type elements
     val ai0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
@@ -3706,6 +3774,19 @@ class CollectionExpressionsSuite
     // an internal IndexOutOfBoundsException.
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       checkEvaluation(ElementAt(a, Literal(Int.MinValue), None, failOnError = false), null)
+    }
+  }
+
+  test("SPARK-61552: array_insert with a foldable position that fails to evaluate") {
+    // `ConstantFolding` leaves such a position in a conditional branch. Only a row that evaluates
+    // the position should fail, also in generated code.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val arr = BoundReference(0, ArrayType(IntegerType), nullable = true)
+      val pos = Cast(Divide(Literal(1.0), Literal(0.0)), IntegerType)
+      val e = ArrayInsert(arr, pos, Literal(1), legacyNegativeIndex = false)
+      val expr = If(IsNull(arr), Literal.create(null, e.dataType), e)
+      checkEvaluation(expr, null, create_row(null))
+      checkExceptionInExpression[ArithmeticException](expr, create_row(Seq(2)), "DIVIDE_BY_ZERO")
     }
   }
 }

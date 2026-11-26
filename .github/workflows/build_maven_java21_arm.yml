@@ -21,7 +21,7 @@ name: "Build / Maven (Scala 2.13, JDK 21, ARM)"
 
 on:
   schedule:
-    - cron: '0 15 */4 * *'
+    - cron: '17 15 * * 5'
   workflow_dispatch:
 
 jobs:
@@ -35,3 +35,4 @@ jobs:
       java: 21
       os: ubuntu-24.04-arm
       arch: arm64
+      build_timeout_minutes: 180

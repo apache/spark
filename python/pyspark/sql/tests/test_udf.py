@@ -52,6 +52,7 @@ from pyspark.sql.types import (
     TimestampNTZType,
     VariantType,
     VariantVal,
+    YearMonthIntervalType,
     _parse_datatype_string,
 )
 from pyspark.sql.udf import UserDefinedFunction
@@ -62,7 +63,15 @@ from pyspark.testing.sqlutils import (
     test_compiled,
     test_not_compiled_message,
 )
-from pyspark.testing.utils import assertDataFrameEqual, eventually, timeout
+from pyspark.testing.utils import (
+    assertDataFrameEqual,
+    eventually,
+    have_pandas,
+    have_pyarrow,
+    pandas_requirement_message,
+    pyarrow_requirement_message,
+    timeout,
+)
 from pyspark.util import PythonEvalType, is_remote_only
 
 
@@ -898,11 +907,28 @@ class BaseUDFTestsMixin:
 
         try:
             with self.sql_conf({"spark.sql.sources.useV1SourceList": ""}):
-                self.spark.range(1).write.mode("overwrite").format("parquet").save(path)
-                df = self.spark.read.parquet(path).toDF("i")
+                (
+                    self.spark.range(6)
+                    .selectExpr("id AS i", "id % 3 AS p")
+                    .write.mode("overwrite")
+                    .partitionBy("p")
+                    .parquet(path)
+                )
+                df = self.spark.read.parquet(path)
                 f = udf(lambda x: False, "boolean")(lit(1))
                 result = df.filter(f)
                 self.assertEqual(0, result.count())
+
+                # SPARK-60486: partition predicates that cannot be pushed must still be evaluated.
+                matches_partition = udf(lambda x: x == 1, "boolean")(col("p"))
+                expected = [Row(i=1, p=1), Row(i=4, p=1)]
+                assertDataFrameEqual(df.filter(col("p") == 1), expected)
+                assertDataFrameEqual(df.filter(matches_partition), expected)
+                assertDataFrameEqual(df.filter(matches_partition & (col("p") > 0)), expected)
+                assertDataFrameEqual(
+                    df.filter(matches_partition | (col("p") == 0)),
+                    [Row(i=0, p=0), Row(i=1, p=1), Row(i=3, p=0), Row(i=4, p=1)],
+                )
 
         finally:
             shutil.rmtree(path)
@@ -1554,6 +1580,40 @@ class BaseUDFTestsMixin:
                 "return_type": str(StringType()),
             },
         )
+
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        pandas_requirement_message or pyarrow_requirement_message,
+    )
+    def test_invalid_return_type_for_arrow_and_pandas_apis(self):
+        df = self.spark.range(1)
+        grouped = df.groupBy("id")
+        cogrouped = grouped.cogroup(grouped)
+        # PySpark's to_arrow_type cannot convert YearMonthIntervalType.
+        unsupported = StructType([StructField("a", YearMonthIntervalType())])
+
+        def identity(x):
+            return x
+
+        def left(x, y):
+            return x
+
+        with self.assertRaisesRegex(PySparkNotImplementedError, "Arrow-optimized Python UDF"):
+            df.select(udf(identity, YearMonthIntervalType(), useArrow=True)("id"))
+        with self.assertRaisesRegex(PySparkNotImplementedError, "in mapInPandas"):
+            df.mapInArrow(identity, unsupported)
+        with self.assertRaisesRegex(PySparkTypeError, "INVALID_RETURN_TYPE_FOR_PANDAS_UDF"):
+            df.mapInPandas(identity, "long")
+        with self.assertRaisesRegex(PySparkNotImplementedError, "groupby.applyInArrow"):
+            grouped.applyInArrow(identity, unsupported)
+        with self.assertRaisesRegex(PySparkTypeError, "INVALID_RETURN_TYPE_FOR_ARROW_UDF"):
+            grouped.applyInArrow(identity, "long")
+        with self.assertRaisesRegex(PySparkTypeError, "INVALID_RETURN_TYPE_FOR_PANDAS_UDF"):
+            cogrouped.applyInPandas(left, "long")
+        with self.assertRaisesRegex(PySparkNotImplementedError, "cogroup.applyInArrow"):
+            cogrouped.applyInArrow(left, unsupported)
+        with self.assertRaisesRegex(PySparkTypeError, "INVALID_RETURN_TYPE_FOR_ARROW_UDF"):
+            cogrouped.applyInArrow(left, "long")
 
     def test_udf_binary_type(self):
         def get_binary_type(x):

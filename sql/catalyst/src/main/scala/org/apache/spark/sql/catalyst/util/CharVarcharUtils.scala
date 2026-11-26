@@ -24,6 +24,7 @@ import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.connector.catalog.Column
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -33,6 +34,24 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
 
   // visible for testing
   private[sql] val CHAR_VARCHAR_TYPE_STRING_METADATA_KEY = "__CHAR_VARCHAR_TYPE_STRING"
+
+  /** JVM method name used by [[addPaddingForScan]] when read-side CHAR padding is on. */
+  private[sql] val READ_SIDE_PADDING = "readSidePadding"
+
+  /** JVM method name used by [[addPaddingForScan]] under standard CHAR/VARCHAR semantics. */
+  private[sql] val CHAR_TYPE_READ_SIDE_CHECK = "charTypeReadSideCheck"
+
+  private[sql] val VARCHAR_TYPE_READ_SIDE_CHECK = "varcharTypeReadSideCheck"
+
+  /**
+   * V2 function name for CHAR read-side padding. Distinct from SQL `RPAD` so connectors that
+   * already allowlist `RPAD` for explicit `rpad()` do not inherit CHAR-scan rewrite. Emitted
+   * only for equality, null-safe equality, inequality, or IN against a string of the CHAR
+   * length. JDBC may compile it as the column only when the remote compares CHAR
+   * blank-padded (see `JdbcDialect.isSupportedFunction`) and stored values never exceed
+   * that length.
+   */
+  private[sql] val V2_CHAR_READ_SIDE_PADDING = "CHAR_READ_SIDE_PADDING"
 
   /**
    * Like [[hasCharVarchar]], but also inspects [[UserDefinedType]] storage types.
@@ -142,6 +161,33 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
       .withMetadata(metadata)
       .remove(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY)
       .build()
+  }
+
+  /**
+   * Adds the CHAR/VARCHAR types of the V2 `columns` to the attributes of `output` with the same
+   * names. `TableOutputResolver.applyColumnMetadata` removes them from the query of a write. An
+   * expression stored with the table, such as a CHECK condition or a generation expression,
+   * resolved against the result pads a string literal compared with a CHAR column, as the write
+   * pads the stored values. A write that treats CHAR as STRING does not pad the values, so the
+   * types are removed instead, also those of a query that reads a CHAR column and already matches
+   * the table: `ApplyCharTypePadding` skips such a write, but not an expression analyzed under the
+   * fixed settings of `StoredExpressionText`.
+   */
+  def withCharVarcharTypes(output: Seq[Attribute], columns: Array[Column]): Seq[Attribute] = {
+    val conf = SQLConf.get
+    // standardSemantics takes precedence over legacy charVarcharAsString.
+    if (conf.charVarcharAsString && !conf.charVarcharStandardSemantics) {
+      output.map(a => a.withMetadata(cleanMetadata(a.metadata)))
+    } else {
+      val charVarcharColumns = columns.filter(c => hasCharVarchar(c.dataType()))
+      output.map { a =>
+        charVarcharColumns.find(c => conf.resolver(c.name(), a.name)).fold(a) { c =>
+          a.withMetadata(new MetadataBuilder().withMetadata(a.metadata)
+            .putString(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, c.dataType().catalogString)
+            .build())
+        }
+      }
+    }
   }
 
   def getRawTypeString(metadata: Metadata): Option[String] = {
@@ -364,13 +410,57 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
         processStringForCharVarchar(
           attr,
           dt,
-          charFuncName = Some("charTypeReadSideCheck"),
-          varcharFuncName = Some("varcharTypeReadSideCheck"))
+          charFuncName = Some(CHAR_TYPE_READ_SIDE_CHECK),
+          varcharFuncName = Some(VARCHAR_TYPE_READ_SIDE_CHECK))
       } else {
         processStringForCharVarchar(
-          attr, dt, charFuncName = Some("readSidePadding"), varcharFuncName = None)
+          attr, dt, charFuncName = Some(READ_SIDE_PADDING), varcharFuncName = None)
       }
     }.getOrElse(attr)
+  }
+
+  /**
+   * Matches the read-side CHAR padding that [[addPaddingForScan]] wraps a column in (when
+   * standard semantics are off) and extracts the padded expression and the CHAR length.
+   */
+  private[sql] object ReadSidePadding {
+    def unapply(e: Expression): Option[(Expression, Int)] = e match {
+      case s @ StaticInvoke(_, _, READ_SIDE_PADDING, Seq(child, Literal(n: Int, _)), _, _, _, _,
+          None) if s.staticObject == classOf[CharVarcharCodegenUtils] =>
+        Some((child, n))
+      case _ => None
+    }
+  }
+
+  /**
+   * Matches what [[addPaddingForScan]] wraps a column in: the read-side CHAR padding, or under
+   * standard CHAR/VARCHAR semantics one of the read-side checks. Extracts the wrapped expression,
+   * the length, and whether shorter values are padded to that length, as the padding and the CHAR
+   * check do. Unlike [[ReadSidePadding]] it also matches the checks, which trim trailing spaces and
+   * fail on values still longer than the length, so it must not be used to compile padding.
+   */
+  private[sql] object ReadSidePaddingOrCheck {
+    def unapply(e: Expression): Option[(Expression, Int, Boolean)] = e match {
+      case s @ StaticInvoke(_, _, name, Seq(child, Literal(n: Int, _)), _, _, _, _, None)
+          if s.staticObject == classOf[CharVarcharCodegenUtils] =>
+        name match {
+          case READ_SIDE_PADDING | CHAR_TYPE_READ_SIDE_CHECK => Some((child, n, true))
+          case VARCHAR_TYPE_READ_SIDE_CHECK => Some((child, n, false))
+          case _ => None
+        }
+      case _ => None
+    }
+  }
+
+  /**
+   * Strips a cast of a CHAR, VARCHAR or STRING value to a STRING of the same collation, such as
+   * the one a comparison with a STRING adds when CHAR and VARCHAR are first-class types. Such a
+   * cast returns the value unchanged, so the result is unique, or estimated, as the child is.
+   */
+  def stripCastToPlainString(e: Expression): Expression = e match {
+    case Cast(child, to: StringType, _, _) if StringHelper.plainStringType(child.dataType) == to =>
+      child
+    case _ => e
   }
 
   /**

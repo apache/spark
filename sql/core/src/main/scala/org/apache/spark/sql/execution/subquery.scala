@@ -22,7 +22,7 @@ import scala.collection.immutable.TreeSet
 import org.apache.spark.QueryContext
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression, ExprId, InSet, InterpretedOrdering, ListQuery, Literal, PlanExpression, Predicate, SupportQueryContext}
+import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression, ExprId, GetStructField, InSet, InterpretedOrdering, ListQuery, Literal, PlanExpression, Predicate, SupportQueryContext}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -112,6 +112,20 @@ case class ScalarSubquery(
   def toLiteral: Literal = {
     require(updated, s"$this has not finished")
     Literal.create(result, dataType)
+  }
+}
+
+object ScalarSubquery {
+  /**
+   * `expr` with each scalar subquery replaced by a literal of its result, so that a filter
+   * translation, which needs a bare literal, can match it. `MergeSubplans` returns the results of
+   * the subqueries it merges in one struct, and reads each result out of it with a
+   * [[GetStructField]], so such a field read becomes a literal of its own. The field is read
+   * straight from the result: a literal of the whole struct would validate every field of it.
+   */
+  def replaceWithLiterals(expr: Expression): Expression = expr.transform {
+    case g @ GetStructField(_: ScalarSubquery, _, _) => Literal(g.eval(), g.dataType)
+    case s: ScalarSubquery => s.toLiteral
   }
 }
 

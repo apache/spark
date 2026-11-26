@@ -22,7 +22,8 @@ import scala.jdk.CollectionConverters.CollectionHasAsScala
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, GeneratorBuilder, TypeCheckResult}
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, GeneratorBuilder, MultiAlias}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -105,11 +106,10 @@ case class UserDefinedGenerator(
     children: Seq[Expression])
   extends Generator with CodegenFallback {
 
-  @transient private[this] var inputRow: InterpretedProjection = _
   @transient private[this] var convertToScala: (InternalRow) => Row = _
+  @transient private lazy val inputExpressions = children.toArray
 
   private def initializeConverters(): Unit = {
-    inputRow = new InterpretedProjection(children)
     convertToScala = {
       val inputSchema = StructType(children.map { e =>
         StructField(e.simpleString(SQLConf.get.maxToStringFields), e.dataType, nullable = true)
@@ -119,11 +119,22 @@ case class UserDefinedGenerator(
   }
 
   override def eval(input: InternalRow): IterableOnce[InternalRow] = {
-    if (inputRow == null) {
+    if (convertToScala == null) {
       initializeConverters()
     }
+    // GenerateExec initializes these children for the partition. A projection would fresh-copy
+    // stateful expressions without initializing the copies. Fill the final array directly to
+    // avoid creating an intermediate collection for each row.
+    val expressions = inputExpressions
+    val outputArray = new Array[Any](expressions.length)
+    var i = 0
+    while (i < expressions.length) {
+      outputArray(i) = expressions(i).eval(input)
+      i += 1
+    }
+    val inputRow = new GenericInternalRow(outputArray)
     // Convert the objects into Scala Type before calling function, we need schema to support UDT
-    function(convertToScala(inputRow(input)))
+    function(convertToScala(inputRow))
   }
 
   override def toString: String = s"UserDefinedGenerator(${children.mkString(",")})"
@@ -335,6 +346,29 @@ case class GeneratorOuter(child: Generator) extends UnaryExpression with Generat
 
   override protected def withNewChildInternal(newChild: Expression): GeneratorOuter =
     copy(child = newChild.asInstanceOf[Generator])
+}
+
+/**
+ * Extracts the parts of a generator item, as ExtractGenerator plans it: a [[Generator]], optionally
+ * wrapped in [[GeneratorOuter]], and then optionally in a [[MultiAlias]] that names its output
+ * columns. Returns the generator inside any GeneratorOuter, the MultiAlias names (None without a
+ * MultiAlias), and whether the generator is outer. Neither wrapper reports itself resolved, so
+ * callers test the returned generator instead.
+ */
+object GeneratorItem {
+  def unapply(e: Expression): Option[(Generator, Option[Seq[String]], Boolean)] = e match {
+    case MultiAlias(child, names) => unwrapOuter(child).map { case (g, outer) =>
+      (g, Some(names), outer)
+    }
+    case _ => unwrapOuter(e).map { case (g, outer) => (g, None, outer) }
+  }
+
+  // GeneratorOuter is itself a Generator, so it must be matched first.
+  private def unwrapOuter(e: Expression): Option[(Generator, Boolean)] = e match {
+    case GeneratorOuter(g) => Some((g, true))
+    case g: Generator => Some((g, false))
+    case _ => None
+  }
 }
 
 /**

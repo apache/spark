@@ -302,7 +302,7 @@ SELECT try_divide(1, (2147483647 + 1))
 -- !query schema
 struct<try_divide(1, (2147483647 + 1)):double>
 -- !query output
--4.6566128730773926E-10
+-4.656612873077393E-10
 
 
 -- !query
@@ -703,3 +703,273 @@ SELECT try_multiply(interval 106751991 day, 2)
 struct<try_multiply(INTERVAL '106751991' DAY, 2):interval day to second>
 -- !query output
 NULL
+
+
+-- !query
+SELECT try_abs(-1), try_negative(1)
+-- !query schema
+struct<try_abs(-1):int,try_negative(1):int>
+-- !query output
+1	-1
+
+
+-- !query
+SELECT try_abs(-128Y), try_negative(-128Y)
+-- !query schema
+struct<try_abs(-128):tinyint,try_negative(-128):tinyint>
+-- !query output
+NULL	NULL
+
+
+-- !query
+SELECT try_abs(-32768S), try_negative(-32768S)
+-- !query schema
+struct<try_abs(-32768):smallint,try_negative(-32768):smallint>
+-- !query output
+NULL	NULL
+
+
+-- !query
+SELECT try_abs(-2147483648), try_negative(-2147483648)
+-- !query schema
+struct<try_abs(-2147483648):int,try_negative(-2147483648):int>
+-- !query output
+NULL	NULL
+
+
+-- !query
+SELECT try_abs(-9223372036854775808L), try_negative(-9223372036854775808L)
+-- !query schema
+struct<try_abs(-9223372036854775808):bigint,try_negative(-9223372036854775808):bigint>
+-- !query output
+NULL	NULL
+
+
+-- !query
+SELECT try_abs(-2147483647), try_negative(2147483647)
+-- !query schema
+struct<try_abs(-2147483647):int,try_negative(2147483647):int>
+-- !query output
+2147483647	-2147483647
+
+
+-- !query
+SELECT try_abs(-1.5D), try_negative(1.5D)
+-- !query schema
+struct<try_abs(-1.5):double,try_negative(1.5):double>
+-- !query output
+1.5	-1.5
+
+
+-- !query
+SELECT try_abs(-12.34BD), try_negative(-12.34BD)
+-- !query schema
+struct<try_abs(-12.34):decimal(4,2),try_negative(-12.34):decimal(4,2)>
+-- !query output
+12.34	12.34
+
+
+-- !query
+SELECT try_abs(-99999999999999999999999999999999999999BD), try_negative(99999999999999999999999999999999999999BD)
+-- !query schema
+struct<try_abs(-99999999999999999999999999999999999999):decimal(38,0),try_negative(99999999999999999999999999999999999999):decimal(38,0)>
+-- !query output
+99999999999999999999999999999999999999	-99999999999999999999999999999999999999
+
+
+-- !query
+SELECT try_abs(NULL), try_negative(NULL)
+-- !query schema
+struct<try_abs(NULL):double,try_negative(NULL):double>
+-- !query output
+NULL	NULL
+
+
+-- !query
+SELECT try_abs("-1"), try_negative("1")
+-- !query schema
+struct<try_abs(-1):double,try_negative(1):double>
+-- !query output
+1.0	-1.0
+
+
+-- !query
+SELECT try_abs(c), try_negative(c) FROM VALUES ('-1.5'), ('abc'), (NULL) AS t(c)
+-- !query schema
+struct<try_abs(c):double,try_negative(c):double>
+-- !query output
+1.5	1.5
+NULL	NULL
+NULL	NULL
+
+
+-- !query
+SELECT try_abs(c), try_negative(c) FROM VALUES (-2147483648), (-1), (2147483647), (NULL) AS t(c)
+-- !query schema
+struct<try_abs(c):int,try_negative(c):int>
+-- !query output
+1	1
+2147483647	-2147483647
+NULL	NULL
+NULL	NULL
+
+
+-- !query
+SELECT try_abs(c), try_negative(c) FROM VALUES (-9223372036854775808L), (1L) AS t(c)
+-- !query schema
+struct<try_abs(c):bigint,try_negative(c):bigint>
+-- !query output
+1	-1
+NULL	NULL
+
+
+-- !query
+SELECT try_abs(2147483647 + 1)
+-- !query schema
+struct<try_abs((2147483647 + 1)):int>
+-- !query output
+NULL
+
+
+-- !query
+SELECT try_negative(2147483647 + 1)
+-- !query schema
+struct<try_negative((2147483647 + 1)):int>
+-- !query output
+NULL
+
+
+-- !query
+SELECT try_abs(interval -2 year), try_negative(interval 2 second)
+-- !query schema
+struct<try_abs(INTERVAL '-2' YEAR):interval year,try_negative(INTERVAL '02' SECOND):interval second>
+-- !query output
+2-0	-0 00:00:02.000000000
+
+
+-- !query
+SELECT try_abs(INTERVAL '-178956970-8' YEAR TO MONTH)
+-- !query schema
+struct<try_abs(INTERVAL '-178956970-8' YEAR TO MONTH):interval year to month>
+-- !query output
+NULL
+
+
+-- !query
+SELECT try_negative(INTERVAL '-178956970-8' YEAR TO MONTH)
+-- !query schema
+struct<try_negative(INTERVAL '-178956970-8' YEAR TO MONTH):interval year to month>
+-- !query output
+NULL
+
+
+-- !query
+SELECT try_abs(INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND)
+-- !query schema
+struct<try_abs(INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND):interval day to second>
+-- !query output
+NULL
+
+
+-- !query
+SELECT try_negative(INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND)
+-- !query schema
+struct<try_negative(INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND):interval day to second>
+-- !query output
+NULL
+
+
+-- !query
+SELECT try_abs(c), try_negative(c)
+FROM VALUES (INTERVAL '-178956970-8' YEAR TO MONTH), (INTERVAL '-1-1' YEAR TO MONTH) AS t(c)
+-- !query schema
+struct<try_abs(c):interval year to month,try_negative(c):interval year to month>
+-- !query output
+1-1	1-1
+NULL	NULL
+
+
+-- !query
+SELECT try_negative(make_interval(0, 1, 0, 2)), try_negative(make_interval(-178956970, -8))
+-- !query schema
+struct<try_negative(make_interval(0, 1, 0, 2, 0, 0, 0.000000)):interval,try_negative(make_interval(-178956970, -8, 0, 0, 0, 0, 0.000000)):interval>
+-- !query output
+-1 months -2 days	NULL
+
+
+-- !query
+SELECT try_abs(true)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"true\"",
+    "inputType" : "\"BOOLEAN\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\")",
+    "sqlExpr" : "\"abs(true)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 20,
+    "fragment" : "try_abs(true)"
+  } ]
+}
+
+
+-- !query
+SELECT try_negative(true)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"true\"",
+    "inputType" : "\"BOOLEAN\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
+    "sqlExpr" : "\"(- true)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "try_negative(true)"
+  } ]
+}
+
+
+-- !query
+SELECT try_abs(make_interval(0, 1))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"make_interval(0, 1, 0, 0, 0, 0, 0.000000)\"",
+    "inputType" : "\"INTERVAL\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\")",
+    "sqlExpr" : "\"abs(make_interval(0, 1, 0, 0, 0, 0, 0.000000))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 35,
+    "fragment" : "try_abs(make_interval(0, 1))"
+  } ]
+}

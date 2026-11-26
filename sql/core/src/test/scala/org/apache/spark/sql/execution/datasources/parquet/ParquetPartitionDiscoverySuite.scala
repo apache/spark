@@ -40,6 +40,7 @@ import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -1212,6 +1213,21 @@ abstract class ParquetPartitionDiscoverySuite
     }
   }
 
+  test("SPARK-60797: read decimal partition values with the user-specified scale") {
+    withTempDir { dir =>
+      Seq("1.5", "2", "1.555").foreach { value =>
+        spark.range(1).write.parquet(new File(dir, s"d=$value").getCanonicalPath)
+      }
+      val res = spark.read
+        .schema("id LONG, d DECIMAL(10, 2)")
+        .parquet(dir.getCanonicalPath)
+      checkAnswer(res, Seq(
+        Row(0L, BigDecimal("1.50")),
+        Row(0L, BigDecimal("2.00")),
+        Row(0L, BigDecimal("1.56"))))
+    }
+  }
+
   test("SPARK-49163: Attempt to create table based on broken parquet partition data") {
     withTempDir { dir =>
       val data = Seq[(String, String, String)](("a", "b", "c"))
@@ -1447,6 +1463,7 @@ class ParquetV1PartitionDiscoverySuite extends ParquetPartitionDiscoverySuite {
   }
 }
 
+@DataSourceV2Test
 class ParquetV2PartitionDiscoverySuite extends ParquetPartitionDiscoverySuite {
   import testImplicits._
 

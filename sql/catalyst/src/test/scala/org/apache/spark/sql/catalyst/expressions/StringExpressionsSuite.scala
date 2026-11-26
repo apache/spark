@@ -26,9 +26,12 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, InvalidFormat}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.Cast._
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, GenerateUnsafeProjection}
+import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.util.CharsetProvider
 import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.catalyst.util.ToNumberParser
 import org.apache.spark.sql.errors.QueryExecutionErrors.toSQLId
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
@@ -1640,6 +1643,54 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null)
   }
 
+  for ((expression, expected) <- Seq(
+      (ToNumber(Literal("12"), Literal("99")), Decimal(12)),
+      (TryToNumber(Literal("12"), Literal("99")), Decimal(12)),
+      (ToCharacter(Literal(Decimal(12)), Literal("99")), "12"))) {
+    test(s"number format evaluator copies isolate parser state: ${expression.prettyName}") {
+      checkEvaluation(expression, expected)
+      val first = expression.freshCopyIfContainsStatefulExpression()
+      val second = expression.freshCopyIfContainsStatefulExpression()
+      assert(first ne expression)
+      assert(second ne first)
+      checkEvaluation(first, expected)
+      checkEvaluation(second, expected)
+      val contexts = Seq(first, second).map { copy =>
+        val context = new CodegenContext
+        copy.genCode(context)
+        context.references.collect { case parser: ToNumberParser => parser }.toSeq
+      }
+      assert(contexts.forall(_.size == 1))
+      assert(contexts.head.head ne contexts.last.head)
+      checkEvaluation(expression.withNewChildren(Seq(
+        Literal.create(null, expression.children.head.dataType), Literal("99"))), null)
+    }
+
+    test(s"number format expressions preserve constant folding: ${expression.prettyName}") {
+      val copies = Seq(expression,
+        expression.freshCopyIfContainsStatefulExpression(),
+        expression.freshCopyIfContainsStatefulExpression())
+      copies.foreach { copy =>
+        assert(copy.foldable)
+        val project = Project(Seq(Alias(copy, "result")()), OneRowRelation())
+        val optimized = ConstantFolding(project).asInstanceOf[Project]
+        assert(optimized.projectList.head.asInstanceOf[Alias].child ==
+          Literal.create(expected, expression.dataType))
+      }
+
+      val input = AttributeReference("input", expression.children.head.dataType)()
+      val nonFoldable = expression.withNewChildren(Seq(input, Literal("99")))
+      val nonFoldableCopies = Seq(nonFoldable,
+        nonFoldable.freshCopyIfContainsStatefulExpression(),
+        nonFoldable.freshCopyIfContainsStatefulExpression())
+      nonFoldableCopies.foreach { copy =>
+        assert(!copy.foldable)
+        val project = Project(Seq(Alias(copy, "result")()), LocalRelation(input))
+        assert(ConstantFolding(project) === project)
+      }
+    }
+  }
+
   test("ToNumber: positive tests") {
     Seq(
       ("$345", "S$999,099.99") -> Decimal(345),
@@ -2274,6 +2325,47 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
       checkEvaluation(expr, expected)
     }
+  }
+
+  test("ToCharacter: zero value with no digits after the decimal point") {
+    def toChar(decimal: Decimal, format: String): Expression = {
+      val expr = ToCharacter(Literal(decimal), Literal(format))
+      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      expr
+    }
+    // (input, format, result, result with the legacy config)
+    Seq(
+      (Decimal(0), "9", "0", " "),
+      (Decimal(0), "999", "  0", "   "),
+      (Decimal("0.00"), "999", "  0", "   "),
+      (Decimal(0), "9G999", "    0", "     "),
+      (Decimal(0), "$999", "$  0", "$   "),
+      (Decimal(0), "999S", "  0+", "+   "),
+      (Decimal(0), "S999", "  +0", "   +"),
+      (Decimal(0), "999MI", "  0 ", "    "),
+      (Decimal(0), "999PR", "  0  ", "     "),
+      // These formats already rendered the zero, so the legacy config does not change them.
+      (Decimal(0), "099", "000", "000"),
+      (Decimal(0), "999.", "  0 ", "  0 "),
+      (Decimal(0), "999.9", "  0.0", "  0.0")
+    ).foreach { case (decimal, format, expected, expectedLegacy) =>
+      checkEvaluation(toChar(decimal, format), expected)
+      withSQLConf(SQLConf.LEGACY_TO_CHAR_FORMAT_ZERO_AS_BLANK.key -> "true") {
+        checkEvaluation(toChar(decimal, format), expectedLegacy)
+      }
+    }
+    val legacyExpr = withSQLConf(SQLConf.LEGACY_TO_CHAR_FORMAT_ZERO_AS_BLANK.key -> "true") {
+      toChar(Decimal(0), "999")
+    }
+    // The config value is captured when the expression is built, not when it is evaluated.
+    checkEvaluation(legacyExpr, "   ")
+    val rebuilt = legacyExpr.withNewChildren(
+      Seq(Literal(Decimal(0), DecimalType(20, 0)), legacyExpr.children(1)))
+    assert(rebuilt ne legacyExpr)
+    checkEvaluation(rebuilt, "   ")
+    val defaultExpr = toChar(Decimal(0), "999")
+    assert(!defaultExpr.semanticEquals(legacyExpr))
+    assert(defaultExpr.toString == legacyExpr.toString)
   }
 
   test("find in set") {

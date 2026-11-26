@@ -26,7 +26,7 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector, WritableColumnVector}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.ColumnarBatch
-import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.CompletionIterator
 
 class ColumnarToRowEvaluatorFactory(
     childOutput: Seq[Attribute],
@@ -44,10 +44,14 @@ class ColumnarToRowEvaluatorFactory(
         inputs: Iterator[ColumnarBatch]*): Iterator[InternalRow] = {
       assert(inputs.length == 1)
       val toUnsafe = UnsafeProjection.create(childOutput, childOutput)
+      // Releases each batch once all its rows have been returned, before the next batch is
+      // fetched, as the generated code of ColumnarToRowExec does in advanceBatch: flatMap checks
+      // the iterator of the current batch, which runs its completion, before the next batch.
       inputs.head.flatMap { input =>
         numInputBatches += 1
         numOutputRows += input.numRows()
-        input.rowIterator().asScala.map(toUnsafe)
+        CompletionIterator[InternalRow, Iterator[InternalRow]](
+          input.rowIterator().asScala.map(toUnsafe), input.closeIfFreeable())
       }
     }
   }
@@ -73,10 +77,10 @@ class RowToColumnarEvaluatorFactory(
       val rowIterator = inputs.head
       new Iterator[ColumnarBatch] {
         private lazy val converters = new RowToColumnConverter(schema)
-        private lazy val vectors: Seq[WritableColumnVector] = if (enableOffHeapColumnVector) {
-          OffHeapColumnVector.allocateColumns(numRows, schema).toImmutableArraySeq
+        private lazy val vectors: Array[WritableColumnVector] = if (enableOffHeapColumnVector) {
+          OffHeapColumnVector.allocateColumns(numRows, schema).toArray
         } else {
-          OnHeapColumnVector.allocateColumns(numRows, schema).toImmutableArraySeq
+          OnHeapColumnVector.allocateColumns(numRows, schema).toArray
         }
         private lazy val cb: ColumnarBatch = new ColumnarBatch(vectors.toArray)
 
@@ -94,7 +98,7 @@ class RowToColumnarEvaluatorFactory(
           var rowCount = 0
           while (rowCount < numRows && rowIterator.hasNext) {
             val row = rowIterator.next()
-            converters.convert(row, vectors.toArray)
+            converters.convert(row, vectors)
             rowCount += 1
           }
           cb.setNumRows(rowCount)

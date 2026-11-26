@@ -18,6 +18,7 @@
 import difflib
 import faulthandler
 import functools
+import math
 import os
 import signal
 import struct
@@ -295,6 +296,23 @@ class QuietTest:
 
 
 class PySparkBaseTestCase(unittest.TestCase):
+    # JVM-launched worker/daemon scripts are never imported by test code, so the import graph has
+    # no edge to them. Map each to the API module whose use triggers it at runtime; None means the
+    # script underpins effectively all Python execution, so every test is relevant to it.
+    _ENTRY_POINT_PROXIES: Dict[str, Optional[str]] = {
+        "pyspark.worker": None,
+        "pyspark.worker_util": None,
+        "pyspark.daemon": None,
+        "pyspark.sql.worker.analyze_udtf": "pyspark.sql.udtf",
+        "pyspark.sql.worker.commit_data_source_write": "pyspark.sql.datasource",
+        "pyspark.sql.worker.create_data_source": "pyspark.sql.datasource",
+        "pyspark.sql.worker.data_source_pushdown_filters": "pyspark.sql.datasource",
+        "pyspark.sql.worker.lookup_data_sources": "pyspark.sql.datasource",
+        "pyspark.sql.worker.plan_data_source_read": "pyspark.sql.datasource",
+        "pyspark.sql.worker.python_streaming_sink_runner": "pyspark.sql.datasource",
+        "pyspark.sql.worker.write_into_data_source": "pyspark.sql.datasource",
+    }
+
     @classmethod
     def setUpClass(cls):
         if have_grimp and (path := os.environ.get("PYSPARK_CHANGED_FILES")):
@@ -337,11 +355,22 @@ class PySparkBaseTestCase(unittest.TestCase):
 
         graph = grimp.build_graph("pyspark")
 
+        proxies = PySparkBaseTestCase._ENTRY_POINT_PROXIES
         for changed_module in changed_modules:
             if changed_module == module:
                 return True
+
+            # An entry-point script maps to the API module whose use triggers it; None means it is
+            # relevant to every test.
+            if changed_module in proxies:
+                target = proxies[changed_module]
+                if target is None:
+                    return True
+            else:
+                target = changed_module
+
             try:
-                if graph.chain_exists(module, changed_module):
+                if graph.chain_exists(module, target):
                     return True
             except Exception:
                 # Any exception, we just be conservative and run the test.
@@ -1121,6 +1150,10 @@ def assertDataFrameEqual(
                     and all(compare_vals(val1[k], val2[k]) for k in val1)
                 )
             elif isinstance(val1, float) and isinstance(val2, float):
+                if math.isnan(val1) or math.isnan(val2):
+                    return math.isnan(val1) and math.isnan(val2)
+                if math.isinf(val1) or math.isinf(val2):
+                    return val1 == val2
                 if abs(val1 - val2) > (atol + rtol * abs(val2)):
                     return False
             elif isinstance(val1, Decimal) and isinstance(val2, Decimal):

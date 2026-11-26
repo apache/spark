@@ -38,6 +38,53 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
 class OffsetSeqLogSuite extends SharedSparkSession {
   import testImplicits._
 
+  test("SPARK-60850: old checkpoints disable join event-time retention") {
+    val entry = SQLConf.STREAMING_JOIN_PRESERVE_EVENT_TIME_COLUMNS
+    val (_, offsets) = readFromResource("offset-log-version-2.1.0")
+    val metadata = offsets.metadataOpt.get
+    assert(!metadata.conf.contains(entry.key))
+    val restored = new SQLConf
+    val startup = new SQLConf
+    Seq(restored, startup).foreach(_.setConf(entry, true))
+
+    OffsetSeqMetadata.setSessionConf(metadata, restored)
+    OffsetSeqMetadata.setConfWithoutLogging(metadata, startup)
+
+    assert(!restored.getConf(entry))
+    assert(!startup.getConf(entry))
+  }
+
+  test("SPARK-60850: new checkpoints enable join event-time retention by default") {
+    val entry = SQLConf.STREAMING_JOIN_PRESERVE_EVENT_TIME_COLUMNS
+    val metadata = OffsetSeqMetadata(0, 0, spark.conf)
+    assert(metadata.conf.get(entry.key).contains("true"))
+  }
+
+  test("SPARK-60850: new checkpoints pin join event-time retention across restarts") {
+    val entry = SQLConf.STREAMING_JOIN_PRESERVE_EVENT_TIME_COLUMNS
+    Seq(false, true).foreach { enabled =>
+      withSQLConf(
+          entry.key -> enabled.toString,
+          SQLConf.STATEFUL_SHUFFLE_PARTITIONS_INTERNAL.key -> "3") {
+        val metadatas = Seq(
+          OffsetSeqMetadata(0, 0, spark.conf),
+          OffsetSeqMetadataV2(0, 0, spark.conf))
+        metadatas.foreach { metadata =>
+          assert(metadata.conf.get(entry.key).contains(enabled.toString))
+          val restored = new SQLConf
+          val startup = new SQLConf
+          Seq(restored, startup).foreach(_.setConf(entry, !enabled))
+
+          OffsetSeqMetadata.setSessionConf(metadata, restored)
+          OffsetSeqMetadata.setConfWithoutLogging(metadata, startup)
+
+          assert(restored.getConf(entry) == enabled)
+          assert(startup.getConf(entry) == enabled)
+        }
+      }
+    }
+  }
+
   test("streaming EXCEPT compatibility defaults to legacy behavior for old checkpoints") {
     val (_, offsetSeq) = readFromResource("offset-log-version-2.1.0")
     val metadata = offsetSeq.metadataOpt.get
@@ -52,6 +99,71 @@ class OffsetSeqLogSuite extends SharedSparkSession {
     assert(metadata.conf.get(SQLConf.ALLOW_EXCEPT_ON_STREAMING_DATAFRAME.key).contains("false"))
   }
 
+  test("SPARK-62057: old checkpoints keep pruning empty streaming union children") {
+    val (_, offsetSeq) = readFromResource("offset-log-version-2.1.0")
+    val metadata = offsetSeq.metadataOpt.get
+    val entry = SQLConf.PROPAGATE_EMPTY_RELATION_CAN_PRUNE_STREAMING_UNION_CHILDREN
+    assert(!metadata.conf.contains(entry.key))
+    assert(OffsetSeqMetadata.readValue(metadata, entry).toBoolean)
+  }
+
+  test("SPARK-62057: new checkpoints keep empty streaming union children") {
+    val metadata = OffsetSeqMetadata(
+      batchWatermarkMs = 0, batchTimestampMs = 0, spark.conf)
+    assert(metadata.conf.get(
+      SQLConf.PROPAGATE_EMPTY_RELATION_CAN_PRUNE_STREAMING_UNION_CHILDREN.key).contains("false"))
+  }
+
+  test("SPARK-60632: regex pattern cost estimate is version 0 for old checkpoints") {
+    val (_, offsetSeq) = readFromResource("offset-log-version-2.1.0")
+    val metadata = offsetSeq.metadataOpt.get
+    assert(!metadata.conf.contains(SQLConf.REGEX_PATTERN_COST_ESTIMATE_VERSION.key))
+    assert(OffsetSeqMetadata.readValue(
+      metadata, SQLConf.REGEX_PATTERN_COST_ESTIMATE_VERSION) == "0")
+  }
+
+  test("SPARK-60632: regex pattern cost estimate is version 1 for new checkpoints") {
+    val metadata = OffsetSeqMetadata(
+      batchWatermarkMs = 0, batchTimestampMs = 0, spark.conf)
+    assert(metadata.conf.get(SQLConf.REGEX_PATTERN_COST_ESTIMATE_VERSION.key).contains("1"))
+  }
+
+  test("SPARK-60885: avoidDoubleFilterEval defaults to false for checkpoints written " +
+      "before Spark 4.2") {
+    val key = SQLConf.AVOID_DOUBLE_FILTER_EVAL
+    val (_, offsetSeq) = readFromResource("offset-log-version-2.1.0")
+    val metadata = offsetSeq.metadataOpt.get
+    assert(OffsetSeqMetadata.readValue(metadata, key) === "false")
+
+    val sessionConf = new SQLConf
+    sessionConf.setConfString(key.key, "true")
+    OffsetSeqMetadata.setSessionConf(metadata, sessionConf)
+    assert(sessionConf.getConfString(key.key) === "false")
+  }
+
+  test("SPARK-60885: avoidDoubleFilterEval keeps the session value for checkpoints of " +
+      "Spark 4.2 and 4.3") {
+    val key = SQLConf.AVOID_DOUBLE_FILTER_EVAL
+    val (_, offsetSeq) = readFromResource(
+      "checkpoint-version-4.2.0-deduplication-metadata-boundary/offsets")
+    val metadata = offsetSeq.metadataOpt.get
+    assert(OffsetSeqMetadata.readValueOpt(metadata, key).isEmpty)
+
+    val sessionConf = new SQLConf
+    sessionConf.setConfString(key.key, "true")
+    OffsetSeqMetadata.setSessionConf(metadata, sessionConf)
+    assert(sessionConf.getConfString(key.key) === "true")
+  }
+
+  test("SPARK-60905: Python UDFs are expensive only for checkpoints that record it") {
+    val entry = SQLConf.AVOID_DOUBLE_FILTER_EVAL_FOR_PYTHON_UDF
+    val (_, offsetSeq) = readFromResource(
+      "checkpoint-version-4.2.0-deduplication-metadata-boundary/offsets")
+    assert(OffsetSeqMetadata.readValue(offsetSeq.metadataOpt.get, entry) == "false")
+    val metadata = OffsetSeqMetadata(batchWatermarkMs = 0, batchTimestampMs = 0, spark.conf)
+    assert(metadata.conf.get(entry.key).contains("true"))
+  }
+
   test("SPARK-59919: v1 and v2 metadata persist rebound stateful shuffle partitions") {
     withSQLConf(
       SQLConf.SHUFFLE_PARTITIONS.key -> "10",
@@ -61,6 +173,32 @@ class OffsetSeqLogSuite extends SharedSparkSession {
 
       assert(v1.conf.get(SQLConf.SHUFFLE_PARTITIONS.key).contains("3"))
       assert(v2.conf.get(SQLConf.SHUFFLE_PARTITIONS.key).contains("3"))
+    }
+  }
+
+  test("setConfWithoutLogging sets the values that setSessionConf sets") {
+    // The metadata of a checkpoint without the confs that have defaults for old checkpoints, of a
+    // checkpoint of Spark 4.2, and of a new query, with a rebound conf.
+    val metadatas = withSQLConf(
+        SQLConf.SHUFFLE_PARTITIONS.key -> "10",
+        SQLConf.STATEFUL_SHUFFLE_PARTITIONS_INTERNAL.key -> "3") {
+      Seq(
+        readFromResource("offset-log-version-2.1.0")._2.metadataOpt.get,
+        readFromResource("checkpoint-version-4.2.0-deduplication-metadata-boundary/offsets")
+          ._2.metadataOpt.get,
+        OffsetSeqMetadata(0, 0, spark.conf))
+    }
+    metadatas.foreach { metadata =>
+      val logged = spark.sessionState.conf.clone()
+      val unlogged = spark.sessionState.conf.clone()
+      // Values that the metadata replaces, and one that only a conf missing from it keeps.
+      Seq(logged, unlogged).foreach { conf =>
+        conf.setConf(SQLConf.SHUFFLE_PARTITIONS, 7)
+        conf.setConf(SQLConf.AVOID_DOUBLE_FILTER_EVAL, true)
+      }
+      OffsetSeqMetadata.setSessionConf(metadata, logged)
+      OffsetSeqMetadata.setConfWithoutLogging(metadata, unlogged)
+      assert(unlogged.getAllConfs === logged.getAllConfs, metadata)
     }
   }
 

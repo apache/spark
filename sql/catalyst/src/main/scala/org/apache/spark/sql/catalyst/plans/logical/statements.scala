@@ -158,12 +158,11 @@ case class QualifiedColType(
 }
 
 /**
- * An INSERT statement as parsed from SQL.
+ * A temporary INSERT plan whose target identifier expression still needs analyzer traversal.
  *
- * The target is exposed as a child until the analyzer converts this node to the unary
- * [[InsertIntoStatement]]. A static target is represented by `UnresolvedInsertTarget`, while a
- * dynamic target keeps its identifier expression in `PlanWithUnresolvedIdentifier` until that
- * expression is resolved.
+ * The target is exposed as a child only until it becomes an `UnresolvedInsertTarget`. The analyzer
+ * then converts this node to the unary [[InsertIntoStatement]], before resolving the target as a
+ * relation.
  */
 case class UnresolvedInsert(
     table: LogicalPlan,

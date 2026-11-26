@@ -17,9 +17,10 @@
 
 import datetime
 import unittest
+from typing import Iterator
 
 from pyspark.sql import Row
-from pyspark.sql.functions import col, udf
+from pyspark.sql.functions import arrow_udf, col, pandas_udf, udf
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import (
     assertDataFrameEqual,
@@ -75,10 +76,12 @@ class ArrowPythonUDFCachedInputTests(ReusedSQLTestCase):
         finally:
             super().tearDownClass()
 
-    def _assert_columnar_arrow_eval(self, df, expected_nodes):
+    def _assert_columnar_arrow_eval(self, df, expected_nodes, pass_through_columns=None):
         # Assert the executed plan contains exactly `expected_nodes` ArrowEvalPythonExec
         # operators and every one of them takes the columnar input path -- otherwise the
-        # test silently stops exercising the code this suite exists to pin.
+        # test silently stops exercising the code this suite exists to pin. If
+        # `pass_through_columns` is given, also assert that every one of them passes through
+        # the child columns of those names.
         nodes = []
         stack = [df._jdf.queryExecution().executedPlan()]
         while stack:
@@ -95,6 +98,10 @@ class ArrowPythonUDFCachedInputTests(ReusedSQLTestCase):
         self.assertEqual(len(nodes), expected_nodes, "unexpected number of ArrowEvalPythonExec")
         for node in nodes:
             self.assertTrue(node.supportsColumnar(), "expected the columnar input path")
+            if pass_through_columns is not None:
+                required = node.requiredChildOutput()
+                names = [required.apply(i).name() for i in range(required.size())]
+                self.assertEqual(names, pass_through_columns, "unexpected pass-through columns")
 
     def _assert_udf_on_cached_strings(self):
         df = self.spark.createDataFrame(
@@ -128,8 +135,24 @@ class ArrowPythonUDFCachedInputTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame([(1, "a"), (2, "b")], schema="i long, s string").cache()
         try:
             result = df.select(col("s"), udf(lambda x: x + 1, "long")(col("i")))
-            self._assert_columnar_arrow_eval(result, expected_nodes=1)
+            self._assert_columnar_arrow_eval(result, expected_nodes=1, pass_through_columns=["s"])
             assertDataFrameEqual(result, [Row("a", 2), Row("b", 3)])
+        finally:
+            df.unpersist()
+
+    def test_udf_on_cached_input_with_output_batch_slicing(self):
+        # The 10-row result of the single cached batch is sliced under the configs below, and
+        # must still line up with its rows, which are paired with the results by row.
+        df = self.spark.range(0, 10, 1, 1).cache()
+        try:
+            for conf in [
+                {"spark.sql.execution.arrow.maxRecordsPerOutputBatch": "3"},
+                {"spark.sql.execution.arrow.maxBytesPerOutputBatch": "3"},
+            ]:
+                with self.subTest(conf=conf), self.sql_conf(conf):
+                    result = df.select(col("id"), udf(lambda x: x + 1, "long")(col("id")))
+                    self._assert_columnar_arrow_eval(result, expected_nodes=1)
+                    assertDataFrameEqual(result, [Row(i, i + 1) for i in range(10)])
         finally:
             df.unpersist()
 
@@ -168,6 +191,89 @@ class ArrowPythonUDFCachedInputTests(ReusedSQLTestCase):
                 # The stored epoch round-trips; naive-datetime wall time is preserved because
                 # createDataFrame and collect both convert against the machine-local timezone.
                 assertDataFrameEqual(result, [Row(ts)])
+        finally:
+            df.unpersist()
+
+    def test_udfs_without_pass_through_columns(self):
+        # Only the results are selected, so no column is passed through, and the result batches
+        # of Python are the output batches, including those of iterator UDFs, which may return
+        # batches of other sizes than their input.
+        import pandas as pd
+        import pyarrow as pa
+        import pyarrow.compute as pc
+
+        @pandas_udf("long")
+        def pandas_plus_one(it: Iterator[pd.Series]) -> Iterator[pd.Series]:
+            for s in it:
+                yield s + 1
+
+        @arrow_udf("long")
+        def arrow_plus_one(it: Iterator[pa.Array]) -> Iterator[pa.Array]:
+            for a in it:
+                # Splits each batch in two.
+                half = len(a) // 2
+                yield pc.add(a[:half], 1)
+                yield pc.add(a[half:], 1)
+
+        @pandas_udf("long")
+        def pandas_times_two(s: pd.Series) -> pd.Series:
+            return s * 2
+
+        num_rows = 10000
+        df = self.spark.range(0, num_rows, 1, 2).selectExpr("id", "id * 10 AS v").cache()
+        cases = [
+            ("pandas_iter", pandas_plus_one, lambda i: i + 1),
+            ("arrow_iter", arrow_plus_one, lambda i: i + 1),
+            ("pandas", pandas_times_two, lambda i: i * 2),
+            ("udf", udf(lambda x: x + 1, "long"), lambda i: i + 1),
+        ]
+        try:
+            with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": "1000"}):
+                for name, f, g in cases:
+                    with self.subTest(udf=name):
+                        expected = [Row(r=g(i)) for i in range(num_rows)]
+                        result = df.select(f(col("id")).alias("r"))
+                        self._assert_columnar_arrow_eval(
+                            result, expected_nodes=1, pass_through_columns=[]
+                        )
+                        assertDataFrameEqual(result, expected)
+                        # With a filter on the result above.
+                        filtered = result.where(col("r") % 7 == 0)
+                        assertDataFrameEqual(filtered, [r for r in expected if r.r % 7 == 0])
+        finally:
+            df.unpersist()
+
+    def test_stacked_udfs_without_pass_through_columns(self):
+        # The outer UDF reads the result batches of the inner one, which are loaded into the
+        # same vectors for every batch, and neither passes through a column.
+        import pandas as pd
+
+        @pandas_udf("long")
+        def pandas_times_two(s: pd.Series) -> pd.Series:
+            return s * 2
+
+        plus_one = udf(lambda x: x + 1, "long")
+        df = self.spark.range(0, 10000, 1, 2).cache()
+        try:
+            with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": "1000"}):
+                result = df.select(pandas_times_two(plus_one(col("id"))).alias("r"))
+                self._assert_columnar_arrow_eval(result, expected_nodes=2, pass_through_columns=[])
+                assertDataFrameEqual(result, [Row(r=(i + 1) * 2) for i in range(10000)])
+        finally:
+            df.unpersist()
+
+    def test_cache_results_of_udf_without_pass_through_columns(self):
+        # The results of Python are the output batches, which are cached by copying them.
+        df = self.spark.range(0, 10000, 1, 2).cache()
+        try:
+            result = df.select(udf(lambda x: x + 1, "long")(col("id")).alias("r"))
+            self._assert_columnar_arrow_eval(result, expected_nodes=1, pass_through_columns=[])
+            cached = result.cache()
+            try:
+                self.assertEqual(cached.count(), 10000)
+                assertDataFrameEqual(cached, [Row(r=i + 1) for i in range(10000)])
+            finally:
+                cached.unpersist()
         finally:
             df.unpersist()
 

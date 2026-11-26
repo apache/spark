@@ -161,6 +161,33 @@ class Profiler:
         raise NotImplementedError
 
 
+class SamplingResultParam(AccumulatorParam[Dict[str, Any]]):
+    """SamplingResultParam is used to merge sampling results"""
+
+    @staticmethod
+    def zero(value: Dict[str, Any]) -> Dict[str, Any]:
+        return {}
+
+    @staticmethod
+    def addInPlace(value1: Dict[str, Any], value2: Dict[str, Any]) -> Dict[str, Any]:
+        # Merge with an explicit stack rather than recursion, so that the merge does not
+        # depend on the recursion limit, even though WorkerSamplingProfiler caps the depth of
+        # the call trees it sends.
+        stack = [(value1, value2)]
+        while stack:
+            node1, node2 = stack.pop()
+            for key, value in node2.items():
+                if key not in node1:
+                    node1[key] = value
+                elif isinstance(value, int):
+                    node1[key] += value
+                elif isinstance(value, dict):
+                    stack.append((node1[key], value))
+                else:
+                    raise ValueError(f"Unsupported value type: {type(value)}")
+        return value1
+
+
 class PStatsParam(AccumulatorParam[Optional[pstats.Stats]]):
     """PStatsParam is used to merge pstats.Stats"""
 

@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{Partition, SparkException}
+import org.apache.spark.SparkException
 import org.apache.spark.rdd.{CoalescedRDD, PartitionCoalescer, PartitionGroup, RDD, SortedMergeCoalescedRDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparabl
 import org.apache.spark.sql.execution.{SafeForKWayMerge, SparkPlan, SQLExecution, UnaryExecNode}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.vectorized.ColumnarBatch
+import org.apache.spark.storage.StorageLevel
 
 /**
  * Physical operator that groups input partitions by their partition keys.
@@ -39,9 +40,10 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
  * storage-partitioned joins to align partitions from different sides of the join.
  *
  * Everything that says how the node was decided is `@transient`, since only the driver plans and
- * the executors read the groups through [[GroupedPartitionCoalescer]] rather than through this
- * node. The two partitionings are not, matching `ShuffleExchangeExec`'s, since they are what the
- * node claims rather than how it arrived at the claim.
+ * groups the partitions, through [[GroupedPartitionCoalescer]], and the executors read the
+ * coalesced partitions rather than this node. The two partitionings are not, matching
+ * `ShuffleExchangeExec`'s, since they are what the node claims rather than how it arrived at the
+ * claim.
  *
  * @param child The child plan providing bucketed/partitioned input
  * @param grouping What this node does to the child's partitions, derived once at planning time by
@@ -114,9 +116,11 @@ case class GroupPartitionsExec(
    * `plannedPartitioning` rebuilds its keyed members on top of the grouping. A rule that hands this
    * node a child reporting something else invalidates both, so the keyed claim is dropped and only
    * the physical output count is reported. `ValidateRequirements` then finds the parent's
-   * distribution unsatisfied and `AdaptiveSparkPlanExec` reverts the rewrite, which is what an
-   * `AQEShuffleReadExec` landing over a keyed shuffle stage relies on. Only an `AQEShuffleReadRule`
-   * is validated that way, so `checkChildStillMatches` covers the rest at execution.
+   * distribution unsatisfied and `AdaptiveSparkPlanExec` reverts the rewrite. A coalesced
+   * `AQEShuffleReadExec` over a keyed stage also reports `UnknownPartitioning` itself, so
+   * validation can reject it even without this node. Only an `AQEShuffleReadRule` is validated
+   * that way, so a retained node also checks its child at execution with `checkChildStillMatches`.
+   * A side whose identity node was skipped has no such execution-time check.
    *
    * Re-deriving instead would apply a recipe chosen for one pairing to a different child, yielding
    * a claim nothing validated against the other side. It would also buy nothing today: no rule is
@@ -124,9 +128,11 @@ case class GroupPartitionsExec(
    * where this check passes, and `UnknownPartitioning`, where re-deriving reports the same thing.
    *
    * The comparison is by reference for a child that reports the same object, which the columnar and
-   * codegen wrappers do. `PlanAdaptiveDynamicPruningFilters` rebuilds `BatchScanExec`, so there it
-   * compares the partition keys by value, and reads equal only while the connector returns the same
-   * input partitions for the same scan.
+   * codegen wrappers do. A rule that rewrites a subquery in the runtime or storage filters of a
+   * `BatchScanExec` after `EnsureRequirements` rebuilds it, so there it compares the partition keys
+   * by value. Such rules are `PlanAdaptiveDynamicPruningFilters` and `ReuseAdaptiveSubquery` with
+   * AQE, and `ReuseExchangeAndSubquery` without it. The rebuilt node shares the input partitions
+   * the first one planned (`PlannedScan`), so its keys come from the same partitions.
    *
    * Asked on the read rather than in `withNewChildInternal` because canonicalization rebuilds this
    * node over a canonicalized child whose partitioning cannot be read at all: a canonicalized
@@ -226,17 +232,19 @@ case class GroupPartitionsExec(
   //
   // --- Concrete example of an unsafe operator: SortExec + SortMergeJoinExec ---
   //
-  // SortExec stores its active sorter in a plain var field (`rowSorter`) on the plan node.
-  // When the k-way merge initialises its N partition iterators, each one drives the same SortExec
-  // instance and calls createSorter(), which assigns rowSorter = newSorter -- overwriting the
-  // field each time. After all N iterators are initialised, rowSorter holds only the sorter
-  // created for the *last* partition.
+  // SortExec stores its active sorter in a plain var field (`rowSorter`) of its
+  // `SortExecSorterHolder`, one per SortExec instance in a task. When the k-way merge
+  // initialises its N partition iterators, each one drives the same SortExec instance and calls
+  // createSorter() on its holder, which assigns rowSorter = newSorter -- overwriting the field
+  // each time. After all N iterators are initialised, rowSorter holds only the sorter created for
+  // the *last* partition.
   //
   // SortMergeJoinExec performs eager resource cleanup: when a join partition is exhausted it
-  // calls cleanupResources() on its children, which reaches SortExec.cleanupResources(). That
-  // method calls rowSorter.cleanupResources() -- but rowSorter now holds the last-created sorter,
-  // not the one belonging to the just-exhausted partition. If that last sorter is still being
-  // actively read by another partition in the k-way merge, freeing it causes a use-after-free.
+  // closes the sorters of the SortExecs below it, through their holders (`taskResourceCleaner`).
+  // That calls rowSorter.cleanupResources() -- but
+  // rowSorter now holds the last-created sorter, not the one belonging to the just-exhausted
+  // partition. If that last sorter is still being actively read by another partition in the
+  // k-way merge, freeing it causes a use-after-free.
   //
   // To be conservative, we use a whitelist. An unknown node type counts as unsafe, so the merge
   // is not planned and the node concatenates. Only node types explicitly confirmed to store no
@@ -431,8 +439,8 @@ case class GroupPartitionsExec(
       // within-partition ordering is lost due to concatenation -- for example, if two input
       // partitions both share key=A and hold rows (A,1),(A,3) and (A,2),(A,5) respectively (each
       // sorted ascending by the data column), concatenating them yields (A,1),(A,3),(A,2),(A,5)
-      // which is no longer sorted by the data column. Only sort orders over partition key
-      // expressions remain valid -- they evaluate to the same value (A) in every merged partition.
+      // which is no longer sorted by the data column. For unmarked layouts without reducers, sort
+      // orders over partition keys remain valid: they evaluate to the same value in each partition.
       //
       // The config below and the child's ordering stay per-call reads. They only change how much
       // of an ordering that holds either way is reported. So a late read can never claim more
@@ -441,9 +449,10 @@ case class GroupPartitionsExec(
       // is planned, see `sortedMergeOrdering`.
       outputPartitioning match {
         case p: Partitioning with Expression
-            if reducers.isEmpty && conf.v2BucketingPreserveKeyOrderingOnCoalesceEnabled =>
-          // Without reducers all merged partitions share the same original key value, so the sort
-          // orders on key expressions still hold. The transform keys match nothing here, since
+            if reducers.isEmpty && conf.v2BucketingPreserveKeyOrderingOnCoalesceEnabled &&
+              PartitioningCollection.keyedUnknownKeysOf(p).isEmpty =>
+          // Undeclared rows can have different key values within a merged partition.
+          // Unmarked layouts without reducers keep key orders. Transform keys match nothing here:
           // `DataSourceV2ScanExecBase.outputOrdering` drops every sort order over a transform.
           val keyedPartitionings = p.collect { case k: KeyedPartitioning => k }
           val keyExprs = ExpressionSet(keyedPartitionings.flatMap(_.expressions))
@@ -566,6 +575,9 @@ case class GroupPartitionsExec(
  *                   claim into a different key space or changes the modulus. A reducer slot counts
  *                   as key-changing even where a conforming self-reducer could not rewrite a
  *                   reachable key value, so the give-up there loses at most an optimization.
+ * @param keysRewritten whether the grouping re-labels the groups, by projecting the keys onto
+ *                      cluster-key positions or by reducing them, so an undeclared row is grouped
+ *                      under the image of a key the clustering does not read.
  * @param numPrunedPartitions the alignment's effect on the reads of the child's splits, 0 outside
  *                            the alignment path. See `alignToExpectedKeys`.
  * @param numReplicatedPartitionReads as above.
@@ -574,6 +586,7 @@ private[sql] case class PartitionGrouping(
     partitions: Seq[(InternalRowComparableWrapper, Seq[Int])],
     layout: KeyLayout,
     isIdentity: Boolean,
+    keysRewritten: Boolean,
     numPrunedPartitions: Int,
     numReplicatedPartitionReads: Int) {
 
@@ -616,7 +629,9 @@ private[sql] object GroupPartitionsExec {
     val grouping = computeGrouping(
       childKp, joinKeyPositions, expectedPartitionKeys, reducers, ungroupingOrigin)
     GroupPartitionsExec(child, grouping,
-      computeOutputPartitioning(childExpr, grouping, joinKeyPositions, reducers),
+      computeOutputPartitioning(
+        childExpr, grouping, joinKeyPositions, reducers,
+        hasExpectedKeys = expectedPartitionKeys.isDefined),
       childPartitioning, joinKeyPositions, expectedPartitionKeys.map(_.size), reducers,
       ungroupingOrigin, sortedMergeOrdering)
   }
@@ -631,7 +646,8 @@ private[sql] object GroupPartitionsExec {
       p: Partitioning with Expression,
       grouping: PartitionGrouping,
       joinKeyPositions: Option[Seq[Int]],
-      reducers: Option[Seq[Option[KeyReducer]]]): Partitioning = {
+      reducers: Option[Seq[Option[KeyReducer]]],
+      hasExpectedKeys: Boolean): Partitioning = {
     // There can be multiple `KeyedPartitioning`s in an output partitioning of a join, but they
     // can only differ in `expressions`, since they share one `KeyLayout` (enforced by
     // `PartitioningCollection`). So the grouping is computed once, and the layout it describes
@@ -642,18 +658,20 @@ private[sql] object GroupPartitionsExec {
     // single-side-transform reducers; for the both-sides-reduce shape no single transform
     // describes the keys, so the reduce marks it (see `KeyedShuffleSpec.reducersBothWays`).
     //
-    // A marked claim pins undeclared rows to hash(key) % numPartitions (see [[KeyLayout]]'s
-    // `mayContainUnknownPartitionKeys`), and only an identity grouping keeps that relationship (see
-    // `PartitionGrouping.isIdentity`). Clearing the marker alone would misreport the undeclared
-    // rows that remain, so the keyed partitioning goes and only the physical output count is
-    // reported, one per group with padding included, which is the count a parent's
-    // `PartitioningCollection` needs for uniformity. `EnsureRequirements` asks this before it
-    // commits to a pairing and falls back to a shuffle when it happens.
+    // A marked layout keeps its keyed claim through a plain regrouping: coalescing the partitions
+    // that share a key leaves every key's rows, declared or not, in the group named for the
+    // declared key they reached, and full-key clustering is all a `ClusteredDistribution` reads.
+    // `computeGrouping` reports that layout as `ROUTING_LOST`, since the regrouping moved an
+    // undeclared key's group off `hash(key) % numPartitions`.
     //
-    // The marker read off `p` is the same bit the `else` branch publishes through
-    // `grouping.layout`, since `computeGrouping` copies the child's layout and carries the
-    // marker over. A change to that copy has to move this guard with it.
-    if (PartitioningCollection.keyedMarkerOf(p).contains(true) && !grouping.isIdentity) {
+    // A key rewrite or non-identity expected-key alignment re-labels or replicates the groups, so
+    // those shapes give the keyed claim up, and only the physical output count is reported, which
+    // is the count a parent's `PartitioningCollection` needs for uniformity.
+    //
+    // The state read off `p` is the one `computeGrouping` copies into `grouping.layout`; a change
+    // to that copy has to move this guard with it.
+    if (PartitioningCollection.keyedUnknownKeysOf(p).isDefined &&
+        (grouping.keysRewritten || (hasExpectedKeys && !grouping.isIdentity))) {
       UnknownPartitioning(grouping.partitions.size)
     } else {
       // One instance for every member, so they share it by reference. It already carries the
@@ -722,12 +740,23 @@ private[sql] object GroupPartitionsExec {
       val splits = keyMap.getOrElse(key, Seq.empty)
       numMatchedPartitions += splits.size
       if (distributePartitions) {
+        // `padTo` only pads, never truncates, so a key holding more splits than its expected
+        // count would be emitted more times than the count says, while `isGrouped` can still
+        // read as grouped. No producer does this today: under partial clustering the join split
+        // carries no reducers (`reducersBothWays` returns none), so it never merges keys and its
+        // counts match its splits, and the ordering split counts the same keys it groups. The
+        // assert surfaces any future miscount here instead of as a shuffle fallback at the
+        // `committed` gate in `EnsureRequirements` or as a bad grouped layout.
+        assert(splits.size <= numSplits,
+          s"a distributed partition key holds more splits (${splits.size}) than its expected " +
+            s"count ($numSplits)")
         // Distribute splits across expected partitions, padding with empty sequences
         val paddedSplits = splits.map(Seq(_)).padTo(numSplits, Seq.empty)
         paddedSplits.map((key, _))
       } else {
-        // The slots beyond the first re-read the whole group. A key this side does not hold
-        // has no splits to re-read, so the product is 0 and no explicit guard is needed.
+        // `Seq.fill(numSplits)` emits exactly `numSplits` entries whatever the split count, so this
+        // branch cannot over-emit and needs no size guard. The slots beyond the first re-read the
+        // whole group; a key this side does not hold has no splits to re-read, so the product is 0.
         numReplicatedPartitionReads += (numSplits - 1) * splits.size
         // Replicate all splits to each expected partition
         Seq.fill(numSplits)((key, splits))
@@ -816,13 +845,10 @@ private[sql] object GroupPartitionsExec {
         case ((_, Seq(single)), outputIndex) => single == outputIndex
         case _ => false
       }
-    // A `copy` of the child's layout rather than a fresh one, so the marker and anything the
-    // layout grows later are carried without this having to name them. The origin is the one
-    // field not carried: the output claims what this node's own producer stamped, never what
-    // the child's claimed, and only while the shape holds the claim -- a grouping that settles
-    // every key leaves nothing repeating, so it spends the claim the way `toGrouped` does.
-    // Built here, where the child is in scope, so `computeOutputPartitioning` has nothing left
-    // to re-apply.
+    // Copy the child's layout, deciding both origins explicitly. Only identity regrouping keeps
+    // unknown-key routing. Ungrouping uses this node's stamp, cleared when every key is grouped.
+    val unknownKeysOrigin =
+      if (isIdentity) childKp.layout.unknownKeysOrigin else childKp.layout.unknownKeysRoutingLost
     PartitionGrouping(
       partitions,
       childKp.layout.copy(
@@ -830,8 +856,9 @@ private[sql] object GroupPartitionsExec {
         dataTypes = reducedDataTypes,
         isGrouped = isGrouped,
         isCollapsed = isCollapsed,
+        unknownKeysOrigin = unknownKeysOrigin,
         ungroupingOrigin = if (isGrouped) None else ungroupingOrigin),
-      isIdentity, numPrunedPartitions, numReplicatedPartitionReads)
+      isIdentity, keysRewritten, numPrunedPartitions, numReplicatedPartitionReads)
   }
 }
 
@@ -840,34 +867,69 @@ private[sql] object GroupPartitionsExec {
  *
  * Unlike Spark's default coalescer which tries to minimize data movement, this coalescer
  * groups partitions based on their partition keys to maintain the grouping semantics
- * required for storage-partitioned operations.
+ * required for storage-partitioned operations. When nothing in the parent's narrow lineage is
+ * persisted, a group names a location if it has several partitions, shares none of them with
+ * another group, and more of its partitions prefer one host than any other host. Every other
+ * group leaves its location to the scheduler.
  *
  * @param groupedPartitions Sequence where each element is a sequence of input partition
- *                         indices that should be grouped together
+ *                         indices that should be grouped together. Only the driver reads it,
+ *                         so it is not serialized into tasks.
  */
 class GroupedPartitionCoalescer(
-    val groupedPartitions: Seq[Seq[Int]]
+    @transient val groupedPartitions: Seq[Seq[Int]]
   ) extends PartitionCoalescer with Serializable {
 
   override def coalesce(maxPartitions: Int, parent: RDD[_]): Array[PartitionGroup] = {
+    require(groupedPartitions.size == maxPartitions, s"GroupedPartitionCoalescer has " +
+      s"${groupedPartitions.size} groups but was asked for $maxPartitions partitions")
+    // Groups that share partitions, as the slots of a key under `REPLICATED_FOR_JOIN` do, would all
+    // name the same host when one is ahead, and a zip copies it into every task of the key. Left to
+    // the scheduler, each task gets the locations of the zip's first side that has any, as on
+    // master: its own split's when the split side comes first.
+    lazy val shared =
+      groupedPartitions.flatten.groupMapReduce(identity)(_ => 1)(_ + _).filter(_._2 > 1).keySet
+    // The scheduler looks cached blocks up when it submits each stage, while a group gets its
+    // location once, when the partitions are computed.
+    lazy val persisted =
+      (parent +: parent.getNarrowAncestors).exists(_.getStorageLevel != StorageLevel.NONE)
     groupedPartitions.map { partitionIndices =>
-      val partitions = new ArrayBuffer[Partition](partitionIndices.size)
-      val preferredLocations = new ArrayBuffer[String](partitionIndices.size)
-      partitionIndices.foreach { partitionIndex =>
-        val partition = parent.partitions(partitionIndex)
-        partitions += partition
-        preferredLocations ++= parent.preferredLocations(partition)
-      }
-      // Select the most common location as the preferred location
-      val preferredLocation = preferredLocations
-        .groupBy(identity)
-        .view.mapValues(_.size)
-        .maxByOption(_._2)
-        .map(_._1)
-      val partitionGroup = new PartitionGroup(preferredLocation)
+      // Read the partitions before the vote: otherwise the scheduler would compute them while it
+      // holds its cache-location map, against the lock order that `DAGScheduler` documents.
+      val partitions = partitionIndices.map(parent.partitions(_))
+      // A group of one leaves its location to the scheduler, which then offers every location of
+      // its partition. The checks above run only for groups of several partitions.
+      val votes = partitionIndices.size > 1 && !partitionIndices.exists(shared) && !persisted
+      val partitionGroup =
+        new PartitionGroup(if (votes) preferredLocation(parent, partitionIndices) else None)
       partitionGroup.partitions ++= partitions
       partitionGroup
     }.toArray
+  }
+
+  /**
+   * The host that more of the given partitions prefer than any other host, or the only location
+   * that they name on it, such as an executor. With no host ahead it is None, and the scheduler
+   * offers the locations of the first partition that has any. Naming a tied host would mostly
+   * narrow that offer, though in a group of three or more that partition can miss them. As in
+   * `DefaultPartitionCoalescer`, a partition's locations are the ones the scheduler would use
+   * for it, found through the parent's lineage, since a parent such as a scan's mapped RDD
+   * reports none of its own.
+   */
+  private def preferredLocation(parent: RDD[_], partitionIndices: Seq[Int]): Option[String] = {
+    val locations = partitionIndices.map(parent.context.getPreferredLocs(parent, _))
+    // A partition counts once for each host, however it names the host.
+    val counts = locations.flatMap(_.map(_.host).distinct).groupBy(identity).view
+      .mapValues(_.size).toSeq
+    val top = counts.map(_._2).maxOption
+    counts.collect { case (host, count) if top.contains(count) => host } match {
+      case Seq(host) =>
+        locations.flatten.filter(_.host == host).map(_.toString).distinct match {
+          case Seq(location) => Some(location)
+          case _ => Some(host)
+        }
+      case _ => None
+    }
   }
 }
 

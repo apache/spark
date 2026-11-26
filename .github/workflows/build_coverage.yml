@@ -21,7 +21,7 @@ name: "Build / Python Coverage (Python 3.12)"
 
 on:
   schedule:
-    - cron: '0 10 */2 * *'
+    - cron: '17 22 1-28/3 * *'
   workflow_dispatch:
 
 jobs:
@@ -32,7 +32,7 @@ jobs:
     uses: ./.github/workflows/build_and_test.yml
     if: github.repository == 'apache/spark'
     with:
-      java: 17
+      java: 21
       branch: master
       hadoop: hadoop3
       envs: >-

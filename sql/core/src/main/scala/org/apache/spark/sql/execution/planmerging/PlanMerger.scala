@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeMap, AttributeSet, Expression, ExpressionSet, If, Literal, NamedExpression, Or, SortOrder}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.{Cross, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter}
+import org.apache.spark.sql.catalyst.plans.{Cross, ExistenceJoin, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.connector.catalog.TableCapability
@@ -669,7 +669,9 @@ class PlanMerger(
               }
           }
 
-        case (np: Join, cp: Join) if np.joinType == cp.joinType && np.hint == cp.hint =>
+        // Existence joins have the same join type once their `exists` attributes are normalized.
+        case (np: Join, cp: Join)
+            if np.joinType.canonicalized == cp.joinType.canonicalized && np.hint == cp.hint =>
           tryMergePlans(np.left, cp.left, context.copy(filterAboveScan = false)).flatMap {
             case TryMergeResult(mergedLeft, leftNPMapping, leftNPFilter, leftCPFilter, _,
                 leftDsv2Merged) =>
@@ -690,7 +692,13 @@ class PlanMerger(
                            filterSafeForJoin(fromLeft = true, cp.joinType)) &&
                        (rightNPFilter.isEmpty && rightCPFilter.isEmpty ||
                            filterSafeForJoin(fromLeft = false, cp.joinType)) =>
-                  val npMapping = leftNPMapping ++ rightNPMapping
+                  // The merged join keeps `cp.joinType`, so the new plan's `exists` is now `cp`'s.
+                  val existsMapping = (np.joinType, cp.joinType) match {
+                    case (ExistenceJoin(npExists), ExistenceJoin(cpExists)) =>
+                      AttributeMap(Seq[(Attribute, Attribute)](npExists -> cpExists))
+                    case _ => AttributeMap.empty[Attribute]
+                  }
+                  val npMapping = leftNPMapping ++ rightNPMapping ++ existsMapping
                   val mappedNPCondition = np.condition.map(mapAttributes(_, npMapping))
                   // Comparing the canonicalized form is required to ignore different forms of the
                   // same expression and `AttributeReference.qualifier`s in `cp.condition`.
@@ -903,7 +911,10 @@ class PlanMerger(
     // here: SPARK-58207 keeps non-deterministic filters from being pushed to a V2 source, so an
     // offered one is simply not pushed (and dropped when the scan is extracted).
     val conds = strictFilters ++ bestEffortFilter.filter(_.references.subsetOf(relationOut))
-    V2ScanRelationPushDown.rebuildScan(relation, unionAttrs, conds).filter { scan =>
+    // Spark reads the merged result through scalar subqueries, even when the original
+    // scans came from the main query. Rebuild the scan with the destination's context.
+    V2ScanRelationPushDown.rebuildScan(
+      relation, unionAttrs, conds, isSubquery = true).filter { scan =>
       // The rebuilt scan must itself be mergeable. rebuildScan re-runs the full pushdown, so any
       // non-reproducible pushdown it introduces would make the merged scan unsound. Today's
       // Project-over-Filter input only triggers the plain path (always mergeable), so this is

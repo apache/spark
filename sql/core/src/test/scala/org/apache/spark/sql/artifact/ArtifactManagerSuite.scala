@@ -19,6 +19,9 @@ package org.apache.spark.sql.artifact
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path, Paths}
+import java.util.zip.{ZipEntry, ZipOutputStream}
+
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException}
 import org.apache.spark.metrics.source.CodegenMetrics
@@ -396,6 +399,89 @@ class ArtifactManagerSuite extends SharedSparkSession {
     assert(ArtifactManager.artifactRootDirectory.toFile.exists())
   }
 
+  test("SPARK-61671: LIST FILES, JARS and ARCHIVES list the artifacts of the session and of " +
+    "the SparkContext but not those of other sessions") {
+    val session1 = spark.newSession()
+    val session2 = spark.newSession()
+    val sc = spark.sparkContext
+    val dir = Utils.createTempDir().toPath
+    // A zip file, which is also a valid jar and archive.
+    def newFile(name: String): Path = {
+      val path = dir.resolve(name)
+      Utils.tryWithResource(new ZipOutputStream(Files.newOutputStream(path))) { out =>
+        out.putNextEntry(new ZipEntry("my_file.txt"))
+        out.write("listed".getBytes(StandardCharsets.UTF_8))
+      }
+      path
+    }
+    // The paths of the artifacts of a session under the URI of the file server, which differs
+    // between runs, and the names of the other ones.
+    def normalize(uris: Seq[String]): Seq[String] = uris.map { uri =>
+      val i = uri.indexOf("/artifacts/")
+      if (i >= 0) uri.substring(i) else uri.substring(uri.lastIndexOf('/'))
+    }.sorted
+    def list(session: SparkSession, kind: String): Seq[String] =
+      normalize(session.sql(s"LIST $kind").collect().map(_.getString(0)).toSeq)
+
+    // Added to the SparkContext outside of any session, as with --jars, --files and --archives.
+    val contextFile = newFile("context.txt").toString
+    val contextJar = newFile("context.jar").toString
+    val contextArchive = newFile("context.zip").toString
+    val contextKeys = Seq(sc.addedFiles, sc.addedJars, sc.addedArchives).map { added =>
+      added.get("default").map(_.keySet.toSet).getOrElse(Set.empty)
+    }
+    sc.addFile(contextFile)
+    sc.addJar(contextJar)
+    sc.addArchive(contextArchive)
+    try {
+      Seq("files/listed.txt", "pyfiles/listed.py", "jars/listed.jar").foreach { path =>
+        session1.artifactManager.addArtifact(Paths.get(path), newFile(path.split("/")(1)), None)
+      }
+      session1.artifactManager.addArtifact(
+        Paths.get("archives/listed.zip"), newFile("listed.zip"), Some("my_files"))
+      // Added again to the session, so that each is recorded both for the session and outside of
+      // any session, and still listed once.
+      session1.sql(s"ADD FILE '$contextFile'")
+      session1.sql(s"ADD JAR '$contextJar'")
+      session1.sql(s"ADD ARCHIVE '$contextArchive'")
+      Seq(sc.addedFiles -> "/context.txt", sc.addedJars -> "/context.jar",
+          sc.addedArchives -> "/context.zip").foreach { case (added, name) =>
+        val key = added("default").keySet.find(_.endsWith(name)).get
+        assert(added(session1.sessionUUID).contains(key), name)
+      }
+
+      val root = s"/artifacts/${session1.sessionUUID}"
+      assert(list(session1, "FILES") ==
+        Seq(s"$root/files/listed.txt", s"$root/pyfiles/listed.py", "/context.txt"))
+      assert(list(session1, "JARS") == Seq(s"$root/jars/listed.jar", "/context.jar"))
+      assert(list(session1, "ARCHIVES") ==
+        Seq(s"$root/archives/listed.zip#my_files", "/context.zip"))
+      assert(list(session1, "JAR context.jar") == Seq("/context.jar"))
+      assert(list(session1, "ARCHIVE context.zip") == Seq("/context.zip"))
+      assert(list(session2, "FILES") == Seq("/context.txt"))
+      assert(list(session2, "JARS") == Seq("/context.jar"))
+      assert(list(session2, "ARCHIVES") == Seq("/context.zip"))
+      // The SparkContext lists those of every session.
+      assert(sc.listFiles().exists(_.contains(root)))
+      assert(sc.listArchives().exists(_.contains(root)))
+      // So does a session with the legacy flag, as before Spark 4.5.
+      session2.conf.set(SQLConf.LEGACY_LIST_ALL_SESSIONS_RESOURCES.key, "true")
+      assert(list(session2, "FILES") == normalize(sc.listFiles()))
+      assert(list(session2, "JARS") == normalize(sc.listJars()))
+      assert(list(session2, "ARCHIVES") == normalize(sc.listArchives()))
+      assert(list(session2, "FILES").contains(s"$root/files/listed.txt"))
+      assert(list(session2, "JARS").contains(s"$root/jars/listed.jar"))
+      assert(list(session2, "ARCHIVES").contains(s"$root/archives/listed.zip#my_files"))
+    } finally {
+      session1.artifactManager.cleanUpResourcesForTesting()
+      Seq(sc.addedFiles, sc.addedJars, sc.addedArchives).zip(contextKeys).foreach {
+        case (added, keys) =>
+          added.get("default").foreach(m => m.keySet.diff(keys).foreach(m.remove))
+      }
+      Utils.deleteRecursively(dir.toFile)
+    }
+  }
+
   test("Add artifact to local session - by path") {
     val (fileName, binaryName) = ("Hello.class", "Hello")
     testAddArtifactToLocalSession(fileName, binaryName) { classPath =>
@@ -428,6 +514,31 @@ class ArtifactManagerSuite extends SharedSparkSession {
       val buffer = Files.readAllBytes(classPath)
       spark.addArtifact(buffer, filePath)
       filePath
+    }
+  }
+
+  test("Add local artifacts through the public addArtifact") {
+    // A subclass that overrides addArtifact, for example to audit what a session adds, sees the
+    // local files that addLocalArtifacts adds, other than a native data source package that Spark
+    // checks, which goes through a private overload, as it sees the in-memory ones.
+    val added = ArrayBuffer.empty[Path]
+    val manager = new ArtifactManager(spark.newSession()) {
+      override def addArtifact(
+          remoteRelativePath: Path,
+          serverLocalStagingPath: Path,
+          fragment: Option[String],
+          deleteStagedFile: Boolean): Unit = {
+        added += remoteRelativePath
+        super.addArtifact(remoteRelativePath, serverLocalStagingPath, fragment, deleteStagedFile)
+      }
+    }
+    try {
+      val file = Files.writeString(Utils.createTempDir().toPath.resolve("audited.txt"), "audited")
+      manager.addLocalArtifacts(
+        Artifact.newFileArtifact(Paths.get("audited.txt"), new Artifact.LocalFile(file)) :: Nil)
+      assert(added.toSeq == Seq(Paths.get("files", "audited.txt")))
+    } finally {
+      manager.close()
     }
   }
 

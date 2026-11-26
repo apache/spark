@@ -23,11 +23,13 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.connector.catalog.{InMemoryRelationCatalog, TableSummary}
 import org.apache.spark.sql.execution.command
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.util.Utils
 
 /**
  * The class contains tests for the `SHOW TABLES` command to check V2 table catalogs.
  */
+@DataSourceV2Test
 class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase {
   override def defaultNamespace: Seq[String] = Nil
   // Extended JSON now uses TableSummary.tableType(), and TableCatalog.listTableSummaries
@@ -67,6 +69,34 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase 
 
       assert(information.split("\n").contains("Table Properties: [p1=v1, p2=v2]"))
     }
+  }
+
+  gridTest("show table extended preserves reserved metadata with display properties")(
+      Seq((false, false), (true, true))) {
+    case (external, withLocation) =>
+      withNamespaceAndTable("ns", "tbl") { _ =>
+        createTableWithDisplayProperties("ns", "tbl", external, withLocation)
+
+        val information = sql(s"SHOW TABLE EXTENDED IN $catalog.ns LIKE 'tbl'")
+          .head().getString(3)
+        val tableType = if (external) "EXTERNAL" else "MANAGED"
+        val locationRow = if (withLocation) "Location: file:/tmp/display-properties\n" else ""
+        val properties =
+          "[catalog-label=catalog-value, password=*********(redacted), persisted=stored]"
+        assert(information ===
+          s"""Catalog: $catalog
+             |Namespace: ns
+             |Table: tbl
+             |Type: $tableType
+             |Comment: table comment
+             |${locationRow}Provider: _
+             |Owner: ${Utils.getCurrentUserName()}
+             |Table Properties: $properties
+             |Schema: root
+             | |-- id: long (nullable = true)
+             |
+             |""".stripMargin)
+      }
   }
 
   test("show table extended omits empty table properties") {

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{DescribeNamespace, LogicalPlan, ShowTableProperties, ShowTables}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
@@ -33,16 +34,52 @@ object KeepLegacyOutputs extends Rule[LogicalPlan] {
       plan.resolveOperatorsUpWithPruning(
         _.containsPattern(COMMAND)) {
         case s: ShowTables =>
-          assert(s.output.length == 3)
-          val newOutput = s.output.head.withName("database") +: s.output.tail
-          s.copy(output = newOutput)
+          keepLegacyShowTablesOutput(s)
         case d: DescribeNamespace =>
-          assert(d.output.length == 2)
-          d.copy(output = Seq(d.output.head.withName("database_description_item"),
-            d.output.last.withName("database_description_value")))
+          keepLegacyDescribeNamespaceOutput(d)
         case s: ShowTableProperties if s.propertyKey.isDefined =>
-           s.copy(output = Seq(s.output.last))
+          keepLegacyShowTablePropertiesOutput(s)
       }
     }
+  }
+
+  /**
+   * Applies the legacy SHOW TABLES schema, preserving output expression IDs, when
+   * `spark.sql.legacy.keepCommandOutputSchema` is enabled; otherwise returns the plan unchanged.
+   */
+  def keepLegacyShowTablesOutput(showTables: ShowTables): ShowTables = {
+    if (conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)) {
+      assert(showTables.output.length == 3)
+      showTables.copy(output = withLegacyShowTablesDatabaseColumn(showTables.output))
+    } else {
+      showTables
+    }
+  }
+
+  /**
+   * Keeps only the value column for keyed SHOW TBLPROPERTIES, preserving its expression ID.
+   * The caller checks `spark.sql.legacy.keepCommandOutputSchema`.
+   */
+  def keepLegacyShowTablePropertiesOutput(
+      showTableProperties: ShowTableProperties): ShowTableProperties = {
+    if (showTableProperties.propertyKey.isDefined) {
+      showTableProperties.copy(output = Seq(showTableProperties.output.last))
+    } else {
+      showTableProperties
+    }
+  }
+
+  /** Unconditionally renames the first SHOW TABLES output column to its legacy name. */
+  def withLegacyShowTablesDatabaseColumn(output: Seq[Attribute]): Seq[Attribute] = {
+    output.head.withName("database") +: output.tail
+  }
+
+  /** Renames namespace output to its legacy names; the caller applies the legacy-schema gate. */
+  def keepLegacyDescribeNamespaceOutput(
+      describeNamespace: DescribeNamespace): DescribeNamespace = {
+    assert(describeNamespace.output.length == 2)
+    describeNamespace.copy(output = Seq(
+      describeNamespace.output.head.withName("database_description_item"),
+      describeNamespace.output.last.withName("database_description_value")))
   }
 }

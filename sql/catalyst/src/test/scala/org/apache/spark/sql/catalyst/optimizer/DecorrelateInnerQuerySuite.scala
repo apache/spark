@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{DecimalType, IntegerType, LongType}
 
 class DecorrelateInnerQuerySuite extends PlanTest {
 
@@ -164,6 +165,22 @@ class DecorrelateInnerQuerySuite extends PlanTest {
         Filter(x === y + a,
           DomainJoin(Seq(x, y), testRelation)))
     check(innerPlan, outerPlan, correctAnswer, Seq(x <=> x, y <=> y))
+  }
+
+  test("SPARK-60969: pull up a cast from a scale-0 decimal depending on the eval mode") {
+    val d = AttributeReference("d", DecimalType(19, 0))()
+    val d1 = AttributeReference("d1", DecimalType(19, 1))()
+    def cast(attr: Attribute, mode: EvalMode.Value): Expression =
+      Cast(attr, LongType, None, mode)
+    val k = OuterReference(AttributeReference("k", LongType)())
+    // ANSI is 1:1 under both equalities, TRY only under `=`, and LEGACY wraps around.
+    assert(DecorrelateInnerQuery.canPullUpOverAgg(cast(d, EvalMode.ANSI) === k))
+    assert(DecorrelateInnerQuery.canPullUpOverAgg(cast(d, EvalMode.ANSI) <=> k))
+    assert(DecorrelateInnerQuery.canPullUpOverAgg(cast(d, EvalMode.TRY) === k))
+    assert(!DecorrelateInnerQuery.canPullUpOverAgg(cast(d, EvalMode.TRY) <=> k))
+    assert(!DecorrelateInnerQuery.canPullUpOverAgg(cast(d, EvalMode.LEGACY) === k))
+    // A non-zero scale truncates, so it is not 1:1.
+    assert(!DecorrelateInnerQuery.canPullUpOverAgg(cast(d1, EvalMode.ANSI) === k))
   }
 
   test("aggregate with correlated equality predicates that has no attribute") {
@@ -812,6 +829,85 @@ class DecorrelateInnerQuerySuite extends PlanTest {
         Project(Seq(x),
           Limit(1, testRelation2))
       check(outputPlan, joinCond, correctAnswer, Seq(a < b))
+    }
+  }
+
+  private def pyUdf(children: Seq[Expression]): PythonUDF =
+    PythonUDF("udf", null, LongType, children, PythonEvalType.SQL_BATCHED_UDF,
+      udfDeterministic = true)
+
+  private def markers(plan: LogicalPlan): Seq[EvalOnlyWhen] =
+    plan.flatMap(_.expressions.flatMap(_.collect { case e: EvalOnlyWhen => e }))
+
+  test("SPARK-61482: a Python UDF over an aggregate is wrapped in an EvalOnlyWhen marker, " +
+      "a plain aggregate column is not") {
+    val outerPlan = testRelation
+    // A correlated non-equi join forces a DomainJoin, i.e. COUNT-bug handling.
+    val innerPlan =
+      Aggregate(
+        Seq.empty[Expression],
+        Seq(Alias(pyUdf(Seq(count(Literal(1)))), "d")(), Alias(count(Literal(1)), "c")()),
+        Project(Seq(x, y, a3, b3),
+          Join(testRelation2, testRelation3, Inner,
+            Some(And(x === a3, y > OuterReference(a))), JoinHint.NONE)))
+    val (outputPlan, _) =
+      DecorrelateInnerQuery(innerPlan, outerPlan.select(), handleCountBug = true)
+    val found = markers(outputPlan)
+    assert(found.length == 1, s"expected one marker, got ${found.length} in\n$outputPlan")
+    assert(found.head.child.exists(_.isInstanceOf[PythonUDF]))
+    // The condition is the one the enclosing If reads.
+    assert(found.head.condition.isInstanceOf[IsNull])
+  }
+
+  test("SPARK-61482: a Python UDF outside an aggregate function is also wrapped") {
+    val outerPlan = testRelation
+    val innerPlan =
+      Aggregate(
+        Seq.empty[Expression],
+        Seq(Alias(Add(count(Literal(1)), pyUdf(Seq(OuterReference(a)))), "d")()),
+        Project(Seq(x, y, a3, b3),
+          Join(testRelation2, testRelation3, Inner,
+            Some(And(x === a3, y > OuterReference(a))), JoinHint.NONE)))
+    val (outputPlan, _) =
+      DecorrelateInnerQuery(innerPlan, outerPlan.select(), handleCountBug = true)
+    assert(markers(outputPlan).length == 1)
+  }
+
+  test("SPARK-61482: a guarded Python UDF keeps master's plan (no marker after simplification)") {
+    val outerPlan = testRelation
+    // Over zero rows `count(*)` is 0, so the CASE folds to 0 and no UDF is left; the marker the
+    // rewrite adds is then dropped by SimplifyConditionals, matching the plan without this change.
+    val guarded = Alias(
+      CaseWhen(
+        Seq((EqualTo(count(Literal(1)), Literal(0L)), Literal(0L))),
+        Some(pyUdf(Seq(count(Literal(1)))))),
+      "d")()
+    val innerPlan =
+      Aggregate(
+        Seq.empty[Expression], Seq(guarded),
+        Project(Seq(x, y, a3, b3),
+          Join(testRelation2, testRelation3, Inner,
+            Some(And(x === a3, y > OuterReference(a))), JoinHint.NONE)))
+    val (outputPlan, _) =
+      DecorrelateInnerQuery(innerPlan, outerPlan.select(), handleCountBug = true)
+    val simplified = SimplifyConditionals(ConstantFolding(outputPlan))
+    assert(markers(simplified).isEmpty)
+  }
+
+  test("SPARK-61482: no marker when the conditional-evaluation config is off") {
+    withSQLConf(
+        SQLConf.DECORRELATE_INNER_QUERY_COUNT_BUG_EVAL_UDF_CONDITIONALLY_ENABLED.key -> "false") {
+      val outerPlan = testRelation
+      val innerPlan =
+        Aggregate(
+          Seq.empty[Expression],
+          Seq(Alias(pyUdf(Seq(count(Literal(1)))), "d")()),
+          Project(Seq(x, y, a3, b3),
+            Join(testRelation2, testRelation3, Inner,
+              Some(And(x === a3, y > OuterReference(a))), JoinHint.NONE)))
+      val (outputPlan, _) =
+        DecorrelateInnerQuery(innerPlan, outerPlan.select(), handleCountBug = true)
+      assert(markers(outputPlan).isEmpty)
     }
   }
 }

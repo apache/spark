@@ -22,6 +22,7 @@ import json
 import os
 import random
 import sys
+import uuid
 import warnings
 from collections.abc import Iterable
 from typing import (
@@ -84,6 +85,10 @@ from pyspark.sql.dataframe import (
 )
 from pyspark.sql.dataframe import (
     DataFrameStatFunctions as ParentDataFrameStatFunctions,
+)
+from pyspark.sql.dataframe import (
+    _validate_approx_quantile_probabilities,
+    _validate_approx_quantile_relative_error,
 )
 from pyspark.sql.pandas.functions import _validate_vectorized_udf  # type: ignore[attr-defined]
 from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
@@ -999,6 +1004,72 @@ class DataFrame(ParentDataFrame):
             session=self._session,
         )
 
+    def binBy(
+        self,
+        rangeStart: "ColumnOrName",
+        rangeEnd: "ColumnOrName",
+        binWidth: Column,
+        distributeUniform: Union[List["ColumnOrName"], Tuple["ColumnOrName", ...]],
+        *,
+        alignTo: Optional[Column] = None,
+        binStartName: Optional[str] = None,
+        binEndName: Optional[str] = None,
+        binDistributeRatioName: Optional[str] = None,
+    ) -> ParentDataFrame:
+        expressions = {"binWidth": binWidth}
+        if alignTo is not None:
+            expressions["alignTo"] = alignTo
+        for arg_name, expression in expressions.items():
+            if not isinstance(expression, Column):
+                raise PySparkTypeError(
+                    errorClass="NOT_EXPECTED_TYPE",
+                    messageParameters={
+                        "arg_name": arg_name,
+                        "expected_type": "Column",
+                        "arg_type": type(expression).__name__,
+                    },
+                )
+
+        if not isinstance(distributeUniform, (list, tuple)):
+            raise PySparkTypeError(
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "distributeUniform",
+                    "expected_type": "list or tuple",
+                    "arg_type": type(distributeUniform).__name__,
+                },
+            )
+        aliases = {
+            "binStartName": binStartName,
+            "binEndName": binEndName,
+            "binDistributeRatioName": binDistributeRatioName,
+        }
+        for arg_name, name in aliases.items():
+            if name is not None and not isinstance(name, str):
+                raise PySparkTypeError(
+                    errorClass="NOT_EXPECTED_TYPE",
+                    messageParameters={
+                        "arg_name": arg_name,
+                        "expected_type": "str",
+                        "arg_type": type(name).__name__,
+                    },
+                )
+
+        return DataFrame(
+            plan.BinBy(
+                child=self._plan,
+                range_start=F._to_col(rangeStart),
+                range_end=F._to_col(rangeEnd),
+                bin_width=F._to_col(binWidth),
+                distribute_uniform=[F._to_col(col) for col in distributeUniform],
+                align_to=F._to_col(alignTo) if alignTo is not None else None,
+                bin_start_name=binStartName,
+                bin_end_name=binEndName,
+                bin_distribute_ratio_name=binDistributeRatioName,
+            ),
+            session=self._session,
+        )
+
     def unpivot(
         self,
         ids: Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]],
@@ -1708,46 +1779,9 @@ class DataFrame(ParentDataFrame):
                     },
                 )
 
-        if not isinstance(probabilities, (list, tuple)):
-            raise PySparkTypeError(
-                errorClass="NOT_EXPECTED_TYPE",
-                messageParameters={
-                    "arg_name": "probabilities",
-                    "expected_type": "list or tuple",
-                    "arg_type": type(probabilities).__name__,
-                },
-            )
-        if isinstance(probabilities, tuple):
-            probabilities = list(probabilities)
-        for p in probabilities:
-            if not isinstance(p, (float, int)) or p < 0 or p > 1:
-                raise PySparkTypeError(
-                    errorClass="NOT_EXPECTED_TYPE",
-                    messageParameters={
-                        "arg_name": "probabilities",
-                        "expected_type": "list[float, int]",
-                        "arg_type": type(p).__name__,
-                    },
-                )
+        probabilities = _validate_approx_quantile_probabilities(probabilities)
 
-        if not isinstance(relativeError, (float, int)):
-            raise PySparkTypeError(
-                errorClass="NOT_EXPECTED_TYPE",
-                messageParameters={
-                    "expected_type": "float or int",
-                    "arg_name": "relativeError",
-                    "arg_type": type(relativeError).__name__,
-                },
-            )
-        if relativeError < 0:
-            raise PySparkValueError(
-                errorClass="NEGATIVE_VALUE",
-                messageParameters={
-                    "arg_name": "relativeError",
-                    "arg_value": str(relativeError),
-                },
-            )
-        relativeError = float(relativeError)
+        relativeError = _validate_approx_quantile_relative_error(relativeError)
         table, _ = DataFrame(
             plan.StatApproxQuantile(
                 child=self._plan,
@@ -2417,26 +2451,41 @@ class DataFrame(ParentDataFrame):
         return DataFrame(plan.Offset(child=self._plan, offset=num), session=self._session)
 
     def checkpoint(self, eager: bool = True) -> ParentDataFrame:
-        cmd = plan.Checkpoint(child=self._plan, local=False, eager=eager)
+        relation_id = str(uuid.uuid4())
+        cmd = plan.Checkpoint(
+            child=self._plan,
+            local=False,
+            eager=eager,
+            relation_id=relation_id,
+        )
         _, properties, self._execution_info = self._session.client.execute_command(
             cmd.command(self._session.client)
         )
-        assert "checkpoint_command_result" in properties
-        checkpointed = properties["checkpoint_command_result"]
-        assert isinstance(checkpointed._plan, plan.CachedRemoteRelation)
-        return checkpointed
+        returned_relation_id = properties["checkpoint_command_result"]
+        return DataFrame(
+            plan=plan.CachedRemoteRelation(returned_relation_id, self._session),
+            session=self._session,
+        )
 
     def localCheckpoint(
         self, eager: bool = True, storageLevel: Optional[StorageLevel] = None
     ) -> ParentDataFrame:
-        cmd = plan.Checkpoint(child=self._plan, local=True, eager=eager, storage_level=storageLevel)
+        relation_id = str(uuid.uuid4())
+        cmd = plan.Checkpoint(
+            child=self._plan,
+            local=True,
+            eager=eager,
+            storage_level=storageLevel,
+            relation_id=relation_id,
+        )
         _, properties, self._execution_info = self._session.client.execute_command(
             cmd.command(self._session.client)
         )
-        assert "checkpoint_command_result" in properties
-        checkpointed = properties["checkpoint_command_result"]
-        assert isinstance(checkpointed._plan, plan.CachedRemoteRelation)
-        return checkpointed
+        returned_relation_id = properties["checkpoint_command_result"]
+        return DataFrame(
+            plan=plan.CachedRemoteRelation(returned_relation_id, self._session),
+            session=self._session,
+        )
 
     def toJSON(self) -> ParentDataFrame:
         return self.select(F.to_json(F.struct(F.col("*"))).alias("value"))
