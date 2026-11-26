@@ -126,7 +126,11 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       val paramName = ctx.namedParameterMarker().simpleIdentifier().getText
       val startIndex = ctx.getStart.getStartIndex
       val stopIndex = ctx.getStop.getStopIndex + 1
-      recordNamedParameter(paramName, startIndex, stopIndex, optional = ctx.optionalMarker != null)
+      recordNamedParameter(
+        paramName,
+        startIndex,
+        stopIndex,
+        optional = ctx.optionalMarker != null)
 
       null // Return value not used
     }
@@ -196,11 +200,13 @@ class SubstituteParmsAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
 
       val precedingParameterEnd = ctx.col.getStop.getStopIndex + 1
       if (parameterEnds.contains(precedingParameterEnd) &&
-          ctx.path.getStart.getTokenIndex == ctx.path.getStop.getTokenIndex) {
+        ctx.path.getStart.getTokenIndex == ctx.path.getStop.getTokenIndex) {
         val startIndex = ctx.COLON().getSymbol.getStartIndex
         val stopIndex = ctx.path.getStop.getStopIndex + 1
         conditionalNamedParamLocations += ConditionalNamedParameterLocation(
-          ctx.path.getText, ParameterLocation(startIndex, stopIndex), precedingParameterEnd)
+          ctx.path.getText,
+          ParameterLocation(startIndex, stopIndex),
+          precedingParameterEnd)
         parameterEnds += stopIndex
       }
 
@@ -309,8 +315,9 @@ case class ParameterLocationInfo(
     hasOptionalReferences: Boolean = false,
     conditionalNamedParameterLocations: List[ConditionalNamedParameterLocation] = Nil) {
 
-  def isEmpty: Boolean = namedParameterLocations.isEmpty && positionalParameterLocations.isEmpty &&
-    conditionalNamedParameterLocations.isEmpty
+  def isEmpty: Boolean =
+    namedParameterLocations.isEmpty && positionalParameterLocations.isEmpty &&
+      conditionalNamedParameterLocations.isEmpty
   def nonEmpty: Boolean = !isEmpty
   def totalCount: Int =
     namedParameterLocations.values.map(_.size).sum + positionalParameterLocations.size +
