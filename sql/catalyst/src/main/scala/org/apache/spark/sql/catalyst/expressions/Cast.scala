@@ -1393,6 +1393,8 @@ case class Cast(
       b => CastUtils.floatToShortExact(b.asInstanceOf[Float])
     case DoubleType if ansiEnabled =>
       b => CastUtils.doubleToShortExact(b.asInstanceOf[Double])
+    case _: DecimalType if ansiEnabled =>
+      b => b.asInstanceOf[Decimal].roundToShort()
     case x: NumericType if ansiEnabled =>
       val exactNumeric = PhysicalNumericType.exactNumeric(x)
       b =>
@@ -1459,6 +1461,8 @@ case class Cast(
       b => CastUtils.floatToByteExact(b.asInstanceOf[Float])
     case DoubleType if ansiEnabled =>
       b => CastUtils.doubleToByteExact(b.asInstanceOf[Double])
+    case _: DecimalType if ansiEnabled =>
+      b => b.asInstanceOf[Decimal].roundToByte()
     case x: NumericType if ansiEnabled =>
       val exactNumeric = PhysicalNumericType.exactNumeric(x)
       b =>
