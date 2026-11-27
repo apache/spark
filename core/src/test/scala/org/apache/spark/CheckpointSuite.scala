@@ -17,15 +17,19 @@
 
 package org.apache.spark
 
-import java.io.File
+import java.io.{File, FilterOutputStream, IOException}
 import java.net.URI
+import java.nio.ByteBuffer
 import java.util.Properties
+import java.util.zip.CRC32
 
 import scala.reflect.ClassTag
 
-import org.apache.hadoop.fs.{FileAlreadyExistsException, LocalFileSystem, Path, RawLocalFileSystem}
+import org.apache.hadoop.fs.{FileAlreadyExistsException, FileStatus, FileSystem, FSDataOutputStream, LocalFileSystem, Path, RawLocalFileSystem}
+import org.apache.hadoop.fs.permission.FsPermission
+import org.apache.hadoop.util.Progressable
 
-import org.apache.spark.internal.config.CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME
+import org.apache.spark.internal.config.{CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME, CHECKPOINT_VERIFY_PARTITION_COUNT_ENABLED}
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.memory.TaskMemoryManager
@@ -791,6 +795,337 @@ class CheckpointStorageSuite extends SparkFunSuite with LocalSparkContext {
         parameters = Map("path" -> rddPath.toString))
     }
   }
+
+  // SPARK-58883: truncated checkpoint directory (trailing part-* file deleted) should be
+  // detected when reading back via SparkContext.checkpointFile.
+  test("SPARK-58883: reading a truncated checkpoint directory throws an error") {
+    withTempDir { checkpointDir =>
+      val conf = new SparkConf().set(UI_ENABLED.key, "false")
+      sc = new SparkContext("local", "test", conf)
+      sc.setCheckpointDir(checkpointDir.toString)
+      val rdd = sc.makeRDD(1 to 20, numSlices = 4)
+      rdd.checkpoint()
+      rdd.collect()
+
+      val checkpointPath = new Path(rdd.getCheckpointFile.get)
+      val fs = checkpointPath.getFileSystem(sc.hadoopConfiguration)
+
+      // Delete the last partition file; the remaining files are still contiguous so the
+      // old contiguity check would pass silently and return a 3-partition RDD.
+      val lastPartFile = new Path(checkpointPath, "part-00003")
+      assert(fs.exists(lastPartFile), "expected part-00003 to exist before deletion")
+      fs.delete(lastPartFile, false)
+
+      // Reading back should now throw because _num_partitions records the original count.
+      val recoveredRDD = sc.checkpointFile[Int](rdd.getCheckpointFile.get)
+      checkError(
+        exception = intercept[SparkException](recoveredRDD.partitions),
+        condition = "CHECKPOINT_DIRECTORY_PARTITION_COUNT_MISMATCH.MISSING_FILES",
+        sqlState = Some("58030"),
+        parameters = Map(
+          "path" -> rdd.getCheckpointFile.get,
+          "expected" -> "4",
+          "found" -> "3"))
+
+      // With the config disabled, the same truncated directory should load silently.
+      sc.conf.set(CHECKPOINT_VERIFY_PARTITION_COUNT_ENABLED, false)
+      try {
+        val suppressedRDD = sc.checkpointFile[Int](rdd.getCheckpointFile.get)
+        assert(suppressedRDD.partitions.length === 3)
+      } finally {
+        sc.conf.set(CHECKPOINT_VERIFY_PARTITION_COUNT_ENABLED, true)
+      }
+    }
+  }
+
+  test("SPARK-58883: reading a checkpoint directory with extra partition files throws an error") {
+    withTempDir { checkpointDir =>
+      val conf = new SparkConf().set(UI_ENABLED.key, "false")
+      sc = new SparkContext("local", "test", conf)
+      sc.setCheckpointDir(checkpointDir.toString)
+      val rdd = sc.makeRDD(1 to 20, numSlices = 4)
+      rdd.checkpoint()
+      rdd.collect()
+
+      val checkpointPath = new Path(rdd.getCheckpointFile.get)
+      val fs = checkpointPath.getFileSystem(sc.hadoopConfiguration)
+
+      // Add a contiguous part-00004 that the checkpoint never wrote. The contiguity check
+      // still passes, so only the recorded count can reject it, and the mismatch must be
+      // reported as extra files rather than as truncation. A regression from != to < in the
+      // comparison would leave this directory accepted with 5 partitions.
+      val extraPartFile = new Path(checkpointPath, "part-00004")
+      assert(!fs.exists(extraPartFile), "expected part-00004 not to exist before the copy")
+      writeAllBytes(fs, extraPartFile, readAllBytes(fs, new Path(checkpointPath, "part-00003")))
+
+      val recoveredRDD = sc.checkpointFile[Int](rdd.getCheckpointFile.get)
+      checkError(
+        exception = intercept[SparkException](recoveredRDD.partitions),
+        condition = "CHECKPOINT_DIRECTORY_PARTITION_COUNT_MISMATCH.UNEXPECTED_FILES",
+        sqlState = Some("58030"),
+        parameters = Map(
+          "path" -> rdd.getCheckpointFile.get,
+          "expected" -> "4",
+          "found" -> "5"))
+
+      // With the config disabled, all 5 part files load as-is.
+      sc.conf.set(CHECKPOINT_VERIFY_PARTITION_COUNT_ENABLED, false)
+      try {
+        val suppressedRDD = sc.checkpointFile[Int](rdd.getCheckpointFile.get)
+        assert(suppressedRDD.partitions.length === 5)
+      } finally {
+        sc.conf.set(CHECKPOINT_VERIFY_PARTITION_COUNT_ENABLED, true)
+      }
+    }
+  }
+
+  test("SPARK-58883: checkpoint directory without _num_partitions is read without error") {
+    // Backward compatibility: a checkpoint written before SPARK-58883 has no _num_partitions
+    // file. Removing it must not prevent the RDD from being read.
+    withTempDir { checkpointDir =>
+      val conf = new SparkConf().set(UI_ENABLED.key, "false")
+      sc = new SparkContext("local", "test", conf)
+      sc.setCheckpointDir(checkpointDir.toString)
+      val rdd = sc.makeRDD(1 to 20, numSlices = 4)
+      rdd.checkpoint()
+      rdd.collect()
+
+      val checkpointPath = new Path(rdd.getCheckpointFile.get)
+      val fs = checkpointPath.getFileSystem(sc.hadoopConfiguration)
+
+      // Remove the metadata file to simulate a pre-SPARK-58883 checkpoint.
+      val countFile = new Path(checkpointPath, "_num_partitions")
+      assert(fs.exists(countFile), "expected _num_partitions to exist before deletion")
+      fs.delete(countFile, false)
+
+      // Must recover normally with all 4 partitions and correct data, and silently: an absent
+      // file is the expected state of a pre-upgrade directory, not a corrupted one, so it must
+      // not log the inactive-check warning on every read.
+      val logAppender = new LogAppender("pre-SPARK-58883 checkpoint directory")
+      withLogAppender(logAppender,
+          loggerNames = Seq(classOf[ReliableCheckpointRDD[_]].getName),
+          level = Some(org.apache.logging.log4j.Level.WARN)) {
+        val recovered = sc.checkpointFile[Int](rdd.getCheckpointFile.get)
+        assert(recovered.partitions.length === 4)
+        assert(recovered.collect().sorted === (1 to 20).toArray)
+      }
+      val warnings = logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
+      assert(warnings.isEmpty, s"reading a directory without _num_partitions warned: $warnings")
+    }
+  }
+
+  test("SPARK-58883: _num_partitions is written only after the read-back check passes") {
+    // On the write path, the read-back in writeRDDToCheckpointDirectory compares the new RDD's
+    // partition count against the original's and reports a mismatch with the SPARK-58770 hint
+    // (the usual cause is a checkpoint directory not shared by the driver and the executors).
+    // The count file must be written after that check, otherwise the read-back would find it
+    // first and report lost trailing files instead, hiding that diagnosis.
+    withTempDir { checkpointDir =>
+      val conf = new SparkConf()
+        .set("spark.hadoop.fs.file.impl", classOf[LastPartFileHidingFilesystem].getName)
+        .set("spark.hadoop.fs.file.impl.disable.cache", "true")
+        .set(UI_ENABLED.key, "false")
+      sc = new SparkContext("local", "test", conf)
+      sc.setCheckpointDir(checkpointDir.toString)
+      val rdd = sc.makeRDD(1 to 20, numSlices = 4)
+      rdd.checkpoint()
+
+      val e = intercept[SparkException](rdd.collect())
+      assert(e.getCondition === "CHECKPOINT_RDD_PARTITION_COUNT_MISMATCH")
+      assert(e.getMessageParameters.get("originalRDDLength") === "4")
+      assert(e.getMessageParameters.get("newRDDLength") === "3")
+
+      // The check failed before the count was recorded, so no _num_partitions file exists.
+      val checkpointPath = new Path(checkpointDir.toString)
+      val fs = checkpointPath.getFileSystem(sc.hadoopConfiguration)
+      val rddDirs = fs.listStatus(checkpointPath).flatMap(d => fs.listStatus(d.getPath))
+        .map(_.getPath).filter(_.getName.startsWith("rdd-"))
+      assert(rddDirs.length === 1)
+      assert(!fs.exists(new Path(rddDirs.head, "_num_partitions")))
+    }
+  }
+
+  test("SPARK-58883: corrupted _num_partitions file is tolerated") {
+    withTempDir { checkpointDir =>
+      val conf = new SparkConf().set(UI_ENABLED.key, "false")
+      sc = new SparkContext("local", "test", conf)
+      sc.setCheckpointDir(checkpointDir.toString)
+      val rdd = sc.makeRDD(1 to 20, numSlices = 4)
+      rdd.checkpoint()
+      rdd.collect()
+
+      val checkpointPath = new Path(rdd.getCheckpointFile.get)
+      val fs = checkpointPath.getFileSystem(sc.hadoopConfiguration)
+
+      val countFile = new Path(checkpointPath, "_num_partitions")
+      assert(fs.exists(countFile), "expected _num_partitions to exist before corruption")
+      val originalBytes = readAllBytes(fs, countFile)
+      // Pin the version-1 layout independently of the writer: 1-byte version, 4-byte big-endian
+      // count, 8-byte big-endian CRC32 of the preceding 5 bytes. A change to any field must bump
+      // the version rather than pass silently because the paired reader was changed with it.
+      val expectedBytes = Array[Byte](
+        0x01, // format version
+        0x00, 0x00, 0x00, 0x04, // partition count 4
+        0x00, 0x00, 0x00, 0x00, 0xfc.toByte, 0x2f, 0x1a, 0xb4.toByte) // CRC32 of 0x0100000004
+      assert(originalBytes === expectedBytes)
+      assert(encodePartitionCount(version = 1, count = 4) === expectedBytes)
+
+      // A corrupted file must not prevent recovery, and a WARN must be logged to confirm
+      // the check ran and was suppressed, not silently skipped.
+      def assertTolerated(description: String)(corrupt: => Unit): Unit = {
+        corrupt
+        val logAppender = new LogAppender(s"corrupted _num_partitions: $description")
+        withLogAppender(logAppender,
+            loggerNames = Seq(classOf[ReliableCheckpointRDD[_]].getName),
+            level = Some(org.apache.logging.log4j.Level.WARN)) {
+          val recovered = sc.checkpointFile[Int](rdd.getCheckpointFile.get)
+          assert(recovered.partitions.length === 4, description)
+          assert(recovered.collect().sorted === (1 to 20).toArray, description)
+        }
+        assert(logAppender.loggingEvents.exists(
+          _.getMessage.getFormattedMessage.contains("truncation detection will be inactive")),
+          description)
+      }
+
+      // Short garbage payload: fails parsing before any count is read.
+      assertTolerated("short garbage payload") {
+        writeAllBytes(fs, countFile, Array[Byte](0xff.toByte, 0xfe.toByte))
+      }
+
+      // Valid layout, corrupted count: the 4 count bytes are rewritten to another valid Int (5)
+      // while the version and checksum are left intact. Without the checksum this would read
+      // back as an authoritative count of 5 and raise a false
+      // CHECKPOINT_DIRECTORY_PARTITION_COUNT_MISMATCH against the 4 files present; the checksum
+      // mismatch must send it down the tolerated path.
+      assertTolerated("valid layout with corrupted count bytes") {
+        val corrupted = originalBytes.clone()
+        ByteBuffer.wrap(corrupted).putInt(1, 5)
+        writeAllBytes(fs, countFile, corrupted)
+      }
+
+      // Valid layout, trailing bytes appended after a checksum that still verifies.
+      assertTolerated("trailing bytes") {
+        writeAllBytes(fs, countFile, originalBytes :+ 0.toByte)
+      }
+
+      // Internally consistent payloads that the reader must still reject: the checksum verifies,
+      // so only the version and count validation stand between them and a false mismatch.
+      assertTolerated("checksum-valid unsupported version") {
+        writeAllBytes(fs, countFile, encodePartitionCount(version = 2, count = 4))
+      }
+      assertTolerated("checksum-valid negative count") {
+        writeAllBytes(fs, countFile, encodePartitionCount(version = 1, count = -1))
+      }
+
+      // Control: restoring the original payload makes the count authoritative again, and a real
+      // trailing-file loss is still reported rather than tolerated.
+      writeAllBytes(fs, countFile, originalBytes)
+      assert(fs.delete(new Path(checkpointPath, "part-00003"), false))
+      checkError(
+        exception = intercept[SparkException](
+          sc.checkpointFile[Int](rdd.getCheckpointFile.get).partitions),
+        condition = "CHECKPOINT_DIRECTORY_PARTITION_COUNT_MISMATCH.MISSING_FILES",
+        sqlState = Some("58030"),
+        parameters = Map(
+          "path" -> rdd.getCheckpointFile.get,
+          "expected" -> "4",
+          "found" -> "3"))
+    }
+  }
+
+  private def readAllBytes(fs: FileSystem, path: Path): Array[Byte] = {
+    val in = fs.open(path)
+    try {
+      in.readAllBytes()
+    } finally {
+      in.close()
+    }
+  }
+
+  private def writeAllBytes(fs: FileSystem, path: Path, bytes: Array[Byte]): Unit = {
+    val out = fs.create(path, true)
+    try {
+      out.write(bytes)
+    } finally {
+      out.close()
+    }
+  }
+
+  // Encodes a _num_partitions payload (SPARK-58883) independently of ReliableCheckpointRDD, so
+  // tests can build checksum-valid inputs for the reader's rejection branches.
+  private def encodePartitionCount(version: Byte, count: Int): Array[Byte] = {
+    val header = ByteBuffer.allocate(5).put(version).putInt(count).array()
+    val crc = new CRC32()
+    crc.update(header)
+    ByteBuffer.allocate(13).put(header).putLong(crc.getValue).array()
+  }
+
+  // SPARK-58883: the _num_partitions file is best effort. A failure to publish it must not fail
+  // the action that triggered checkpointing (the partition files are already committed by then);
+  // it must only log the inactive-check warning. When the write fails after `create`, a partial
+  // file is left behind; its fixed-length format lets the reader reject it, so the directory
+  // still reads back with detection inactive.
+  Seq(
+    ("create throws", classOf[PartitionCountCreateFailingFilesystem], false),
+    ("write throws after create", classOf[PartitionCountWriteFailingFilesystem], true)
+  ).foreach { case (failure, fsClass, partialFileLeft) =>
+    test(s"SPARK-58883: checkpointing succeeds when publishing _num_partitions fails " +
+        s"($failure)") {
+      withTempDir { checkpointDir =>
+        val conf = new SparkConf()
+          .set("spark.hadoop.fs.file.impl", fsClass.getName)
+          .set("spark.hadoop.fs.file.impl.disable.cache", "true")
+          .set(UI_ENABLED.key, "false")
+        sc = new SparkContext("local", "test", conf)
+        sc.setCheckpointDir(checkpointDir.toString)
+        val rdd = sc.makeRDD(1 to 20, numSlices = 4)
+        rdd.checkpoint()
+
+        val writeAppender = new LogAppender(s"_num_partitions publication: $failure")
+        withLogAppender(writeAppender,
+            loggerNames = Seq(classOf[ReliableCheckpointRDD[_]].getName),
+            level = Some(org.apache.logging.log4j.Level.WARN)) {
+          assert(rdd.collect().sorted === (1 to 20).toArray)
+        }
+        assert(rdd.isCheckpointed)
+        val writeWarnings = writeAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
+        assert(writeWarnings.exists(_.contains("truncation detection will be inactive")), failure)
+
+        val checkpointPath = new Path(rdd.getCheckpointFile.get)
+        val fs = checkpointPath.getFileSystem(sc.hadoopConfiguration)
+        val countFile = new Path(checkpointPath, "_num_partitions")
+        assert(fs.exists(countFile) === partialFileLeft, failure)
+
+        // The directory reads back with detection inactive: silently when there is no file, and
+        // with the reader rejecting the partial file (and warning) when there is one.
+        val readAppender = new LogAppender(s"_num_partitions read-back: $failure")
+        withLogAppender(readAppender,
+            loggerNames = Seq(classOf[ReliableCheckpointRDD[_]].getName),
+            level = Some(org.apache.logging.log4j.Level.WARN)) {
+          val recovered = sc.checkpointFile[Int](rdd.getCheckpointFile.get)
+          assert(recovered.partitions.length === 4)
+          assert(recovered.collect().sorted === (1 to 20).toArray)
+        }
+        val readWarnings = readAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
+        assert(
+          readWarnings.exists(_.contains("truncation detection will be inactive")) ===
+            partialFileLeft,
+          s"$failure: $readWarnings")
+      }
+    }
+  }
+}
+
+/**
+ * A filesystem whose directory listings omit the last part file of a four-partition checkpoint
+ * (SPARK-58883). The file is written and readable; only `listStatus` hides it, which is what the
+ * read-back in `writeRDDToCheckpointDirectory` consults, so the write path sees fewer part files
+ * than the RDD has partitions.
+ */
+class LastPartFileHidingFilesystem extends LocalFileSystem {
+  override def listStatus(f: Path): Array[FileStatus] = {
+    super.listStatus(f).filterNot(_.getPath.getName == "part-00003")
+  }
 }
 
 /**
@@ -819,5 +1154,57 @@ class FileAlreadyExistsRenameFileSystem extends RawLocalFileSystem {
         s"Failed to rename $src to $dst; destination file exists")
     }
     super.rename(src, dst)
+  }
+}
+
+/**
+ * A filesystem that throws when `ReliableCheckpointRDD` creates the `_num_partitions` metadata
+ * file (SPARK-58883). Partition files and everything else are written normally, so the test
+ * isolates the best-effort metadata publication path. All `create` overloads of `FileSystem`
+ * funnel into this one.
+ */
+class PartitionCountCreateFailingFilesystem extends LocalFileSystem {
+  override def create(
+      f: Path,
+      permission: FsPermission,
+      overwrite: Boolean,
+      bufferSize: Int,
+      replication: Short,
+      blockSize: Long,
+      progress: Progressable): FSDataOutputStream = {
+    if (f.getName == "_num_partitions") {
+      throw new IOException(s"Injected failure creating $f")
+    }
+    super.create(f, permission, overwrite, bufferSize, replication, blockSize, progress)
+  }
+}
+
+/**
+ * A filesystem whose output stream for the `_num_partitions` file throws on the first write
+ * (SPARK-58883). Unlike [[PartitionCountCreateFailingFilesystem]], `create` succeeds, so an empty
+ * partial file is left behind for the reader to reject.
+ */
+class PartitionCountWriteFailingFilesystem extends LocalFileSystem {
+  override def create(
+      f: Path,
+      permission: FsPermission,
+      overwrite: Boolean,
+      bufferSize: Int,
+      replication: Short,
+      blockSize: Long,
+      progress: Progressable): FSDataOutputStream = {
+    val out = super.create(f, permission, overwrite, bufferSize, replication, blockSize, progress)
+    if (f.getName == "_num_partitions") {
+      new FSDataOutputStream(new FilterOutputStream(out) {
+        override def write(b: Int): Unit = {
+          throw new IOException(s"Injected failure writing $f")
+        }
+        override def write(b: Array[Byte], off: Int, len: Int): Unit = {
+          throw new IOException(s"Injected failure writing $f")
+        }
+      }, null)
+    } else {
+      out
+    }
   }
 }

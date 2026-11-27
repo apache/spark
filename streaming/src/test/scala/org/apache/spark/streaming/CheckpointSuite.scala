@@ -372,6 +372,31 @@ class CheckpointSuite extends TestSuiteBase with LocalStreamingContext with DStr
     } finally {
       System.clearProperty("spark.master")
     }
+
+    // SPARK-58883: the checkpoint partition-count check can be switched off for recovery. The
+    // checkpointed conf has the default, so the new value must be reloaded from the environment.
+    // The SPARK-6331 block above leaves its context running, and `SparkContext.getOrCreate` would
+    // reuse it instead of creating one from the recovered conf.
+    ssc.stop()
+    val verifyKey = CHECKPOINT_VERIFY_PARTITION_COUNT_ENABLED.key
+    assert(!newCp.createSparkConf().contains(verifyKey))
+    try {
+      System.setProperty(verifyKey, "false")
+      assert(newCp.createSparkConf().get(verifyKey) === "false")
+
+      // The value comes from the current launch only: the recovered conf has the false, and the
+      // next checkpoint saves it, but a restart without the flag must not inherit it.
+      ssc = new StreamingContext(null, newCp, null)
+      assert(ssc.conf.get(verifyKey) === "false")
+      val recoveredCp = new Checkpoint(ssc, Time(2000))
+      ssc.stop()
+      ssc = null
+      assert(recoveredCp.sparkConfPairs.toMap.get(verifyKey) === Some("false"))
+      System.clearProperty(verifyKey)
+      assert(!recoveredCp.createSparkConf().contains(verifyKey))
+    } finally {
+      System.clearProperty(verifyKey)
+    }
   }
 
   // This tests if "spark.driver.host" and "spark.driver.port" is set by user, can be recovered
