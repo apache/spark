@@ -322,6 +322,15 @@ trait Row extends Serializable {
     getAs[org.apache.spark.sql.types.Geography](i)
 
   /**
+   * Returns the value at position i of file type as org.apache.spark.sql.types.FileRef.
+   *
+   * @throws ClassCastException
+   *   when data type does not match.
+   */
+  def getFile(i: Int): org.apache.spark.sql.types.FileRef =
+    getAs[org.apache.spark.sql.types.FileRef](i)
+
+  /**
    * Returns the value at position i of date type as java.sql.Date.
    *
    * @throws ClassCastException

@@ -1397,6 +1397,216 @@ class JDBCSuite extends SharedSparkSession {
     assert(msSqlServer.compileExpression(bareIsNull).get === "\"a\" IS NULL")
   }
 
+  test("SPARK-58372: fractional to integral cast pushdown is wrapped in the dialect truncating " +
+    "function when needed") {
+    val cast = new V2Cast(FieldReference("a"), DoubleType, IntegerType)
+    val decimalCast = new V2Cast(FieldReference("a"), DecimalType(10, 2), LongType)
+
+    // A dialect that doesn't say how to truncate keeps the cast in Spark.
+    assert(JdbcDialects.get("jdbc:").compileExpression(cast).isEmpty)
+    // These databases' casts already truncate.
+    Seq("jdbc:db2://127.0.0.1/db", "jdbc:derby:memory:db", "jdbc:teradata://127.0.0.1/db")
+      .foreach { url =>
+        assert(JdbcDialects.get(url).compileExpression(cast).get === """CAST("a" AS INTEGER)""")
+      }
+    assert(JdbcDialects.get("jdbc:databricks://127.0.0.1/db").compileExpression(cast).get ===
+      "CAST(`a` AS INTEGER)")
+
+    assert(JdbcDialects.get("jdbc:postgresql://127.0.0.1/db").compileExpression(cast).get ===
+      """CAST(TRUNC("a") AS INTEGER)""")
+    assert(JdbcDialects.get("jdbc:oracle://127.0.0.1/db").compileExpression(cast).get ===
+      """CAST(TRUNC("a") AS NUMBER(10))""")
+    assert(JdbcDialects.get("jdbc:snowflake://127.0.0.1/db").compileExpression(cast).get ===
+      """CAST(TRUNC("a") AS INTEGER)""")
+    assert(JdbcDialects.get("jdbc:mysql://127.0.0.1/db").compileExpression(decimalCast).get ===
+      "CAST(TRUNCATE(`a`, 0) AS SIGNED)")
+    // SQL Server rounds only MONEY and SMALLMONEY, which Spark reads as DECIMAL.
+    assert(JdbcDialects.get("jdbc:sqlserver://127.0.0.1/db").compileExpression(cast).get ===
+      """CAST("a" AS INTEGER)""")
+    assert(JdbcDialects.get("jdbc:sqlserver://127.0.0.1/db").compileExpression(decimalCast).get ===
+      """CAST(ROUND("a", 0, 1) AS BIGINT)""")
+
+    // The legacy conf restores the previous pushed SQL, including Spark's type names.
+    withSQLConf(SQLConf.LEGACY_JDBC_ROUND_INTEGRAL_CAST_PUSHDOWN.key -> "true") {
+      assert(JdbcDialects.get("jdbc:postgresql://127.0.0.1/db").compileExpression(cast).get ===
+        """CAST("a" AS integer)""")
+      assert(JdbcDialects.get("jdbc:oracle://127.0.0.1/db").compileExpression(cast).get ===
+        """CAST("a" AS NUMBER(10))""")
+      assert(JdbcDialects.get("jdbc:snowflake://127.0.0.1/db").compileExpression(cast).get ===
+        """CAST("a" AS INTEGER)""")
+      assert(JdbcDialects.get("jdbc:mysql://127.0.0.1/db").compileExpression(cast).get ===
+        "CAST(`a` AS INTEGER)")
+      assert(JdbcDialects.get("jdbc:mysql://127.0.0.1/db").compileExpression(decimalCast).get ===
+        "CAST(`a` AS BIGINT)")
+      assert(JdbcDialects.get("jdbc:sqlserver://127.0.0.1/db").compileExpression(cast).get ===
+        """CAST("a" AS integer)""")
+      val fromTimestamp = new V2Cast(FieldReference("a"), TimestampType, LongType)
+      assert(JdbcDialects.get("jdbc:sqlserver://127.0.0.1/db").compileExpression(fromTimestamp)
+        .get === """CAST("a" AS long)""")
+    }
+  }
+
+  test("SPARK-58372: fractional to integral casts truncate through AggregatedDialect") {
+    val custom = new JdbcDialect {
+      override def canHandle(url: String): Boolean = url.startsWith("jdbc:postgresql")
+    }
+    val cast = new V2Cast(FieldReference("a"), DoubleType, IntegerType)
+    Seq(
+      new AggregatedDialect(List(custom, PostgresDialect())),
+      new AggregatedDialect(List(PostgresDialect(), custom))
+    ).foreach { d =>
+      assert(d.compileExpression(cast).get === """CAST(TRUNC("a") AS INTEGER)""", s"dialect=$d")
+    }
+    assert(new AggregatedDialect(List(custom, NoopDialect)).compileExpression(cast).isEmpty)
+    assert(new AggregatedDialect(List(custom, DB2Dialect())).compileExpression(cast).get ===
+      """CAST("a" AS INTEGER)""")
+
+    val fromTimestamp = new V2Cast(FieldReference("a"), TimestampType, LongType)
+    Seq(
+      new AggregatedDialect(List(custom, DatabricksDialect())),
+      new AggregatedDialect(List(DatabricksDialect(), custom))
+    ).foreach { d =>
+      assert(d.castsDatetimeToNumericLikeSpark, s"dialect=$d")
+      assert(d.compileExpression(fromTimestamp).isDefined, s"dialect=$d")
+    }
+    Seq(
+      new AggregatedDialect(List(custom, PostgresDialect())),
+      new AggregatedDialect(List(custom, NoopDialect))
+    ).foreach { d =>
+      assert(!d.castsDatetimeToNumericLikeSpark, s"dialect=$d")
+      assert(d.compileExpression(fromTimestamp).isEmpty, s"dialect=$d")
+    }
+  }
+
+  test("SPARK-58372: numeric casts of datetime sources are pushed down only to Databricks") {
+    val casts = for (from <- Seq(TimestampType, TimestampNTZType, DateType, TimeType());
+         to <- Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DecimalType(20, 6)))
+      yield new V2Cast(FieldReference("a"), from, to)
+    Seq("jdbc:", "jdbc:postgresql://127.0.0.1/db", "jdbc:sqlserver://127.0.0.1/db",
+      "jdbc:db2://127.0.0.1/db", "jdbc:oracle://127.0.0.1/db", "jdbc:h2:mem:testdb0",
+      "jdbc:mysql://127.0.0.1/db", "jdbc:snowflake://127.0.0.1/db", "jdbc:derby:memory:db",
+      "jdbc:teradata://127.0.0.1/db"
+    ).foreach { url =>
+      casts.foreach { cast =>
+        assert(JdbcDialects.get(url).compileExpression(cast).isEmpty, s"$url: $cast")
+      }
+    }
+    val databricks = JdbcDialects.get("jdbc:databricks://127.0.0.1/db")
+    casts.foreach(cast => assert(databricks.compileExpression(cast).isDefined, s"$cast"))
+    assert(databricks.compileExpression(new V2Cast(FieldReference("a"), TimestampType, LongType))
+      .get === "CAST(`a` AS long)")
+  }
+
+  test("SPARK-58372: H2 truncates fractional to integral casts") {
+    val h2 = JdbcDialects.get("jdbc:h2:mem:testdb0")
+    Seq(DoubleType, DecimalType(10, 2)).foreach { from =>
+      val cast = new V2Cast(FieldReference("a"), from, IntegerType)
+      assert(h2.compileExpression(cast).get === """CAST(TRUNC("a") AS INTEGER)""")
+      withSQLConf(SQLConf.LEGACY_JDBC_ROUND_INTEGRAL_CAST_PUSHDOWN.key -> "true") {
+        assert(h2.compileExpression(cast).get === """CAST("a" AS INTEGER)""")
+      }
+    }
+  }
+
+  test("SPARK-58372: only casts that drop a fraction are truncated") {
+    val postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
+    val oracle = JdbcDialects.get("jdbc:oracle://127.0.0.1/db")
+    def cast(from: DataType, to: DataType): V2Cast = new V2Cast(FieldReference("a"), from, to)
+
+    // A DECIMAL without a scale has no fraction to drop.
+    assert(postgres.compileExpression(cast(DecimalType(10, 0), IntegerType)).get ===
+      """CAST("a" AS INTEGER)""")
+    assert(oracle.compileExpression(cast(DecimalType(19, 0), LongType)).get ===
+      """CAST("a" AS NUMBER(19))""")
+    // A cast to a non-integral type keeps its fraction.
+    assert(postgres.compileExpression(cast(DoubleType, DecimalType(10, 2))).get ===
+      """CAST("a" AS NUMERIC(10,2))""")
+    assert(postgres.compileExpression(cast(DoubleType, StringType)).get ===
+      """CAST("a" AS TEXT)""")
+    assert(postgres.compileExpression(cast(DecimalType(10, 2), IntegerType)).get ===
+      """CAST(TRUNC("a") AS INTEGER)""")
+  }
+
+  test("SPARK-58372: casts between arrays follow the rules for their elements") {
+    val postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
+    def cast(from: DataType, to: DataType): V2Cast = new V2Cast(FieldReference("a"), from, to)
+    val doublesToInts = cast(ArrayType(DoubleType), ArrayType(IntegerType))
+
+    Seq(doublesToInts, cast(ArrayType(DecimalType(10, 2)), ArrayType(LongType)),
+      cast(ArrayType(ArrayType(DoubleType)), ArrayType(ArrayType(IntegerType))),
+      cast(ArrayType(TimestampType), ArrayType(LongType))
+    ).foreach(c => assert(postgres.compileExpression(c).isEmpty, s"$c"))
+    assert(postgres.compileExpression(cast(ArrayType(DecimalType(10, 0)), ArrayType(IntegerType)))
+      .get === """CAST("a" AS INTEGER[])""")
+    assert(postgres.compileExpression(cast(ArrayType(DoubleType), ArrayType(DecimalType(10, 2))))
+      .get === """CAST("a" AS NUMERIC(10,2)[])""")
+    withSQLConf(SQLConf.LEGACY_JDBC_ROUND_INTEGRAL_CAST_PUSHDOWN.key -> "true") {
+      assert(postgres.compileExpression(doublesToInts).get === """CAST("a" AS INTEGER[])""")
+    }
+
+    val castAlreadyTruncates = new JdbcDialect {
+      override def canHandle(url: String): Boolean = false
+      override def getJDBCType(dt: DataType): Option[JdbcType] =
+        Some(JdbcType("INTEGER[]", java.sql.Types.ARRAY))
+      override def truncateFractionalValue(expr: String, from: NumericType): Option[String] =
+        Some(expr)
+    }
+    assert(castAlreadyTruncates.compileExpression(doublesToInts).get ===
+      """CAST("a" AS INTEGER[])""")
+  }
+
+  test("SPARK-58372: fractional casts to unmapped SMALLINT and BIGINT targets use SQL type names") {
+    val decimal = DecimalType(10, 0)
+    val toBigint = new V2Cast(FieldReference("a"), decimal, LongType)
+    Seq("jdbc:", "jdbc:postgresql://127.0.0.1/db", "jdbc:sqlserver://127.0.0.1/db",
+      "jdbc:db2://127.0.0.1/db", "jdbc:derby:memory:db", "jdbc:teradata://127.0.0.1/db"
+    ).foreach { url =>
+      assert(JdbcDialects.get(url).compileExpression(toBigint).get === """CAST("a" AS BIGINT)""")
+    }
+    val toSmallint = new V2Cast(FieldReference("a"), decimal, ShortType)
+    Seq("jdbc:", "jdbc:teradata://127.0.0.1/db").foreach { url =>
+      assert(
+        JdbcDialects.get(url).compileExpression(toSmallint).get === """CAST("a" AS SMALLINT)""")
+    }
+    // Casts from other types keep the previous SQL.
+    Seq(IntegerType, StringType).foreach { from =>
+      val cast = new V2Cast(FieldReference("a"), from, LongType)
+      assert(JdbcDialects.get("jdbc:").compileExpression(cast).get === """CAST("a" AS long)""")
+    }
+  }
+
+  test("SPARK-58372: MySQL pushes fractional casts only from DECIMALs that fit the target") {
+    val mysql = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
+    def compile(from: DataType, to: DataType): Option[String] =
+      mysql.compileExpression(new V2Cast(FieldReference("a"), from, to))
+
+    // (source, target, whether every source value fits the target). BIGINT UNSIGNED is
+    // DECIMAL(20, 0).
+    Seq(
+      (DecimalType(4, 2), ByteType, true), (DecimalType(3, 0), ByteType, false),
+      (DecimalType(6, 2), ShortType, true), (DecimalType(5, 0), ShortType, false),
+      (DecimalType(11, 2), IntegerType, true), (DecimalType(10, 0), IntegerType, false),
+      (DecimalType(18, 0), LongType, true), (DecimalType(20, 2), LongType, true),
+      (DecimalType(19, 0), LongType, false), (DecimalType(20, 0), LongType, false),
+      (DecimalType(38, 10), LongType, false)
+    ).foreach { case (from, to, fits) =>
+      val value = if (from.scale == 0) "`a`" else "TRUNCATE(`a`, 0)"
+      val expected = if (fits) Some(s"CAST($value AS SIGNED)") else None
+      assert(compile(from, to) === expected, s"$from -> $to")
+    }
+    // MariaDB clamps FLOAT and DOUBLE values beyond 64 bits where Spark raises an overflow error.
+    for (from <- Seq(FloatType, DoubleType);
+         to <- Seq(ByteType, ShortType, IntegerType, LongType)) {
+      assert(compile(from, to).isEmpty)
+    }
+    Seq(IntegerType, LongType).foreach(to => assert(compile(TimestampType, to).isEmpty))
+    // Casts from other types keep the previous SQL.
+    Seq(StringType, IntegerType, BooleanType).foreach { from =>
+      assert(compile(from, IntegerType).get === "CAST(`a` AS INTEGER)")
+      assert(compile(from, LongType).get === "CAST(`a` AS BIGINT)")
+    }
+  }
+
   test("SPARK-57988: IS [NOT] NULL parenthesizes IN and other non-comparison predicate operands") {
     val dialect = JdbcDialects.get("jdbc:")
     val h2 = JdbcDialects.get("jdbc:h2:mem:testdb0")
