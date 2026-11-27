@@ -125,7 +125,10 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
         case _: ExternalUserDefinedFunction =>
           throw QueryCompilationErrors.useExternalUDFInJoinConditionUnsupportedError(join.joinType)
         case _: ColumnarUDF =>
-          throw QueryCompilationErrors.useColumnarUDFInJoinConditionUnsupportedError(join.joinType)
+          // The call can read lookup columns only, so the error of a regular join, about a
+          // call over both sides, does not describe it.
+          throw QueryCompilationErrors.unsupportedExternalLookupJoinError(
+            "COLUMNAR_UDF_IN_CONDITION", Map("joinType" -> toSQLStmt(join.joinType.sql)))
         case _ =>
           throw QueryCompilationErrors.usePythonUDFInJoinConditionUnsupportedError(join.joinType)
       }

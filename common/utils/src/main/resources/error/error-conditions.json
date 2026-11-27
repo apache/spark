@@ -1248,6 +1248,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "COLUMNAR_UDF_NOT_SERIALIZABLE" : {
+    "message" : [
+      "The columnar function <name> cannot be serialized, so it cannot be sent to the executors. The function, and everything that its instance holds, must be serializable."
+    ],
+    "sqlState" : "39000"
+  },
   "COLUMNAR_UDF_NO_IMPLEMENTATION" : {
     "message" : [
       "The columnar function <name> has no implementation. Create it with an implementation that Spark runs, or add an implementation for another engine with `withEngineImplementation`."
@@ -1257,6 +1263,12 @@
   "COLUMNAR_UDF_RESULT_IS_ARGUMENT" : {
     "message" : [
       "The columnar function <name> returned one of its argument columns, or a vector inside one. It must return a vector of its own, which Spark closes."
+    ],
+    "sqlState" : "39000"
+  },
+  "COLUMNAR_UDF_RESULT_REUSED" : {
+    "message" : [
+      "The columnar function <name> returned a vector that it had returned before, for another call over the same batch or for the previous batch. Each call must return a new vector, which Spark closes."
     ],
     "sqlState" : "39000"
   },
@@ -2958,6 +2970,11 @@
       "The join cannot be executed as an external lookup join:"
     ],
     "subClass" : {
+      "COLUMNAR_UDF_IN_CONDITION" : {
+        "message" : [
+          "The join condition calls a columnar UDF over lookup columns, which Spark evaluates after the join. That is possible for an inner join only, and the join type is <joinType>."
+        ]
+      },
       "CONFLICTING_JOIN_STRATEGY" : {
         "message" : [
           "The join strategy hint <strategy> cannot be honored by an external lookup join over <relation>. Remove the <strategy> hint."
@@ -2970,7 +2987,7 @@
       },
       "LOOKUP_PLAN" : {
         "message" : [
-          "The lookup side must be a DSv2 table, optionally under projections and filters, which Spark evaluates on the lookup results. They cannot contain Python UDFs, external UDFs, subqueries or non-deterministic expressions: Spark evaluates them on each returned row, so a non-deterministic one could give one stored row different values for different stream rows. No other operator can be between the table and the join."
+          "The lookup side must be a DSv2 table, optionally under projections and filters, which Spark evaluates on the lookup results. They cannot contain Python UDFs, columnar UDFs, external UDFs, subqueries or non-deterministic expressions: Spark evaluates them on each returned row, so a non-deterministic one could give one stored row different values for different stream rows. No other operator can be between the table and the join."
         ]
       },
       "LOOKUP_TABLE_ON_LEFT" : {
@@ -9644,7 +9661,7 @@
       },
       "COLUMNAR_UDF_IN_JOIN_CONDITION" : {
         "message" : [
-          "Columnar UDF over columns of both sides in the condition of a <joinType> join. The condition is the ON clause of the join, or the correlated predicate of an EXISTS, IN or scalar subquery, which is evaluated as such a join."
+          "Columnar UDF over columns of both sides in the condition of the <joinType> join. The condition is the ON clause of the join, or the correlated predicate of an EXISTS, IN or scalar subquery, which is evaluated as such a join."
         ]
       },
       "COMBINATION_QUERY_RESULT_CLAUSES" : {

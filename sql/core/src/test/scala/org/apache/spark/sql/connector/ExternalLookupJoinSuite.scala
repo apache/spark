@@ -51,6 +51,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, ExternalLookupC
 import org.apache.spark.sql.catalyst.trees.TreePattern.LOOKUP_ONLY_RELATION
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.classic.Dataset
+import org.apache.spark.sql.columnar.ColumnarUserDefinedFunction
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryBaseTable,
   InMemoryTableCatalog, MetadataColumn, SupportsMetadataColumns, SupportsRead, Table,
   TableCapability, TableCatalog, TableChange,
@@ -64,6 +65,7 @@ import org.apache.spark.sql.connector.read.{Batch, ExternalLookup, ExternalLooku
   PartitionReader, PartitionReaderFactory, Scan, ScanBuilder, SupportsExternalLookup,
   SupportsPushDownRequiredColumns, SupportsPushDownV2Filters}
 import org.apache.spark.sql.execution.{CoalesceExec, LocalTableScanExec}
+import org.apache.spark.sql.execution.columnar.udf.ShoutFunction
 import org.apache.spark.sql.execution.datasources.{FileFormat, SaveIntoDataSourceCommand}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExternalLookupRelation,
@@ -4581,6 +4583,32 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     // A lookup-side filter is evaluated inside the lookup join, which cannot run a Python UDF, so
     // the join fails when the DataFrame is built.
     val filtered = lookup.filter(pythonUDF(lookup("department")) === "engineering")
+    checkError(
+      exception = intercept[AnalysisException](left.join(filtered, left("id") === filtered("id"))),
+      condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.LOOKUP_PLAN",
+      parameters = Map.empty)
+  }
+
+  test("a columnar UDF over lookup columns in the join condition") {
+    val shout = ColumnarUserDefinedFunction.create(
+      "shout", Seq(StringType), StringType, new ShoutFunction)
+    val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+    val left = streamOf(Seq(1, 2).toDF("id"))
+    val condition =
+      left("id") === lookup("id") && shout(lookup("department")) === "ENGINEERING!"
+
+    // An inner join evaluates it above the lookup join; other join types cannot.
+    checkStream(left.join(lookup, condition), Seq(Row(1, 1, "engineering")))
+    Seq("left_outer" -> "LEFT OUTER", "left_semi" -> "LEFT SEMI").foreach {
+      case (joinType, sqlJoinType) =>
+        checkError(
+          exception = streamFailure[AnalysisException](left.join(lookup, condition, joinType)),
+          condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.COLUMNAR_UDF_IN_CONDITION",
+          parameters = Map("joinType" -> sqlJoinType))
+    }
+    // A lookup-side filter is evaluated inside the lookup join, which cannot run a columnar UDF,
+    // so the join fails when the DataFrame is built.
+    val filtered = lookup.filter(shout(lookup("department")) === "ENGINEERING!")
     checkError(
       exception = intercept[AnalysisException](left.join(filtered, left("id") === filtered("id"))),
       condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.LOOKUP_PLAN",

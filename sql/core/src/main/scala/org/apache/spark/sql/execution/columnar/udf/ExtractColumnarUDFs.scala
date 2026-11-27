@@ -61,7 +61,10 @@ object ExtractColumnarUDFs extends Rule[LogicalPlan] with PredicateHelper {
       }
   }
 
-  private def hasColumnarUDF(e: Expression): Boolean = e.containsPattern(COLUMNAR_UDF)
+  // The pattern of an expression includes the plan of a subquery inside it. The calls of that
+  // plan are evaluated there, so the expressions themselves are searched.
+  private def hasColumnarUDF(e: Expression): Boolean =
+    e.containsPattern(COLUMNAR_UDF) && e.exists(_.isInstanceOf[ColumnarUDF])
 
   // ---------------------------------------------------------------------------------------
   // Calls in a join condition that read both sides

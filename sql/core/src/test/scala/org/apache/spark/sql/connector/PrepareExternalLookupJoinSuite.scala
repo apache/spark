@@ -729,10 +729,11 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
         assert(join.residualCondition.isEmpty)
       case other => fail(s"Expected a filter above a prepared external lookup join: $other")
     }
-    // A left outer join cannot.
+    // A left outer join cannot. The call reads lookup columns only, so the error is not the
+    // one of a call over both sides of a join.
     checkError(
       exception = prepareError(lookupJoin(lookup, condition, LeftOuter)),
-      condition = "UNSUPPORTED_FEATURE.COLUMNAR_UDF_IN_JOIN_CONDITION",
+      condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.COLUMNAR_UDF_IN_CONDITION",
       parameters = Map("joinType" -> "LEFT OUTER"))
   }
 

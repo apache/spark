@@ -3129,16 +3129,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("joinType" -> toSQLStmt(joinTypeName)))
   }
 
-  def columnarUDFNoImplementationError(name: String): Throwable = {
-    new AnalysisException(
-      errorClass = "COLUMNAR_UDF_NO_IMPLEMENTATION",
-      messageParameters = Map("name" -> toSQLId(name)))
-  }
-
   def useExternalUDFInJoinConditionUnsupportedError(joinType: JoinType): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.EXTERNAL_UDF_IN_ON_CLAUSE",
       messageParameters = Map("joinType" -> toSQLStmt(joinType.sql)))
+  }
+
+  def columnarUDFNoImplementationError(name: String): Throwable = {
+    new AnalysisException(
+      errorClass = "COLUMNAR_UDF_NO_IMPLEMENTATION",
+      messageParameters = Map("name" -> toSQLId(name)))
   }
 
   def externalUDFsDisabledError(config: String): SparkUnsupportedOperationException = {

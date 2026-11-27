@@ -639,9 +639,9 @@ object PushDownUtils extends Logging {
 
   /**
    * Whether the data source can be trusted to evaluate `f` in place of Spark: a non-deterministic
-   * expression would not give the same answer twice, and a Python UDF or a subquery cannot be
-   * evaluated by the source at all. Spark will attempt to push only these expressions to the
-   * data source.
+   * expression would not give the same answer twice, and a Python UDF, a columnar UDF or a
+   * subquery cannot be evaluated by the source at all. Spark will attempt to push only these
+   * expressions to the data source.
    *
    * Spark will also call this before dropping a fully pushed runtime filter from the
    * post-scan filters, so that it never removes the only evaluator of a filter that Spark

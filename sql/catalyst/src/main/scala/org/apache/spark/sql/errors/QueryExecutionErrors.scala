@@ -188,13 +188,27 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def columnarUDFNotExecutableError(name: String, kinds: Seq[String]): Throwable = {
     new SparkUnsupportedOperationException(
       errorClass = "COLUMNAR_UDF_NOT_EXECUTABLE",
-      messageParameters = Map("name" -> name, "kinds" -> kinds.mkString("[", ", ", "]")))
+      messageParameters = Map(
+        "name" -> toSQLId(name), "kinds" -> kinds.mkString("[", ", ", "]")))
+  }
+
+  def columnarUDFNotSerializableError(name: String, cause: Throwable): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "COLUMNAR_UDF_NOT_SERIALIZABLE",
+      messageParameters = Map("name" -> toSQLId(name)),
+      cause = cause)
   }
 
   def columnarUDFResultIsArgumentError(name: String): Throwable = {
     new SparkRuntimeException(
       errorClass = "COLUMNAR_UDF_RESULT_IS_ARGUMENT",
-      messageParameters = Map("name" -> name))
+      messageParameters = Map("name" -> toSQLId(name)))
+  }
+
+  def columnarUDFResultReusedError(name: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "COLUMNAR_UDF_RESULT_REUSED",
+      messageParameters = Map("name" -> toSQLId(name)))
   }
 
   def columnarUDFResultTooShortError(name: String, actualRows: Int, expectedRows: Int)
@@ -202,7 +216,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkRuntimeException(
       errorClass = "COLUMNAR_UDF_RESULT_TOO_SHORT",
       messageParameters = Map(
-        "name" -> name,
+        "name" -> toSQLId(name),
         "actualRows" -> actualRows.toString,
         "expectedRows" -> expectedRows.toString))
   }
@@ -212,7 +226,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkRuntimeException(
       errorClass = "COLUMNAR_UDF_RESULT_TYPE_MISMATCH",
       messageParameters = Map(
-        "name" -> name,
+        "name" -> toSQLId(name),
         "actualType" -> actualType.map(toSQLType).getOrElse("NULL"),
         "expectedType" -> toSQLType(expectedType)))
   }

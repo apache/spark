@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.columnar.udf
 
+import java.util.{Collections, IdentityHashMap}
+
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkException, TaskContext}
@@ -70,6 +72,11 @@ case class EvalColumnarUDFsExec(
 
   override def supportsColumnar: Boolean = true
 
+  // The columns of the child are passed on as they are, so they keep the classes that the
+  // child declares, which the generated code of the operators above reads them with.
+  override def vectorTypes: Option[Seq[String]] = child.vectorTypes.map(
+    _ ++ Seq.fill(resultAttrs.length)(classOf[ColumnVector].getName))
+
   override lazy val metrics: Map[String, SQLMetric] = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "numOutputBatches" -> SQLMetrics.createMetric(sparkContext, "number of output batches"),
@@ -90,7 +97,22 @@ case class EvalColumnarUDFsExec(
     // instance of a function that several of them call, and an operator between them can read
     // its child from another thread. The functions are serialized apart here, so that each
     // partition of this node reads its own instances, which only this node calls.
-    val serializedFunctions: Array[Byte] = Utils.serialize(driverFunctions)
+    // They are serialized together, so that the calls of one instance still share it.
+    val serializedFunctions: Array[Byte] = try {
+      Utils.serialize(driverFunctions)
+    } catch {
+      case NonFatal(e) =>
+        // The failure is reported for the function that cannot be serialized on its own.
+        val failed = driverFunctions.indices.find { i =>
+          try {
+            Utils.serialize(driverFunctions(i))
+            false
+          } catch {
+            case NonFatal(_) => true
+          }
+        }.getOrElse(0)
+        throw QueryExecutionErrors.columnarUDFNotSerializableError(udfs(failed).name, e)
+    }
     // The ordinals, in the input batch, of the arguments of each call.
     val argOrdinals: Array[Array[Int]] = udfs.map { udf =>
       udf.children.map { arg =>
@@ -124,12 +146,58 @@ case class EvalColumnarUDFsExec(
         // The results of the current batch, which this node owns.
         private var results: Array[ColumnVector] = Array.empty
 
+        // The results of the previous batch, which are closed. They are kept to reject a
+        // function that returns one of them again.
+        private var previousResults: Array[ColumnVector] = Array.empty
+
+        private var functionsClosed = false
+
         private def closeResults(): Unit = {
           results.foreach(r => if (r != null) r.close())
+          if (results.nonEmpty) previousResults = results
           results = Array.empty
         }
 
-        Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => closeResults()))
+        // Releases what the instances hold, after the results that they returned are closed.
+        // The calls of this node can share an instance, which is closed once.
+        private def closeFunctions(): Unit = {
+          if (!functionsClosed) {
+            functionsClosed = true
+            val closed = Collections.newSetFromMap(new IdentityHashMap[AnyRef, java.lang.Boolean])
+            functions.foreach {
+              case c: AutoCloseable if closed.add(c) => Utils.tryLogNonFatalError(c.close())
+              case _ =>
+            }
+          }
+        }
+
+        Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit] { _ =>
+          closeResults()
+          closeFunctions()
+        })
+
+        // Whether the two results are one vector, or two Arrow vectors over one value vector.
+        private def isSameVector(a: ColumnVector, b: ColumnVector): Boolean = {
+          (a eq b) || ((a, b) match {
+            case (x: ArrowColumnVector, y: ArrowColumnVector) =>
+              x.getValueVector eq y.getValueVector
+            case _ => false
+          })
+        }
+
+        // Whether the function has returned the vector before: for an earlier call over this
+        // batch, whose values the vector would replace, or for the previous batch, whose
+        // results are closed. This cannot keep a function from writing into a vector that is
+        // closed, which it does before it returns.
+        private def isReusedResult(
+            result: ColumnVector, batchResults: Array[ColumnVector], count: Int): Boolean = {
+          var j = 0
+          while (j < count) {
+            if (isSameVector(result, batchResults(j))) return true
+            j += 1
+          }
+          previousResults.exists(r => r != null && isSameVector(result, r))
+        }
 
         // Whether `vector` is `column` or a vector inside it. A writable vector, which the
         // vectorized readers and `RowToColumnarExec` produce, gives its children for every
@@ -158,7 +226,10 @@ case class EvalColumnarUDFsExec(
 
         override def hasNext: Boolean = {
           val more = batches.hasNext
-          if (!more) closeResults()
+          if (!more) {
+            closeResults()
+            closeFunctions()
+          }
           more
         }
 
@@ -192,6 +263,11 @@ case class EvalColumnarUDFsExec(
             // vector inside one, is not kept as a result, and is rejected.
             if (result != null && isInputColumn(batch, result)) {
               throw QueryExecutionErrors.columnarUDFResultIsArgumentError(names(i))
+            }
+            // A vector that the function returned before is not kept either: it is closed
+            // with the earlier result, or is closed already.
+            if (result != null && isReusedResult(result, newResults, i)) {
+              throw QueryExecutionErrors.columnarUDFResultReusedError(names(i))
             }
             // Set before the checks, so that a vector that fails them is closed as well.
             newResults(i) = result

@@ -1009,7 +1009,7 @@ public abstract class WritableColumnVector extends ColumnVector {
   /**
    * Returns the maximum number of rows that can be stored in this column.
    */
-  public final int getCapacity() { return capacity; }
+  public int getCapacity() { return capacity; }
 
   /**
    * The default number of rows that can be stored in this column.

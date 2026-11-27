@@ -67,7 +67,10 @@ import org.apache.spark.util.ArrayImplicits._
  *  - Calls with named arguments, and calls inside the lambda function of a higher-order
  *    function, are not supported.
  *  - A call that reads columns of both sides of a join is supported in the condition of an
- *    inner join only. This includes the joins that correlated EXISTS and IN subqueries become.
+ *    inner join only. This includes the joins that correlated EXISTS, IN and scalar
+ *    subqueries become.
+ *  - A call that reads lookup columns in the condition of an external lookup join is supported
+ *    in an inner join only, also when it reads no column of the other side.
  *  - A conditional expression does not guard a call. A call in a branch of CASE, IF or
  *    COALESCE, or on one side of AND or OR, is evaluated for every row, and so are the
  *    expressions that compute its arguments, which can then fail for rows that the branch

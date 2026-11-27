@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.execution.columnar.udf
 
+import java.io.NotSerializableException
 import java.util.Locale
-import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 
 import org.apache.arrow.vector.BigIntVector
 
@@ -29,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.{BloomFilterMightContain, Colum
 import org.apache.spark.sql.catalyst.plans.NormalizePlan
 import org.apache.spark.sql.catalyst.plans.logical.{EvalColumnarUDFs, Filter, Join, LogicalPlan}
 import org.apache.spark.sql.columnar.{ColumnarScalarFunction, ColumnarUDFImplementation, ColumnarUserDefinedFunction}
-import org.apache.spark.sql.execution.{RowToColumnarExec, SparkPlan}
+import org.apache.spark.sql.execution.{FileSourceScanExec, RowToColumnarExec, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.MarkSingleTaskExecution
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
@@ -144,6 +145,96 @@ class ArrowCopyFunction(valueCount: Option[Int]) extends ColumnarScalarFunction 
   }
 }
 
+/** Counts the vectors that are created and closed. Only the node that owns one closes it. */
+object CountingArrowVector {
+  val created = new AtomicInteger()
+  val closed = new AtomicInteger()
+  lazy val allocator =
+    ArrowUtils.rootAllocator.newChildAllocator("columnar-udf-test", 0, Long.MaxValue)
+}
+
+class CountingArrowVector(vector: BigIntVector) extends ArrowColumnVector(vector) {
+  CountingArrowVector.created.incrementAndGet()
+
+  // `ColumnarToRowExec` closes the vectors that can be freed, which would hide a close that
+  // the node misses.
+  override def closeIfFreeable(): Unit = {}
+
+  override def close(): Unit = {
+    CountingArrowVector.closed.incrementAndGet()
+    super.close()
+  }
+}
+
+/** Returns its argument as a counted Arrow vector, with the given value count if there is one. */
+class CountingArrowFunction(valueCount: Option[Int]) extends ColumnarScalarFunction {
+  override def eval(args: ColumnarBatch): ColumnVector = {
+    val n = args.numRows()
+    val vector = new BigIntVector("result", CountingArrowVector.allocator)
+    vector.allocateNew(n)
+    var i = 0
+    while (i < n) {
+      vector.set(i, args.column(0).getLong(i))
+      i += 1
+    }
+    vector.setValueCount(valueCount.getOrElse(n))
+    new CountingArrowVector(vector)
+  }
+}
+
+/** Keeps one writable vector for its results, and returns it from every call. */
+class ReusedVectorFunction extends ColumnarScalarFunction {
+  @transient private var out: OnHeapColumnVector = _
+
+  override def eval(args: ColumnarBatch): ColumnVector = {
+    val n = args.numRows()
+    if (out == null) out = new OnHeapColumnVector(n, LongType)
+    var i = 0
+    while (i < n) {
+      out.putLong(i, args.column(0).getLong(i) + 1)
+      i += 1
+    }
+    out
+  }
+}
+
+/** Keeps one Arrow value vector for its results, and wraps it anew in every call. */
+class ReusedArrowVectorFunction extends ColumnarScalarFunction {
+  @transient private var vector: BigIntVector = _
+
+  override def eval(args: ColumnarBatch): ColumnVector = {
+    val n = args.numRows()
+    if (vector == null) vector = new BigIntVector("result", ArrowUtils.rootAllocator)
+    vector.allocateNew(n)
+    var i = 0
+    while (i < n) {
+      vector.set(i, args.column(0).getLong(i) + 1)
+      i += 1
+    }
+    vector.setValueCount(n)
+    new ArrowColumnVector(vector)
+  }
+}
+
+/** Counts the instances that Spark closes. */
+object ClosingFunction {
+  val closed = new AtomicInteger()
+}
+
+class ClosingFunction extends AddOneFunction with AutoCloseable {
+  override def close(): Unit = ClosingFunction.closed.incrementAndGet()
+}
+
+/** Holds an object that cannot be serialized. */
+class NotSerializableFunction extends AddOneFunction {
+  private val holder = new Object
+
+  override def eval(args: ColumnarBatch): ColumnVector = {
+    assert(holder != null)
+    super.eval(args)
+  }
+}
+
 /** Returns its argument as a vector of the given type. */
 class StringCopyFunction(resultType: DataType) extends ColumnarScalarFunction {
   override def eval(args: ColumnarBatch): ColumnVector = {
@@ -253,6 +344,10 @@ class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSp
       val eval = evalNodes(plan)
       assert(eval.length == 1)
       assert(collect(plan) { case r: RowToColumnarExec => r }.isEmpty)
+      // The columns of the scan keep their classes for the generated code above the node.
+      val scanTypes = eval.head.child.vectorTypes.get
+      assert(scanTypes.forall(_ == classOf[OnHeapColumnVector].getName))
+      assert(eval.head.vectorTypes.get == scanTypes :+ classOf[ColumnVector].getName)
     }
   }
 
@@ -440,6 +535,17 @@ class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSp
         }
       }
     }
+    // A table of the catalog, whose partitions the optimizer prunes with the catalog.
+    withFunctions(addOne) {
+      withTable("partitioned") {
+        spark.range(20).selectExpr("id", "id % 4 as p")
+          .write.partitionBy("p").saveAsTable("partitioned")
+        val df = sql("SELECT * FROM partitioned WHERE add_one(p) = 2 AND id > 1")
+        checkAnswer(df, Seq(5, 9, 13, 17).map(i => Row(i.toLong, 1L)))
+        val scan = collect(df.queryExecution.executedPlan) { case s: FileSourceScanExec => s }.head
+        assert(scan.partitionFilters.isEmpty)
+      }
+    }
   }
 
   test("a call in the creation side of a runtime bloom filter") {
@@ -466,6 +572,16 @@ class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSp
             val df = query("add_one(small.v) = 5")
             assert(!hasBloomFilter(df))
             checkAnswer(df, Row(10L))
+            // A call that computes the join key of the creation side, above its filter.
+            val creationKey = sql("SELECT count(*) FROM big JOIN " +
+              "(SELECT add_one(k) AS k FROM small WHERE v = 5) s ON big.k = s.k")
+            assert(!hasBloomFilter(creationKey))
+            checkAnswer(creationKey, Row(10L))
+            // A call that computes the join key of the application side.
+            val applicationKey = sql("SELECT count(*) FROM big JOIN small " +
+              "ON add_one(big.k) = small.k WHERE small.v = 5")
+            assert(!hasBloomFilter(applicationKey))
+            checkAnswer(applicationKey, Row(10L))
           }
         }
       }
@@ -571,7 +687,7 @@ class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSp
     checkError(
       exception = intercept[SparkUnsupportedOperationException](df.collect()),
       condition = "COLUMNAR_UDF_NOT_EXECUTABLE",
-      parameters = Map("name" -> "engine_only", "kinds" -> "[some-engine]"))
+      parameters = Map("name" -> "`engine_only`", "kinds" -> "[some-engine]"))
   }
 
   test("a function without any implementation cannot be called") {
@@ -621,7 +737,7 @@ class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSp
         checkError(
           exception = intercept[SparkRuntimeException](input.select(identity(col("id"))).collect()),
           condition = "COLUMNAR_UDF_RESULT_IS_ARGUMENT",
-          parameters = Map("name" -> "identity"))
+          parameters = Map("name" -> "`identity`"))
       }
     }
   }
@@ -634,7 +750,7 @@ class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSp
         spark.range(0, 10, 1, 1).select(short(col("id"))).collect()
       },
       condition = "COLUMNAR_UDF_RESULT_TOO_SHORT",
-      parameters = Map("name" -> "short", "actualRows" -> "1", "expectedRows" -> "10"))
+      parameters = Map("name" -> "`short`", "actualRows" -> "1", "expectedRows" -> "10"))
     // A batch of one row fits.
     assert(spark.range(0, 1, 1, 1).select(short(col("id"))).collect().length == 1)
   }
@@ -648,7 +764,7 @@ class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSp
         spark.range(0, 10, 1, 1).select(short(col("id"))).collect()
       },
       condition = "COLUMNAR_UDF_RESULT_TOO_SHORT",
-      parameters = Map("name" -> "short_arrow", "actualRows" -> "1", "expectedRows" -> "10"))
+      parameters = Map("name" -> "`short_arrow`", "actualRows" -> "1", "expectedRows" -> "10"))
     val copy = ColumnarUserDefinedFunction.create(
       "copy_arrow", Seq(LongType), LongType, new ArrowCopyFunction(None))
     checkAnswer(spark.range(0, 10, 1, 1).select(copy(col("id"))), (0L until 10L).map(Row(_)))
@@ -662,7 +778,7 @@ class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSp
       exception = intercept[SparkRuntimeException](df.collect()),
       condition = "COLUMNAR_UDF_RESULT_TYPE_MISMATCH",
       parameters = Map(
-        "name" -> "wrong_type", "actualType" -> "\"STRING\"", "expectedType" -> "\"BIGINT\""))
+        "name" -> "`wrong_type`", "actualType" -> "\"STRING\"", "expectedType" -> "\"BIGINT\""))
   }
 
   test("a function that returns a field of one of its arguments fails") {
@@ -673,7 +789,7 @@ class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSp
     checkError(
       exception = intercept[SparkRuntimeException](df.collect()),
       condition = "COLUMNAR_UDF_RESULT_IS_ARGUMENT",
-      parameters = Map("name" -> "field"))
+      parameters = Map("name" -> "`field`"))
   }
 
   test("a function that returns the elements or the keys of one of its arguments fails") {
@@ -692,11 +808,11 @@ class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSp
         checkError(
           exception = intercept[SparkRuntimeException](input.select(element(col("a"))).collect()),
           condition = "COLUMNAR_UDF_RESULT_IS_ARGUMENT",
-          parameters = Map("name" -> "element"))
+          parameters = Map("name" -> "`element`"))
         checkError(
           exception = intercept[SparkRuntimeException](input.select(key(col("m"))).collect()),
           condition = "COLUMNAR_UDF_RESULT_IS_ARGUMENT",
-          parameters = Map("name" -> "key"))
+          parameters = Map("name" -> "`key`"))
       }
     }
   }
@@ -710,7 +826,103 @@ class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSp
       },
       condition = "COLUMNAR_UDF_RESULT_TYPE_MISMATCH",
       parameters = Map(
-        "name" -> "no_vector", "actualType" -> "NULL", "expectedType" -> "\"BIGINT\""))
+        "name" -> "`no_vector`", "actualType" -> "NULL", "expectedType" -> "\"BIGINT\""))
+  }
+
+  test("a function that returns one vector from two calls fails") {
+    val input = spark.range(0, 10, 1, 1).select(col("id").as("a"), (col("id") * 10).as("b"))
+    Seq(
+      "reused" -> new ReusedVectorFunction,
+      "reused_arrow" -> new ReusedArrowVectorFunction).foreach { case (name, function) =>
+      val reused = ColumnarUserDefinedFunction.create(name, Seq(LongType), LongType, function)
+      // The calls of one node share the instance, so the second call returns the vector of
+      // the first one again.
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          input.select(reused(col("a")), reused(col("b"))).collect()
+        },
+        condition = "COLUMNAR_UDF_RESULT_REUSED",
+        parameters = Map("name" -> s"`$name`"))
+      checkAnswer(input.select(reused(col("a"))), (1L to 10L).map(Row(_)))
+    }
+  }
+
+  test("a function that returns a vector of the previous batch fails") {
+    val reused = ColumnarUserDefinedFunction.create(
+      "reused_arrow", Seq(LongType), LongType, new ReusedArrowVectorFunction)
+    withSQLConf(SQLConf.COLUMN_BATCH_SIZE.key -> "7") {
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          spark.range(0, 20, 1, 1).select(reused(col("id"))).collect()
+        },
+        condition = "COLUMNAR_UDF_RESULT_REUSED",
+        parameters = Map("name" -> "`reused_arrow`"))
+    }
+  }
+
+  test("the node closes each result once") {
+    def checkCloses(run: => Unit): Unit = {
+      CountingArrowVector.created.set(0)
+      CountingArrowVector.closed.set(0)
+      run
+      assert(CountingArrowVector.created.get() > 0)
+      assert(CountingArrowVector.closed.get() == CountingArrowVector.created.get())
+      assert(CountingArrowVector.allocator.getAllocatedMemory == 0)
+    }
+    val copy = ColumnarUserDefinedFunction.create(
+      "counted", Seq(LongType), LongType, new CountingArrowFunction(None))
+    withSQLConf(SQLConf.COLUMN_BATCH_SIZE.key -> "7") {
+      checkCloses {
+        val rows = spark.range(0, 30, 1, 1).select(copy(col("id"))).collect()
+        assert(rows.toSeq == (0L until 30L).map(Row(_)))
+        // One result for each of the five batches.
+        assert(CountingArrowVector.created.get() == 5)
+      }
+      // A limit stops the node before the end of its input.
+      checkCloses {
+        assert(spark.range(0, 30, 1, 1).select(copy(col("id"))).limit(3).collect().length == 3)
+      }
+      // A result that fails a check is closed as well.
+      val short = ColumnarUserDefinedFunction.create(
+        "counted_short", Seq(LongType), LongType, new CountingArrowFunction(Some(1)))
+      checkCloses {
+        intercept[SparkRuntimeException] {
+          spark.range(0, 30, 1, 1).select(short(col("id"))).collect()
+        }
+      }
+    }
+  }
+
+  test("a function that is closeable is closed once for each instance") {
+    val closing = ColumnarUserDefinedFunction.create(
+      "closing", Seq(LongType), LongType, new ClosingFunction)
+    def closes(df: DataFrame): Int = {
+      ClosingFunction.closed.set(0)
+      df.collect()
+      ClosingFunction.closed.get()
+    }
+    val input = spark.range(0, 10, 1, 1).toDF("id")
+    // The two calls of one node share an instance.
+    assert(closes(input.select(closing(col("id")), closing(col("id") + 1))) == 1)
+    // Nested calls are evaluated by two nodes, with an instance each.
+    assert(closes(input.select(closing(closing(col("id"))))) == 2)
+    // An instance for each task.
+    assert(closes(spark.range(0, 10, 1, 3).select(closing(col("id")))) == 3)
+    // A limit stops the node before the end of its input.
+    assert(closes(spark.range(0, 100000, 1, 1).select(closing(col("id"))).limit(3)) == 1)
+  }
+
+  test("a function that cannot be serialized") {
+    val notSerializable = ColumnarUserDefinedFunction.create(
+      "not_serializable", Seq(LongType), LongType, new NotSerializableFunction)
+    val e = intercept[SparkRuntimeException] {
+      spark.range(3).select(addOne(col("id")), notSerializable(col("id"))).collect()
+    }
+    checkError(
+      exception = e,
+      condition = "COLUMNAR_UDF_NOT_SERIALIZABLE",
+      parameters = Map("name" -> "`not_serializable`"))
+    assert(e.getCause.isInstanceOf[NotSerializableException])
   }
 
   test("a function that fails") {
@@ -826,6 +1038,11 @@ class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSp
         checkAnswer(
           sql("SELECT * FROM range(3) r WHERE r.id IN (SELECT add_one(v) FROM t)"),
           Seq(Row(1L), Row(2L)))
+        // A call whose argument holds a subquery with a call: the plan of the subquery does
+        // not make the outer call a nested one.
+        val overSubquery = "add_one(id + (SELECT max(add_one(v)) FROM t))"
+        checkAnswer(sql(s"SELECT $overSubquery FROM range(2)"), Seq(Row(6L), Row(7L)))
+        checkAnswer(sql(s"SELECT id FROM range(5) WHERE $overSubquery = 7"), Row(1L))
       }
     }
   }
@@ -900,7 +1117,7 @@ class ColumnarUDFSuite extends QueryTest with SharedSparkSession with AdaptiveSp
         },
         condition = "COLUMNAR_UDF_RESULT_TYPE_MISMATCH",
         parameters = Map(
-          "name" -> "wrong_type",
+          "name" -> "`wrong_type`",
           "actualType" -> "\"BIGINT\"",
           "expectedType" -> "\"VARCHAR(3)\""))
     }
