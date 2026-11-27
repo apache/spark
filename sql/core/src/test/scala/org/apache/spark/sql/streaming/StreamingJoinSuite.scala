@@ -2679,7 +2679,11 @@ abstract class StreamingOuterJoinBase extends StreamingJoinSuite {
       withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
         testStream(joined)(
           MultiAddData(leftInput, (1, -1, 5), (-1, -1, 5))(rightInput, (-1, 1, 6), (-1, -1, 6)),
-          CheckNewAnswer(Row(1, null, 5L, null, 1, 6L) +: nullRows: _*))
+          CheckNewAnswer(Row(1, null, 5L, null, 1, 6L) +: nullRows: _*),
+          // Only the two rows without a NULL key, one per input, are stored.
+          AssertOnQuery { q =>
+            q.lastProgress.stateOperators.head.numRowsTotal == 2
+          })
       }
     }
   }
@@ -2705,6 +2709,10 @@ abstract class StreamingOuterJoinBase extends StreamingJoinSuite {
         testStream(joined)(
           MultiAddData(leftInput, (1, 5), (-1, 5))(rightInput, (1, 5), (-1, 5)),
           CheckNewAnswer(Row(1, 5L, 1, 5L) +: nullRows: _*),
+          // Only the two rows without a NULL key, one per input, are stored.
+          AssertOnQuery { q =>
+            q.lastProgress.stateOperators.head.numRowsTotal == 2
+          },
           AddData(leftInput, (2, 100)),
           CheckNewAnswer(),
           AddData(leftInput),
