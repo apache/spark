@@ -185,28 +185,33 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
    * above it too if the key is that column, or that column shifted forward by constants. With a
    * backward shift, or a key in another form, they can still match state keys at or below the
    * watermark, which eviction removes.
+   *
+   * The watermarked column is the first one in `inputOutput`, which late-row filtering compares,
+   * not the key's reference: a reference keeps the metadata of the plan it was taken from.
    */
-  def isKeyBoundedByWatermark(key: Expression, inputAttributes: AttributeSet): Boolean = {
-    def isWatermarked(a: AttributeReference): Boolean =
-      a.metadata.contains(delayKey) && inputAttributes.contains(a)
-    def isNotBackward(shift: Expression): Boolean = shift.foldable && (shift.eval() match {
-      case i: CalendarInterval => i.months >= 0 && i.days >= 0 && i.microseconds >= 0
-      case n: java.lang.Number => n.longValue >= 0
-      case _ => false
-    })
+  def isKeyBoundedByWatermark(key: Expression, inputOutput: Seq[Attribute]): Boolean = {
+    val watermarked = inputOutput.find(_.metadata.contains(delayKey))
+    def isWatermarked(a: AttributeReference): Boolean = watermarked.exists(_.exprId == a.exprId)
+    // A fresh copy: queries that start at the same time can check the same analyzed plan.
+    def isNotBackward(shift: Expression): Boolean = shift.foldable &&
+      (shift.freshCopyIfContainsStatefulExpression().eval() match {
+        case i: CalendarInterval => i.months >= 0 && i.days >= 0 && i.microseconds >= 0
+        case n: java.lang.Number => n.longValue >= 0
+        case _ => false
+      })
     key match {
       case a: AttributeReference => isWatermarked(a)
       // NOTE: We assume this is window struct, as same as WatermarkSupport.watermarkExpression
       case GetStructField(a: AttributeReference, 1, _) => isWatermarked(a)
       case Cast(child, TimestampType, _, _) if child.dataType == TimestampType =>
-        isKeyBoundedByWatermark(child, inputAttributes)
-      case DatetimeSub(_, _, replacement) => isKeyBoundedByWatermark(replacement, inputAttributes)
+        isKeyBoundedByWatermark(child, inputOutput)
+      case DatetimeSub(_, _, replacement) => isKeyBoundedByWatermark(replacement, inputOutput)
       case TimestampAddInterval(start, interval, _) =>
-        isNotBackward(interval) && isKeyBoundedByWatermark(start, inputAttributes)
+        isNotBackward(interval) && isKeyBoundedByWatermark(start, inputOutput)
       case TimestampAddYMInterval(start, interval, _) =>
-        isNotBackward(interval) && isKeyBoundedByWatermark(start, inputAttributes)
+        isNotBackward(interval) && isKeyBoundedByWatermark(start, inputOutput)
       case TimestampAdd(_, quantity, start, _) =>
-        isNotBackward(quantity) && isKeyBoundedByWatermark(start, inputAttributes)
+        isNotBackward(quantity) && isKeyBoundedByWatermark(start, inputOutput)
       case _ => false
     }
   }

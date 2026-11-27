@@ -96,4 +96,46 @@ class StreamingJoinWatermarkDirectionSuite extends StreamTest {
     assert(e.getMessage.contains("without a watermark on the right input that bounds the " +
       "state of the left input"))
   }
+
+  // A DataFrame column reference keeps the metadata of the plan it was taken from, but late-row
+  // filtering reads the watermark of the joined input itself.
+  test("a key reference taken before withWatermark is bounded by the input's watermark") {
+    val leftInput = MemoryStream[(Int, Int)]
+    val rightInput = MemoryStream[(Int, Int)]
+    val left = leftInput.toDF().toDF("lk", "t")
+      .select($"lk", timestamp_seconds($"t").as("lt"))
+      .withWatermark("lt", "10 seconds")
+    val rightWithoutWatermark = rightInput.toDF().toDF("rk", "t")
+      .select($"rk", timestamp_seconds($"t").as("rt"))
+    val right = rightWithoutWatermark.withWatermark("rt", "10 seconds")
+    val joined = left.join(right,
+      left("lk") === rightWithoutWatermark("rk") && left("lt") === rightWithoutWatermark("rt"),
+      "left_outer")
+      .select($"lk", $"lt".cast("long"), $"rt".cast("long"))
+    testStream(joined)(
+      AddData(leftInput, (1, 5)),
+      AddData(rightInput, (1, 5)),
+      CheckNewAnswer((1, 5L, 5L)))
+  }
+
+  test("a key reference from a watermarked copy does not bound the state of the other input") {
+    val leftInput = MemoryStream[(Int, Int)]
+    val rightInput = MemoryStream[(Int, Int)]
+    val left = leftInput.toDF().toDF("lk", "t")
+      .select($"lk", timestamp_seconds($"t").as("lt"))
+      .withWatermark("lt", "10 seconds")
+    val right = rightInput.toDF().toDF("rk", "t")
+      .select($"rk", timestamp_seconds($"t").as("rt"))
+    // The joined right input has no watermark, although the reference to rt carries one.
+    val watermarkedCopy = right.withWatermark("rt", "10 seconds")
+    val joined = left.join(right,
+      left("lk") === right("rk") && left("lt") === watermarkedCopy("rt"), "left_outer")
+    val e = intercept[AnalysisException] {
+      testStream(joined)(
+        AddData(leftInput, (1, 5)),
+        CheckNewAnswer())
+    }
+    assert(e.getMessage.contains("without a watermark on the right input that bounds the " +
+      "state of the left input"))
+  }
 }

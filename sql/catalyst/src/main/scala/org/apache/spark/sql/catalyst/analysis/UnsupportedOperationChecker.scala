@@ -776,7 +776,7 @@ object UnsupportedOperationChecker extends Logging {
         other: LogicalPlan,
         otherKeys: Seq[Expression]): Unit = {
       val boundedByKey = keyOrdinal.exists { ordinal =>
-        StreamingJoinHelper.isKeyBoundedByWatermark(otherKeys(ordinal), other.outputSet)
+        StreamingJoinHelper.isKeyBoundedByWatermark(otherKeys(ordinal), other.output)
       }
       // TODO: [SPARK-62002] [SPARK-61989] With a watermarked equality key, eviction uses the key
       //  and ignores the range, yet this arm still accepts an input that a range condition
