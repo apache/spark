@@ -185,9 +185,23 @@ object NestedColumnAliasing {
       plan: LogicalPlan,
       nestedFieldToAlias: Map[Expression, Alias],
       attrToAliases: AttributeMap[Seq[Alias]]): LogicalPlan = {
-    plan.withNewChildren(plan.children.map { plan =>
-      Project(plan.output.flatMap(a => attrToAliases.getOrElse(a, Seq(a))), plan)
-    }).transformExpressions {
+    val newPlan = plan match {
+      // `unrequiredChildIndex` holds positions in the child output, which shift when an attribute
+      // is replaced by its aliases. The aliases of an unrequired attribute are unrequired too.
+      case g: Generate =>
+        val unrequired = g.unrequiredChildIndex.toSet
+        val newChildOutput = g.child.output.zipWithIndex.flatMap { case (a, i) =>
+          attrToAliases.getOrElse(a, Seq(a)).map(_ -> unrequired.contains(i))
+        }
+        g.copy(
+          unrequiredChildIndex = newChildOutput.zipWithIndex.collect { case ((_, true), i) => i },
+          child = Project(newChildOutput.map(_._1), g.child))
+      case _ =>
+        plan.withNewChildren(plan.children.map { plan =>
+          Project(plan.output.flatMap(a => attrToAliases.getOrElse(a, Seq(a))), plan)
+        })
+    }
+    newPlan.transformExpressions {
       case f: ExtractValue if nestedFieldToAlias.contains(f.canonicalized) =>
         nestedFieldToAlias(f.canonicalized).toAttribute
     }
@@ -499,6 +513,8 @@ object GeneratorNestedColumnAliasing {
     case _: Stack => true
     case _: PosExplode => true
     case _: Inline => true
+    // Unlike for ExplodeBase, fields read from the UNNEST output are not pushed into its input.
+    case _: Unnest => true
     case _ => false
   }
 }
