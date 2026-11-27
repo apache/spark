@@ -22,6 +22,7 @@ import java.lang.Thread.UncaughtExceptionHandler
 import java.lang.management.ManagementFactory
 import java.net.{URI, URL, URLClassLoader}
 import java.nio.ByteBuffer
+import java.time.{Duration => JDuration}
 import java.util.{Locale, Properties}
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicBoolean
@@ -391,7 +392,7 @@ private[spark] class Executor(
 
   val isolatedSessionCache: Cache[String, IsolatedSessionState] = CacheBuilder.newBuilder()
     .maximumSize(conf.get(EXECUTOR_ISOLATED_SESSION_CACHE_SIZE))
-    .expireAfterAccess(java.time.Duration.ofMinutes(30))
+    .expireAfterAccess(JDuration.ofMinutes(30))
     .removalListener(new RemovalListener[String, IsolatedSessionState]() {
       override def onRemoval(
           notification: RemovalNotification[String, IsolatedSessionState]): Unit = {
