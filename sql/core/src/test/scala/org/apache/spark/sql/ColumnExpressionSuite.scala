@@ -1147,7 +1147,7 @@ class ColumnExpressionSuite extends SharedSparkSession {
             "x -> rand(2) + x * 0 BETWEEN 0.6 AND 0.4), v -> v))"),
           Row(0, 0))
         // A definition that reads no lambda variable was evaluated once per row, so every element
-        // got the same value, and also for an empty array.
+        // got the same value, and it was evaluated even for an empty array (the ANSI case below).
         checkAnswer(
           spark.sql(
             "SELECT size(array_distinct(transform(sequence(1, 100), x -> nullif(rand(3), 2))))"),
@@ -1158,13 +1158,14 @@ class ColumnExpressionSuite extends SharedSparkSession {
             df.selectExpr("transform(arr, x -> nullif(a / b, 1))"),
             Seq(Row(Seq.empty[Double]), Row(Seq(2.0, 2.0))))
           // `zip_with` and `map_zip_with` evaluate their second argument only if the first one is
-          // not null.
+          // not null, and `aggregate` its start value only if the array is not null.
           checkAnswer(
             df.selectExpr(
               "zip_with(CAST(NULL AS ARRAY<INT>), array(nullif(a / b, 1)), (x, y) -> y)",
               "map_zip_with(CAST(NULL AS MAP<INT, INT>), map(1, nullif(a / b, 1)), " +
-                "(k, v1, v2) -> v2)"),
-            Seq(Row(null, null), Row(null, null)))
+                "(k, v1, v2) -> v2)",
+              "aggregate(CAST(NULL AS ARRAY<INT>), nullif(a / b, 1), (acc, x) -> acc)"),
+            Seq(Row(null, null, null), Row(null, null, null)))
         }
       }
     }

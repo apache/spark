@@ -258,8 +258,9 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
 
   /**
    * Whether this definition may be substituted into its references: it is referenced at most once
-   * anyway, or it is deterministic and, under `requireCheap`, cheap to evaluate twice. With
-   * `requireCheap`, substituting is as good as evaluating it once.
+   * anyway, or it is deterministic and, under `requireCheap`, cheap to evaluate twice by
+   * `isCheapToRepeat`, which is `CollapseProject.isCheap` with a lambda variable counted as an
+   * attribute. With `requireCheap`, substituting is as good as evaluating it once.
    *
    * `CollapseProject.isCheap` answers what one evaluation costs, not whether a second is allowed --
    * it admits a `PythonUDF`, which may be nondeterministic and is still in the tree here, since
@@ -281,13 +282,20 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
       multiplyReferenced: => Set[CommonExpressionId],
       requireCheap: Boolean = true): Boolean = {
     if (requireCheap) {
-      !multiplyReferenced.contains(id) || (CollapseProject.isCheap(child) && child.deterministic)
+      !multiplyReferenced.contains(id) || (isCheapToRepeat(child) && child.deterministic)
     } else {
       // Determinism first, so a caller passing the count lazily computes it only once it meets a
       // nondeterministic definition.
       child.deterministic || !multiplyReferenced.contains(id)
     }
   }
+
+  /**
+   * `CollapseProject.isCheap`, with each lambda variable read as an attribute: both are slot reads,
+   * so a definition over one is as cheap as the same definition over the other.
+   */
+  private def isCheapToRepeat(e: Expression): Boolean =
+    CollapseProject.isCheap(e.transform { case v: NamedLambdaVariable => v.toAttribute })
 
   /**
    * The ids the given `With` reads more than once, counted from the node in hand rather than once
@@ -469,9 +477,15 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
         // instead, but only the definitions that gain something from it.
         inlineWithsThatGainNothing(newExpr)
 
-      // A lambda function is evaluated once per element, possibly for none, so a definition in it
-      // cannot go into a project either. Only the arguments that are always evaluated are
-      // rewritten as above, and a `With` in the rest stays where it is, as in a conditional branch.
+      // A lambda function may be evaluated any number of times, possibly none, and an argument not
+      // in `alwaysEvaluatedArguments` may not be evaluated at all, so a definition in either cannot
+      // go into a project. Only the always-evaluated arguments are rewritten as above. In the rest,
+      // a `With` stays where it is, as in a conditional branch, and only the definitions that gain
+      // something from memoizing keep it.
+      // TODO: a deterministic definition in a lambda function that reads no lambda variable is
+      //       evaluated each time the lambda function is, although its value is the same for the
+      //       whole evaluation of the higher-order function. It could be memoized lazily around
+      //       that function instead.
       case h: HigherOrderFunction =>
         val newExpr = h.mapChildren { c =>
           if (h.alwaysEvaluatedArguments.exists(_ eq c)) {

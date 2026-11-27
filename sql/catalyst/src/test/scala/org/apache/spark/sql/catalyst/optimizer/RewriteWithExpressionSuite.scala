@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.{DefaultCatalogManager, Identifier}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DateType, IntegerType, StringType, TimestampNTZType, TimestampType, TimeType}
+import org.apache.spark.sql.types.{DateType, IntegerType, StringType, StructType, TimestampNTZType, TimestampType, TimeType}
 
 class RewriteWithExpressionSuite extends PlanTest {
 
@@ -787,6 +787,88 @@ class RewriteWithExpressionSuite extends PlanTest {
     comparePlans(
       Optimizer.execute(inlined),
       mergeRows(MergeRows.Keep(MergeRows.Update, TrueLiteral, Seq(nullIfZero(a), b))))
+  }
+
+  test("SPARK-62323: a With in a higher-order function is hoisted only if always evaluated") {
+    val Seq(a, b) = testRelation.output
+    val x = NamedLambdaVariable("x", IntegerType, nullable = true)
+    val y = NamedLambdaVariable("y", IntegerType, nullable = true)
+    val arr = CreateArray(Seq(a, b))
+    def transform(arg: Expression, body: Expression, v: NamedLambdaVariable = x): Expression =
+      ArrayTransform(arg, LambdaFunction(body, Seq(v)))
+    def select(e: Expression): LogicalPlan = testRelation.select(e.as("col"))
+
+    // Not cheap and referenced twice, so it stays a `With` in the lambda function.
+    val kept = select(transform(arr, With(x + 1) { case Seq(ref) => ref * ref }))
+    comparePlans(Optimizer.execute(kept), kept)
+
+    // A definition that gains nothing from memoizing is inlined: one as cheap over a lambda
+    // variable as it would be over an attribute (the variable, a field of it, a collation of it),
+    // or one referenced once.
+    comparePlans(
+      Optimizer.execute(select(transform(arr, With(x) { case Seq(ref) => ref * ref }))),
+      select(transform(arr, x * x)))
+    val s = NamedLambdaVariable("s", new StructType().add("f", IntegerType), nullable = true)
+    val structs = CreateArray(Seq(CreateNamedStruct(Seq(Literal("f"), a))))
+    val field = GetStructField(s, 0, Some("f"))
+    comparePlans(
+      Optimizer.execute(select(transform(structs, With(field) { case Seq(ref) => ref * ref }, s))),
+      select(transform(structs, field * field, s)))
+    val t = NamedLambdaVariable("t", StringType, nullable = true)
+    val strs = CreateArray(Seq(Literal("a")))
+    val collated = Collate(t, ResolvedCollation("UTF8_LCASE"))
+    val compared = With(collated) { case Seq(ref) => ref === ref }
+    comparePlans(
+      Optimizer.execute(select(transform(strs, compared, t))),
+      select(transform(strs, collated === collated, t)))
+    comparePlans(
+      Optimizer.execute(select(transform(arr, With(x + 1) { case Seq(ref) => ref * Literal(2) }))),
+      select(transform(arr, (x + 1) * Literal(2))))
+
+    // The array argument is always evaluated, so a definition there is hoisted into a `Project`.
+    val common = (a + b).as("_common_expr_0")
+    comparePlans(
+      Optimizer.execute(select(transform(With(a + b) { case Seq(ref) =>
+        CreateArray(Seq(ref, ref))
+      }, x))),
+      testRelation
+        .select((testRelation.output :+ common): _*)
+        .select(transform(CreateArray(Seq(common.toAttribute, common.toAttribute)), x).as("col")))
+
+    // `zip_with` and `map_zip_with` evaluate their second argument only if the first one is not
+    // null, so a `With` there stays where it is, while one in the first argument is hoisted.
+    val skipped = With(a + b) { case Seq(ref) => ref * ref }
+    val zipWith = LambdaFunction(y, Seq(x, y))
+    comparePlans(
+      Optimizer.execute(select(ZipWith(
+        With(a + b) { case Seq(ref) => CreateArray(Seq(ref, ref)) },
+        CreateArray(Seq(skipped)),
+        zipWith))),
+      testRelation
+        .select((testRelation.output :+ common): _*)
+        .select(ZipWith(
+          CreateArray(Seq(common.toAttribute, common.toAttribute)),
+          CreateArray(Seq(skipped)),
+          zipWith).as("col")))
+    val k = NamedLambdaVariable("k", IntegerType, nullable = false)
+    val mapZipWith = LambdaFunction(y, Seq(k, x, y))
+    comparePlans(
+      Optimizer.execute(select(MapZipWith(
+        With(a + b) { case Seq(ref) => CreateMap(Seq(Literal(1), ref, Literal(2), ref)) },
+        CreateMap(Seq(Literal(1), skipped)),
+        mapZipWith))),
+      testRelation
+        .select((testRelation.output :+ common): _*)
+        .select(MapZipWith(
+          CreateMap(Seq(Literal(1), common.toAttribute, Literal(2), common.toAttribute)),
+          CreateMap(Seq(Literal(1), skipped)),
+          mapZipWith).as("col")))
+    // `aggregate` evaluates its start value only if the array is not null.
+    val acc = NamedLambdaVariable("acc", IntegerType, nullable = true)
+    val finishAcc = NamedLambdaVariable("acc", IntegerType, nullable = true)
+    val aggregate = select(ArrayAggregate(arr, skipped,
+      LambdaFunction(acc + x, Seq(acc, x)), LambdaFunction(finishAcc, Seq(finishAcc))))
+    comparePlans(Optimizer.execute(aggregate), aggregate)
   }
 
   test("WITH expression in grouping exprs") {
