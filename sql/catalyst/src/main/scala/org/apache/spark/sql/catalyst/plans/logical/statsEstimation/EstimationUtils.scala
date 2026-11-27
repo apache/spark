@@ -123,7 +123,11 @@ object EstimationUtils {
    * or through an rpad or a cast that `CharVarcharWidening` matches, such as one a comparison or
    * a union adds.
    */
-  case class ColumnRead(attr: Attribute, stat: ColumnStat, padTo: Option[Int], widened: Boolean) {
+  private[statsEstimation] case class ColumnRead(
+      attr: Attribute,
+      stat: ColumnStat,
+      padTo: Option[Int],
+      widened: Boolean) {
     /**
      * The statistics of the expression: the column's, with the lengths raised to at least N
      * unless the column has no non-null values.
@@ -148,7 +152,9 @@ object EstimationUtils {
    * characters, since rpad truncates longer ones. Returns None if the expression reads no column
    * through these, the column has no statistics, or the values do not fit.
    */
-  def readColumn(e: Expression, attributeStats: AttributeMap[ColumnStat]): Option[ColumnRead] = {
+  private[statsEstimation] def readColumn(
+      e: Expression,
+      attributeStats: AttributeMap[ColumnStat]): Option[ColumnRead] = {
     def through(
         child: Expression,
         n: Int,

@@ -464,13 +464,14 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
   }
 
   /**
-   * Matches the padding or widening that a comparison of CHAR or VARCHAR values, or a union of
-   * VARCHAR values of different lengths, adds to a value: rpad with spaces of a CHAR value to a
-   * length at least its own, or a cast of a CHAR value to a CHAR or VARCHAR type at least as
-   * long, or of a VARCHAR value to a VARCHAR type at least as long, of the same collation. Extracts
-   * the value, the target length N, and whether the target pads to N. Values longer than N can
-   * become equal, as rpad truncates them, and so can unpadded CHAR values that differ only in
-   * trailing spaces. So the result is not unique where the value is.
+   * Matches the padding or widening that a comparison of CHAR or VARCHAR values, or a set
+   * operation of such values of different types, adds to a value, or that a query writes
+   * explicitly: rpad with spaces of a CHAR value to a length at least its own, or a cast of a CHAR
+   * value to a CHAR or VARCHAR type at least as long, or of a VARCHAR value to a VARCHAR type at
+   * least as long, of the same collation. Extracts the value, the target length N, and whether the
+   * target pads to N. Values longer than N can become equal, as rpad truncates them, and so can
+   * unpadded CHAR values that differ only in trailing spaces. So the result is not unique where
+   * the value is.
    */
   private[sql] object CharVarcharWidening {
     def unapply(e: Expression): Option[(Expression, Int, Boolean)] = e match {

@@ -17,16 +17,14 @@
 
 package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 
-import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Expression, ExpressionSet}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.planning.ExtractAllEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Histogram, Join, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, DistinctKeyVisitor, Histogram, Join, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 
 
 case class JoinEstimation(join: Join) extends Logging {
@@ -63,8 +61,8 @@ case class JoinEstimation(join: Join) extends Logging {
       // padded or widened is estimated as the column it reads (see `readColumn`), but is not
       // unique where the column is.
       val joinKeyPairs = extractJoinKeysWithColStats(leftKeys, rightKeys)
-      val leftKeySet = ExpressionSet(leftKeys.map(CharVarcharUtils.stripCastToPlainString))
-      val rightKeySet = ExpressionSet(rightKeys.map(CharVarcharUtils.stripCastToPlainString))
+      val leftKeySet = DistinctKeyVisitor.joinKeySet(leftKeys)
+      val rightKeySet = DistinctKeyVisitor.joinKeySet(rightKeys)
       val leftSideUniqueness = left.distinctKeys.exists(_.subsetOf(leftKeySet))
       val rightSideUniqueness = right.distinctKeys.exists(_.subsetOf(rightKeySet))
       val (numInnerJoinedRows, keyStatsAfterJoin) =
@@ -195,7 +193,9 @@ case class JoinEstimation(join: Join) extends Logging {
       case (false, true) => leftStats.rowCount.get
       case _ => leftStats.rowCount.get * rightStats.rowCount.get
     }
-    val keyStatsAfterJoin = new mutable.HashMap[Attribute, ColumnStat]()
+    // The key stats in the order they are written: for a column in several pairs, the stats
+    // written last win, also when the pairs reference it through different qualifiers.
+    val keyStatsAfterJoin = new ArrayBuffer[(Attribute, ColumnStat)]()
     // The columns of a padded or widened pair keep their own lengths (see `lengths` below). The
     // other pairs come last, so that their joined stats, whose maximum length is bounded by both
     // sides, take precedence for a column that they share with such a pair.
@@ -221,8 +221,7 @@ case class JoinEstimation(join: Join) extends Logging {
           case _ =>
             computeByNdv(leftKey, rightKey, newMin, newMax)
         }
-        // The columns of keys that are padded or widened differently can hold values of
-        // different lengths, so each keeps its own lengths.
+        // Each column of a padded or widened pair keeps its own lengths.
         def lengths(keyStat: ColumnStat): ColumnStat = if (widened) {
           joinStat.copy(avgLen = keyStat.avgLen, maxLen = keyStat.maxLen)
         } else {
@@ -246,7 +245,7 @@ case class JoinEstimation(join: Join) extends Logging {
       }
       i += 1
     }
-    (joinCard, AttributeMap(keyStatsAfterJoin))
+    (joinCard, AttributeMap(keyStatsAfterJoin.toSeq))
   }
 
   /**

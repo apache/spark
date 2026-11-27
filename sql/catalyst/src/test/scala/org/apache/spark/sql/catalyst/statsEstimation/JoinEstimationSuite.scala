@@ -768,9 +768,8 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
           s"$joinType, $plan")
       }
     }
-    // A key that is itself a read-side padding, e.g. of a column read without padding through a
-    // predicate pushed below the Project, is padded as well: k keeps its lengths of 3, which
-    // ANALYZE with padding off collected, and c5 its lengths of 5.
+    // A key that is itself the read-side padding of a column also makes the pair padded: k keeps
+    // the lengths of 3 that ANALYZE with padding off collected, and c5 its lengths of 5.
     val k = charAttr("k", 5)
     val unpaddedSide = StatsTestPlan(Seq(k), 10, AttributeMap(Seq(
       k -> stat.copy(avgLen = Some(3), maxLen = Some(3)))))
@@ -779,6 +778,18 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
     assert(readPadded.rowCount.contains(BigInt(10)))
     assert(lengths(readPadded, k).contains((Some(3L), Some(3L))))
     assert(lengths(readPadded, c5.output.head).contains((Some(5L), Some(5L))))
+    // The same with the padded key on the right.
+    val swapped = join(c10, c5, EqualTo(c10.output.head, rpad(c5, 10)))
+    assert(swapped.rowCount.contains(BigInt(10)))
+    assert(lengths(swapped, c5.output.head).contains((Some(5L), Some(5L))))
+    assert(lengths(swapped, c10.output.head).contains((Some(10L), Some(10L))))
+    // A key without a distinct count, e.g. from a connector that reports only lengths, gives no
+    // estimate from the key, on either side.
+    val noNdv = paddedSide(charAttr("c5", 5), stat.copy(distinctCount = None))
+    assert(joinRows(noNdv, c10, EqualTo(rpad(noNdv, 10), c10.output.head))
+      .contains(BigInt(100)))
+    assert(joinRows(c10, noNdv, EqualTo(c10.output.head, rpad(noNdv, 10)))
+      .contains(BigInt(100)))
     // A pair of keys compared as they are bounds the lengths of a column that it shares with a
     // padded pair, in either order: s, a STRING column with values of at most 4 characters, joins
     // c10 as well.
@@ -801,11 +812,28 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
         assert(lengths(stats, a).contains((Some(avgLen), Some(maxLen))), s"$twoPairs, $a")
       }
     }
+    // The same when the two pairs reference c10 through references that differ only in their
+    // qualifier, as a filter pushed into the join from a subquery can.
+    val c10Qualified = c10.output.head.withQualifier(Seq("j"))
+    Seq((c10Qualified, c10.output.head), (c10.output.head, c10Qualified)).foreach {
+      case (paddedRef, plainRef) =>
+        val qualifiedPadded = EqualTo(rpad(twoColumns, 10), paddedRef)
+        val qualifiedPlain = EqualTo(twoColumns.output.last, plainRef)
+        Seq(And(qualifiedPadded, qualifiedPlain), And(qualifiedPlain, qualifiedPadded)).foreach {
+          twoPairs =>
+            val stats = join(twoColumns, c10, twoPairs)
+            assert(stats.rowCount.contains(BigInt(10)), twoPairs)
+            Seq(twoColumns.output.last, c10.output.head).foreach { a =>
+              assert(lengths(stats, a).contains((Some(6L), Some(4L))), s"$twoPairs, $a")
+            }
+        }
+    }
     // A pad of several spaces pads as one space does. As first-class types, the pad that
     // `createStringRPad` gives a CHAR(5) value is 5 spaces.
     assert(joinRows(c5, c10, EqualTo(StringRPad(c5.output.head, Literal(10), Literal("   ")),
       c10.output.head)).contains(BigInt(10)))
-    // A VARCHAR key, or a pad other than spaces, can make values equal: no estimate.
+    // A VARCHAR key or a pad other than spaces can make values equal, and an empty pad does not
+    // pad: no estimate.
     val v5 = paddedSide(varcharAttr("v5", 5))
     assert(joinRows(v5, c10, EqualTo(rpad(v5, 10), c10.output.head)).contains(BigInt(100)))
     Seq("x", " x", "").foreach { pad =>
@@ -872,6 +900,19 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
       // CHAR(10) and VARCHAR(5) are both cast to VARCHAR(10).
       assert(joinRows(fc10, fv5, EqualTo(Cast(fc10.output.head, VarcharType(10)),
         Cast(fv5.output.head, VarcharType(10)))).contains(BigInt(10)), standardSemantics)
+      // The columns of a widened pair keep their own lengths, also of a cast to VARCHAR, in
+      // either order.
+      val v10 = varcharAttr("v10", 10)
+      val longV10 = side(v10, firstClassRead(v10, standardSemantics),
+        stat.copy(avgLen = Some(8), maxLen = Some(9)))
+      val widenedKey = Cast(fv5.output.head, VarcharType(10))
+      Seq(join(fv5, longV10, EqualTo(widenedKey, longV10.output.head)),
+          join(longV10, fv5, EqualTo(longV10.output.head, widenedKey))).foreach { stats =>
+        assert(stats.rowCount.contains(BigInt(10)), standardSemantics)
+        assert(lengths(stats, fv5.output.head).contains((Some(5L), Some(5L))), standardSemantics)
+        assert(lengths(stats, longV10.output.head).contains((Some(8L), Some(9L))),
+          standardSemantics)
+      }
     }
   }
 

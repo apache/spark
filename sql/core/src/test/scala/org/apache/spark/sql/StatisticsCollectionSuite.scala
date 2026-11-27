@@ -442,9 +442,12 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
               case j: Join => j
             }
           }
-          // As first-class types a union of VARCHAR columns of different lengths casts the
-          // shorter one. A union with a CHAR column of a different type is rejected then.
-          if (leftType.startsWith("VARCHAR")) {
+          // As first-class types a union of the columns casts them to their common type and has
+          // 10 groups. Without first-class types a union of CHAR(5) and CHAR(10) keeps the
+          // CHAR(10) values padded to 10 characters next to the 5-character ones, so it has 20
+          // groups; the other pairs have 10.
+          val firstClass = modeConfs.exists(c => firstClassCharVarcharConfs.exists(_.key == c._1))
+          if (rightType != "CHAR(10)" || firstClass) {
             checkRows(s"SELECT k, count(*) FROM (SELECT a AS k FROM $left UNION ALL " +
                 s"SELECT b FROM $right) GROUP BY k", 10, s"$modeConfs, union") {
               case g: Aggregate => g
@@ -458,9 +461,9 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   test("SPARK-61871: CBO estimates CHAR predicates that a comparison pads") {
     // A CHAR column compared with a longer literal is padded to the literal's length, and with
     // read-side padding off to its own length as well. All are estimated as the column. Under
-    // `preserveCharVarcharTypeInfo` a comparison with a literal casts the column to STRING
-    // instead, and one with a CHAR column of the same type pads with a pad of as many spaces as
-    // its length.
+    // `preserveCharVarcharTypeInfo` with read-side padding off, a comparison with a literal casts
+    // the column to STRING instead, and one with a CHAR column of the same type pads with a pad
+    // of as many spaces as its length.
     val paddingOff = SQLConf.READ_SIDE_CHAR_PADDING.key -> "false"
     val preserve = SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true"
     Seq(Nil, Seq(paddingOff), Seq(paddingOff, preserve)).foreach { modeConfs =>
@@ -488,6 +491,30 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
             case j: Join => j
           }
         }
+      }
+    }
+  }
+
+  test("SPARK-61871: partition pruning estimates a padded CHAR filter with only planStats on") {
+    // A CHAR partition column compared with a longer literal is padded to the literal's length.
+    // Partition pruning estimates the filter when only `planStats` is on, and saves the result
+    // as the pruned relation's statistics.
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "false",
+        SQLConf.PLAN_STATS_ENABLED.key -> "true") {
+      val tableName = "char_padded_partition_pruning_stats"
+      withTable(tableName) {
+        sql(s"CREATE TABLE $tableName(v INT, p CHAR(5)) USING parquet PARTITIONED BY (p)")
+        sql(s"INSERT INTO $tableName SELECT CAST(id AS INT), $fiveCharValues")
+        sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS v, p")
+
+        val query = s"SELECT * FROM $tableName WHERE p = '10003  '"
+        val plan = sql(query).queryExecution.optimizedPlan
+        val prunedStats = plan.collectFirst {
+          case l: LogicalRelation => l.catalogTable.flatMap(_.stats)
+        }.flatten.getOrElse(fail(s"no catalog statistics in\n${plan.treeString}"))
+        assert(prunedStats.rowCount.contains(BigInt(100)), plan.treeString)
+        assert(sql(query).count() == 100)
       }
     }
   }
