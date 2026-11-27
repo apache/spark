@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.internal.LogKeys.{SQL_TEXT, UNSUPPORTED_EXPR}
-import org.apache.spark.sql.catalyst.expressions.{And, ArrayExists, ArrayFilter, CaseWhen, EqualNullSafe, Expression, If, In, InSet, IsNotNull, LambdaFunction, Like, Literal, MapFilter, Not, Or}
+import org.apache.spark.sql.catalyst.expressions.{And, ArrayExists, ArrayFilter, Attribute, BinaryComparison, CaseWhen, EqualNullSafe, Expression, If, In, InSet, IsNotNull, LambdaFunction, Like, Literal, MapFilter, Not, Or, StringPredicate}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.logical.{DeleteAction, DeleteFromTable, Filter, InsertAction, InsertStarAction, Join, LogicalPlan, MergeAction, MergeIntoTable, ReplaceData, UpdateAction, UpdateStarAction, UpdateTable, WriteDelta}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -129,6 +129,13 @@ object ReplaceNullWithFalseInPredicate extends Rule[LogicalPlan] {
         if pattern != null && isMatchAllLikePattern(pattern.toString, escapeChar) =>
       IsNotNull(child)
 
+    case EqualNullSafe(left, TrueLiteral) if isPushablePredicate(left) => rewriteIsTrue(left)
+    case EqualNullSafe(TrueLiteral, right) if isPushablePredicate(right) => rewriteIsTrue(right)
+    case Not(EqualNullSafe(left, TrueLiteral)) if isPushablePredicate(left) =>
+      Not(rewriteIsTrue(left))
+    case Not(EqualNullSafe(TrueLiteral, right)) if isPushablePredicate(right) =>
+      Not(rewriteIsTrue(right))
+
     case And(left, right) =>
       And(replaceNullWithFalse(left), replaceNullWithFalse(right))
     case Or(left, right) =>
@@ -157,6 +164,27 @@ object ReplaceNullWithFalseInPredicate extends Rule[LogicalPlan] {
         logWarning(message)
         e
       }
+  }
+
+  private def isPushablePredicate(e: Expression): Boolean = e match {
+    case And(left, right) => isPushablePredicate(left) && isPushablePredicate(right)
+    case Or(left, right) => isPushablePredicate(left) && isPushablePredicate(right)
+    case _: BinaryComparison | _: StringPredicate => e.nullIntolerant && e.children.forall {
+      case _: Attribute | _: Literal => true
+      case _ => false
+    }
+    case In(_: Attribute, list) => list.forall {
+      case Literal(value, _) => value != null
+      case _ => false
+    }
+    case InSet(_: Attribute, hset) => !hset.contains(null)
+    case _ => false
+  }
+
+  private def rewriteIsTrue(e: Expression): Expression = e match {
+    case And(left, right) => And(rewriteIsTrue(left), rewriteIsTrue(right))
+    case Or(left, right) => Or(rewriteIsTrue(left), rewriteIsTrue(right))
+    case _ => And(e, e.children.map(IsNotNull(_)).reduce(And))
   }
 
   private def replaceNullWithFalse(mergeActions: Seq[MergeAction]): Seq[MergeAction] = {
