@@ -433,4 +433,20 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
       assert(grpRows === Set((false, 1L), (true, 1L)))
     }
   }
+
+  test("SPARK-58372: pushed integral casts of MONEY values truncate like Spark") {
+    val tableName = "money_cast"
+    val table = s"$catalogName.$tableName"
+    withTable(table) {
+      Using.resource(getConnection()) { conn =>
+        conn.prepareStatement(
+          s"CREATE TABLE $tableName (m MONEY, sm SMALLMONEY, label VARCHAR(8))").executeUpdate()
+        conn.prepareStatement(
+          s"INSERT INTO $tableName VALUES (1.6, 1.6, 'a'), (2.6, 2.6, 'b'), (-1.6, -1.6, 'c')")
+          .executeUpdate()
+      }
+      // SQL Server's own cast rounds MONEY, which would match 1.6 and sum to 2 + 3 + (-2) = 3.
+      checkIntegralCastsTruncate(table, Seq("m", "sm"))
+    }
+  }
 }

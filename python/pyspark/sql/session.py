@@ -18,14 +18,13 @@ import filecmp
 import os
 import sys
 import warnings
-from collections.abc import Sized
+from collections.abc import Callable, Sized
 from functools import cached_property, reduce
 from threading import RLock
 from types import TracebackType
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
     ClassVar,
     Dict,
     Generic,
@@ -1990,6 +1989,49 @@ class SparkSession(SparkConversionMixin):
 
         return DataFrame(self._jsparkSession.table(tableName), self)
 
+    def getOrCreateDataFrame(self, path: str, create: Callable[[], DataFrame]) -> DataFrame:
+        """Returns the :class:`DataFrame` stored at ``path``, computing and storing it first if
+        it is not already there. The dataset is stored as Parquet.
+
+        .. versionadded:: 4.5.0
+
+        Parameters
+        ----------
+        path : str
+            Directory holding the dataset. The caller supplies it, so a scheduled pipeline can
+            keep its runs apart by including a run identifier in it.
+        create : function
+            Zero-argument function returning the :class:`DataFrame` to store. It is called only
+            when ``path`` does not already hold a complete dataset.
+
+        Returns
+        -------
+        :class:`DataFrame`
+
+        Notes
+        -----
+        Supports Spark Classic only.
+
+        This API is experimental.
+
+        Completeness is tracked with a marker file written under ``path`` once the data is
+        stored, so a path left behind by an interrupted write is recomputed rather than read
+        back as if it were finished.
+
+        Examples
+        --------
+        >>> import tempfile
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     path = os.path.join(d, "ids")
+        ...     spark.getOrCreateDataFrame(path, lambda: spark.range(3)).count()
+        ...     spark.getOrCreateDataFrame(path, lambda: spark.range(100)).count()
+        3
+        3
+        """
+        if not self._jsparkSession.isDataFrameMaterialized(path):
+            self._jsparkSession.materializeDataFrame(create()._jdf, path)
+        return self.read.parquet(path)
+
     @property
     def read(self) -> DataFrameReader:
         """
@@ -2354,12 +2396,12 @@ class SparkSession(SparkConversionMixin):
         :class:`SparkContext`, such as with ``--files``. Without Spark Connect, these are all the
         files added to the :class:`SparkContext`, also by other sessions. With Spark Connect, these
         are the files added to this session and those added to the server outside of any session,
-        but not those of the other sessions, which servers before Spark 4.4 also list. A file
+        but not those of the other sessions, which servers before Spark 4.5 also list. A file
         uploaded with :meth:`SparkSession.addArtifacts` is listed as the URI of its copy on the
         server, and one added with ``ADD FILE`` as :attr:`SparkContext.listFiles` lists it, such as
         by the path it was added with when the server runs in local mode.
 
-        .. versionadded:: 4.4.0
+        .. versionadded:: 4.5.0
 
         Returns
         -------
@@ -2398,12 +2440,12 @@ class SparkSession(SparkConversionMixin):
         added with. Without Spark Connect, these are all the archives added to the
         :class:`SparkContext`, also by other sessions. With Spark Connect, these are the archives
         added to this session and those added to the server outside of any session, but not those
-        of the other sessions, which servers before Spark 4.4 also list. An archive uploaded with
+        of the other sessions, which servers before Spark 4.5 also list. An archive uploaded with
         :meth:`SparkSession.addArtifacts` is listed as the URI of its copy on the server, and one
         added with ``ADD ARCHIVE`` as :attr:`SparkContext.listArchives` lists it, such as by the
         path it was added with when the server runs in local mode.
 
-        .. versionadded:: 4.4.0
+        .. versionadded:: 4.5.0
 
         Returns
         -------

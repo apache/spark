@@ -742,7 +742,7 @@ class CodegenContext extends Logging {
   def addBufferedState(dataType: DataType, variableName: String, initCode: String): ExprCode = {
     val value = addMutableState(javaType(dataType), variableName)
     val sqlType = UserDefinedType.sqlType(dataType)
-    val resolved = TypeOps(sqlType).flatMap(_.rowRepresentationType).getOrElse(sqlType)
+    val resolved = TypeOps.rowRepresentationOrSelf(sqlType)
     val code = resolved match {
       case _: StringType => code"$value = $initCode.clone();"
       case _: StructType | _: ArrayType | _: MapType => code"$value = $initCode.copy();"

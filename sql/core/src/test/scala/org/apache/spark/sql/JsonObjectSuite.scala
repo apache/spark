@@ -1424,11 +1424,16 @@ world'))"""))
         sql(s"CREATE OR REPLACE FUNCTION perm_json_fn() RETURNS STRING RETURN $body")
         checkAnswer(sql("SELECT perm_json_fn()"), Row("""{"a":{"b":1}}"""))
       }
-      // The flat call is still rejected by name, as before.
-      val e = intercept[AnalysisException] {
-        sql("CREATE OR REPLACE FUNCTION perm_json_fn() RETURNS STRING RETURN json_object('a', 1)")
+      // The built-in owns the flat call too. Earlier versions rejected it by name, as the legacy
+      // flag does.
+      val flat = "CREATE OR REPLACE FUNCTION perm_json_fn() RETURNS STRING " +
+        "RETURN json_object('a', 1)"
+      sql(flat)
+      checkAnswer(sql("SELECT perm_json_fn()"), Row("""{"a":1}"""))
+      withSQLConf(SQLConf.LEGACY_ALLOW_TEMP_FUNCTION_IN_PERSISTED_SQL_FUNCTION.key -> "true") {
+        val e = intercept[AnalysisException](sql(flat))
+        assert(e.getCondition == "INVALID_TEMP_OBJ_REFERENCE")
       }
-      assert(e.getCondition == "INVALID_TEMP_OBJ_REFERENCE")
     } finally {
       sql("DROP FUNCTION IF EXISTS perm_json_fn")
       sql("DROP TEMPORARY FUNCTION IF EXISTS json_object")

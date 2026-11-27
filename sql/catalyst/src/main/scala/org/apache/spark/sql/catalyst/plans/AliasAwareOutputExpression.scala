@@ -64,12 +64,62 @@ trait AliasAwareOutputExpression extends SQLConfHelper {
 
   protected def hasAlias: Boolean = aliasMap.nonEmpty
 
+  private def isFoldableLeaf(expr: Expression): Boolean =
+    expr.foldable && expr.children.isEmpty
+
+  @transient
+  protected lazy val hasFoldableAlias = aliasMap.keys.exists(isFoldableLeaf)
+
+  protected def keepsFoldable(expr: Expression): Boolean =
+    hasFoldableAlias && expr.exists(e => isFoldableLeaf(e) && aliasMap.contains(e.canonicalized))
+
   /**
    * Return a stream of expressions in which the original expression is projected with `aliasMap`.
+   * When an alias child is a foldable leaf, also return the spelling that keeps the literal: a
+   * requirement can keep that spelling where FoldablePropagation does not rewrite it (for example
+   * across CollectMetrics or a checkpoint). Projecting twice adds at most one constant spelling
+   * per candidate, instead of forking every occurrence of a literal into 2^k candidates.
    */
   protected def projectExpression(expr: Expression): LazyList[Expression] = {
+    val (aliasExprs, constantExprs) = projectExpressions(Seq(expr))
+    aliasExprs #::: constantExprs
+  }
+
+  /**
+   * Projects `exprs` into two deduplicated streams: `(aliasExprs, constantExprs)`.
+   * `aliasExprs` holds the standard alias-projected spellings (`keepFoldable = false`);
+   * `constantExprs` holds the constant spellings for inputs keeping a matched foldable leaf
+   * (`keepFoldable = true`), which are disjoint from `aliasExprs`.
+   */
+  protected def projectExpressions(
+      exprs: Iterable[Expression]): (LazyList[Expression], LazyList[Expression]) = {
+    val lazyExprs = exprs.to(LazyList)
     val outputSet = AttributeSet(outputExpressions.map(_.toAttribute))
+    val aliasSeen = mutable.Set.empty[Expression]
+    val aliasExprs = lazyExprs
+      .flatMap(projectExpression(_, outputSet, keepFoldable = false))
+      .filter(e => aliasSeen.add(e.canonicalized))
+    val constantExprs = if (hasFoldableAlias) {
+      val constantSeen = mutable.Set.empty[Expression]
+      lazyExprs.filter(keepsFoldable)
+        .flatMap(projectExpression(_, outputSet, keepFoldable = true))
+        .filter(e => keepsFoldable(e) && constantSeen.add(e.canonicalized))
+    } else {
+      LazyList.empty
+    }
+    (aliasExprs, constantExprs)
+  }
+
+  private def projectExpression(
+      expr: Expression,
+      outputSet: AttributeSet,
+      keepFoldable: Boolean): LazyList[Expression] = {
     expr.multiTransformDown {
+      // The second pass leaves a matched foldable leaf in place: the constant spelling.
+      case e: Expression
+          if keepFoldable && isFoldableLeaf(e) && aliasMap.contains(e.canonicalized) =>
+        Seq(e)
+
       // Mapping with aliases
       case e: Expression if aliasMap.contains(e.canonicalized) =>
         aliasMap(e.canonicalized).toSeq ++ (if (e.containsChild.nonEmpty) Seq(e) else Seq.empty)
@@ -102,10 +152,8 @@ trait AliasAwareQueryOutputOrdering[T <: QueryPlan[T]]
       // if only `a AS x` can be projected then we can return Seq(SortOrder(x))`
       // but if only `b AS y` can be projected we can't return `Seq(SortOrder(y))`.
       orderingExpressions.iterator.map { sortOrder =>
-        val orderingSet = mutable.Set.empty[Expression]
-        val sameOrderings = sortOrder.children.to(LazyList)
-          .flatMap(projectExpression)
-          .filter(e => orderingSet.add(e.canonicalized))
+        val (aliasOrderings, constantOrderings) = projectExpressions(sortOrder.children)
+        val sameOrderings = (aliasOrderings #::: constantOrderings)
           .take(aliasCandidateLimit)
           // Materialize the bounded result into a strict collection. The `LazyList` above is only
           // needed so `take` can short-circuit candidate generation; storing `sameOrderExpressions`

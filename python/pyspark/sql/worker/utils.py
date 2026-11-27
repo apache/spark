@@ -56,15 +56,13 @@ class RunnerConf(Conf):
         return self.get("spark.sql.pyspark.dataSource.profiler", None)
 
 
-def is_method_overridden(reader: Any, name: str) -> bool:
+def is_method_overridden(instance: Any, base: type, name: str) -> bool:
     """
-    Whether `reader` overrides the `DataSourceReader` method `name`, rather than inheriting the
-    default implementation. Used to detect pushdown methods that a reader implements while the
-    corresponding pushdown configuration is disabled, so that they are not silently ignored.
+    Whether `instance` overrides the `base` method `name`, rather than inheriting the default
+    implementation. Used to detect methods that a reader or writer implements while the
+    configuration that enables them is disabled, so that they are not silently ignored.
     """
-    from pyspark.sql.datasource import DataSourceReader
-
-    return getattr(getattr(reader, name), "__func__", None) is not getattr(DataSourceReader, name)
+    return getattr(getattr(instance, name), "__func__", None) is not getattr(base, name)
 
 
 def check_pushdown_not_disabled(
@@ -79,12 +77,13 @@ def check_pushdown_not_disabled(
     the read info in that worker and `plan_data_source_read` never runs for such a scan.
     """
     from pyspark.errors import PySparkAssertionError
+    from pyspark.sql.datasource import DataSourceReader
 
     for method, conf, enabled in (
         ("pushFilters", "spark.sql.python.filterPushdown.enabled", enable_filter_pushdown),
         ("pushLimit", "spark.sql.python.limitPushdown.enabled", enable_limit_pushdown),
     ):
-        if not enabled and is_method_overridden(reader, method):
+        if not enabled and is_method_overridden(reader, DataSourceReader, method):
             raise PySparkAssertionError(
                 errorClass="DATA_SOURCE_PUSHDOWN_DISABLED",
                 messageParameters={

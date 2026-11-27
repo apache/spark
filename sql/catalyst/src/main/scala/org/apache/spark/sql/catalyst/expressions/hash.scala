@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, MapData}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
@@ -715,6 +715,11 @@ abstract class HashExpression[E] extends Expression {
       genHashForMap(ctx, input, result, kt, vt, valueContainsNull)
     case StructType(fields) => genHashForStruct(ctx, input, result, fields)
     case udt: UserDefinedType[_] => computeHashWithTailRec(input, udt.sqlType, result, ctx)
+    case ft: FileType =>
+      // FILE is not comparable, so its values cannot be hashed. Only a non-null value reaches
+      // here; a null FILE value keeps the seed, as for any other type.
+      val fileType = ctx.addReferenceObj("fileType", ft, classOf[DataType].getName)
+      s"if (true) throw QueryExecutionErrors.unsupportedDataTypeError($fileType);"
   }
 
   protected def computeHash(
@@ -867,6 +872,8 @@ abstract class InterpretedHashFunction {
           case udt: UserDefinedType[_] =>
             udt.sqlType.asInstanceOf[StructType].map(_.dataType).toArray
           case StructType(fields) => fields.map(_.dataType)
+          // FILE is not comparable, so its values cannot be hashed.
+          case ft: FileType => throw QueryExecutionErrors.unsupportedDataTypeError(ft)
         }
         var result = seed
         var i = 0
@@ -1407,6 +1414,8 @@ object HiveHashFunction extends InterpretedHashFunction {
           case udt: UserDefinedType[_] =>
             udt.sqlType.asInstanceOf[StructType].map(_.dataType).toArray
           case StructType(fields) => fields.map(_.dataType)
+          // FILE is not comparable, so its values cannot be hashed.
+          case ft: FileType => throw QueryExecutionErrors.unsupportedDataTypeError(ft)
         }
 
         var result = 0

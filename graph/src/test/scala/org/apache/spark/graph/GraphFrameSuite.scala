@@ -24,7 +24,7 @@ import org.apache.spark.graph.GraphFrame.{DST, ID, SRC}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.functions.{array, col}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ByteType, IntegerType, LongType, ShortType, StringType}
+import org.apache.spark.sql.types.{ByteType, IntegerType, LongType, ShortType, StringType, StructField, StructType}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
@@ -403,6 +403,112 @@ class GraphFrameSuite extends QueryTest with GraphFrameTestBase {
     assert(g.edgeColumns.toSeq == Seq(SRC, DST, "relationship"))
   }
 
+  test("degree metrics") {
+    val g = graph
+    assert(g.outDegrees.columns.toSeq == Seq(ID, "outDegree"))
+    checkColumnType(g.outDegrees.schema, "outDegree", IntegerType)
+    checkAnswer(g.outDegrees, Seq(Row(0L, 1), Row(1L, 2), Row(2L, 2)))
+
+    assert(g.inDegrees.columns.toSeq == Seq(ID, "inDegree"))
+    checkColumnType(g.inDegrees.schema, "inDegree", IntegerType)
+    checkAnswer(g.inDegrees, Seq(Row(0L, 2), Row(1L, 1), Row(2L, 1), Row(3L, 1)))
+
+    assert(g.degrees.columns.toSeq == Seq(ID, "degree"))
+    checkColumnType(g.degrees.schema, "degree", IntegerType)
+    checkAnswer(g.degrees, Seq(Row(0L, 3), Row(1L, 3), Row(2L, 3), Row(3L, 1)))
+  }
+
+  test("degree metrics skip isolated vertices and count self-loops twice") {
+    val g = GraphFrame(
+      vertexData,
+      spark.createDataFrame(Seq((0L, 0L, "self"), (0L, 1L, "friend"))).toDF(SRC, DST, "rel"))
+    checkAnswer(g.outDegrees, Seq(Row(0L, 2)))
+    checkAnswer(g.inDegrees, Seq(Row(0L, 1), Row(1L, 1)))
+    checkAnswer(g.degrees, Seq(Row(0L, 3), Row(1L, 1)))
+  }
+
+  test("type degree metrics") {
+    val g = graph
+    val types = Seq("follow", "friend", "unknown")
+    val degreesType = StructType(types.map(StructField(_, IntegerType, nullable = false)))
+
+    val out = g.typeOutDegree("relationship")
+    assert(out.schema == StructType(Seq(
+      StructField(ID, LongType, nullable = false),
+      StructField("outDegrees", degreesType, nullable = false))))
+    checkAnswer(out, Seq(Row(0L, Row(0, 1, 0)), Row(1L, Row(1, 1, 0)), Row(2L, Row(1, 0, 1))))
+
+    val in = g.typeInDegree("relationship")
+    assert(in.columns.toSeq == Seq(ID, "inDegrees"))
+    checkAnswer(
+      in,
+      Seq(Row(0L, Row(1, 0, 1)), Row(1L, Row(0, 1, 0)), Row(2L, Row(0, 1, 0)),
+        Row(3L, Row(1, 0, 0))))
+
+    val all = g.typeDegree("relationship")
+    assert(all.columns.toSeq == Seq(ID, "degrees"))
+    checkAnswer(
+      all,
+      Seq(Row(0L, Row(1, 1, 1)), Row(1L, Row(1, 2, 0)), Row(2L, Row(1, 1, 1)),
+        Row(3L, Row(1, 0, 0))))
+  }
+
+  test("type degree metrics with explicit edge types") {
+    val g = graph
+    // The struct fields follow the order of the given types, including the types without edges.
+    val types = Seq("friend", "follow", "missing")
+    Seq(
+      g.typeOutDegree("relationship", types) ->
+        Seq(Row(0L, Row(1, 0, 0)), Row(1L, Row(1, 1, 0)), Row(2L, Row(0, 1, 0))),
+      g.typeInDegree("relationship", types) ->
+        Seq(Row(0L, Row(0, 1, 0)), Row(1L, Row(1, 0, 0)), Row(2L, Row(1, 0, 0)),
+          Row(3L, Row(0, 1, 0))),
+      g.typeDegree("relationship", types) ->
+        Seq(Row(0L, Row(1, 1, 0)), Row(1L, Row(2, 1, 0)), Row(2L, Row(1, 1, 0)),
+          Row(3L, Row(0, 1, 0)))).foreach { case (df, expected) =>
+      assert(df.schema(1).dataType.asInstanceOf[StructType].fieldNames.toSeq == types)
+      checkAnswer(df, expected)
+    }
+    // Edges of the types that are not listed are not counted.
+    checkAnswer(
+      g.typeOutDegree("relationship", Seq("unknown")),
+      Seq(Row(0L, Row(0)), Row(1L, Row(0)), Row(2L, Row(1))))
+  }
+
+  test("type degree metrics with edge types equal to id or with special characters") {
+    val types = Seq(ID, "a.b", "a `b`")
+    val g = GraphFrame(
+      vertexData,
+      spark.createDataFrame(Seq((0L, 1L, types(0)), (0L, 2L, types(1)), (1L, 2L, types(2))))
+        .toDF(SRC, DST, "edge.type"))
+    val out = g.typeOutDegree("`edge.type`", types)
+    assert(out.columns.toSeq == Seq(ID, "outDegrees"))
+    assert(out.schema("outDegrees").dataType.asInstanceOf[StructType].fieldNames.toSeq == types)
+    checkAnswer(out, Seq(Row(0L, Row(1, 1, 0)), Row(1L, Row(0, 0, 1))))
+    checkAnswer(
+      g.typeDegree("`edge.type`").select(ID, "degrees.`id`", "degrees.`a.b`"),
+      Seq(Row(0L, 1, 1), Row(1L, 1, 0), Row(2L, 0, 1)))
+  }
+
+  test("type degree metrics with integer edge types") {
+    val g = GraphFrame(vertexData, edgeData.withColumn("w", col(SRC) % 2))
+    val out = g.typeOutDegree("w")
+    assert(out.schema("outDegrees").dataType.asInstanceOf[StructType].fieldNames.toSeq ==
+      Seq("0", "1"))
+    checkAnswer(out, Seq(Row(0L, Row(1, 0)), Row(1L, Row(0, 2)), Row(2L, Row(2, 0))))
+  }
+
+  test("type degree metrics fail on a missing edge type column") {
+    checkError(
+      exception = intercept[AnalysisException](graph.typeOutDegree("missing")),
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      sqlState = "42703",
+      parameters = Map(
+        "objectName" -> "`missing`",
+        "proposal" -> "`dst`, `src`, `relationship`"),
+      context = ExpectedContext(fragment = "col", callSitePattern = ".*"))
+  }
+
   test("filterEdges and dropIsolatedVertices") {
     val expectedEdges = Seq(Row(0L, 1L, "friend"), Row(1L, 2L, "friend"))
     val expectedVertices = Seq(Row(0L, "a", "f"), Row(1L, "b", "m"), Row(2L, "c", "m"))
@@ -583,6 +689,12 @@ class GraphFrameSuite extends QueryTest with GraphFrameTestBase {
     checkAnswer(g.filterVertices(col(ID) > 0).vertices, Seq.empty)
     checkAnswer(g.filterEdges(col(SRC) > 0).edges, Seq.empty)
     checkAnswer(g.dropIsolatedVertices().vertices, Seq.empty)
+    checkAnswer(g.outDegrees, Seq.empty)
+    checkAnswer(g.inDegrees, Seq.empty)
+    checkAnswer(g.degrees, Seq.empty)
+    checkAnswer(g.typeOutDegree("relationship", Seq("friend")), Seq.empty)
+    checkAnswer(g.typeInDegree("relationship", Seq("friend")), Seq.empty)
+    checkAnswer(g.typeDegree("relationship", Seq("friend")), Seq.empty)
   }
 
   test("toString puts the id, src and dst columns first") {
@@ -619,5 +731,9 @@ class GraphFrameSuite extends QueryTest with GraphFrameTestBase {
     checkAnswer(
       g.filterVertices(col(ID) =!= "0").edges.select(SRC, DST),
       Seq(Row("1", "2"), Row("2", "3")))
+    checkAnswer(g.degrees, Seq(Row("0", 3), Row("1", 3), Row("2", 3), Row("3", 1)))
+    checkAnswer(
+      g.typeInDegree("relationship", Seq("follow")),
+      Seq(Row("0", Row(1)), Row("1", Row(0)), Row("2", Row(0)), Row("3", Row(1))))
   }
 }
