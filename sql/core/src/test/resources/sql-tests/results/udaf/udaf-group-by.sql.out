@@ -288,7 +288,7 @@ SELECT udaf(1) FROM testData WHERE false
 -- !query schema
 struct<udaf(1):int>
 -- !query output
-
+0
 
 
 -- !query

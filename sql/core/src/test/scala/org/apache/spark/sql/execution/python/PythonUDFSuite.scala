@@ -97,6 +97,22 @@ class PythonUDFSuite extends SharedSparkSession {
     checkAnswer(actual, expected)
   }
 
+  test("SPARK-60826: Global aggregation of Pandas UDF returns one row for an empty input") {
+    assume(shouldTestPandasUDFs)
+    // The pandas UDF counts the values of its input.
+    val pandasTestUDF = TestGroupedAggPandasUDF(name = "pandas_udf")
+    Seq(
+      spark.range(10).where("id > 100"),
+      spark.range(10).where("id > 100").repartition(3),
+      spark.emptyDataset[Long].toDF("id")
+    ).foreach { df =>
+      checkAnswer(df.agg(pandasTestUDF(df("id"))), df.agg(count(df("id"))))
+      checkAnswer(df.agg(pandasTestUDF(df("id")), pandasTestUDF(df("id") + 1)), Row(0, 0))
+      // An aggregation with grouping keys returns no row for an empty input.
+      checkAnswer(df.groupBy("id").agg(pandasTestUDF(df("id"))), Seq.empty[Row])
+    }
+  }
+
   test("SPARK-34265: Instrument Python UDF execution using SQL Metrics") {
     assume(shouldTestPythonUDFs)
     val pythonSQLMetrics = List(

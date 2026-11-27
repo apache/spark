@@ -287,6 +287,9 @@ private[python] trait GroupedPythonArrowInput { self: RowInputArrowPythonRunner 
       private var nextBatchStart: Iterator[InternalRow] = Iterator.empty
 
       override def writeNextInputToStream(dataOut: DataOutputStream): Boolean = {
+        // A group with no rows is sent as a single batch with no rows, so that the Python worker
+        // still gets the group, together with its schema.
+        var isEmptyGroup = false
         if (!nextBatchStart.hasNext) {
           if (inputIterator.hasNext) {
             dataOut.writeInt(1) // Notify that there is a group to read.
@@ -297,9 +300,10 @@ private[python] trait GroupedPythonArrowInput { self: RowInputArrowPythonRunner 
             // Set the unloader with compression after creating the writer
             writer.unloader = ArrowCompressionUtils.createVectorUnloader(writer.root, self.codec)
             nextBatchStart = inputIterator.next()
+            isEmptyGroup = !nextBatchStart.hasNext
           }
         }
-        if (nextBatchStart.hasNext) {
+        if (nextBatchStart.hasNext || isEmptyGroup) {
           val startData = dataOut.size()
           val numRowsInBatch: Int = BatchedPythonArrowInput.writeSizedBatch(writer.arrowWriter,
             writer.streamWriter, nextBatchStart, maxBytesPerBatch, maxRecordsPerBatch,
@@ -310,7 +314,8 @@ private[python] trait GroupedPythonArrowInput { self: RowInputArrowPythonRunner 
             // the TaskCompletionListener.
             writer.close()
           }
-          assert(0 < numRowsInBatch && numRowsInBatch <= maxRecordsPerBatch, numRowsInBatch)
+          assert((0 < numRowsInBatch || isEmptyGroup) && numRowsInBatch <= maxRecordsPerBatch,
+            numRowsInBatch)
           val deltaData = dataOut.size() - startData
           pythonMetrics("pythonDataSent") += deltaData
           true
