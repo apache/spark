@@ -752,12 +752,12 @@ case class Join(
 
   override lazy val maxRows: Option[Long] = {
     joinType match {
-      case Inner | Cross | FullOuter | LeftOuter | RightOuter | LeftSingle
+      case Inner | Cross | FullOuter | LeftOuter | RightOuter
           if left.maxRows.isDefined && right.maxRows.isDefined =>
         val leftMaxRows = BigInt(left.maxRows.get)
         val rightMaxRows = BigInt(right.maxRows.get)
         val minRows = joinType match {
-          case LeftOuter | LeftSingle => leftMaxRows
+          case LeftOuter => leftMaxRows
           case RightOuter => rightMaxRows
           case FullOuter => leftMaxRows + rightMaxRows
           case _ => BigInt(0)
@@ -769,7 +769,7 @@ case class Join(
           None
         }
 
-      case LeftSemi | LeftAnti =>
+      case LeftSemi | LeftAnti | LeftSingle =>
         left.maxRows
 
       case _ =>
@@ -848,9 +848,10 @@ case class Join(
     patterns
   }
 
-  // Ignore hint for canonicalization
+  // Ignore hint for canonicalization, and normalize the join type, see `JoinType.canonicalized`.
   protected override def doCanonicalize(): LogicalPlan =
-    super.doCanonicalize().asInstanceOf[Join].copy(hint = JoinHint.NONE)
+    super.doCanonicalize().asInstanceOf[Join].copy(
+      joinType = joinType.canonicalized, hint = JoinHint.NONE)
 
   // Do not include an empty join hint in string description
   protected override def stringArgs: Iterator[Any] = super.stringArgs.filter { e =>
@@ -2669,9 +2670,10 @@ case class LateralJoin(
    */
   override def resolveChildren(
       nameParts: Seq[String],
-      resolver: Resolver): Option[NamedExpression] = {
-    childAttributes.resolve(nameParts, resolver)
-      .orElse(childMetadataAttributes.resolve(nameParts, resolver))
+      resolver: Resolver,
+      optionalNamePartIndices: Set[Int]): Option[NamedExpression] = {
+    childAttributes.resolve(nameParts, resolver, optionalNamePartIndices)
+      .orElse(childMetadataAttributes.resolve(nameParts, resolver, optionalNamePartIndices))
   }
 
   override def childrenResolved: Boolean = left.resolved && right.resolved
@@ -3147,18 +3149,18 @@ object AsOfJoin extends PredicateHelper {
           case (true, Backward) =>
             And(base, GreaterThanOrEqual(rightAsOf, lowerBound))
           case (false, Backward) =>
-            And(base, GreaterThan(rightAsOf, lowerBound))
+            And(base, GreaterThanOrEqual(rightAsOf, lowerBound))
           case (true, Forward) =>
             And(base, LessThanOrEqual(rightAsOf, upperBound))
           case (false, Forward) =>
-            And(base, LessThan(rightAsOf, upperBound))
+            And(base, LessThanOrEqual(rightAsOf, upperBound))
           case (true, Nearest) =>
             And(GreaterThanOrEqual(rightAsOf, lowerBound),
               LessThanOrEqual(rightAsOf, upperBound))
           case (false, Nearest) =>
             And(base,
-              And(GreaterThan(rightAsOf, lowerBound),
-                LessThan(rightAsOf, upperBound)))
+              And(GreaterThanOrEqual(rightAsOf, lowerBound),
+                LessThanOrEqual(rightAsOf, upperBound)))
         }
       case None => base
     }

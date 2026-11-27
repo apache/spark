@@ -283,6 +283,9 @@ class JDBCOptions(
       .map(_.toBoolean)
       .getOrElse(dialectTimestampNTZAsWallClock)
 
+  // Resolved once, so tasks compile pushed predicates under the value pushdown used.
+  val legacyIntegralCastPushdown: Boolean = SQLConf.get.legacyJdbcRoundIntegralCastPushdown
+
   val hint = parameters.get(JDBC_HINT_STRING).map(value => {
     require(value.matches("(?s)^/\\*\\+ .* \\*/$"),
       s"Invalid value `$value` for option `$JDBC_HINT_STRING`." +
@@ -300,6 +303,16 @@ class JDBCOptions(
   }
 
   def getRedactUrl(): String = JDBCOptions.redactUrl(url, SQLConf.get.stringRedactionPattern)
+
+  /**
+   * Whether `other` opens a connection to the same database, with the same driver, connection
+   * provider and connection properties as these options.
+   */
+  def opensSameConnection(other: JDBCOptions): Boolean =
+    url == other.url &&
+      driverClass == other.driverClass &&
+      connectionProviderName == other.connectionProviderName &&
+      asConnectionProperties == other.asConnectionProperties
 }
 
 class JdbcOptionsInWrite(

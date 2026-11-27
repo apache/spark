@@ -185,9 +185,14 @@ object InternalRow {
 
   /**
    * Returns a writer for an `InternalRow` with given data type.
+   *
+   * A framework type with a row representation is written as that representation, so that a
+   * value pointing into a reused buffer (e.g. an `UnsafeRow`) is copied.
    */
   def getWriter(ordinal: Int, dt: DataType): (InternalRow, Any) => Unit =
-    TypeOps(dt).map(_.getRowWriter(ordinal)).getOrElse(getWriterDefault(ordinal, dt))
+    TypeOps(dt).map { ops =>
+      ops.rowRepresentationType.map(getWriter(ordinal, _)).getOrElse(ops.getRowWriter(ordinal))
+    }.getOrElse(getWriterDefault(ordinal, dt))
 
   private def getWriterDefault(
       ordinal: Int, dt: DataType): (InternalRow, Any) => Unit = dt match {

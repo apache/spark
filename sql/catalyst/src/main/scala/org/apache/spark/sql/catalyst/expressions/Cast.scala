@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.st.STExpressionUtils.isGeoSpatialType
+import org.apache.spark.sql.catalyst.optimizer.SpecialDatetimeValues
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.{PhysicalFractionalType, PhysicalIntegralType, PhysicalNumericType}
@@ -97,6 +98,9 @@ object Cast extends QueryErrorsBase {
     // Geospatial types cannot be cast to/from other data types.
     case (fromType, toType) if isGeoSpatialType(fromType) != isGeoSpatialType(toType) => false
 
+    // A cast of a FILE to STRING is to read its bytes (SPARK-59132), which is not supported yet.
+    case (fromType, _: StringType) if fromType.existsRecursively(_.isInstanceOf[FileType]) =>
+      false
     case (_, _: StringType) => true
 
     case (_: StringType, _: BinaryType) => true
@@ -189,6 +193,8 @@ object Cast extends QueryErrorsBase {
         }
 
     case (udt1: UserDefinedType[_], udt2: UserDefinedType[_]) if udt2.acceptsType(udt1) => true
+    // A FILE casts to a FILE of unknown mode: the value does not change.
+    case (_: FileType, FileType(FileTypeMode.UNKNOWN)) => true
 
     // Casts from concrete GEOGRAPHY(srid) to mixed GEOGRAPHY(ANY) is allowed.
     case (gt1: GeographyType, gt2: GeographyType) if !gt1.isMixedSrid && gt2.isMixedSrid =>
@@ -239,6 +245,20 @@ object Cast extends QueryErrorsBase {
   val BY_TABLE_INSERTION = TreeNodeTag[Unit]("by_table_insertion")
 
   /**
+   * Whether a cast that stores a value of type `from` in a table column of type `to` is valid.
+   * Such a cast also turns a FILE of any mode into the FILE EXTERNAL of the column, which an
+   * explicit cast does not: the value does not change, and the file becomes external to the
+   * table that stores it.
+   */
+  private def canCastForTableInsertion(
+      from: DataType,
+      to: DataType,
+      canCast: (DataType, DataType) => Boolean): Boolean = {
+    canCast(from, to) || (to.existsRecursively(_.isInstanceOf[FileType]) &&
+      canCast(from, to.transformRecursively { case _: FileType => FileType() }))
+  }
+
+  /**
    * A tag to decide if a CAST is specified by user.
    */
   val USER_SPECIFIED_CAST = new TreeNodeTag[Unit]("user_specified_cast")
@@ -260,6 +280,9 @@ object Cast extends QueryErrorsBase {
     // Geospatial types cannot be cast to/from other data types.
     case (fromType, toType) if isGeoSpatialType(fromType) != isGeoSpatialType(toType) => false
 
+    // A cast of a FILE to STRING is to read its bytes (SPARK-59132), which is not supported yet.
+    case (fromType, _: StringType) if fromType.existsRecursively(_.isInstanceOf[FileType]) =>
+      false
     case (_, _: StringType) => true
 
     case (_: StringType, BinaryType) => true
@@ -360,6 +383,8 @@ object Cast extends QueryErrorsBase {
         }
 
     case (udt1: UserDefinedType[_], udt2: UserDefinedType[_]) if udt2.acceptsType(udt1) => true
+    // A FILE casts to a FILE of unknown mode: the value does not change.
+    case (_: FileType, FileType(FileTypeMode.UNKNOWN)) => true
 
     // Casts from concrete GEOGRAPHY(srid) to mixed GEOGRAPHY(ANY) is allowed.
     case (gt1: GeographyType, gt2: GeographyType) if !gt1.isMixedSrid && gt2.isMixedSrid =>
@@ -386,8 +411,8 @@ object Cast extends QueryErrorsBase {
    * (micro and nanosecond), TIME -> TIMESTAMP_NTZ (whose date fields come from CURRENT_DATE), and
    * both directions of TIME <-> TIMESTAMP_LTZ (the LTZ value is an absolute instant, so extracting
    * its time-of-day and attaching CURRENT_DATE to a TIME both depend on the session time zone).
-   * A cast to STRING is zone-dependent whenever one of those timestamps appears anywhere in the
-   * source type, including under ARRAY/MAP/STRUCT.
+   * A cast to STRING is zone-dependent whenever one of those timestamps, or a VARIANT, appears
+   * anywhere in the source type, including under ARRAY/MAP/STRUCT.
    */
   def needsTimeZone(from: DataType, to: DataType): Boolean = (from, to) match {
     case (VariantType, _) => true
@@ -437,8 +462,8 @@ object Cast extends QueryErrorsBase {
           case (fromField, toField) =>
             needsTimeZone(fromField.dataType, toField.dataType)
         }
-    // `castToString` recurses into ARRAY/MAP/STRUCT and formats each LTZ leaf with `zoneId`, while
-    // the complex-to-complex cases above only match a target of the same shape.
+    // `castToString` recurses into ARRAY/MAP/STRUCT and formats each LTZ or VARIANT leaf with
+    // `zoneId`, while the complex-to-complex cases above only match a target of the same shape.
     case (from, _: StringType) => from.existsRecursively(needsTimeZoneToString)
     case _ => false
   }
@@ -448,13 +473,11 @@ object Cast extends QueryErrorsBase {
    * ARRAY/MAP/STRUCT nodes return false; the caller uses `existsRecursively` to inspect
    * nested types, while Python UDTs recursively check their `sqlType`.
    *
-   * Only the LTZ families carry an absolute instant that has to be localized;
-   * TIMESTAMP_NTZ, DATE and TIME render on a fixed grid, and a nested VARIANT renders
-   * through `VariantVal.toString` at UTC (only a top-level VARIANT reads the zone,
-   * via the `(VariantType, _)` arm).
+   * Only the LTZ families and VARIANT (which can hold a TIMESTAMP) carry an absolute instant that
+   * has to be localized; TIMESTAMP_NTZ, DATE and TIME render on a fixed grid.
    */
   private def needsTimeZoneToString(dt: DataType): Boolean = dt match {
-    case TimestampType | _: TimestampLTZNanosType => true
+    case TimestampType | _: TimestampLTZNanosType | VariantType => true
     // A Python UDT renders through its `sqlType`; a Scala UDT through its `stringifyValue`.
     case pudt: PythonUserDefinedType => pudt.sqlType.existsRecursively(needsTimeZoneToString)
     case _ => false
@@ -856,8 +879,16 @@ case class Cast(
   }
 
   override def contextIndependentFoldable: Boolean = {
-    child.contextIndependentFoldable && !Cast.needsTimeZone(child.dataType, dataType)
+    child.contextIndependentFoldable && !Cast.needsTimeZone(child.dataType, dataType) &&
+      specialDatetimeValue.isEmpty
   }
+
+  /**
+   * The special value that this casts, such as 'today' or 'epoch', which `SpecialDatetimeValues`
+   * replaces with its value. Evaluating the cast does not give that value.
+   */
+  private[sql] lazy val specialDatetimeValue: Option[UTF8String] =
+    SpecialDatetimeValues.specialValueOf(this)
 
   def ansiEnabled: Boolean = {
     evalMode == EvalMode.ANSI || (evalMode == EvalMode.TRY && !canUseLegacyCastForTryCast)
@@ -901,13 +932,18 @@ case class Cast(
 
   override def checkInputDataTypes(): TypeCheckResult = {
     TypeUtils.failUnsupportedDataType(dataType, SQLConf.get)
-    val canCast = evalMode match {
-      case EvalMode.LEGACY => Cast.canCast(child.dataType, dataType)
-      case EvalMode.ANSI => Cast.canAnsiCast(child.dataType, dataType)
-      case EvalMode.TRY => Cast.canTryCast(child.dataType, dataType)
+    val canCastFn: (DataType, DataType) => Boolean = evalMode match {
+      case EvalMode.LEGACY => Cast.canCast
+      case EvalMode.ANSI => Cast.canAnsiCast
+      case EvalMode.TRY => Cast.canTryCast
       case other => throw new SparkIllegalArgumentException(
         errorClass = "_LEGACY_ERROR_TEMP_3232",
         messageParameters = Map("other" -> other.toString))
+    }
+    val canCast = if (containsTag(Cast.BY_TABLE_INSERTION)) {
+      Cast.canCastForTableInsertion(child.dataType, dataType, canCastFn)
+    } else {
+      canCastFn(child.dataType, dataType)
     }
     if (canCast) {
       TypeCheckResult.TypeCheckSuccess
@@ -1386,6 +1422,8 @@ case class Cast(
       b => CastUtils.floatToShortExact(b.asInstanceOf[Float])
     case DoubleType if ansiEnabled =>
       b => CastUtils.doubleToShortExact(b.asInstanceOf[Double])
+    case _: DecimalType if ansiEnabled =>
+      b => b.asInstanceOf[Decimal].roundToShort()
     case x: NumericType if ansiEnabled =>
       val exactNumeric = PhysicalNumericType.exactNumeric(x)
       b =>
@@ -1452,6 +1490,8 @@ case class Cast(
       b => CastUtils.floatToByteExact(b.asInstanceOf[Float])
     case DoubleType if ansiEnabled =>
       b => CastUtils.doubleToByteExact(b.asInstanceOf[Double])
+    case _: DecimalType if ansiEnabled =>
+      b => b.asInstanceOf[Decimal].roundToByte()
     case x: NumericType if ansiEnabled =>
       val exactNumeric = PhysicalNumericType.exactNumeric(x)
       b =>
@@ -1715,6 +1755,8 @@ case class Cast(
         case struct: StructType => castStruct(from.asInstanceOf[StructType], struct)
         case udt: UserDefinedType[_] if udt.acceptsType(from) =>
           identity[Any]
+        case ft: FileType if ft.acceptsType(from) =>
+          identity[Any]
         case _: UserDefinedType[_] =>
           throw QueryExecutionErrors.cannotCastError(from, to)
       }
@@ -1831,6 +1873,8 @@ case class Cast(
     case map: MapType => castMapCode(from.asInstanceOf[MapType], map, ctx)
     case struct: StructType => castStructCode(from.asInstanceOf[StructType], struct, ctx)
     case udt: UserDefinedType[_] if udt.acceptsType(from) =>
+      (c, evPrim, evNull) => code"$evPrim = $c;"
+    case ft: FileType if ft.acceptsType(from) =>
       (c, evPrim, evNull) => code"$evPrim = $c;"
     case _: UserDefinedType[_] =>
       throw QueryExecutionErrors.cannotCastError(from, to)

@@ -21,8 +21,9 @@ import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.analysis.FormExternalLookupJoin
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, ExternalUserDefinedFunction, If,
-  Literal, PythonUDF, RaiseError, Rand, ScalarSubquery}
+import org.apache.spark.sql.catalyst.expressions.{Add, Cast, EvalMode, Expression,
+  ExternalUserDefinedFunction, If, Literal, NumericEvalContext, PythonUDF, RaiseError, Rand,
+  ScalarSubquery}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftAnti, LeftOuter, LeftSemi,
   PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupJoin, Join, JoinHint,
@@ -138,6 +139,12 @@ class PushPredicateThroughExternalLookupJoinSuite extends PlanTest {
     }
     val filtered = lookupJoin(LeftOuter, keysEqual).where(lookupNonCandidate && nonDeterministic)
     assert(Optimize.execute(filtered) eq filtered)
+    // A conjunct written after a non-deterministic one does not move if it can fail, as an
+    // addition in ANSI mode can.
+    val canFail = Add(streamKey, lookupValue, NumericEvalContext(EvalMode.ANSI)) > 0
+    val filteredAfterNonDeterministic =
+      lookupJoin(Inner, keysEqual).where(nonDeterministic && canFail)
+    assert(Optimize.execute(filteredAfterNonDeterministic) eq filteredAfterNonDeterministic)
   }
 
   test("move a comparison with a constant onto the lookup side as for a join") {
@@ -265,14 +272,37 @@ class PushPredicateThroughExternalLookupJoinSuite extends PlanTest {
 
   test("keep a throwing conjunct of a filter above an inner join out of its condition") {
     // In the condition, it would be evaluated on every stream row, also one without a match, and
-    // could fail the query on it. A conjunct over both sides that cannot throw still moves.
+    // could fail the query on it. A conjunct over both sides that cannot throw, written before it,
+    // still moves.
     val throwing = lookupValue ===
       If(streamKey < 0, Cast(new RaiseError(Literal("bad")), IntegerType), streamKey)
     assert(throwing.throwable)
     val inner = lookupJoin(Inner, keysEqual)
     comparePlans(
-      Optimize.execute(inner.where(throwing && bothSidesConjunct)),
+      Optimize.execute(inner.where(bothSidesConjunct && throwing)),
       expectedJoin(inner, conjuncts = Seq(keysEqual, bothSidesConjunct)).where(throwing))
+  }
+
+  test("SPARK-62137: keep a filter conjunct that can fail above an inner, left semi or left " +
+    "anti join after a throwing conjunct of its condition") {
+    // The condition of an inner, left semi or left anti join decides which stream rows reach the
+    // filter above it, so after its throwing conjunct, a filter conjunct that can fail, as an
+    // addition in ANSI mode can, stays above the join, while one that cannot fail moves. A left
+    // outer join keeps every stream row, so both move below it.
+    val throwing =
+      If(streamKey < 0, Cast(new RaiseError(Literal("bad")), BooleanType), streamKey =!= 2)
+    val canFail = Add(streamKey, Literal(1), NumericEvalContext(EvalMode.ANSI)) > 0
+    lookupJoinTypes.foreach { joinType =>
+      val join = lookupJoin(joinType, keysEqual, throwing)
+      val expected = if (joinType == LeftOuter) {
+        expectedJoin(join, stream.where(canFail && streamKey > 1),
+          conjuncts = Seq(keysEqual, throwing))
+      } else {
+        expectedJoin(join, stream.where(streamKey > 1), conjuncts = Seq(keysEqual, throwing))
+          .where(canFail)
+      }
+      comparePlans(Optimize.execute(join.where(canFail && streamKey > 1)), expected)
+    }
   }
 
   test("a filter that rejects null lookup columns turns a left outer lookup join into inner") {

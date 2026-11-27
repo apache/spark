@@ -273,6 +273,15 @@ final class ShuffleBlockFetcherIterator(
     }.toMap
     val remainingBlocks = new HashSet[String]() ++= infoMap.keys
     val deferredBlocks = new ArrayBuffer[String]()
+    // Blocks of this request whose SuccessFetchResult was queued. The success callback can throw
+    // after queuing it, and the network layer then reports a failure for the same block, which
+    // must not fail or re-fetch a block the reader already has.
+    val deliveredBlocks = new HashSet[String]()
+    // Blocks of this request whose failure was already handled. OneForOneBlockFetcher fails every
+    // block from a failed chunk onwards, so when several chunks of a request fail and no
+    // RetryingBlockTransferor drops the repeats (spark.shuffle.io.maxRetries=0), a block can be
+    // failed more than once. Only its first failure counts.
+    val failedBlocks = new HashSet[String]()
     val blockIds = req.blocks.map(_.blockId.toString)
     val address = req.address
     val requestStartTime = clock.nanoTime()
@@ -304,15 +313,27 @@ final class ShuffleBlockFetcherIterator(
         // i.e. cleanup() has not been called yet.
         ShuffleBlockFetcherIterator.this.synchronized {
           if (!isZombie) {
-            // Increment the ref count because we need to pass this to a different thread.
-            // This needs to be released after use.
-            buf.retain()
             remainingBlocks -= blockId
             blockOOMRetryCounts.remove(blockId)
             val blkId = BlockId(blockId)
             updateMergedReqsDuration(blkId.isShuffleChunk)
-            results.put(SuccessFetchResult(blkId, infoMap(blockId)._2,
-              address, infoMap(blockId)._1, buf, remainingBlocks.isEmpty))
+            val result = SuccessFetchResult(blkId, infoMap(blockId)._2,
+              address, infoMap(blockId)._1, buf, remainingBlocks.isEmpty)
+            // Increment the ref count because we need to pass this to a different thread.
+            // This needs to be released after use.
+            buf.retain()
+            // The block is marked delivered exactly when its result is queued. If either step
+            // throws, the block was not delivered, so the failure that follows must still reach
+            // the reader, and nothing else will release the reference taken above.
+            try {
+              deliveredBlocks += blockId
+              results.put(result)
+            } catch {
+              case t: Throwable =>
+                deliveredBlocks -= blockId
+                buf.release()
+                throw t
+            }
             logDebug("remainingBlocks: " + remainingBlocks)
             enqueueDeferredFetchRequestIfNecessary()
           }
@@ -321,6 +342,25 @@ final class ShuffleBlockFetcherIterator(
       }
 
       override def onBlockFetchFailure(blockId: String, e: Throwable): Unit = {
+        val (alreadyDelivered, alreadyFailed) = ShuffleBlockFetcherIterator.this.synchronized {
+          val delivered = deliveredBlocks.contains(blockId)
+          // The success callback can throw after queuing the result but before queuing the
+          // blocks of this request deferred after a Netty OOM, and those would then never be
+          // fetched. Queue them now; this is a no-op if there are none or they are already queued.
+          if (delivered && !isZombie) {
+            enqueueDeferredFetchRequestIfNecessary()
+          }
+          (delivered, !delivered && !failedBlocks.add(blockId))
+        }
+        if (alreadyDelivered) {
+          logWarning(log"Ignoring a failure for block ${MDC(BLOCK_ID, blockId)} whose result " +
+            log"was already delivered", e)
+          return
+        }
+        if (alreadyFailed) {
+          logDebug(s"Ignoring a repeated failure for block $blockId", e)
+          return
+        }
         ShuffleBlockFetcherIterator.this.synchronized {
           logError(log"Failed to get block(s) from " +
             log"${MDC(HOST, req.address.host)}:${MDC(PORT, req.address.port)}", e)

@@ -57,7 +57,9 @@ abstract class BasePythonUDFRunner(
     ).getOrElse(Map.empty) ++
     Map(
       SQLConf.PYTHON_UDF_PROFILER_SAMPLING_INTERVAL.key ->
-        SQLConf.get.pythonUDFProfilerSamplingInterval.toString
+        SQLConf.get.pythonUDFProfilerSamplingInterval.toString,
+      SQLConf.PYTHON_UDF_PROFILER_SAMPLING_AGGREGATION.key ->
+        SQLConf.get.pythonUDFProfilerSamplingAggregation
     )
   }
 
@@ -122,9 +124,7 @@ abstract class BasePythonUDFRunner(
       stream, writer, startTime, env, worker, handle, releasedOrClosed, context) {
 
       protected override def read(): Array[Byte] = {
-        if (writer.exception.isDefined) {
-          throw writer.exception.get
-        }
+        throwIfWriterFailed()
         try {
           stream.readInt() match {
             case length if length >= 0 =>

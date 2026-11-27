@@ -47,6 +47,7 @@ object TreePattern extends Enumeration  {
   val DATETIME: Value = Value
   val DYNAMIC_PRUNING_EXPRESSION: Value = Value
   val DYNAMIC_PRUNING_SUBQUERY: Value = Value
+  val EVAL_ONLY_WHEN: Value = Value
   val EXISTS_SUBQUERY = Value
   val EXPRESSION_WITH_RANDOM_SEED: Value = Value
   val EXTERNAL_UDF: Value = Value
@@ -85,6 +86,7 @@ object TreePattern extends Enumeration  {
   val OUTER_REFERENCE: Value = Value
   val PARAMETER: Value = Value
   val PARSE_SQL: Value = Value
+  val PER_PARTITION_RUNTIME_FILTER_SUBQUERY: Value = Value
   val PIPE_EXPRESSION: Value = Value
   val PLAN_EXPRESSION: Value = Value
   val PYTHON_UDF: Value = Value

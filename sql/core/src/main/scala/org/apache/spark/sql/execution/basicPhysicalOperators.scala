@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.optimizer.CollapseProject
 import org.apache.spark.sql.catalyst.plans.logical.Sample
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeAsOfJoinExec,
   SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -130,6 +131,16 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
     copy(child = newChild)
 }
 
+/**
+ * The placement of the IsNotNull checks with `spark.sql.optimizer.evaluateNotNullChecksInOrder`
+ * (SPARK-60329): for each of `notNullPreds`, whether it can be generated at its position in the
+ * condition, and for each of `otherPreds`, whether the checks that precede it are generated
+ * before it, see `GeneratePredicateHelper.notNullCheckPlacement`. Both are indexed by position.
+ */
+private[execution] case class NotNullCheckPlacement(
+    atPosition: IndexedSeq[Boolean],
+    movesChecks: IndexedSeq[Boolean])
+
 trait GeneratePredicateHelper extends PredicateHelper {
   self: CodegenSupport =>
 
@@ -178,6 +189,73 @@ trait GeneratePredicateHelper extends PredicateHelper {
   protected def mayRaise(e: Expression): Boolean = !ExprUtils.canEvaluateUnconditionally(e)
 
   /**
+   * The columns of `inputAttrs` whose variables in `inputExprCode` are evaluated on demand, that
+   * is, whose code is not empty. The aggregate `FILTER` clause passes the attributes of the
+   * aggregation buffers before those of its input, with the variables of its input only, so the
+   * variables are paired with the last attributes.
+   */
+  private def deferredInputs(
+      inputAttrs: Seq[Attribute],
+      inputExprCode: Seq[ExprCode]): AttributeSet = {
+    assert(inputAttrs.length >= inputExprCode.length)
+    AttributeSet(inputAttrs.takeRight(inputExprCode.length).zip(inputExprCode).collect {
+      case (a, ev) if ev.code.nonEmpty => a
+    })
+  }
+
+  /**
+   * With `spark.sql.optimizer.evaluateNotNullChecksInOrder` (SPARK-60329), returns the placement of
+   * `notNullPreds` before `otherPreds`, or None without the config or without a check. A check can
+   * be generated at its position when it cannot raise itself and does not evaluate a computation
+   * that can. A conjunct moves the checks that precede it when evaluating it can be observed: it
+   * `mayRaise`, or evaluates a computation that can. `inputExprCode` must be the input variables of
+   * the predicate before any code is generated for it: a variable whose code is not empty is
+   * evaluated on demand, so a check or a conjunct on its column evaluates the expression that
+   * computes it, see `deferredMayRaise`. Each column is judged once.
+   */
+  protected def notNullCheckPlacement(
+      notNullPreds: Seq[Expression],
+      otherPreds: Seq[Expression],
+      inputAttrs: Seq[Attribute],
+      inputExprCode: Seq[ExprCode]): Option[NotNullCheckPlacement] = {
+    // Without a check to place, `precedingNotNullChecks` never reads the placement.
+    if (conf.evaluateNotNullChecksInOrder && notNullPreds.nonEmpty) {
+      val deferred = deferredInputs(inputAttrs, inputExprCode)
+      val raisingDeferred = mutable.HashMap.empty[Attribute, Boolean]
+      def computesRaising(e: Expression): Boolean = e.references.exists { a =>
+        deferred.contains(a) && raisingDeferred.getOrElseUpdate(a, deferredMayRaise(a))
+      }
+      Some(NotNullCheckPlacement(
+        notNullPreds.map(p => !mayRaise(p) && !computesRaising(p)).toIndexedSeq,
+        otherPreds.map(c => mayRaise(c) || computesRaising(c)).toIndexedSeq))
+    } else {
+      None
+    }
+  }
+
+  /**
+   * Whether the expression that computes the column `attr`, which this stage evaluates on
+   * demand, can raise: a projection alias, or a result of an aggregate, possibly through an
+   * operator that forwards the variables of its child, such as a filter, a sample or a limit.
+   * A column read from the input of the stage, a scan, a columnar batch or an exchange, cannot.
+   * Any other operator is not looked into, and its columns are taken to raise.
+   */
+  private def deferredMayRaise(attr: Attribute): Boolean = {
+    def resolve(plan: SparkPlan, e: Expression): Option[Expression] = plan match {
+      case p: ProjectExec => resolve(p.child, replaceAlias(e, getAliasMap(p.projectList)))
+      case f: FilterExec => resolve(f.child, e)
+      case s: SampleExec => resolve(s.child, e)
+      case l: BaseLimitExec => resolve(l.child, e)
+      // The inputs of the result expressions, the grouping keys and the aggregation buffers, are
+      // evaluated before them.
+      case a: BaseAggregateExec => Some(replaceAlias(e, getAliasMap(a.resultExpressions)))
+      case _: InputAdapter | _: ColumnarToRowExec | _: LeafExecNode => Some(e)
+      case _ => None
+    }
+    self.children.headOption.flatMap(resolve(_, attr)).forall(mayRaise)
+  }
+
+  /**
    * Returns a fresh name for the flag that records a conjunct evaluated to NULL, or None if the
    * row is dropped at the first NULL conjunct (the legacy behavior), if none of `otherPreds`,
    * bound with the nullability they are generated with in `boundOtherPreds`, can be NULL, or if
@@ -215,21 +293,25 @@ trait GeneratePredicateHelper extends PredicateHelper {
    *
    * So the states are generated with `ctx.currentVars` swapped for copies whose code is blank;
    * `input` keeps its code, and the states read only the columns' variables.
-   * `exprCodesNeedEvaluate` is then empty (nothing to hoist); its (empty) evaluation code is
-   * returned with the states and emitted by the caller anyway, so a future change that does hoist
-   * a column fails no stage rather than dropping a declaration. This hiding is the precondition
-   * `generatePredicateCode` documents for `subExprStates`, done here so a caller need not repeat
-   * it.
+   * `exprCodesNeedEvaluate`, which only the split fills, is then empty, as asserted, and is not
+   * emitted, unlike in `ProjectExec` and `ExpandExec`, which evaluate their states up front:
+   * `generatePredicateCode` loads each column, and a split state takes the columns it reads as
+   * parameters. Copies that keep the code would not do: kept inline, a state would declare a
+   * column that `generatePredicateCode` declares too, and split, the column's code would reach
+   * `exprCodesNeedEvaluate`. This hiding is the precondition `generatePredicateCode` documents
+   * for `subExprStates`, done here so a caller need not repeat it.
    */
   protected def subExprStatesToEliminate(
       ctx: CodegenContext,
       equivalentExpressions: EquivalentExpressions,
-      input: Seq[ExprCode]): (Map[ExpressionEquals, SubExprEliminationState], String) = {
+      input: Seq[ExprCode]): Map[ExpressionEquals, SubExprEliminationState] = {
     val savedVars = ctx.currentVars
     ctx.currentVars = input.map(_.copy(code = EmptyBlock)).toIndexedSeq
     try {
       val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(equivalentExpressions)
-      (subExprs.states, evaluateVariables(subExprs.exprCodesNeedEvaluate))
+      assert(subExprs.exprCodesNeedEvaluate.isEmpty,
+        "the states must not carry the code of an input column, see subExprStatesToEliminate")
+      subExprs.states
     } finally {
       ctx.currentVars = savedVars
     }
@@ -263,16 +345,29 @@ trait GeneratePredicateHelper extends PredicateHelper {
 
   /**
    * Returns the checks of `notNullPreds` that precede the k-th other conjunct `conjunct` in the
-   * condition and are not generated yet, and marks them generated, when `afterNullable` is set
-   * and the conjunct or one of these checks `mayRaise`, or Nil.
+   * condition, are not generated yet, and are to be generated before it, and marks them
+   * generated. The checks are otherwise generated lazily, before the first conjunct that
+   * references their column, or after all conjuncts, so that a column is not loaded until a
+   * conjunct needs it. `And.eval` evaluates the condition in its order instead, so a check is
+   * generated at its position when the difference is observable:
    *
-   * With the NULL-conjunct flag, a NULL conjunct no longer drops the row, so the conjuncts after
-   * it are evaluated in the order of the condition, as `And.eval` does: a FALSE IsNotNull check
-   * drops the row before an error a later conjunct raises on it (SPARK-60315). `afterNullable`
-   * is set once a conjunct that can be NULL has been generated. The conjuncts before it are
-   * never reached after a NULL conjunct, so the checks before them keep the lazy placement. So
-   * do the checks before a conjunct when neither it nor one of them can raise: their order is
-   * not observable, and the checks are still generated before the next conjunct that can raise.
+   *  - With `spark.sql.optimizer.evaluateNotNullChecksInOrder`, before a conjunct that
+   *    `placement` moves the checks before, the pending checks that it allows at their position,
+   *    see `notNullCheckPlacement` (SPARK-60329). Such a check only drops a row before an error
+   *    the conjunct raises on it, as `And.eval` does. With the config,
+   *    `InferFiltersFromConstraints` places an inferred check just before the first conjunct at
+   *    which the conjuncts so far imply it, so it does not load its column any earlier. A check
+   *    that is not allowed at its position keeps the lazy placement, so on a row on which it
+   *    raises, a check after it can drop the row first, where `And.eval` raises the error of the
+   *    earlier check. Codegen then raises less than `And.eval`, as it does when a later conjunct
+   *    drops such a row.
+   *  - With the NULL-conjunct flag, a NULL conjunct no longer drops the row, so the conjuncts
+   *    after it are evaluated in the order of the condition: a FALSE IsNotNull check drops the
+   *    row before an error a later conjunct raises on it (SPARK-60315). Once a conjunct that can
+   *    be NULL has been generated (`afterNullable`), all the pending checks before a conjunct
+   *    are generated when it or one of them `mayRaise`. The conjuncts before the first one that
+   *    can be NULL are never reached after a NULL conjunct, so the checks before them keep the
+   *    lazy placement.
    *
    * The exception to the order is a check on a column, or on an expression over the column, that
    * a later conjunct references: the check on the column is generated before the first such
@@ -285,24 +380,29 @@ trait GeneratePredicateHelper extends PredicateHelper {
   protected def precedingNotNullChecks(
       notNullPreds: Seq[Expression],
       precedingNotNulls: Seq[Int],
+      placement: Option[NotNullCheckPlacement],
       k: Int,
       conjunct: Expression,
       afterNullable: Boolean,
       generated: Array[Boolean]): Seq[Expression] = {
-    if (afterNullable) {
-      val pending = notNullPreds.take(precedingNotNulls(k)).zipWithIndex.filterNot {
-        case (_, idx) => generated(idx)
-      }
-      if (pending.nonEmpty && (mayRaise(conjunct) || pending.exists(p => mayRaise(p._1)))) {
-        pending.map { case (p, idx) =>
-          generated(idx) = true
-          p
-        }
-      } else {
-        Nil
-      }
+    lazy val pending = notNullPreds.take(precedingNotNulls(k)).zipWithIndex.filterNot {
+      case (_, idx) => generated(idx)
+    }
+    // Without the config, only the NULL-conjunct flag moves the checks, and with it, only a
+    // conjunct that `placement` moves the checks before. `pending` is built only then.
+    val positioned = if ((!afterNullable && !placement.exists(_.movesChecks(k))) ||
+        pending.isEmpty) {
+      Nil
+    } else if (afterNullable && (mayRaise(conjunct) || pending.exists(p => mayRaise(p._1)))) {
+      pending
+    } else if (placement.exists(_.movesChecks(k))) {
+      pending.filter { case (_, idx) => placement.get.atPosition(idx) }
     } else {
       Nil
+    }
+    positioned.map { case (p, idx) =>
+      generated(idx) = true
+      p
     }
   }
 
@@ -338,6 +438,10 @@ trait GeneratePredicateHelper extends PredicateHelper {
    *  5. The checks are bound with the nullability the child produced, unlike the states, so they
    *     are generated without the states.
    *  6. The checks left are generated after all the conjuncts.
+   *  7. With `spark.sql.optimizer.evaluateNotNullChecksInOrder`, the checks written before a
+   *     conjunct whose evaluation is observable go before it when they cannot raise, see
+   *     `precedingNotNullChecks` (SPARK-60329). `inputExprCode` must then be the input
+   *     variables before any code is generated for them, see `notNullCheckPlacement`.
    */
   protected def generatePredicateCode(
       ctx: CodegenContext,
@@ -351,6 +455,7 @@ trait GeneratePredicateHelper extends PredicateHelper {
       subExprStates: Map[ExpressionEquals, SubExprEliminationState] = Map.empty): String = {
     // The IsNotNull checks are never NULL, so only `otherPreds` can need the flag.
     val nullFlag = nullConjunctFlag(ctx, otherPreds, boundOtherPreds, notNullPreds)
+    val placement = notNullCheckPlacement(notNullPreds, otherPreds, inputAttrs, inputExprCode)
 
     // The states by the index of the first conjunct that references them. Evaluating a state
     // evaluates the states it depends on first and clears the code of each, so a state that an
@@ -414,9 +519,12 @@ trait GeneratePredicateHelper extends PredicateHelper {
     var nullableSeen = false
     val generated = otherPreds.zip(boundOtherPreds).zipWithIndex.map { case ((c, bound), k) =>
       val afterNullable = nullFlag.isDefined && nullableSeen
-      val precedingChecks = precedingNotNullChecks(
-        notNullPreds, precedingNotNulls, k, c, afterNullable,
-        generatedIsNotNullChecks).map(genNotNull).mkString("\n").trim
+      val preceding = precedingNotNullChecks(
+        notNullPreds, precedingNotNulls, placement, k, c, afterNullable,
+        generatedIsNotNullChecks)
+      // The column of a check generated here needs no synthetic check below.
+      extraIsNotNullAttrs ++= preceding.collect { case IsNotNull(a: Attribute) => a }
+      val precedingChecks = preceding.map(genNotNull).mkString("\n").trim
       nullableSeen ||= bound.nullable
 
       val nullChecks = c.references.map { r =>
@@ -432,8 +540,8 @@ trait GeneratePredicateHelper extends PredicateHelper {
             !extraIsNotNullAttrs.contains(r)) {
           // A synthetic check for a column covered only by a check on an expression, or, before
           // the flag applies, for a column whose check was generated before an earlier predicate.
-          // After a predicate that can be NULL, the check generated by `precedingNotNullChecks`
-          // already covers the column.
+          // A check that `precedingNotNullChecks` generated, after a predicate that can be NULL or
+          // with `spark.sql.optimizer.evaluateNotNullChecksInOrder`, already covers the column.
           extraIsNotNullAttrs += r
           genNotNull(IsNotNull(r))
         } else {
@@ -540,9 +648,12 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     val numOutput = metricTerm(ctx, "numOutputRows")
 
     // Eliminate the common subexpressions of `otherPreds` only when one of them is not cheap,
-    // per `CollapseProject.isCheap`. Elimination has a cost: a state adds a local variable, or
-    // with the split above `methodSplitThreshold` a method and up to two mutable fields, per
-    // common subexpression. Sharing a cheap subexpression, such as the struct field of
+    // per `CollapseProject.isCheap`. Kept inline, a state computes the repeated expression once,
+    // before the first conjunct that references it, instead of at each occurrence, so it adds no
+    // local variable, but when the code of the states together exceeds `methodSplitThreshold`
+    // and the parameters of each fit in a Java method, each common subexpression becomes a
+    // method with up to two mutable fields, which is known only once the states are generated,
+    // after this gate. Sharing a cheap subexpression, such as the struct field of
     // `s.x > 5 AND s.x < 100`, does not pay for that, since computing it again is a slot read.
     // A column that conjuncts share is never a common subexpression, as `EquivalentExpressions`
     // skips leaf expressions. `subexpressionElimination.filterExec.enabled` turns this off
@@ -551,10 +662,10 @@ case class FilterExec(condition: Expression, child: SparkPlan)
       conf.subexpressionEliminationFilterExecEnabled && otherPreds.nonEmpty &&
       otherPredsEquivalentExpressions.getCommonSubexpressions.exists(!CollapseProject.isCheap(_))
 
-    val (subExprStates, subExprInputEval) = if (eliminateSubExprs) {
+    val subExprStates = if (eliminateSubExprs) {
       subExprStatesToEliminate(ctx, otherPredsEquivalentExpressions, input)
     } else {
-      (Map.empty[ExpressionEquals, SubExprEliminationState], "")
+      Map.empty[ExpressionEquals, SubExprEliminationState]
     }
 
     val predicateCode = generatePredicateCode(
@@ -573,7 +684,6 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     // Note: wrap in "do { } while (false);", so the generated checks can jump out with "continue;"
     s"""
        |do {
-       |  $subExprInputEval
        |  $predicateCode
        |  $numOutput.add(1);
        |  ${consume(ctx, resultVars)}

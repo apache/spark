@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.plans.{logical, QueryPlan}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.catalyst.util.{truncatedString, CaseInsensitiveMap}
 import org.apache.spark.sql.columnar.{CachedBatch, CachedBatchSerializer, SimpleMetricsCachedBatch, SimpleMetricsCachedBatchSerializer}
 import org.apache.spark.sql.execution._
@@ -240,9 +241,11 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
     // Find the ordinals and data types of the requested columns.
     val requestedColumnIndices = CachedColumnIndices(cacheAttributes, selectedAttributes)
 
+    // The columns are read as the types they are cached as: a UDT as its SQL type, and a
+    // framework type stored as a struct, such as FileType, as its representation.
     val columnTypes = selectedAttributes.map(_.dataType match {
       case udt: UserDefinedType[_] => udt.sqlType
-      case other => other
+      case other => TypeOps.rowRepresentationOrSelf(other)
     }).toArray
 
     input.mapPartitionsInternal { cachedBatchIterator =>
@@ -423,8 +426,13 @@ case class CachedRDDBuilder(
         // SPARK-49982: during RDD execution, AQE will execute all stages except ResultStage. If any
         // failure happen, the failure will be cached and the next SQL cache caller will hit the
         // negative cache. Therefore we need to recache the plan.
+        // This runs under this builder's lock, possibly on the thread of a subquery that a
+        // dependent's build is waiting for. Re-caching a dependent that reads this plan only
+        // inside a subquery would wait for that dependent's lock and deadlock. Such a dependent
+        // is re-planned when its own adaptive build fails; a non-adaptive one is not re-planned
+        // by this path.
         val session = cachedPlan.session
-        session.sharedState.cacheManager.recacheByPlan(session, logicalPlan)
+        session.sharedState.cacheManager.recacheByPlanOutsideSubqueries(session, logicalPlan)
         throw e
     }
     // Records one successful partition materialization: this partition's (rows, bytes) keyed by its

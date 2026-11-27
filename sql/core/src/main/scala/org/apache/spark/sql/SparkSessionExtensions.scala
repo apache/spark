@@ -237,6 +237,12 @@ class SparkSessionExtensions {
    * Inject an analyzer hint resolution rule builder into the [[SparkSession]]. These analyzer
    * rules will be executed as part of the early resolution phase of the analyzer, together with
    * other hint resolution rules.
+   *
+   * The single-pass resolver runs these rules too, before it resolves relation metadata, so rules
+   * that rewrite unresolved relations behave the same under both analyzers. Rules matching an
+   * `UnresolvedHint` are an exception: the single-pass resolver does not support that operator, so
+   * a plan carrying one is analyzed by the fixed-point analyzer unless the single-pass resolver is
+   * forced on.
    */
   def injectHintResolutionRule(builder: RuleBuilder): Unit = {
     hintResolutionRuleBuilders += builder

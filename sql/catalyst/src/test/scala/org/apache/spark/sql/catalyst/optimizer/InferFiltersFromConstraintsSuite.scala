@@ -55,12 +55,88 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  /** The conjuncts of the condition of `query` optimized with or without the config. */
+  private def optimizedConjuncts(query: LogicalPlan, inOrder: Boolean): Seq[Expression] = {
+    withSQLConf(SQLConf.EVALUATE_NOT_NULL_CHECKS_IN_ORDER.key -> inOrder.toString) {
+      val Filter(condition, _) = Optimize.execute(query.analyze)
+      splitConjunctivePredicates(condition)
+    }
+  }
+
+  /** The positions of `exprs` in the optimized condition of `query` with the config. */
+  private def inOrderPositions(query: LogicalPlan, exprs: Expression*): Seq[Int] = {
+    val conjuncts = optimizedConjuncts(query, inOrder = true).map(_.canonicalized)
+    exprs.map(e => conjuncts.indexOf(e.canonicalized))
+  }
+
   test("filter: filter out constraints in condition") {
     val originalQuery = testRelation.where($"a" === 1 && $"a" === $"b").analyze
     val correctAnswer = testRelation.where(IsNotNull($"a") && IsNotNull($"b") &&
       $"a" === $"b" && $"a" === 1 && $"b" === 1).analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-60329: evaluateNotNullChecksInOrder places inferred IsNotNull checks in the " +
+      "order of the condition") {
+    val originalQuery = testRelation.where($"b" + 1 > 0 && $"a" > 0 && $"c" === $"a")
+    val Seq(a, b, c) = testRelation.output
+    // Each inferred check is just before the first conjunct at which the conjuncts so far imply
+    // it, here the first conjunct on its column, after the conjuncts before that one:
+    // `isnotnull(c)` before `c = a`, after `a > 0`.
+    val Seq(notNullB, written1, notNullA, written2, notNullC, written3) =
+      inOrderPositions(originalQuery,
+        IsNotNull(b), b + 1 > 0, IsNotNull(a), a > 0, IsNotNull(c), c === a)
+    assert(notNullB == 0 && written1 == 1 && written1 < notNullA && notNullA < written2 &&
+      written2 < notNullC && notNullC < written3,
+      optimizedConjuncts(originalQuery, inOrder = true))
+    // Otherwise the inferred predicates are at the front of the condition.
+    assert(optimizedConjuncts(originalQuery, inOrder = false).takeRight(3).map(_.canonicalized)
+      === Seq(b + 1 > 0, a > 0, c === a).map(_.canonicalized))
+  }
+
+  test("SPARK-60329: evaluateNotNullChecksInOrder places an inferred predicate just before the " +
+      "first conjunct at which the conjuncts so far imply it") {
+    // `coalesce(a, 1) + b > 0` references `a`, but only `a > 0` implies `isnotnull(a)`.
+    val Seq(a, b, c) = testRelation.output
+    val Seq(written1, notNullA, written2) = inOrderPositions(
+      testRelation.where(Coalesce(Seq($"a", 1)) + $"b" > 0 && $"a" > 0),
+      Coalesce(Seq(a, 1)) + b > 0, IsNotNull(a), a > 0)
+    assert(written1 >= 0 && written1 < notNullA && notNullA < written2)
+    // `c > 0` shares no column with the conjuncts. It is inferred from `a > 0` through the
+    // `a = c` of the nondeterministic child filter, which is not combined, so it goes just
+    // before `a > 0`, after `b + 1 > 0`.
+    val Seq(written3, inferredC, written4) = inOrderPositions(
+      testRelation.where($"a" === $"c" && Rand(0) < 2).where($"b" + 1 > 0 && $"a" > 0),
+      b + 1 > 0, c > 0, a > 0)
+    assert(written3 >= 0 && written3 < inferredC && inferredC < written4)
+    // A transitive one: `a = c` goes just before `b = c`, after `b + 1 > 0`.
+    val Seq(written5, written6, inferredAC, written7) = inOrderPositions(
+      testRelation.where($"a" === $"b" && $"b" + 1 > 0 && $"b" === $"c"),
+      a === b, b + 1 > 0, a === c, b === c)
+    assert(written5 >= 0 && written5 < written6 && written6 < inferredAC &&
+      inferredAC < written7)
+  }
+
+  test("SPARK-60329: evaluateNotNullChecksInOrder places the inferred predicates of a long " +
+      "condition exactly and keeps the condition balanced") {
+    val relation = LocalRelation((1 to 16).map(i => AttributeReference(s"c$i", IntegerType)()))
+    val columns = relation.output
+    // Each conjunct implies the check on its own column, and only that one, so each inferred
+    // check goes right before its conjunct, also at depths that a short condition never reaches.
+    val conjuncts = columns.map(c => c > 0)
+    val optimized = optimizedConjuncts(relation.where(conjuncts.reduce(And)), inOrder = true)
+    assert(optimized.map(_.canonicalized) ===
+      columns.flatMap(c => Seq(IsNotNull(c), c > 0)).map(_.canonicalized))
+    withSQLConf(SQLConf.EVALUATE_NOT_NULL_CHECKS_IN_ORDER.key -> "true") {
+      val Filter(condition, _) = Optimize.execute(relation.where(conjuncts.reduce(And)).analyze)
+      def depth(e: Expression): Int = e match {
+        case And(l, r) => 1 + math.max(depth(l), depth(r))
+        case _ => 0
+      }
+      // 32 conjuncts in a balanced tree, where a left-deep chain would be 31 levels deep.
+      assert(depth(condition) == 5, condition)
+    }
   }
 
   test("single inner join: filter out values on either side on equi-join keys") {
@@ -463,6 +539,30 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     comparePlans(
       InferFiltersFromConstraints(projected.where($"k" > 1).where(condition).analyze),
       projected.where(IsNotNull($"k") && $"k" > 1).where(IsNotNull($"r") && condition).analyze)
+  }
+
+  test("SPARK-61921: a constraint over a column that can fail through a sort, a limit, an " +
+    "offset, a join or an aggregate is not inferred as a filter") {
+    // `i` can fail as the cast does, also through the sort, the limits, the offset and the join,
+    // and so can the aggregate result `c`. So no constraint over either, e.g. `i > 0` from
+    // `i = k AND k > 0`, goes ahead of the condition, while one over `g`, a grouping key, `m`, an
+    // aggregate function, or `f`, a non-deterministic result computed for every group, does.
+    val left = LocalRelation($"s".string, $"k".int)
+      .select($"k", Cast($"s", IntegerType, evalMode = EvalMode.ANSI).as("i"))
+      .orderBy($"k".asc)
+      .limit(5)
+      .offset(1)
+    val right = LocalRelation($"g".int, $"t".string)
+      .groupBy($"g")($"g", max($"g").as("m"),
+        Cast(max($"t"), IntegerType, evalMode = EvalMode.ANSI).as("c"),
+        Cast(Rand(1) * max($"g"), IntegerType, evalMode = EvalMode.ANSI).as("f"))
+    val joined = left.join(right)
+    val condition =
+      $"i" === $"k" && $"k" > 0 && $"c" === $"m" && $"m" > 0 && $"f" > 0 && $"g" > 0
+    comparePlans(
+      InferFiltersFromConstraints(joined.where(condition).analyze),
+      joined.where(IsNotNull($"k") && IsNotNull($"m") && IsNotNull($"f") && IsNotNull($"g") &&
+        condition).analyze)
   }
 
   test("SPARK-36978: IsNotNull constraints on structs should apply at the member field " +
