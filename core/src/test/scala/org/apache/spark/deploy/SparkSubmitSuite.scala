@@ -137,7 +137,7 @@ class SparkSubmitSuite
   }
 
   test("SPARK-62387: reject R applications") {
-    Seq("app.R", "app.r", "sparkr-shell").foreach { res =>
+    Seq("app.R", "app.r", "sparkr-shell", "sparkr-shell-main").foreach { res =>
       val e = intercept[SparkException](new SparkSubmitArguments(Seq(res)))
       assert(e.getMessage.contains("SparkR was removed in Apache Spark 5.0.0"), res)
     }

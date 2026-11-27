@@ -1051,8 +1051,11 @@ object SparkSubmit extends CommandLineUtils with Logging {
   private val SPARK_SHELL = "spark-shell"
   private val PYSPARK_SHELL = "pyspark-shell"
   private val CONNECT_SHELL = "connect-shell"
-  // The primary resource name of the removed SparkR shell, kept only to reject it.
+  // The primary resource names of the removed SparkR shell, kept only to reject them:
+  // `sparkr-shell` is what the SparkR package sends, and `sparkr-shell-main` is what the
+  // `bin/sparkR` script of Spark 4.x and earlier sends.
   private val SPARKR_SHELL = "sparkr-shell"
+  private val SPARKR_SHELL_MAIN = "sparkr-shell-main"
 
   // Following constants are visible for testing.
   private[deploy] val YARN_CLUSTER_SUBMIT_CLASS =
@@ -1159,7 +1162,8 @@ object SparkSubmit extends CommandLineUtils with Logging {
    * Apache Spark 5.0.0, so SparkSubmitArguments rejects these.
    */
   private[deploy] def isR(res: String): Boolean = {
-    res != null && (res.endsWith(".R") || res.endsWith(".r")) || res == SPARKR_SHELL
+    res != null && (res.endsWith(".R") || res.endsWith(".r")) ||
+      res == SPARKR_SHELL || res == SPARKR_SHELL_MAIN
   }
 
   private[deploy] def isInternal(res: String): Boolean = {
