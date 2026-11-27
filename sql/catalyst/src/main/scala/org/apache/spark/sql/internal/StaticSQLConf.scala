@@ -147,6 +147,36 @@ object StaticSQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val HIVE_THRIFT_SERVER_ALLOW_INEFFECTIVE_DOAS =
+    buildStaticConf("spark.sql.hive.thriftServer.allowIneffectiveDoAs")
+      .doc("With hive.server2.enable.doAs=true the Spark Thrift Server impersonates the " +
+        "connecting user for Hive metastore calls and driver-side file system access, but " +
+        "executor-side data access still runs as the server's own service identity " +
+        "(SPARK-5159), so storage-level permissions are checked against the privileged " +
+        "service principal instead of the impersonated user. Because that can silently " +
+        "grant users access to data they could not read with their own credentials, the " +
+        "server refuses to start when hive.server2.enable.doAs=true and " +
+        "hive.server2.authentication verifies user identities (any recognized type other " +
+        "than NONE/NOSASL), unless this option is set to true to acknowledge the limitation.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val SPARK_SESSION_EXTENSIONS_DEFAULT_LIST =
+    buildStaticConf("spark.sql.extensions.defaultList")
+      .doc("A comma-separated list of classes that implement " +
+        "Function1[SparkSessionExtensions, Unit] used to configure Spark Session extensions. The " +
+        "classes must have a no-args constructor. These extensions are applied ahead of the ones " +
+        "specified in spark.sql.extensions. When the same extension appears in both configs, " +
+        "every occurrence of it here is dropped with a warning; repeats within a single config " +
+        "are still applied as many times as listed.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .stringConf
+      .toSequence
+      .createOptional
+
   val SPARK_SESSION_EXTENSIONS = buildStaticConf("spark.sql.extensions")
     .doc("A comma-separated list of classes that implement " +
       "Function1[SparkSessionExtensions, Unit] used to configure Spark Session extensions. The " +
@@ -154,7 +184,11 @@ object StaticSQLConf {
       "applied in the specified order. For the case of rules and planner strategies, they are " +
       "applied in the specified order. For the case of parsers, the last parser is used and each " +
       "parser can delegate to its predecessor. For the case of function name conflicts, the last " +
-      "registered function name is used.")
+      "registered function name is used. Extensions listed in " +
+      "spark.sql.extensions.defaultList are applied ahead of this list; when an extension is " +
+      "listed in both configs, it is applied only at its positions in this list. Note that " +
+      "spark.conf.get(\"spark.sql.extensions\") / SET spark.sql.extensions shows only the value " +
+      "of this key, not the combined list.")
     .version("2.2.0")
     .stringConf
     .toSequence
@@ -357,7 +391,7 @@ object StaticSQLConf {
         "framework. Execution requires a supported external UDF physical operator. When false, " +
         "external UDF expressions are rejected. This config must be set before the SparkSession " +
         "is created. Experimental.")
-      .version("4.2.0")
+      .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
@@ -447,6 +481,23 @@ object StaticSQLConf {
       .bytesConf(ByteUnit.BYTE)
       .checkValue(_ >= 0, "The maximum total size must not be negative.")
       .createWithDefault(128 * 1024) // 128 KiB
+
+  val NATIVE_DATA_SOURCE_ENABLED =
+    buildStaticConf("spark.sql.dataSource.native.enabled")
+      .doc("When true, Spark finds and loads native data sources: data sources implemented in " +
+        "native code such as Rust or C++. The library of a data source, such as my_source, is " +
+        "found when it is installed in the native library path as spark_datasource_my_source, " +
+        "for example libspark_datasource_my_source.so in /usr/local/lib on Linux. The native " +
+        "library path consists of the directories of java.library.path, and the lib directory " +
+        "of each installation prefix in PATH. Libraries can also be distributed in native data " +
+        "source packages (.sparkpkg files), added with spark.addArtifact or under " +
+        "spark.sql.dataSource.native.paths. Loading a native data source runs its native code " +
+        "in the driver and executor processes. When false, spark.addArtifact adds a .sparkpkg " +
+        "file as a file of the session, without checking it as a package.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
 
   val KAFKA_DISALLOWED_OPTIONS =
     buildStaticConf("spark.sql.kafka.disallowedOptions")

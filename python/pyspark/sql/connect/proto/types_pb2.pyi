@@ -38,11 +38,12 @@ import builtins
 import collections.abc
 import google.protobuf.descriptor
 import google.protobuf.internal.containers
+import google.protobuf.internal.enum_type_wrapper
 import google.protobuf.message
 import sys
 import typing
 
-if sys.version_info >= (3, 8):
+if sys.version_info >= (3, 10):
     import typing as typing_extensions
 else:
     import typing_extensions
@@ -55,6 +56,28 @@ class DataType(google.protobuf.message.Message):
     """
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class _FileTypeMode:
+        ValueType = typing.NewType("ValueType", builtins.int)
+        V: typing_extensions.TypeAlias = ValueType
+
+    class _FileTypeModeEnumTypeWrapper(
+        google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+            DataType._FileTypeMode.ValueType
+        ],
+        builtins.type,
+    ):  # noqa: F821
+        DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+        FILE_TYPE_MODE_UNSPECIFIED: DataType._FileTypeMode.ValueType  # 0
+        FILE_TYPE_MODE_UNKNOWN: DataType._FileTypeMode.ValueType  # 1
+        FILE_TYPE_MODE_EXTERNAL: DataType._FileTypeMode.ValueType  # 3
+
+    class FileTypeMode(_FileTypeMode, metaclass=_FileTypeModeEnumTypeWrapper):
+        """The mode of a File type."""
+
+    FILE_TYPE_MODE_UNSPECIFIED: DataType.FileTypeMode.ValueType  # 0
+    FILE_TYPE_MODE_UNKNOWN: DataType.FileTypeMode.ValueType  # 1
+    FILE_TYPE_MODE_EXTERNAL: DataType.FileTypeMode.ValueType  # 3
 
     class Boolean(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -518,40 +541,84 @@ class DataType(google.protobuf.message.Message):
 
         LENGTH_FIELD_NUMBER: builtins.int
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
+        COLLATION_FIELD_NUMBER: builtins.int
         length: builtins.int
         type_variation_reference: builtins.int
+        collation: builtins.str
+        """(Optional) Collation name. When omitted, the collation was not explicitly specified.
+        Older clients ignore this field and decode the historical uncollated CHAR type.
+        """
         def __init__(
             self,
             *,
             length: builtins.int = ...,
             type_variation_reference: builtins.int = ...,
+            collation: builtins.str | None = ...,
         ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_collation", b"_collation", "collation", b"collation"
+            ],
+        ) -> builtins.bool: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "length", b"length", "type_variation_reference", b"type_variation_reference"
+                "_collation",
+                b"_collation",
+                "collation",
+                b"collation",
+                "length",
+                b"length",
+                "type_variation_reference",
+                b"type_variation_reference",
             ],
         ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_collation", b"_collation"]
+        ) -> typing_extensions.Literal["collation"] | None: ...
 
     class VarChar(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         LENGTH_FIELD_NUMBER: builtins.int
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
+        COLLATION_FIELD_NUMBER: builtins.int
         length: builtins.int
         type_variation_reference: builtins.int
+        collation: builtins.str
+        """(Optional) Collation name. When omitted, the collation was not explicitly specified.
+        Older clients ignore this field and decode the historical uncollated VARCHAR type.
+        """
         def __init__(
             self,
             *,
             length: builtins.int = ...,
             type_variation_reference: builtins.int = ...,
+            collation: builtins.str | None = ...,
         ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_collation", b"_collation", "collation", b"collation"
+            ],
+        ) -> builtins.bool: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "length", b"length", "type_variation_reference", b"type_variation_reference"
+                "_collation",
+                b"_collation",
+                "collation",
+                b"collation",
+                "length",
+                b"length",
+                "type_variation_reference",
+                b"type_variation_reference",
             ],
         ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_collation", b"_collation"]
+        ) -> typing_extensions.Literal["collation"] | None: ...
 
     class Decimal(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -806,6 +873,27 @@ class DataType(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
+    class File(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        MODE_FIELD_NUMBER: builtins.int
+        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
+        mode: global___DataType.FileTypeMode.ValueType
+        """The mode of the file. Unset or unrecognized values are read as FILE_TYPE_MODE_UNKNOWN."""
+        type_variation_reference: builtins.int
+        def __init__(
+            self,
+            *,
+            mode: global___DataType.FileTypeMode.ValueType = ...,
+            type_variation_reference: builtins.int = ...,
+        ) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "mode", b"mode", "type_variation_reference", b"type_variation_reference"
+            ],
+        ) -> None: ...
+
     class UDT(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -942,6 +1030,7 @@ class DataType(google.protobuf.message.Message):
     TIME_FIELD_NUMBER: builtins.int
     TIMESTAMP_NTZ_NANOS_FIELD_NUMBER: builtins.int
     TIMESTAMP_LTZ_NANOS_FIELD_NUMBER: builtins.int
+    FILE_FIELD_NUMBER: builtins.int
     @property
     def null(self) -> global___DataType.NULL: ...
     @property
@@ -1013,6 +1102,9 @@ class DataType(google.protobuf.message.Message):
         """
     @property
     def timestamp_ltz_nanos(self) -> global___DataType.TimestampLTZNanos: ...
+    @property
+    def file(self) -> global___DataType.File:
+        """A reference to a file, with metadata describing the file."""
     def __init__(
         self,
         *,
@@ -1046,6 +1138,7 @@ class DataType(google.protobuf.message.Message):
         time: global___DataType.Time | None = ...,
         timestamp_ntz_nanos: global___DataType.TimestampNTZNanos | None = ...,
         timestamp_ltz_nanos: global___DataType.TimestampLTZNanos | None = ...,
+        file: global___DataType.File | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -1070,6 +1163,8 @@ class DataType(google.protobuf.message.Message):
             b"decimal",
             "double",
             b"double",
+            "file",
+            b"file",
             "float",
             b"float",
             "geography",
@@ -1137,6 +1232,8 @@ class DataType(google.protobuf.message.Message):
             b"decimal",
             "double",
             b"double",
+            "file",
+            b"file",
             "float",
             b"float",
             "geography",
@@ -1215,6 +1312,7 @@ class DataType(google.protobuf.message.Message):
             "time",
             "timestamp_ntz_nanos",
             "timestamp_ltz_nanos",
+            "file",
         ]
         | None
     ): ...

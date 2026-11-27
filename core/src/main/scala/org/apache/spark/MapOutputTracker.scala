@@ -233,8 +233,9 @@ private class ShuffleStatus(
     val preStatus =
       if (mapStatuses(mapIndex) != null) mapStatuses(mapIndex) else mapStatusesDeleted(mapIndex)
     if (preStatus != null && preStatus.checksumValue != status.checksumValue) {
-      logInfo(s"Checksum of map output changes from ${preStatus.checksumValue} to " +
-        s"${status.checksumValue} for task ${status.mapId}.")
+      logInfo(log"Checksum of map output changes from " +
+        log"${MDC(OLD_VALUE, preStatus.checksumValue)} to " +
+        log"${MDC(NEW_VALUE, status.checksumValue)} for task ${MDC(MAP_ID, status.mapId)}.")
       checksumMismatchIndices.add(mapIndex)
       isChecksumMismatch = true
     }
@@ -586,7 +587,9 @@ private[spark] case class GetShufflePushMergerLocations(shuffleId: Int)
   extends MapOutputTrackerMessage
 private[spark] case object StopMapOutputTracker extends MapOutputTrackerMessage
 
-private[spark] sealed trait MapOutputTrackerMasterMessage
+private[spark] sealed trait MapOutputTrackerMasterMessage {
+  def context: RpcCallContext
+}
 private[spark] case class GetMapOutputMessage(shuffleId: Int,
   context: RpcCallContext) extends MapOutputTrackerMasterMessage
 private[spark] case class GetMapAndMergeOutputMessage(shuffleId: Int,
@@ -889,17 +892,33 @@ private[spark] class MapOutputTrackerMaster(
       }
     }
 
+    /**
+     * Replies to `message` with `error` after its handler threw. Without this reply the caller's
+     * ask stays pending until its RPC timeout expires. Never throws, so a failing reply cannot
+     * kill the MessageLoop thread.
+     */
+    private def replyFailure(message: MapOutputTrackerMasterMessage, error: Throwable): Unit = {
+      try {
+        message.context.sendFailure(error)
+      } catch {
+        case NonFatal(e) =>
+          logWarning(log"Failed to send the failure reply for " +
+            log"${MDC(CLASS_NAME, message.getClass.getSimpleName)}", e)
+      }
+    }
+
     override def run(): Unit = {
       try {
         while (true) {
-          try {
-            val data = mapOutputTrackerMasterMessages.take()
-            if (data == PoisonPill) {
-              // Put PoisonPill back so that other MessageLoops can see it.
-              mapOutputTrackerMasterMessages.offer(PoisonPill)
-              return
-            }
+          // Taken outside the try below so that its catch can reply on the message's context.
+          val data = mapOutputTrackerMasterMessages.take()
+          if (data == PoisonPill) {
+            // Put PoisonPill back so that other MessageLoops can see it.
+            mapOutputTrackerMasterMessages.offer(PoisonPill)
+            return
+          }
 
+          try {
             data match {
               case GetMapOutputMessage(shuffleId, context) =>
                 handleStatusMessage(shuffleId, context, false)
@@ -912,7 +931,15 @@ private[spark] class MapOutputTrackerMaster(
                   .getOrElse(Seq.empty[BlockManagerId]))
             }
           } catch {
-            case NonFatal(e) => logError(log"${MDC(ERROR, e.getMessage)}", e)
+            case NonFatal(e) =>
+              logError(log"${MDC(ERROR, e.getMessage)}", e)
+              replyFailure(data, e)
+            case t: Throwable =>
+              // Answer the request before rethrowing, as the RPC Inbox does, so the caller sees
+              // the error instead of an RPC timeout. The rethrow ends this MessageLoop as before.
+              logError(log"${MDC(ERROR, t.getMessage)}", t)
+              replyFailure(data, t)
+              throw t
           }
         }
       } catch {
@@ -1618,8 +1645,9 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
               val deserializedStale = MapOutputTracker.deserializeStaleMapIndexes(fetchedBytes._3)
               staleMapIndexes.put(shuffleId, deserializedStale)
               if (!deserializedStale.isEmpty) {
-                logInfo(s"Got stale pushed partition indexes for shuffle $shuffleId: " +
-                  deserializedStale.asScala.mkString(","))
+                logInfo(log"Got stale pushed partition indexes for shuffle " +
+                  log"${MDC(SHUFFLE_ID, shuffleId)}: " +
+                  log"${MDC(PARTITION_IDS, deserializedStale.asScala.mkString(","))}")
               }
             } catch {
               case e: SparkException =>

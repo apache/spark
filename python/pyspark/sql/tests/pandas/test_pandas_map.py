@@ -120,6 +120,16 @@ class MapInPandasTestsMixin:
             expected = df.collect()
             self.assertEqual(actual, expected)
 
+    def test_map_in_pandas_accept_any_iterable_by_default(self):
+        # The legacy flag defaults to true, so returning a non-Iterator iterable (e.g. list) is
+        # accepted without setting any config. This guards the default against regression: the
+        # *_legacy_accept_any_iterable tests above force the flag on and would still pass if the
+        # default were flipped back to false.
+        df = self.spark.range(10, numPartitions=3)
+        actual = df.mapInPandas(lambda it: [pdf for pdf in it], "id long").collect()
+        expected = df.collect()
+        self.assertEqual(actual, expected)
+
     def test_multiple_columns(self):
         data = [(1, "foo"), (2, None), (3, "bar"), (4, "bar")]
         df = self.spark.createDataFrame(data, "a int, b string")
@@ -616,6 +626,47 @@ class MapInPandasTests(MapInPandasTestsMixin, ReusedSQLTestCase):
             os.environ["TZ"] = cls.tz_prev
         time.tzset()
         ReusedSQLTestCase.tearDownClass()
+
+    def test_phase_metrics(self):
+        def rebatch(dfs):
+            frames = list(dfs)
+            time.sleep(0.01)
+            if frames:
+                combined = pd.concat(frames)
+                yield combined.iloc[:1]
+                yield combined.iloc[1:]
+
+        phase_names = (
+            "pythonDataReadTime",
+            "pythonInputPreparationTime",
+            "pythonUDFExecutionTime",
+            "pythonOutputPreparationTime",
+            "pythonDataWriteTime",
+        )
+        with self.sql_conf(
+            {
+                "spark.sql.execution.arrow.maxRecordsPerBatch": "2",
+                "spark.sql.adaptive.enabled": "false",
+                "spark.sql.execution.pythonUDF.detailedTiming.enabled": "true",
+            }
+        ):
+            for num_rows in (5, 0):
+                with self.subTest(num_rows=num_rows):
+                    data = self.spark.createDataFrame(
+                        self.sc.parallelize([(i,) for i in range(num_rows)], 1), "id long"
+                    )
+                    result = data.mapInPandas(rebatch, "id long")
+                    self.assertEqual(result.collect(), [Row(i) for i in range(num_rows)])
+                    metrics = result._jdf.queryExecution().executedPlan().metrics()
+                    self.assertEqual(metrics.apply("pythonNumTimingReports").value(), 1)
+                    self.assertEqual(
+                        metrics.apply("pythonNumTimedBatches").value(), (num_rows + 1) // 2
+                    )
+                    for name in phase_names:
+                        self.assertFalse(metrics.apply(name).isZero(), name)
+                    phases = [metrics.apply(name).value() for name in phase_names]
+                    self.assertGreaterEqual(phases[2], 10)
+                    self.assertLessEqual(sum(phases), metrics.apply("pythonProcessingTime").value())
 
 
 if __name__ == "__main__":

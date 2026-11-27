@@ -48,9 +48,10 @@ import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableU
 import org.apache.spark.sql.execution.datasources.v2.{TransactionalExec, V2TableRefreshUtil}
 import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
 import org.apache.spark.sql.execution.exchange.{EnablePipelinedShuffle, EnsureRequirements, PipelinedShuffleEligibility, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.joins.ChoosePerPartitionRuntimeFilters
 import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
 import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqMetadata
-import org.apache.spark.sql.execution.streaming.runtime.{IncrementalExecution, WatermarkPropagator}
+import org.apache.spark.sql.execution.streaming.runtime.{IncrementalExecution, InsertShuffleBeforeStatefulCartesianProduct, WatermarkPropagator}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.scripting.SqlScriptingExecution
 import org.apache.spark.sql.streaming.OutputMode
@@ -279,16 +280,14 @@ class QueryExecution(
         result.toImmutableArraySeq)
     }
     p transformDown {
-      case u @ Union(children, _, _) if children.forall(_.isInstanceOf[Command]) =>
-        eagerlyExecute(u, "multi-commands", CommandExecutionMode.SKIP)
-      case w @ WithCTE(u @ Union(children, _, _), _) if children.forall(_.isInstanceOf[Command]) =>
-        eagerlyExecute(w, "multi-commands", CommandExecutionMode.SKIP)
-      case c: Command =>
-        val name = commandExecutionName(c)
-        eagerlyExecute(c, name, CommandExecutionMode.NON_ROOT)
-      case w @ WithCTE(c: Command, _) =>
-        val name = commandExecutionName(c)
-        eagerlyExecute(w, name, CommandExecutionMode.SKIP)
+      // isEagerlyExecutedCommand decides the shapes; this only maps each to a name and mode.
+      case node if QueryExecution.isEagerlyExecutedCommand(node) =>
+        val (name, mode) = node match {
+          case c: Command => (commandExecutionName(c), CommandExecutionMode.NON_ROOT)
+          case WithCTE(c: Command, _) => (commandExecutionName(c), CommandExecutionMode.SKIP)
+          case _ => ("multi-commands", CommandExecutionMode.SKIP) // Union / WithCTE(Union)
+        }
+        eagerlyExecute(node, name, mode)
     }
   }
 
@@ -796,6 +795,20 @@ object QueryExecution {
 
   private def nextExecutionId: Long = _nextExecutionId.getAndIncrement
 
+  /**
+   * Whether [[QueryExecution.eagerlyExecuteCommands]] would eagerly execute `plan` as a command:
+   * a `Command`, a `Union` of commands, or either wrapped in a `WithCTE`. The single source of
+   * truth for those shapes, gated on by `eagerlyExecuteCommands`. EXECUTE IMMEDIATE uses it to
+   * defer matching inner payloads to the execution level.
+   */
+  private[sql] def isEagerlyExecutedCommand(plan: LogicalPlan): Boolean = plan match {
+    case Union(children, _, _) => children.forall(_.isInstanceOf[Command])
+    case WithCTE(Union(children, _, _), _) => children.forall(_.isInstanceOf[Command])
+    case _: Command => true
+    case WithCTE(_: Command, _) => true
+    case _ => false
+  }
+
   private[execution] def create(
       sparkSession: SparkSession,
       logical: LogicalPlan,
@@ -818,15 +831,32 @@ object QueryExecution {
       sparkSession: SparkSession,
       adaptiveExecutionRule: Option[InsertAdaptiveSparkPlan] = None,
       subquery: Boolean): Seq[Rule[SparkPlan]] = {
+    // Read once here so that both union barriers below, and the codegen gate they stamp for, answer
+    // from the same values however long preparation takes.
+    val unionConf = UnionConfSnapshot(sparkSession.sessionState.conf)
+    val ensureRequirements = EnsureRequirements()
     // `AdaptiveSparkPlanExec` is a leaf node. If inserted, all the following rules will be no-op
     // as the original plan is hidden behind `AdaptiveSparkPlanExec`.
     adaptiveExecutionRule.toSeq ++
     Seq(
       CoalesceBucketsInJoin,
+      // Must run before `EnsureRequirements`, which then plans the query without the semi joins
+      // this rule drops.
+      ChoosePerPartitionRuntimeFilters(ensureRequirements, unionConf),
       PlanDynamicPruningFilters(sparkSession),
       PlanSubqueries(sparkSession),
       RemoveRedundantProjects,
-      EnsureRequirements(),
+      // Must run before `EnsureRequirements`, which asks a `UnionExec` what it reports: it
+      // records the conf that answer depends on, so the following `StampUnionDecisions` freezes the
+      // decision under the same value the exchanges were planned against.
+      new SnapshotUnionPreparationConf(unionConf),
+      ensureRequirements,
+      // Must run after `EnsureRequirements`: it fixes each `UnionExec`'s partitioning decision, and
+      // the answer to fix is the one the exchanges around it were planned against.
+      new StampUnionDecisions(unionConf),
+      // After EnsureRequirements, whose exchanges it must see. Not gated on streaming, since a
+      // batch plan can embed an already-planned stateful subtree.
+      InsertShuffleBeforeStatefulCartesianProduct,
       // This rule must be run after `EnsureRequirements`.
       InsertSortForLimitAndOffset,
       // `PushDownLocalSort` pushes a wider local sort down onto a narrower one below it, so a
@@ -851,7 +881,12 @@ object QueryExecution {
       // see `AdaptiveSparkPlanExec.queryStagePreparationRules`.)
       RemoveRedundantSorts,
       ApplyColumnarRulesAndInsertTransitions(
-        sparkSession.sessionState.columnarRules, outputsColumnar = false),
+        SnapshotUnionPreparationConf.after(unionConf, sparkSession.sessionState.columnarRules),
+        outputsColumnar = false),
+      // A barrier for a `UnionExec` an injected columnar rule just created, which has no decision
+      // yet and would otherwise take one wherever it is first asked. A decision already stamped on
+      // a node is kept.
+      new StampUnionDecisions(unionConf),
       CollapseCodegenStages()) ++
       (if (subquery) {
         Nil
@@ -1016,7 +1051,8 @@ object QueryExecution {
       refreshPhaseEnabled: Boolean = true,
       mode: CommandExecutionMode.Value = CommandExecutionMode.SKIP,
       shuffleCleanupModeOpt: Option[ShuffleCleanupMode] = None,
-      analyzerOpt: Option[Analyzer] = None)
+      analyzerOpt: Option[Analyzer] = None,
+      beforeExecution: SparkPlan => Unit = _ => ())
     : (QueryExecution, Array[InternalRow]) = {
     val qe = new QueryExecution(
       sparkSession,
@@ -1027,6 +1063,7 @@ object QueryExecution {
       analyzerOpt = analyzerOpt)
     val result = QueryExecution.withInternalError(s"Executed $name failed.") {
       SQLExecution.withNewExecutionId(qe, Some(name)) {
+        beforeExecution(qe.executedPlan)
         qe.executedPlan.executeCollect()
       }
     }

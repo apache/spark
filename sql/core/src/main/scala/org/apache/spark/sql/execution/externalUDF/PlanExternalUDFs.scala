@@ -235,6 +235,11 @@ private[sql] object PlanExternalUDFs
     collectEvaluableUDF(plan) match {
       case None => plan
       case Some(udf) =>
+        // TODO(SPARK-59745): Preserve named argument metadata in unified Python UDF execution.
+        if (udf.children.exists(_.isInstanceOf[NamedArgumentExpression])) {
+          throw QueryCompilationErrors.namedArgumentsNotSupported(
+            udf.name.getOrElse(udf.prettyName))
+        }
         val childIndex = plan.children.indexWhere { child =>
           udf.references.subsetOf(child.outputSet)
         }
@@ -242,10 +247,17 @@ private[sql] object PlanExternalUDFs
           throw QueryCompilationErrors.externalUDFWithMultipleChildrenUnsupportedError(udf)
         }
 
-        val resultAttr = AttributeReference("externalUDF", udf.dataType, udf.nullable)()
+        val resultAttr = AttributeReference("externalUDF", udf.dataType)()
+        // Evaluate the UDF only for the rows that need it (see `EvalOnlyWhen`).
+        val evalCondition = EvalOnlyWhen.udfConditions(
+          plan.expressions,
+          _.isInstanceOf[ExternalUserDefinedFunction],
+          _.asInstanceOf[ExternalUserDefinedFunction].resultId)
+          .getOrElse(udf.resultId, None)
+          .filter(_.references.subsetOf(plan.children(childIndex).outputSet))
         val newChildren = plan.children.zipWithIndex.map { case (child, index) =>
           if (index == childIndex) {
-            ExecuteExternalUDF(udf, resultAttr, child)
+            ExecuteExternalUDF(udf, resultAttr, child, evalCondition)
           } else {
             child
           }

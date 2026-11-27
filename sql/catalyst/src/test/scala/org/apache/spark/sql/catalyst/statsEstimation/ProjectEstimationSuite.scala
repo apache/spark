@@ -19,9 +19,9 @@ package org.apache.spark.sql.catalyst.statsEstimation
 
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, Cast, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils}
 import org.apache.spark.sql.types._
 
 
@@ -161,6 +161,126 @@ class ProjectEstimationSuite extends StatsEstimationTestBase {
       rowCount = Some(2),
       attributeStats = toAttributeMap(expectedColStats2, proj2))
     assert(proj2.stats == expectedStats2)
+  }
+
+  test("SPARK-60810: column stats of a CHAR column survive read-side padding") {
+    val c = charAttr("c", 5)
+    val colStat = ColumnStat(distinctCount = Some(10), nullCount = Some(0),
+      avgLen = Some(5), maxLen = Some(5))
+    val child = StatsTestPlan(
+      outputList = Seq(c),
+      rowCount = 1000,
+      attributeStats = AttributeMap(Seq(c -> colStat)))
+
+    val padded = CharVarcharUtils.addPaddingForScan(c)
+    assert(padded != c, "expected a read-side padding expression for a CHAR column")
+    val proj = Project(Seq(Alias(padded, "c")()), child)
+    assert(proj.stats.attributeStats.get(proj.output.head).contains(colStat))
+
+    // Statistics of values shorter than N, e.g. collected with read-side padding off: every
+    // non-null padded value has at least N characters.
+    val shortStat = colStat.copy(avgLen = Some(3), maxLen = Some(4))
+    val shortChild = child.copy(attributeStats = AttributeMap(Seq(c -> shortStat)))
+    val shortProj = Project(Seq(Alias(padded, "c")()), shortChild)
+    assert(shortProj.stats.attributeStats.get(shortProj.output.head).contains(colStat))
+    // The same without a distinct count, e.g. from a connector that reports only lengths.
+    val noNdvChild = child.copy(
+      attributeStats = AttributeMap(Seq(c -> shortStat.copy(distinctCount = None))))
+    val noNdvProj = Project(Seq(Alias(padded, "c")()), noNdvChild)
+    assert(noNdvProj.stats.attributeStats.get(noNdvProj.output.head)
+      .contains(colStat.copy(distinctCount = None)))
+    // Padding leaves longer values as they are, so lengths above N are kept.
+    val longStat = colStat.copy(avgLen = Some(7), maxLen = Some(9))
+    val longProj = Project(Seq(Alias(padded, "c")()),
+      child.copy(attributeStats = AttributeMap(Seq(c -> longStat))))
+    assert(longProj.stats.attributeStats.get(longProj.output.head).contains(longStat))
+
+    // An all-null column has no values to pad; ANALYZE stores the default size of the string
+    // type, 20, as its lengths, which a CHAR(30) floor must not raise.
+    val wide = charAttr("w", 30)
+    val nullStat = ColumnStat(distinctCount = Some(0), nullCount = Some(1000),
+      avgLen = Some(20), maxLen = Some(20))
+    val nullChild = StatsTestPlan(
+      outputList = Seq(wide),
+      rowCount = 1000,
+      attributeStats = AttributeMap(Seq(wide -> nullStat)))
+    val nullProj = Project(Seq(Alias(CharVarcharUtils.addPaddingForScan(wide), "w")()), nullChild)
+    assert(nullProj.stats.attributeStats.get(nullProj.output.head).contains(nullStat))
+    // An IS NULL filter below the padding Project sets the distinct count to 0 and scales the
+    // null count down, so it no longer covers every row the filter returns.
+    val isNullStat = ColumnStat(distinctCount = Some(0), nullCount = Some(200),
+      avgLen = Some(3), maxLen = Some(4))
+    val isNullProj = Project(Seq(Alias(padded, "c")()),
+      child.copy(attributeStats = AttributeMap(Seq(c -> isNullStat))))
+    assert(isNullProj.stats.attributeStats.get(isNullProj.output.head).contains(isNullStat))
+    // A null count covering every row is not a sign of no values: a filter that leaves 1 of
+    // 1000 rows scales 999 nulls up to 1, while the column still has a value.
+    val scaledStat = ColumnStat(distinctCount = Some(1), nullCount = Some(1),
+      avgLen = Some(2), maxLen = Some(2))
+    val scaledProj = Project(Seq(Alias(padded, "c")()), child.copy(rowCount = 1,
+      attributeStats = AttributeMap(Seq(c -> scaledStat))))
+    assert(scaledProj.stats.attributeStats.get(scaledProj.output.head)
+      .contains(scaledStat.copy(avgLen = Some(5), maxLen = Some(5))))
+  }
+
+  test("SPARK-60830: column stats survive the read-side checks of standard CHAR/VARCHAR") {
+    val stat = ColumnStat(distinctCount = Some(10), nullCount = Some(0),
+      avgLen = Some(3), maxLen = Some(4))
+    val nullStat = ColumnStat(distinctCount = Some(0), nullCount = Some(1000),
+      avgLen = Some(20), maxLen = Some(20))
+    def checkedStat(column: AttributeReference, columnStat: ColumnStat): Option[ColumnStat] = {
+      val child = StatsTestPlan(
+        outputList = Seq(column),
+        rowCount = 1000,
+        attributeStats = AttributeMap(Seq(column -> columnStat)))
+      val checked = readSideCheck(column)
+      assert(checked != column, s"expected a read-side check for $column")
+      val proj = Project(Seq(Alias(checked, column.name)()), child)
+      proj.stats.attributeStats.get(proj.output.head)
+    }
+
+    // The CHAR check pads shorter values to N characters, as the read-side padding does. An
+    // all-null column has no values to pad, so its default lengths of 20 stay under CHAR(30).
+    val c = charAttr("c", 5)
+    assert(checkedStat(c, stat).contains(stat.copy(avgLen = Some(5), maxLen = Some(5))))
+    assert(checkedStat(charAttr("w", 30), nullStat).contains(nullStat))
+    // The VARCHAR check never makes a value longer, so its lengths are kept.
+    assert(checkedStat(varcharAttr("v", 5), stat).contains(stat))
+    // An all-null VARCHAR column keeps its stats too.
+    assert(checkedStat(varcharAttr("w", 30), nullStat).contains(nullStat))
+  }
+
+  test("SPARK-60830: column stats survive a cast of a CHAR/VARCHAR read to STRING") {
+    // E.g. the cast that a union with a STRING column adds to a first-class CHAR or VARCHAR
+    // column. Short values, so that a CHAR read raises the lengths to 5.
+    val stat = ColumnStat(distinctCount = Some(10), nullCount = Some(0),
+      avgLen = Some(3), maxLen = Some(4))
+    def aliasStat(child: LogicalPlan, cast: Expression): Option[ColumnStat] = {
+      val proj = Project(Seq(Alias(cast, "c")()), child)
+      proj.stats.attributeStats.get(proj.output.head)
+    }
+    for {
+      column <- Seq(charAttr("c", 5), varcharAttr("c", 5))
+      standardSemantics <- Seq(true, false)
+    } {
+      val read = firstClassRead(column, standardSemantics)
+      val child = StatsTestPlan(Seq(column), 1000, AttributeMap(Seq(column -> stat)))
+      val expected = if (read.dataType == CharType(5)) {
+        stat.copy(avgLen = Some(5), maxLen = Some(5))
+      } else {
+        stat
+      }
+      assert(aliasStat(child, Cast(read, StringType)).contains(expected), read)
+      // Casts to a length-checked type or to another collation are not stripped.
+      assert(aliasStat(child, Cast(read, VarcharType(2))).isEmpty, read)
+      assert(aliasStat(child, Cast(read, StringType("UTF8_LCASE"))).isEmpty, read)
+    }
+    // Nor is a cast of a column of another type.
+    val i = attr("i")
+    val intChild = StatsTestPlan(Seq(i), 1000, AttributeMap(Seq(i -> ColumnStat(
+      distinctCount = Some(10), min = Some(1), max = Some(10), nullCount = Some(0),
+      avgLen = Some(4), maxLen = Some(4)))))
+    assert(aliasStat(intChild, Cast(i, StringType)).isEmpty)
   }
 
   private def checkProjectStats(

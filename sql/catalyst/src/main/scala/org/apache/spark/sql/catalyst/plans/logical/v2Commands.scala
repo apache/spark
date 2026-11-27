@@ -19,22 +19,21 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AssignmentUtils, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedIdentifier, ResolvedProcedure, ResolveSchemaEvolution, TypeCheckResult, UnresolvedAttribute, UnresolvedException, UnresolvedProcedure, ViewSchemaMode}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AssignmentUtils, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ProcedureReference, ResolvedBoundProcedure, ResolvedIdentifier, ResolveSchemaEvolution, TypeCheckResult, UnresolvedAttribute, UnresolvedException, UnresolvedProcedure, ViewSchemaMode}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.catalog.{FunctionResource, RoutineLanguage}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
+import org.apache.spark.sql.catalyst.plans.{DescribeCommandSchema, QueryPlan}
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern.{DELETE_FROM_TABLE, MERGE_INTO_TABLE, REPLACE_DATA, TreePattern, UPDATE_TABLE, WRITE_DELTA}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.TypeUtils.{ordinalNumber, toSQLExpr}
 import org.apache.spark.sql.connector.catalog._
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{IdentifierHelper, MultipartIdentifierHelper}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
-import org.apache.spark.sql.connector.catalog.procedures.BoundProcedure
-import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder, Transform}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.write.{DeltaWrite, RowLevelOperation, RowLevelOperationTable, SupportsDelta, Write}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.{DELETE, MERGE, UPDATE}
@@ -53,7 +52,9 @@ import org.apache.spark.util.collection.BitSet
 // that DataFrame, instead of the optimized query plan, as building DataFrame optimizes the
 // query plan again. This trait defines a `storeAnalyzedQuery` function which will be called at
 // the end of analysis, and implementations should copy the input query plan into a non-child
-// field so that it won't be transformed by the optimizer.
+// field so that it won't be transformed by the optimizer. `storeAnalyzedQuery` may also take
+// from the analyzed plan what the command needs later, as `AddCheckConstraint` decides there
+// whether to store a predicate. `NormalizePlan` calls it too, on plans in any phase.
 trait KeepAnalyzedQuery extends Command {
   def storeAnalyzedQuery(): Command
 }
@@ -577,7 +578,7 @@ trait V2CreateTableAsSelectPlan
     withNameAndQuery(newName = name, newQuery = WithCTE(query, cteDefs))
   }
 
-  override lazy val resolved: Boolean = childrenResolved && {
+  override lazy val resolved: Boolean = childrenResolved && expressions.forall(_.resolved) && {
     // the table schema is created from the query schema, so the only resolution needed is to check
     // that the columns referenced by the table's partitioning exist in the query schema
     val references = partitioning.flatMap(_.references).toSet
@@ -637,11 +638,17 @@ trait V2CreateTablePlan extends LogicalPlan {
     name.asInstanceOf[ResolvedIdentifier].identifier
   }
 
+  /** The requested write ordering, empty when the statement did not ask for one. */
+  def writeOrdering: Seq[V2SortOrder]
+
   /**
    * Creates a copy of this node with the new partitioning transforms. This method is used to
    * rewrite the partition transforms normalized according to the table schema.
    */
   def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan
+
+  /** Creates a copy of this node with the new write ordering. */
+  def withWriteOrdering(rewritten: Seq[V2SortOrder]): V2CreateTablePlan
 }
 
 /**
@@ -652,7 +659,10 @@ case class CreateTable(
     columns: Seq[ColumnDefinition],
     partitioning: Seq[Transform],
     tableSpec: TableSpecBase,
-    ignoreIfExists: Boolean)
+    ignoreIfExists: Boolean,
+    // Null writeDistributionMode means the statement did not request one.
+    writeDistributionMode: WriteDistributionMode = null,
+    writeOrdering: Seq[V2SortOrder] = Seq.empty)
   extends UnaryCommand with V2CreateTablePlan {
 
   override def child: LogicalPlan = name
@@ -662,6 +672,10 @@ case class CreateTable(
 
   override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
     this.copy(partitioning = rewritten)
+  }
+
+  override def withWriteOrdering(rewritten: Seq[V2SortOrder]): V2CreateTablePlan = {
+    this.copy(writeOrdering = rewritten)
   }
 }
 
@@ -710,13 +724,20 @@ case class CreateTableAsSelect(
     tableSpec: TableSpecBase,
     writeOptions: Map[String, String],
     ignoreIfExists: Boolean,
-    isAnalyzed: Boolean = false)
+    isAnalyzed: Boolean = false,
+    // Null writeDistributionMode means the statement did not request one.
+    writeDistributionMode: WriteDistributionMode = null,
+    writeOrdering: Seq[V2SortOrder] = Seq.empty)
   extends V2CreateTableAsSelectPlan {
 
   override def markAsAnalyzed(ac: AnalysisContext): LogicalPlan = copy(isAnalyzed = true)
 
   override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
     this.copy(partitioning = rewritten)
+  }
+
+  override def withWriteOrdering(rewritten: Seq[V2SortOrder]): V2CreateTablePlan = {
+    this.copy(writeOrdering = rewritten)
   }
 
   override protected def withNameAndQuery(
@@ -868,6 +889,17 @@ case class CreateStreamingTable(
  * @param trackHistoryExceptColumns SCD2-only. Columns excluded from history tracking, from
  *                       `TRACK HISTORY ON * EXCEPT (...)`. [[None]] when no TRACK HISTORY clause
  *                       was specified. Mutually exclusive with [[trackHistoryColumns]].
+ * @param ignoreNullUpdates Whether an `IGNORE NULL UPDATES` clause was specified. When true, null
+ *                       values in an incoming update are ignored and the existing target value is
+ *                       preserved. The bare clause applies to all columns; the two column lists
+ *                       below scope it to a subset.
+ * @param ignoreNullUpdatesColumns The subset of columns for which null updates are ignored, from
+ *                       `IGNORE NULL UPDATES ON (...)`. [[None]] when the clause is absent or names
+ *                       no subset. Mutually exclusive with [[ignoreNullUpdatesExceptColumns]].
+ * @param ignoreNullUpdatesExceptColumns The columns for which null updates overwrite the target
+ *                       (nulls are ignored for all others), from
+ *                       `IGNORE NULL UPDATES ON * EXCEPT (...)`. [[None]] when the clause is absent
+ *                       or names no subset. Mutually exclusive with [[ignoreNullUpdatesColumns]].
  */
 case class CreateStreamingTableAutoCdc(
     name: LogicalPlan,
@@ -883,7 +915,10 @@ case class CreateStreamingTableAutoCdc(
     excludeColumns: Option[Seq[UnresolvedAttribute]],
     storedAsScdType: Int,
     trackHistoryColumns: Option[Seq[UnresolvedAttribute]],
-    trackHistoryExceptColumns: Option[Seq[UnresolvedAttribute]]
+    trackHistoryExceptColumns: Option[Seq[UnresolvedAttribute]],
+    ignoreNullUpdates: Boolean,
+    ignoreNullUpdatesColumns: Option[Seq[UnresolvedAttribute]],
+    ignoreNullUpdatesExceptColumns: Option[Seq[UnresolvedAttribute]]
 ) extends BinaryCommand with CreatePipelineDataset {
   override def left: LogicalPlan = name
   override def right: LogicalPlan = source
@@ -906,7 +941,10 @@ case class ReplaceTable(
     columns: Seq[ColumnDefinition],
     partitioning: Seq[Transform],
     tableSpec: TableSpecBase,
-    orCreate: Boolean)
+    orCreate: Boolean,
+    // Null writeDistributionMode means the statement did not request one.
+    writeDistributionMode: WriteDistributionMode = null,
+    writeOrdering: Seq[V2SortOrder] = Seq.empty)
   extends UnaryCommand with V2CreateTablePlan {
 
   override def child: LogicalPlan = name
@@ -916,6 +954,10 @@ case class ReplaceTable(
 
   override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
     this.copy(partitioning = rewritten)
+  }
+
+  override def withWriteOrdering(rewritten: Seq[V2SortOrder]): V2CreateTablePlan = {
+    this.copy(writeOrdering = rewritten)
   }
 }
 
@@ -932,7 +974,10 @@ case class ReplaceTableAsSelect(
     tableSpec: TableSpecBase,
     writeOptions: Map[String, String],
     orCreate: Boolean,
-    isAnalyzed: Boolean = false)
+    isAnalyzed: Boolean = false,
+    // Null writeDistributionMode means the statement did not request one.
+    writeDistributionMode: WriteDistributionMode = null,
+    writeOrdering: Seq[V2SortOrder] = Seq.empty)
   extends V2CreateTableAsSelectPlan {
 
   override def markAsAnalyzed(ac: AnalysisContext): LogicalPlan = {
@@ -941,6 +986,10 @@ case class ReplaceTableAsSelect(
 
   override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
     this.copy(partitioning = rewritten)
+  }
+
+  override def withWriteOrdering(rewritten: Seq[V2SortOrder]): V2CreateTablePlan = {
+    this.copy(writeOrdering = rewritten)
   }
 
   override protected def withNameAndQuery(
@@ -1894,14 +1943,17 @@ case class AlterViewAs(
     originalText: String,
     query: LogicalPlan,
     isAnalyzed: Boolean = false,
-    referredTempFunctions: Seq[String] = Seq.empty)
-  extends Command with AnalysisOnlyCommand with CTEInChildren {
+    referredTempFunctions: Seq[String] = Seq.empty,
+    referredTempVariablesUnderIdentifier: Seq[Seq[String]] = Seq.empty)
+  extends Command with AnalysisOnlyCommand with CTEInChildren with DefinesView {
 
   override def childrenToAnalyze: Seq[LogicalPlan] = Seq(child, query)
 
   override def markAsAnalyzed(analysisContext: AnalysisContext): LogicalPlan = copy(
     isAnalyzed = true,
-    referredTempFunctions = analysisContext.referredTempFunctionNames.toSeq)
+    referredTempFunctions = analysisContext.referredTempFunctionNames.toSeq,
+    referredTempVariablesUnderIdentifier =
+      analysisContext.referredTempVariableNamesUnderIdentifier.toSeq)
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = {
@@ -1952,14 +2004,17 @@ case class CreateView(
     replace: Boolean,
     viewSchemaMode: ViewSchemaMode,
     isAnalyzed: Boolean = false,
-    referredTempFunctions: Seq[String] = Seq.empty)
-  extends Command with AnalysisOnlyCommand with CTEInChildren {
+    referredTempFunctions: Seq[String] = Seq.empty,
+    referredTempVariablesUnderIdentifier: Seq[Seq[String]] = Seq.empty)
+  extends Command with AnalysisOnlyCommand with CTEInChildren with DefinesView {
 
   override def childrenToAnalyze: Seq[LogicalPlan] = Seq(child, query)
 
   override def markAsAnalyzed(analysisContext: AnalysisContext): LogicalPlan = copy(
     isAnalyzed = true,
-    referredTempFunctions = analysisContext.referredTempFunctionNames.toSeq)
+    referredTempFunctions = analysisContext.referredTempFunctionNames.toSeq,
+    referredTempVariablesUnderIdentifier =
+      analysisContext.referredTempVariableNamesUnderIdentifier.toSeq)
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = {
@@ -2049,8 +2104,9 @@ case class CacheTableAsSelect(
     isLazy: Boolean,
     options: Map[String, String],
     isAnalyzed: Boolean = false,
-    referredTempFunctions: Seq[String] = Seq.empty)
-  extends AnalysisOnlyCommand with CTEInChildren {
+    referredTempFunctions: Seq[String] = Seq.empty,
+    referredTempVariablesUnderIdentifier: Seq[Seq[String]] = Seq.empty)
+  extends AnalysisOnlyCommand with CTEInChildren with DefinesView {
 
   /**
    * Returns the temp view name string. Must only be called after analysis, when `tempViewName`
@@ -2076,7 +2132,10 @@ case class CacheTableAsSelect(
     copy(
       isAnalyzed = true,
       // Collect the referred temporary functions from AnalysisContext
-      referredTempFunctions = ac.referredTempFunctionNames.toSeq)
+      referredTempFunctions = ac.referredTempFunctionNames.toSeq,
+      // Collect the temporary variables read via an IDENTIFIER clause in the SELECT body, so the
+      // text-backed temporary view stays resolvable when re-analyzed on read.
+      referredTempVariablesUnderIdentifier = ac.referredTempVariableNamesUnderIdentifier.toSeq)
   }
 
   override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
@@ -2248,6 +2307,18 @@ case class SetVariable(
 }
 
 /**
+ * The logical plan of an EXECUTE IMMEDIATE command payload. It supervises the already-analyzed
+ * inner command in a non-child slot; it does not execute it. Keeping the payload out of the
+ * children keeps it off the eager-command path and gives EXPLAIN a stable node. Execution happens
+ * only when this node is planned to `ExecuteImmediateExec`, the sole executor of the payload. The
+ * payload is surfaced via [[innerChildren]] so EXPLAIN still shows it.
+ */
+case class ExecuteImmediateCommand(sourceStatement: LogicalPlan) extends LeafCommand {
+  override def output: Seq[Attribute] = sourceStatement.output
+  override def innerChildren: Seq[QueryPlan[_]] = Seq(sourceStatement)
+}
+
+/**
  * The logical plan of the DECLARE CURSOR statement.
  *
  * The queryText is stored to support both parameterized and non-parameterized cursors.
@@ -2301,22 +2372,27 @@ case class Call(
     procedure: LogicalPlan,
     args: Seq[Expression],
     execute: Boolean = true)
-  extends UnaryNode with ExecutableDuringAnalysis {
+  extends UnaryNode with ExecutableDuringAnalysis with SupportsNonDeterministicExpression {
 
   override def output: Seq[Attribute] = Nil
 
   override def child: LogicalPlan = procedure
 
-  def bound: Boolean = procedure match {
-    case ResolvedProcedure(_, _, _: BoundProcedure) => true
-    case _ => false
-  }
+  /**
+   * Whether `BindProcedures` has bound the procedure and rearranged the arguments to match its
+   * parameters.
+   */
+  def bound: Boolean = procedure.isInstanceOf[ResolvedBoundProcedure]
+
+  // Lets a CALL that is not invoked, such as under EXPLAIN, pass analysis with a nondeterministic
+  // argument.
+  override def allowNonDeterministicExpression: Boolean = true
 
   def checkArgTypes(): TypeCheckResult = {
     require(resolved && bound, "can check arg types only after resolution and binding")
 
     val params = procedure match {
-      case ResolvedProcedure(_, _, bound: BoundProcedure) => bound.parameters
+      case ResolvedBoundProcedure(_, _, boundProcedure) => boundProcedure.parameters
     }
     require(args.length == params.length, "number of args and params must match after binding")
 
@@ -2335,9 +2411,8 @@ case class Call(
 
   override def simpleString(maxFields: Int): String = {
     procedure match {
-      case ResolvedProcedure(catalog, ident, _) =>
-        val name = s"${quoteIfNeeded(catalog.name)}.${ident.quoted}"
-        simpleString(name, maxFields)
+      case p: ProcedureReference =>
+        simpleString(V2TableUtil.toQualifiedName(p.catalog, p.ident), maxFields)
       case UnresolvedProcedure(nameParts) =>
         val name = nameParts.quoted
         simpleString(name, maxFields)

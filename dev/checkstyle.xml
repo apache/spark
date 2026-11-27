@@ -203,6 +203,10 @@
             <property name="illegalClasses" value="com.google.common.io.Files" />
         </module>
         <module name="RegexpSinglelineJava">
+            <property name="format" value="\bsun\.misc\.Signal"/>
+            <property name="message" value="Use org.apache.spark.util.SignalUtils instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
             <property name="format" value="Ints\.checkedCast"/>
             <property name="message" value="Use JavaUtils.checkedCast instead." />
         </module>

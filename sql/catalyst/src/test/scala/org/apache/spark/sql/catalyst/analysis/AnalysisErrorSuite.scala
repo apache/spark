@@ -918,7 +918,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       parameters = Map("message" ->
         """
           |Failure when resolving conflicting references in AsOfJoin:
-          |'AsOfJoin (a#x >= a#x), Inner
+          |'AsOfJoin true, Inner
           |:- LocalRelation <empty>, [a#x]
           |+- LocalRelation <empty>, [a#x]
           |

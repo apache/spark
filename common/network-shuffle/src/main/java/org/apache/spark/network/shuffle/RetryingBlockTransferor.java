@@ -291,7 +291,23 @@ public class RetryingBlockTransferor {
 
       // Now actually invoke the parent listener, outside of the synchronized block.
       if (shouldForwardSuccess) {
-        listener.onBlockTransferSuccess(blockId, data);
+        try {
+          listener.onBlockTransferSuccess(blockId, data);
+        } catch (Throwable t) {
+          // The block is no longer outstanding, so a failure reported for it later (for example
+          // by the transport layer after this callback threw) would be ignored by
+          // handleBlockTransferFailure, and the parent listener would never hear about it. Fail it
+          // here instead.
+          try {
+            listener.onBlockTransferFailure(blockId, t);
+          } catch (Throwable failureError) {
+            // addSuppressed throws if a throwable would suppress itself.
+            if (failureError != t) {
+              t.addSuppressed(failureError);
+            }
+          }
+          throw t;
+        }
       }
     }
 

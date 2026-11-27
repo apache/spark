@@ -22,6 +22,7 @@ import org.apache.spark.sql.{CharVarcharTestSuite, QueryTest, Row}
 import org.apache.spark.sql.execution.command.CharVarcharDDLTestBase
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{CharType, VarcharType}
 
 class HiveCharVarcharTestSuite extends CharVarcharTestSuite with TestHiveSingleton {
 
@@ -54,12 +55,36 @@ class HiveCharVarcharTestSuite extends CharVarcharTestSuite with TestHiveSinglet
     }
   }
 
-  test("SPARK-35700: Read char/varchar orc table with created and written by external systems") {
+  test("SPARK-35700, SPARK-58814: read native char/varchar ORC") {
     withTable("t") {
       hiveClient.runSqlHive("CREATE TABLE t(c CHAR(5), v VARCHAR(7)) STORED AS ORC")
       hiveClient.runSqlHive("INSERT INTO t VALUES('Spark', 'kyuubi')")
-      checkAnswer(sql("SELECT c, v from t"), Row("Spark", "kyuubi"))
-      checkAnswer(sql("SELECT v from t where c = 'Spark' and v = 'kyuubi'"), Row("kyuubi"))
+      Seq(true, false).foreach { vectorizedReaderEnabled =>
+        withSQLConf(
+            SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorizedReaderEnabled.toString,
+            HiveUtils.CONVERT_METASTORE_ORC.key -> "true") {
+          checkAnswer(sql("SELECT c, v from t"), Row("Spark", "kyuubi"))
+          checkAnswer(
+            sql("SELECT v from t where c = 'Spark' and v = 'kyuubi'"),
+            Row("kyuubi"))
+        }
+      }
+    }
+    withTable("t") {
+      hiveClient.runSqlHive("CREATE TABLE t(c CHAR(5), v VARCHAR(7)) STORED AS ORC")
+      hiveClient.runSqlHive("INSERT INTO t VALUES('Sp', 'kyuubi')")
+      Seq(true, false).foreach { vectorizedReaderEnabled =>
+        withSQLConf(
+            SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
+            SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorizedReaderEnabled.toString,
+            HiveUtils.CONVERT_METASTORE_ORC.key -> "true") {
+          assert(spark.table("t").schema.map(_.dataType) === Seq(CharType(5), VarcharType(7)))
+          checkAnswer(sql("SELECT c, v from t"), Row("Sp   ", "kyuubi"))
+          checkAnswer(
+            sql("SELECT v from t where c = 'Sp   ' and v = 'kyuubi'"),
+            Row("kyuubi"))
+        }
+      }
     }
   }
 

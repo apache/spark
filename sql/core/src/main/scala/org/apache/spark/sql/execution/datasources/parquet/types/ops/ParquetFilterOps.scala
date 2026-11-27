@@ -26,6 +26,8 @@ import org.apache.parquet.filter2.predicate.SparkFilterApi.longColumn
 import org.apache.parquet.schema.LogicalTypeAnnotation
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 
+import org.apache.spark.sql.types.DataType
+
 /**
  * Optional Parquet filter-pushdown support for a Types Framework type.
  *
@@ -61,6 +63,14 @@ private[parquet] trait ParquetFilterOps {
 
   /** Whether `value` (a non-null external filter value) is pushable for this type. */
   def acceptsValue(value: Any): Boolean
+
+  /**
+   * Whether a predicate with a value is pushable for a column of this encoding that is read as
+   * `readType`, the Spark type in the read schema. Parquet evaluates a pushed down predicate
+   * against the stored values, so this is false when the reader changes them for `readType`, e.g.
+   * truncates them to a lower precision. IsNull and IsNotNull are pushed down regardless.
+   */
+  def acceptsReadType(readType: DataType): Boolean = true
 
   def makeEq(columnPath: Array[String], value: Any): FilterPredicate
   def makeNotEq(columnPath: Array[String], value: Any): FilterPredicate

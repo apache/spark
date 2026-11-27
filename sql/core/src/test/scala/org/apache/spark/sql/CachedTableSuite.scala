@@ -21,9 +21,11 @@ import java.io.{File, FilenameFilter}
 import java.nio.file.{Files, Paths}
 import java.time.{Duration, LocalDateTime, LocalTime, Period}
 import java.util
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.TimeoutException
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 
 import scala.collection.mutable.HashSet
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 
 import org.apache.spark.{CleanerListener, SparkRuntimeException}
@@ -34,8 +36,8 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListe
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.AsOfVersion
 import org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException
-import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Join, JoinStrategyHint, SHUFFLE_HASH}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
+import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Join, JoinStrategyHint, LogicalPlan, SHUFFLE_HASH, SubqueryAlias, UnaryNode}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
 import org.apache.spark.sql.connector.catalog.BasicInMemoryTableCatalog
 import org.apache.spark.sql.connector.catalog.CatalogPlugin
@@ -44,7 +46,7 @@ import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.InMemoryCatalog
 import org.apache.spark.sql.connector.catalog.TableWritePrivilege
 import org.apache.spark.sql.connector.catalog.TruncatableTable
-import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, RDDScanExec, SparkPlan, SparkPlanInfo}
+import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, RDDScanExec, SparkPlan, SparkPlanInfo, SparkStrategy}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEPropagateEmptyRelation}
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.command.CommandUtils
@@ -55,14 +57,38 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
-import org.apache.spark.sql.util.PartitionKeyedAccumulator
+import org.apache.spark.sql.util.{CaseInsensitiveStringMap, PartitionKeyedAccumulator}
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
-import org.apache.spark.storage.StorageLevel.{MEMORY_AND_DISK_2, MEMORY_ONLY}
+import org.apache.spark.storage.StorageLevel.{MEMORY_AND_DISK, MEMORY_AND_DISK_2, MEMORY_ONLY}
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.unsafe.types.CalendarInterval
-import org.apache.spark.util.{AccumulatorContext, Utils}
+import org.apache.spark.util.{AccumulatorContext, ThreadUtils, Utils}
 
 private case class BigData(s: String)
+
+/**
+ * A pass-through node that counts how many times it is copied with a new child, i.e. how many
+ * times a plan containing it is rewritten.
+ */
+private case class CopyCountingNode(child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = child.output
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): CopyCountingNode = {
+    CopyCountingNode.numCopies.incrementAndGet()
+    copy(child = newChild)
+  }
+}
+
+private object CopyCountingNode {
+  val numCopies = new AtomicInteger(0)
+}
+
+private object CopyCountingNodeStrategy extends SparkStrategy {
+  override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+    case CopyCountingNode(child) => planLater(child) :: Nil
+    case _ => Nil
+  }
+}
 
 @SlowSQLTest
 class CachedTableSuite extends SharedSparkSession
@@ -1420,6 +1446,56 @@ class CachedTableSuite extends SharedSparkSession
     }
   }
 
+  test("REFRESH TABLE rebuilds a cached query that reads a V1 table only in a subquery") {
+    withTable("t") {
+      withTempDir { dir =>
+        sql(s"CREATE TABLE t (id BIGINT) USING parquet LOCATION '${dir.toURI}'")
+        sql("INSERT INTO t VALUES (1)")
+        val queries = Seq(
+          "SELECT id FROM range(5) WHERE id IN (SELECT id FROM t)",
+          // The table is read in a subquery of a subquery.
+          "SELECT id FROM range(5) WHERE id IN " +
+            "(SELECT id FROM range(4) WHERE id IN (SELECT id FROM t))")
+        queries.foreach(sql(_).cache())
+        queries.foreach(query => checkAnswer(sql(query), Row(1L)))
+
+        // Add a data file outside Spark, so that only REFRESH TABLE can pick it up.
+        withTempPath { newData =>
+          Seq(3L).toDF("id").write.parquet(newData.getCanonicalPath)
+          newData.listFiles().filter(_.getName.endsWith(".parquet")).foreach { f =>
+            Files.move(f.toPath, Paths.get(dir.getAbsolutePath, f.getName))
+          }
+        }
+        sql("REFRESH TABLE t")
+
+        queries.foreach { query =>
+          val cachedData = cacheManager.lookupCachedData(sql(query))
+          assert(cachedData.isDefined)
+          assert(!cachedData.get.cachedRepresentation.cacheBuilder.isCachedColumnBuffersLoaded)
+          checkAnswer(sql(query), Seq(Row(1L), Row(3L)))
+        }
+      }
+    }
+  }
+
+  test("REFRESH TABLE keeps a cached query whose subquery reads only another table") {
+    withTable("t", "other") {
+      sql("CREATE TABLE t (id BIGINT) USING parquet")
+      sql("INSERT INTO t VALUES (1)")
+      sql("CREATE TABLE other (id BIGINT) USING parquet")
+      sql("INSERT INTO other VALUES (2)")
+      val query = "SELECT id FROM range(5) WHERE id IN (SELECT id FROM other)"
+      sql(query).cache()
+      checkAnswer(sql(query), Row(2L))
+
+      sql("REFRESH TABLE t")
+
+      val cachedData = cacheManager.lookupCachedData(sql(query))
+      assert(cachedData.isDefined)
+      assert(cachedData.get.cachedRepresentation.cacheBuilder.isCachedColumnBuffersLoaded)
+    }
+  }
+
   test("SPARK-33647: cache table support for permanent view") {
     withView("v1") {
       spark.catalog.clearCache()
@@ -1907,6 +1983,41 @@ class CachedTableSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-49982: AQE negative caching with a cache read only inside a scalar subquery") {
+    val triggered = new AtomicBoolean(false)
+    val func: Long => Boolean = (i: Long) => {
+      if (!triggered.get()) {
+        throw new Exception("SPARK-49982")
+      }
+      i % 2 == 0
+    }
+    withUserDefinedFunction("func" -> true) {
+      spark.udf.register("func", func)
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+        withTempView("failing") {
+          val df1 = spark.range(1024).select($"id".as("key1"))
+          val df2 = spark.range(2048).select($"id".as("key2"))
+          val failing = df1.filter(expr("func(key1)")).hint("MERGE").join(df2, $"key1" === $"key2")
+          failing.cache()
+          failing.createOrReplaceTempView("failing")
+          val query = "SELECT id FROM range(10) WHERE id < (SELECT count(*) FROM failing)"
+          sql(query).cache()
+          try {
+            // The failed build of `failing` runs on the subquery's thread while the dependent's
+            // build waits for that subquery, so a hang here shows up as a timeout.
+            val firstRun = Future(sql(query).collect())(ExecutionContext.global)
+            val error = intercept[Throwable](ThreadUtils.awaitResult(firstRun, 2.minutes))
+            assert(!error.isInstanceOf[TimeoutException], "materializing the cache hung")
+            triggered.set(true)
+            checkAnswer(sql(query), (0L until 10L).map(Row(_)))
+          } finally {
+            failing.unpersist(blocking = true)
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-52684: Atomicity of cache table on error") {
     withTempView("SPARK_52684") {
       intercept[SparkRuntimeException] {
@@ -1949,6 +2060,119 @@ class CachedTableSuite extends SharedSparkSession
 
       // verify view is not cached anymore
       assertNotCached(sql("SELECT * FROM v"))
+    }
+  }
+
+  test("cascading uncacheTableOrView removes a cached query reading the table in a subquery") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+      val queries = Seq(
+        s"SELECT id FROM range(5) WHERE id IN (SELECT id FROM $t)",
+        // The table is read in a subquery of a subquery.
+        s"SELECT id FROM range(5) WHERE id IN (SELECT id FROM range(4) WHERE id IN " +
+          s"(SELECT id FROM $t))")
+      queries.foreach { query =>
+        sql(query).cache()
+        assertCached(sql(query))
+        checkAnswer(sql(query), Seq(Row(1L), Row(2L)))
+      }
+
+      cacheManager.uncacheTableOrView(spark, Seq("testcat", "tbl"), cascade = true)
+
+      queries.foreach(query => assertNotCached(sql(query)))
+    }
+  }
+
+  test("cascading uncacheTableOrView keeps a cached query whose subquery reads another table") {
+    val t = "testcat.tbl"
+    val other = "testcat.other"
+    withTable(t, other) {
+      sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a')")
+      sql(s"CREATE TABLE $other (id bigint, data string) USING foo")
+      sql(s"INSERT INTO $other VALUES (2, 'b')")
+      val query = s"SELECT id FROM range(5) WHERE id IN (SELECT id FROM $other)"
+      sql(query).cache()
+      checkAnswer(sql(query), Row(2L))
+
+      cacheManager.uncacheTableOrView(spark, Seq("testcat", "tbl"), cascade = true)
+
+      assertCached(sql(query))
+    }
+  }
+
+  test("cache lookups by table name do not rewrite cached plans") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+      val originalStrategies = spark.experimental.extraStrategies
+      try {
+        // Set the strategy before caching, since caching plans the query in a cloned session.
+        spark.experimental.extraStrategies = CopyCountingNodeStrategy +: originalStrategies
+
+        // Stack several nodes above the aliased table relation. Rewriting the subtree under every
+        // node that the by-name checks visit would copy each of these nodes once for itself and
+        // once for every node above it, which is quadratic in the plan size.
+        val numNodes = 10
+        val plan = (1 to numNodes).foldLeft(spark.table(t).queryExecution.analyzed) {
+          (child, _) => CopyCountingNode(child)
+        }
+        cacheManager.cacheQuery(spark, plan, tableName = None, MEMORY_AND_DISK)
+        assert(cacheManager.numCachedEntries == 1)
+        // Without an alias in the cache key, the old full-tree rewrite would not copy anything
+        // either, and the assertions below would pass vacuously.
+        val cacheKey = cacheManager.lookupCachedData(spark, plan).get.plan
+        assert(cacheKey.exists(_.isInstanceOf[SubqueryAlias]))
+        CopyCountingNode.numCopies.set(0)
+
+        // Scanning the cache for a table that is not referenced must leave the entry alone.
+        val otherName = Seq("testcat", "other")
+        cacheManager.uncacheTableOrView(spark, otherName, cascade = true)
+        cacheManager.uncacheTableOrView(spark, otherName, cascade = false)
+        cacheManager.recacheTableOrView(spark, otherName)
+        // The cached plan is not rooted at the relation, so this finds nothing; it is called to
+        // check that it does not rewrite the plan either.
+        assert(cacheManager.lookupCachedTable(
+          catalog("testcat"),
+          Identifier.of(Array(), "tbl"),
+          tableId = None,
+          CaseInsensitiveStringMap.empty()).isEmpty)
+        assert(cacheManager.numCachedEntries == 1)
+        assert(CopyCountingNode.numCopies.get() == 0)
+
+        // The entry still refers to the table, so uncaching it with cascade must remove it.
+        cacheManager.uncacheTableOrView(spark, Seq("testcat", "tbl"), cascade = true)
+        assert(cacheManager.numCachedEntries == 0)
+      } finally {
+        spark.experimental.extraStrategies = originalStrategies
+      }
+    }
+  }
+
+  test("cache lookups by table name see through a chain of root aliases") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+      // The cache key is rooted at SubqueryAlias(x, SubqueryAlias(testcat.tbl, relation)).
+      val df = spark.table(t).as("x")
+      df.cache()
+      assert(df.queryExecution.analyzed.asInstanceOf[SubqueryAlias].child
+        .isInstanceOf[SubqueryAlias])
+
+      assert(cacheManager.lookupCachedTable(
+        catalog("testcat"),
+        Identifier.of(Array(), "tbl"),
+        tableId = None,
+        CaseInsensitiveStringMap.empty()).isDefined)
+
+      cacheManager.uncacheTableOrView(spark, Seq("testcat", "tbl"), cascade = false)
+      assert(cacheManager.lookupCachedData(df).isEmpty)
     }
   }
 
@@ -2750,6 +2974,39 @@ class CachedTableSuite extends SharedSparkSession
           Row(18L, 15L) :: Row(19L, 16L) :: Row(17L, 14L) :: Nil)
       } finally {
         ordered.unpersist()
+      }
+    }
+  }
+
+  test("SPARK-60179: cached plan is not reused across session time zones for a " +
+    "complex-to-string cast") {
+    withTempView("t") {
+      sql("""SELECT array(timestamp_micros(0)) AS ats,
+            |       array(array(timestamp_micros(0))) AS aats,
+            |       array(CAST(timestamp_micros(0) AS VARIANT)) AS avs,
+            |       timestamp_micros(0) AS ts""".stripMargin)
+        .createOrReplaceTempView("t")
+      // All columns hold the same instant, and rendering one as a string localizes it. The
+      // scalar column is the control: it was already classified as zone-dependent.
+      Seq(
+        ("ats", "[1970-01-01 00:00:00]", "[1969-12-31 16:00:00]"),
+        ("aats", "[[1970-01-01 00:00:00]]", "[[1969-12-31 16:00:00]]"),
+        ("avs", "[\"1970-01-01 00:00:00+00:00\"]", "[\"1969-12-31 16:00:00-08:00\"]"),
+        ("ts", "1970-01-01 00:00:00", "1969-12-31 16:00:00")).foreach {
+        case (column, inUTC, inLA) =>
+          val query = s"SELECT CAST($column AS STRING) AS v FROM t"
+          withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+            val cached = sql(query)
+            cached.persist()
+            try {
+              checkAnswer(cached, Row(inUTC))
+              withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+                checkAnswer(sql(query), Row(inLA))
+              }
+            } finally {
+              cached.unpersist()
+            }
+          }
       }
     }
   }

@@ -41,6 +41,7 @@ case class JsonFileFormat() extends TextBasedFileFormat with DataSourceRegister 
       path: Path): Boolean = {
     val parsedOptions = getJsonOptions(sparkSession, options)
     if (parsedOptions.archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(path)) {
+      SupportsArchiveFormat.checkNoDecompressionCodec(path, parsedOptions.decompressionCodec)
       // A tar archive is read as one sequential stream (entry by entry), so it is never split.
       return false
     }

@@ -17,15 +17,32 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.text.ParsePosition
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
+import java.time.temporal.TemporalAccessor
 import java.util.Locale
+
+import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils._
 import org.apache.spark.unsafe.types.UTF8String
 
 sealed trait TimeFormatter extends Serializable {
   def parse(s: String): Long // returns nanoseconds since midnight
+
+  // A non-throwing variant of `parse`, returning None instead of throwing when the input cannot be
+  // parsed. Used by schema inference to probe the time type without paying an exception per
+  // non-time value. Subclasses override it to return None instead of throwing, but some inputs
+  // may still raise an exception that is caught internally, for example out-of-range fields,
+  // conflicting fields under a pattern, or a time followed by an invalid zone in the default
+  // formatter.
+  def parseOptional(s: String): Option[Long] =
+    try {
+      Some(parse(s))
+    } catch {
+      case _: Exception => None
+    }
 
   def format(localTime: LocalTime): String
   // Converts nanoseconds since the midnight to time string
@@ -45,9 +62,25 @@ class Iso8601TimeFormatter(pattern: String, locale: Locale, isParsing: Boolean)
   protected lazy val formatter: DateTimeFormatter =
     getOrCreateFormatter(pattern, locale, isParsing)
 
+  @transient
+  private lazy val parsingFormat = formatter.toFormat
+
   override def parse(s: String): Long = {
     val localTime = toLocalTime(formatter.parse(s))
     localTimeToNanos(localTime)
+  }
+
+  override def parseOptional(s: String): Option[Long] = {
+    try {
+      val parsePosition = new ParsePosition(0)
+      parsingFormat.parseObject(s, parsePosition) match {
+        case parsed: TemporalAccessor if s.length == parsePosition.getIndex =>
+          Some(localTimeToNanos(toLocalTime(parsed)))
+        case _ => None
+      }
+    } catch {
+      case NonFatal(_) => None
+    }
   }
 
   override def format(localTime: LocalTime): String = {
@@ -99,6 +132,9 @@ class DefaultTimeFormatter(locale: Locale, isParsing: Boolean)
   override def parse(s: String): Long = {
     SparkDateTimeUtils.stringToTimeAnsi(UTF8String.fromString(s))
   }
+
+  override def parseOptional(s: String): Option[Long] =
+    SparkDateTimeUtils.stringToTime(UTF8String.fromString(s))
 }
 
 object TimeFormatter {

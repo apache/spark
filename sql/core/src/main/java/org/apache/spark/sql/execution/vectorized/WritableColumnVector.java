@@ -19,13 +19,15 @@ package org.apache.spark.sql.execution.vectorized;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
-import java.util.Optional;
+import java.util.ArrayList;
+import java.util.List;
 
 import com.google.common.annotations.VisibleForTesting;
 
+import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
-import org.apache.spark.sql.catalyst.util.ArrayBasedMapData;
-import org.apache.spark.sql.catalyst.util.GenericArrayData;
+import org.apache.spark.sql.catalyst.types.ops.TypeOps$;
+import org.apache.spark.sql.execution.RowToColumnConverter;
 import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.sql.vectorized.ColumnVector;
@@ -78,7 +80,13 @@ public abstract class WritableColumnVector extends ColumnVector {
    * Resets this column for writing. The currently stored values are no longer accessible.
    */
   public void reset() {
-    if (isConstant || isAllNull()) return;
+    if (isConstant) return;
+    if (isAllNull()) {
+      // An all-null vector stores nothing, but appending nulls to it (e.g. through a null
+      // parent struct) still advances elementsAppended, so it must be cleared here.
+      elementsAppended = 0;
+      return;
+    }
 
     if (childColumns != null) {
       for (WritableColumnVector c: childColumns) {
@@ -100,6 +108,13 @@ public abstract class WritableColumnVector extends ColumnVector {
 
   @Override
   public void close() {
+    if (reservedColumns != null) {
+      for (WritableColumnVector column : reservedColumns) {
+        column.close();
+      }
+      reservedColumns.clear();
+      reservedColumns = null;
+    }
     if (childColumns != null) {
       for (int i = 0; i < childColumns.length; i++) {
         childColumns[i].close();
@@ -119,6 +134,12 @@ public abstract class WritableColumnVector extends ColumnVector {
   public void closeIfFreeable() {
     // no-op
   }
+
+  /**
+   * Returns true if this vector's own data buffers are released; vectors it owns are not checked.
+   */
+  @VisibleForTesting
+  public abstract boolean isFree();
 
   public void reserveAdditional(int additionalCapacity) {
     reserve(elementsAppended + additionalCapacity);
@@ -211,7 +232,7 @@ public abstract class WritableColumnVector extends ColumnVector {
    */
   public WritableColumnVector reserveDictionaryIds(int capacity) {
     if (dictionaryIds == null) {
-      dictionaryIds = reserveNewColumn(capacity, DataTypes.IntegerType);
+      dictionaryIds = reserveNewInternalColumn(capacity, DataTypes.IntegerType);
     } else {
       dictionaryIds.reset();
       dictionaryIds.reserve(capacity);
@@ -564,7 +585,7 @@ public abstract class WritableColumnVector extends ColumnVector {
    * In all these cases, the return value is the rowId for the first appended element.
    */
   public final int appendNull() {
-    assert (!(dataType() instanceof StructType)); // Use appendStruct()
+    assert (!isStruct); // Use appendStruct()
     reserve(elementsAppended + 1);
     putNull(elementsAppended);
     return elementsAppended++;
@@ -577,7 +598,7 @@ public abstract class WritableColumnVector extends ColumnVector {
   }
 
   public final int appendNulls(int count) {
-    assert (!(dataType() instanceof StructType));
+    assert (!isStruct);
     reserve(elementsAppended + count);
     int result = elementsAppended;
     putNulls(elementsAppended, count);
@@ -586,7 +607,7 @@ public abstract class WritableColumnVector extends ColumnVector {
   }
 
   public final int appendNotNulls(int count) {
-    assert (!(dataType() instanceof StructType));
+    assert (!isStruct);
     reserve(elementsAppended + count);
     int result = elementsAppended;
     putNotNulls(elementsAppended, count);
@@ -781,7 +802,7 @@ public abstract class WritableColumnVector extends ColumnVector {
       putNull(elementsAppended);
       elementsAppended++;
       for (WritableColumnVector c: childColumns) {
-        if (c.type instanceof StructType || c.type instanceof VariantType
+        if (c.isStruct || c.type instanceof VariantType
             || c.type instanceof CalendarIntervalType
             || c.type instanceof AnyTimestampNanoType) {
           c.appendStruct(true);
@@ -796,105 +817,21 @@ public abstract class WritableColumnVector extends ColumnVector {
   }
 
   /**
-   * Appends multiple copies of a Java Object to the vector using the corresponding append* method
-   * above.
+   * Appends `length` copies of `value`, a Catalyst value of this vector's type such as a column's
+   * existence default. `RowToColumnConverter` appends it by the vector's data type, so NULLs nested
+   * in structs, arrays and maps, decimals of any precision, binary values and maps all take the
+   * same path as a row-to-columnar conversion, and each row gets its own map entries.
    * @param length: The number of instances to append
    * @param value value to append to the vector
-   * @return the number of values appended if the value maps to one of the append* methods above,
-   * or Optional.empty() otherwise.
    */
-  public Optional<Integer> appendObjects(int length, Object value) {
-    if (value instanceof Boolean) {
-      return Optional.of(appendBooleans(length, (Boolean) value));
+  public void appendObjects(int length, Object value) {
+    RowToColumnConverter converter =
+      new RowToColumnConverter(new StructType().add("value", type, true));
+    InternalRow row = new GenericInternalRow(new Object[] {value});
+    WritableColumnVector[] vectors = new WritableColumnVector[] {this};
+    for (int i = 0; i < length; i++) {
+      converter.convert(row, vectors);
     }
-    if (value instanceof Byte) {
-      return Optional.of(appendBytes(length, (Byte) value));
-    }
-    if (value instanceof Decimal decimal) {
-      long unscaled = decimal.toUnscaledLong();
-      if (decimal.precision() <= Decimal.MAX_INT_DIGITS()) {
-        return Optional.of(appendInts(length, (int) unscaled));
-      } else if (decimal.precision() <= Decimal.MAX_LONG_DIGITS()) {
-        return Optional.of(appendLongs(length, unscaled));
-      } else {
-        BigInteger integer = decimal.toJavaBigDecimal().unscaledValue();
-        byte[] bytes = integer.toByteArray();
-        int result = 0;
-        for (int i = 0; i < length; ++i) {
-          result += appendByteArray(bytes, 0, bytes.length);
-        }
-        return Optional.of(result);
-      }
-    }
-    if (value instanceof Double) {
-      return Optional.of(appendDoubles(length, (Double) value));
-    }
-    if (value instanceof Float) {
-      return Optional.of(appendFloats(length, (Float) value));
-    }
-    if (value instanceof Integer) {
-      return Optional.of(appendInts(length, (Integer) value));
-    }
-    if (value instanceof Long) {
-      return Optional.of(appendLongs(length, (Long) value));
-    }
-    if (value instanceof Short) {
-      return Optional.of(appendShorts(length, (Short) value));
-    }
-    if (value instanceof UTF8String utf8) {
-      byte[] bytes = utf8.getBytes();
-      int result = 0;
-      for (int i = 0; i < length; ++i) {
-        result += appendByteArray(bytes, 0, bytes.length);
-      }
-      return Optional.of(result);
-    }
-    if (value instanceof GenericArrayData arrayData) {
-      int result = 0;
-      for (int i = 0; i < length; ++i) {
-        appendArray(arrayData.numElements());
-        for (Object element : arrayData.array()) {
-          if (arrayData().appendObjects(1, element).isEmpty()) {
-            return Optional.empty();
-          }
-        }
-        result += arrayData.numElements();
-      }
-      return Optional.of(result);
-    }
-    if (value instanceof GenericInternalRow row) {
-      int result = 0;
-      for (int i = 0; i < length; ++i) {
-        appendStruct(false);
-        for (int j = 0; j < row.values().length; ++j) {
-          Object element = row.values()[j];
-          if (childColumns[j].appendObjects(1, element).isEmpty()) {
-            return Optional.empty();
-          }
-        }
-        result += row.values().length;
-      }
-      return Optional.of(result);
-    }
-    if (value instanceof ArrayBasedMapData data) {
-      appendArray(length);
-      int result = 0;
-      for (int i = 0; i < length; ++i) {
-        for (Object key : data.keyArray().array()) {
-          if (childColumns[0].appendObjects(1, key).isEmpty()) {
-            return Optional.empty();
-          }
-        }
-        for (Object val: data.valueArray().array()) {
-          if (childColumns[1].appendObjects(1, val).isEmpty()) {
-            return Optional.empty();
-          }
-        }
-        result += data.keyArray().numElements();
-      }
-      return Optional.of(result);
-    }
-    return Optional.empty();
   }
 
   // `WritableColumnVector` puts the data of array in the first child column vector, and puts the
@@ -1001,6 +938,13 @@ public abstract class WritableColumnVector extends ColumnVector {
   protected double hugeVectorReserveRatio;
 
   /**
+   * True if this column stores its values as a struct, with one child column per field: a
+   * StructType, or a framework type whose row representation is one, such as FileType. Set once
+   * at construction, so that appending values does not look the type up.
+   */
+  private final boolean isStruct;
+
+  /**
    * Number of nulls in this column. This is an optimization for the reader, to skip NULL checks.
    */
   protected int numNulls;
@@ -1033,9 +977,26 @@ public abstract class WritableColumnVector extends ColumnVector {
   protected WritableColumnVector[] childColumns;
 
   /**
-   * Reserve a new column.
+   * Publicly reserved columns.
    */
-  public abstract WritableColumnVector reserveNewColumn(int capacity, DataType type);
+  private List<WritableColumnVector> reservedColumns;
+
+  /**
+   * Reserve a new column owned by this column vector.
+   */
+  public WritableColumnVector reserveNewColumn(int capacity, DataType type) {
+    WritableColumnVector column = reserveNewInternalColumn(capacity, type);
+    if (reservedColumns == null) {
+      reservedColumns = new ArrayList<>(1);
+    }
+    reservedColumns.add(column);
+    return column;
+  }
+
+  /**
+   * Reserve a new column for internal usage.
+   */
+  protected abstract WritableColumnVector reserveNewInternalColumn(int capacity, DataType type);
 
   protected boolean isArray() {
     return type instanceof ArrayType || type instanceof BinaryType || type instanceof StringType ||
@@ -1061,6 +1022,8 @@ public abstract class WritableColumnVector extends ColumnVector {
     this.defaultCapacity = capacity;
     this.hugeVectorThreshold = SQLConf.get().vectorizedHugeVectorThreshold();
     this.hugeVectorReserveRatio = SQLConf.get().vectorizedHugeVectorReserveRatio();
+    DataType representation = TypeOps$.MODULE$.rowRepresentationOrSelf(type);
+    this.isStruct = representation instanceof StructType;
 
     if (isArray()) {
       DataType childType;
@@ -1072,31 +1035,31 @@ public abstract class WritableColumnVector extends ColumnVector {
         childCapacity *= DEFAULT_ARRAY_LENGTH;
       }
       this.childColumns = new WritableColumnVector[1];
-      this.childColumns[0] = reserveNewColumn(childCapacity, childType);
-    } else if (type instanceof StructType st) {
+      this.childColumns[0] = reserveNewInternalColumn(childCapacity, childType);
+    } else if (representation instanceof StructType st) {
       this.childColumns = new WritableColumnVector[st.fields().length];
       for (int i = 0; i < childColumns.length; ++i) {
-        this.childColumns[i] = reserveNewColumn(capacity, st.fields()[i].dataType());
+        this.childColumns[i] = reserveNewInternalColumn(capacity, st.fields()[i].dataType());
       }
     } else if (type instanceof MapType mapType) {
       this.childColumns = new WritableColumnVector[2];
-      this.childColumns[0] = reserveNewColumn(capacity, mapType.keyType());
-      this.childColumns[1] = reserveNewColumn(capacity, mapType.valueType());
+      this.childColumns[0] = reserveNewInternalColumn(capacity, mapType.keyType());
+      this.childColumns[1] = reserveNewInternalColumn(capacity, mapType.valueType());
     } else if (type instanceof CalendarIntervalType) {
       // Three columns. Months as int. Days as Int. Microseconds as Long.
       this.childColumns = new WritableColumnVector[3];
-      this.childColumns[0] = reserveNewColumn(capacity, DataTypes.IntegerType);
-      this.childColumns[1] = reserveNewColumn(capacity, DataTypes.IntegerType);
-      this.childColumns[2] = reserveNewColumn(capacity, DataTypes.LongType);
+      this.childColumns[0] = reserveNewInternalColumn(capacity, DataTypes.IntegerType);
+      this.childColumns[1] = reserveNewInternalColumn(capacity, DataTypes.IntegerType);
+      this.childColumns[2] = reserveNewInternalColumn(capacity, DataTypes.LongType);
     } else if (type instanceof AnyTimestampNanoType) {
       // Two columns. EpochMicros as Long. NanosWithinMicro as Short.
       this.childColumns = new WritableColumnVector[2];
-      this.childColumns[0] = reserveNewColumn(capacity, DataTypes.LongType);
-      this.childColumns[1] = reserveNewColumn(capacity, DataTypes.ShortType);
+      this.childColumns[0] = reserveNewInternalColumn(capacity, DataTypes.LongType);
+      this.childColumns[1] = reserveNewInternalColumn(capacity, DataTypes.ShortType);
     } else if (type instanceof VariantType) {
       this.childColumns = new WritableColumnVector[2];
-      this.childColumns[0] = reserveNewColumn(capacity, DataTypes.BinaryType);
-      this.childColumns[1] = reserveNewColumn(capacity, DataTypes.BinaryType);
+      this.childColumns[0] = reserveNewInternalColumn(capacity, DataTypes.BinaryType);
+      this.childColumns[1] = reserveNewInternalColumn(capacity, DataTypes.BinaryType);
     } else {
       this.childColumns = null;
     }

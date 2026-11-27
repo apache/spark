@@ -248,6 +248,8 @@ object AgnosticEncoders {
   case object DayTimeIntervalEncoder extends LeafEncoder[Duration](DayTimeIntervalType())
   case object YearMonthIntervalEncoder extends LeafEncoder[Period](YearMonthIntervalType())
   case object VariantEncoder extends LeafEncoder[VariantVal](VariantType)
+  case class FileRefEncoder(mode: FileTypeMode = FileTypeMode.UNKNOWN)
+      extends LeafEncoder[FileRef](FileType(mode))
   case class GeographyEncoder(dt: GeographyType) extends LeafEncoder[Geography](dt)
   case class GeometryEncoder(dt: GeometryType) extends LeafEncoder[Geometry](dt)
   case class DateEncoder(override val lenientSerialization: Boolean)
@@ -267,7 +269,9 @@ object AgnosticEncoders {
       extends LeafEncoder[LocalDateTime](TimestampNTZNanosType(precision))
   case class InstantNanosEncoder(precision: Int)
       extends LeafEncoder[Instant](TimestampLTZNanosType(precision))
-  case object LocalTimeEncoder extends LeafEncoder[LocalTime](TimeType())
+  // Carries the precision, so `RowEncoder` maps `TimeType(p)` to an encoder of the same type.
+  // Otherwise, deserializing an array of `TIME(p)` fails to up-cast the elements to `TIME(6)`.
+  case class LocalTimeEncoder(precision: Int) extends LeafEncoder[LocalTime](TimeType(precision))
 
   case class SparkDecimalEncoder(dt: DecimalType) extends LeafEncoder[Decimal](dt)
   case class ScalaDecimalEncoder(dt: DecimalType) extends LeafEncoder[BigDecimal](dt)
@@ -293,6 +297,7 @@ object AgnosticEncoders {
     GeometryEncoder(GeometryType(Geometry.DEFAULT_SRID))
   val DEFAULT_GEOGRAPHY_ENCODER: GeographyEncoder =
     GeographyEncoder(GeographyType(Geography.DEFAULT_SRID))
+  val DEFAULT_LOCAL_TIME_ENCODER: LocalTimeEncoder = LocalTimeEncoder(TimeType.DEFAULT_PRECISION)
 
   /**
    * Encoder that transforms external data into a representation that can be further processed by

@@ -358,4 +358,28 @@ class JacksonGenerator(
     // Note that JSON uses writer with UTF-8 charset. This string will be written out as UTF-8.
     gen.writeRaw(lineSeparator)
   }
+
+  // --- Incremental object construction --------------------------------------------------------
+  // The whole-container `write(...)` methods above each serialize one row/array/map in a single
+  // call. The SQL/JSON constructors (JSON_OBJECT) instead assemble an object member by member --
+  // dynamic field names, per-member raw splicing, mixed value types -- so they drive the generator
+  // directly through the primitives below, writing every member into one generator lifecycle
+  // rather than serializing each member separately and splicing the text.
+
+  def writeStartObject(): Unit = gen.writeStartObject()
+
+  def writeEndObject(): Unit = gen.writeEndObject()
+
+  def writeFieldName(name: String): Unit = gen.writeFieldName(name)
+
+  def writeNull(): Unit = gen.writeNull()
+
+  // Splice already-JSON text as one value. Uses `writeRawValue` (not `writeRaw`) so the generator
+  // still registers that a value was written and commas the following member correctly.
+  def writeRawValue(json: String): Unit = gen.writeRawValue(json)
+
+  // A writer that renders one value of `dataType` into this generator, reading it from a
+  // `SpecializedGetters` at the given ordinal (e.g. a one-field carrier row). Build it once per
+  // value type and reuse it across rows.
+  def makeValueWriter(dataType: DataType): (SpecializedGetters, Int) => Unit = makeWriter(dataType)
 }

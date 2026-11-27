@@ -29,10 +29,10 @@ import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, FileFormat, FileFormatWriter}
 import org.apache.spark.sql.execution.streaming.{ManifestFileCommitProtocol, Sink}
-import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
+import org.apache.spark.sql.execution.streaming.runtime.{MetadataLogFileIndex, StreamExecution}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
@@ -76,6 +76,35 @@ object FileStreamSink extends Logging {
     val metadataDir = new Path(path, FileStreamSink.metadataDir)
     FileStreamSink.checkEscapedMetadataPath(fs, metadataDir, sqlConf)
     metadataDir
+  }
+
+  /**
+   * Checks that the files committed to the sink log of the table at `path` have the partition
+   * columns the sink is about to write with. Readers infer the partitioning from the logged
+   * paths and skip the files outside of it, so appending files in another layout would hide the
+   * files that are already committed. A log without readable files records no layout.
+   */
+  def checkPartitioningOfCommittedFiles(
+      sparkSession: SparkSession,
+      path: Path,
+      tableName: String,
+      partitionColumnNames: Seq[String]): Unit = {
+    val sqlConf = sparkSession.sessionState.conf
+    val fs = path.getFileSystem(sparkSession.sessionState.newHadoopConf())
+    val logPath = getMetadataLogPath(fs, path, sqlConf)
+    if (!sqlConf.fileStreamSinkMetadataIgnored && fs.exists(logPath)) {
+      val fileIndex = new MetadataLogFileIndex(sparkSession, path, Map.empty, None)
+      if (fileIndex.allFiles().nonEmpty) {
+        val recordedColumnNames = fileIndex.partitionSpec().partitionColumns.fieldNames.toSeq
+        if (recordedColumnNames.length != partitionColumnNames.length ||
+            !recordedColumnNames.zip(partitionColumnNames).forall {
+              case (recorded, expected) => sqlConf.resolver(recorded, expected)
+            }) {
+          throw QueryCompilationErrors.fileStreamSinkPartitioningMismatchError(
+            tableName, partitionColumnNames, recordedColumnNames)
+        }
+      }
+    }
   }
 
   def checkEscapedMetadataPath(fs: FileSystem, metadataPath: Path, sqlConf: SQLConf): Unit = {

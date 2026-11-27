@@ -153,7 +153,7 @@ object Encoders {
    *
    * @since 4.1.0
    */
-  def LOCALTIME: Encoder[java.time.LocalTime] = LocalTimeEncoder
+  def LOCALTIME: Encoder[java.time.LocalTime] = DEFAULT_LOCAL_TIME_ENCODER
 
   /**
    * An encoder for arrays of bytes.
@@ -175,6 +175,16 @@ object Encoders {
    * @since 4.1.0
    */
   def GEOGRAPHY(dt: GeographyType): Encoder[Geography] = GeographyEncoder(dt)
+
+  /**
+   * An encoder for `org.apache.spark.sql.types.FileRef`, the value of the FILE data type. It
+   * serializes to a FILE of unknown mode, which can be written to a FILE EXTERNAL column of an
+   * existing table, for example with `Dataset.writeTo(table).append()` or `INSERT INTO`. A table
+   * created from the Dataset, such as by `saveAsTable`, needs a FILE EXTERNAL column instead.
+   *
+   * @since 4.5.0
+   */
+  def FILE: Encoder[FileRef] = FileRefEncoder()
 
   /**
    * Creates an encoder that serializes instances of the `java.time.Duration` class to the

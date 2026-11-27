@@ -21,8 +21,9 @@ import java.io._
 import java.nio.charset.StandardCharsets.UTF_8
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.analysis.TempResolvedColumn
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TempResolvedColumn}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.objects.InvokeLike
 import org.apache.spark.sql.catalyst.util.FieldMetadataUtils.FIELD_ID_METADATA_KEY
 import org.apache.spark.sql.connector.catalog.MetadataColumn
 import org.apache.spark.sql.types.{MetadataBuilder, NumericType, StringType, StructType}
@@ -90,6 +91,13 @@ package object util extends Logging {
   private def usePrettyExpression(
       e: Expression,
       shouldTrimTempResolvedColumn: Boolean = false): Expression = e transform {
+    case u: UpdateFields if u.fieldOps.exists(_.isInstanceOf[UpdateNestedField]) =>
+      val sql = u.sqlString(toPrettySQL(_, shouldTrimTempResolvedColumn), identity)
+      if (u.checkInputDataTypes().isSuccess) {
+        PrettyAttribute(sql, u.dataType)
+      } else {
+        PrettyAttribute(sql)
+      }
     case a: Attribute => new PrettyAttribute(a)
     case Literal(s: UTF8String, StringType) => PrettyAttribute(s.toString, StringType)
     case Literal(v, t: NumericType) if v != null => PrettyAttribute(v.toString, t)
@@ -129,6 +137,20 @@ package object util extends Logging {
       )
     case c: Cast if !c.containsTag(Cast.USER_SPECIFIED_CAST) =>
       PrettyAttribute(usePrettyExpression(c.child, shouldTrimTempResolvedColumn).sql, c.dataType)
+    // A V2 function's magic method registered under a function name, e.g. by `CREATE FUNCTION`.
+    case i: InvokeLike if i.getTagValue(FunctionRegistry.FUNC_ALIAS).isDefined =>
+      val args = i.arguments.map(toPrettySQL(_, shouldTrimTempResolvedColumn))
+      PrettyAttribute(s"${i.prettyName}(${args.mkString(", ")})", i.dataType)
+    case j: RoutedSqlJsonExpression =>
+      // Column names are for display and never reparsed, so render the clean clause-free form, not
+      // the canonical `sql` that appends a round-trip-only default clause. Render children in place
+      // rather than substituting the node's children, so the raw-vs-quoted splice decisions (which
+      // key off each child's identity) are unchanged and no synthetic `FORMAT JSON` leaks in.
+      PrettyAttribute(
+        j.sqlString(
+          forceBuiltinOwnership = false,
+          usePrettyExpression(_, shouldTrimTempResolvedColumn).sql),
+        j.dataType)
     case p: PythonFuncExpression => PrettyPythonUDF(p.name, p.dataType, p.children)
     // Present a transpiled UDF exactly like the UDF it wraps, so auto-generated
     // column names stay `f(a)` whether or not transpilation engages (the node

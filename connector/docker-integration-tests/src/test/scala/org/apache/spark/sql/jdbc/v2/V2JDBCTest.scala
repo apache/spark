@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.jdbc.v2
 
+import java.sql.SQLException
+
 import org.apache.logging.log4j.Level
 
+import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, DataFrame}
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException}
@@ -27,12 +30,12 @@ import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalo
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.NullOrdering
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCRDD
+import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.DockerIntegrationFunSuite
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
-import org.apache.spark.tags.DockerTest
 
-@DockerTest
 private[v2] trait V2JDBCTest
   extends DataSourcePushdownTestUtils
   with DockerIntegrationFunSuite
@@ -1363,6 +1366,71 @@ private[v2] trait V2JDBCTest
     }
   }
 
+  // Whether this database rounds a fractional to integral cast rather than truncating like Spark.
+  protected def roundsIntegralCast: Boolean = false
+
+  // Whether a cast of `col` to `target` is pushed down.
+  protected def pushesIntegralCast(col: String, target: String): Boolean = true
+
+  // Whether this database accepts the SQL that Spark 4.4 pushed for a cast to `target`.
+  protected def acceptsLegacyIntegralCast(target: String): Boolean = true
+
+  // `table` holds 1.6, 2.6 and -1.6 in each of `cols`, labeled a, b and c. A pushed filter cast
+  // truncates like Spark, so only 2.6 becomes 2. So does an aggregate: 1 + 2 + (-1) = 2.
+  protected def checkIntegralCastsTruncate(table: String, cols: Seq[String]): Unit = {
+    for (col <- cols; target <- Seq("INT", "BIGINT")) {
+      val pushed = pushesIntegralCast(col, target)
+      val filtered = sql(s"SELECT label FROM $table WHERE CAST($col AS $target) = 2")
+      checkFilterPushed(filtered, pushed)
+      assert(filtered.collect().map(_.getString(0)) === Array("b"))
+
+      val aggregated = sql(s"SELECT SUM(CAST($col AS $target)) FROM $table")
+      checkAggregateRemoved(aggregated, pushed)
+      assert(aggregated.collect().map(_.getLong(0)) === Array(2L))
+    }
+  }
+
+  test("SPARK-58372: fractional to integral cast pushed down truncates toward zero like Spark") {
+    val tbl = s"$catalogName.integral_cast"
+    withTable(tbl) {
+      // label is a string so the result type is the same across dialects (a numeric column
+      // comes back as BigDecimal on some engines such as Oracle).
+      sql(s"CREATE TABLE $tbl (double_col DOUBLE, decimal_col DECIMAL(10, 2), label VARCHAR(8))")
+      // .6 magnitudes make the result independent of tie-breaking: rounding gives 2, truncation 1.
+      sql(s"INSERT INTO $tbl VALUES (1.6, 1.6, 'a'), (2.6, 2.6, 'b'), (-1.6, -1.6, 'c')")
+
+      // A projected cast is evaluated locally, not pushed down, so this guards end-to-end
+      // correctness. Spark truncates toward zero, so -1.6, 1.6 and 2.6 become -1, 1 and 2.
+      Seq("double_col", "decimal_col").foreach { col =>
+        val projected = sql(s"SELECT CAST($col AS INT) FROM $tbl ORDER BY $col")
+        assert(projected.collect().map(_.getInt(0)) === Array(-1, 1, 2))
+      }
+
+      checkIntegralCastsTruncate(tbl, Seq("double_col", "decimal_col"))
+
+      // Legacy behavior: the conf restores the previous pushed SQL. A rounding database then
+      // rounds, so a filter matches 1.6 and a sum is 2 + 3 + (-2) = 3.
+      if (roundsIntegralCast) {
+        withSQLConf(SQLConf.LEGACY_JDBC_ROUND_INTEGRAL_CAST_PUSHDOWN.key -> "true") {
+          for (col <- Seq("double_col", "decimal_col"); target <- Seq("INT", "BIGINT")) {
+            val aggregated = sql(s"SELECT SUM(CAST($col AS $target)) FROM $tbl")
+            if (acceptsLegacyIntegralCast(target)) {
+              val filtered = sql(s"SELECT label FROM $tbl WHERE CAST($col AS $target) = 2")
+              checkFilterPushed(filtered)
+              assert(filtered.collect().map(_.getString(0)) === Array("a"))
+              checkAggregateRemoved(aggregated)
+              assert(aggregated.collect().map(_.getLong(0)) === Array(3L))
+            } else {
+              // The database rejects the previous SQL, so Spark evaluates the aggregate.
+              checkAggregateRemoved(aggregated, pushed = false)
+              assert(aggregated.collect().map(_.getLong(0)) === Array(2L))
+            }
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-52262: FAILED_JDBC.TABLE_EXISTS not thrown on connection error") {
     val invalidTableName = s"$catalogName.invalid"
     val originalUrl = spark.conf.get(s"spark.sql.catalog.$catalogName.url")
@@ -1375,6 +1443,32 @@ private[v2] trait V2JDBCTest
         sql(s"SELECT * FROM $invalidTableName")
       }
       assert(e.getCondition !== "FAILED_JDBC.TABLE_EXISTS")
+    }
+  }
+
+  protected def withRestrictedUser(f: String => Unit): Unit
+
+  test("SPARK-61982: loadTable reports a permission error for a restricted user") {
+    withRestrictedUser { restrictedUrl =>
+      val restrictedCatalog = s"${catalogName}_restricted"
+      val namespace = namespaceOpt.map(ns => s"$ns.").getOrElse("")
+      withSQLConf(
+          s"spark.sql.catalog.$restrictedCatalog" -> classOf[JDBCTableCatalog].getName,
+          s"spark.sql.catalog.$restrictedCatalog.url" -> restrictedUrl) {
+        val e = intercept[SparkException] {
+          spark.table(s"$restrictedCatalog.$namespace${caseConvert("employee")}")
+        }
+        checkError(
+          exception = e,
+          condition = "JDBC_EXTERNAL_ENGINE_PERMISSION_ERROR.DURING_OUTPUT_SCHEMA_RESOLUTION",
+          sqlState = Some("42501"),
+          parameters = Map(
+            "jdbcQuery" -> s"SELECT \\* FROM .*${caseConvert("employee")}.* WHERE 1=0",
+            "externalEngineError" -> "[\\s\\S]+",
+            "externalEngineSqlState" -> ".+"),
+          matchPVals = true)
+        assert(e.getCause.isInstanceOf[SQLException])
+      }
     }
   }
 }

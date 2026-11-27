@@ -22,13 +22,14 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{JOIN_CONDITION, JOIN_TYPE, SCHEMA}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.V2ExpressionUtils
-import org.apache.spark.sql.connector.expressions.{FieldReference, SortOrder}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, GeneralScalarExpression, SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.join.JoinType
 import org.apache.spark.sql.connector.read.{SampleMethod, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownJoin, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRDD, JDBCRelation}
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCDatabaseMetadata, JDBCOptions, JDBCPartition, JDBCRDD, JDBCRelation, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.jdbc.{JdbcDialects, JdbcSQLQueryBuilder, JoinPushdownAliasGenerator}
@@ -38,7 +39,8 @@ case class JDBCScanBuilder(
     session: SparkSession,
     schema: StructType,
     var jdbcOptions: JDBCOptions,
-    additionalMetrics: Map[String, SQLMetric] = Map())
+    additionalMetrics: Map[String, SQLMetric] = Map(),
+    databaseMetadata: Option[JDBCDatabaseMetadata] = None)
   extends ScanBuilder
     with SupportsPushDownV2Filters
     with SupportsPushDownRequiredColumns
@@ -66,11 +68,31 @@ case class JDBCScanBuilder(
 
   private var sortOrders: Array[String] = Array.empty[String]
 
+  private def containsUnsupportedCharPad(expr: Expression): Boolean = {
+    if (dialect.isSupportedFunction(CharVarcharUtils.V2_CHAR_READ_SIDE_PADDING)) {
+      false
+    } else {
+      def walk(e: Expression): Boolean = e match {
+        case g: GeneralScalarExpression
+            if g.name() == CharVarcharUtils.V2_CHAR_READ_SIDE_PADDING => true
+        case _ => Option(e.children()).exists(_.exists(walk))
+      }
+      walk(expr)
+    }
+  }
+
+  // Compiles under the legacy cast conf value the scan's tasks use.
+  private def compile(expr: Expression): Option[String] =
+    JdbcUtils.withLegacyIntegralCastPushdown(jdbcOptions.legacyIntegralCastPushdown) {
+      dialect.compileExpression(expr)
+    }
+
   override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
     if (jdbcOptions.pushDownPredicate) {
-      val (pushed, unSupported) = predicates.partition(dialect.compileExpression(_).isDefined)
+      val (unsupportedCharPad, rest) = predicates.partition(containsUnsupportedCharPad)
+      val (pushed, unSupported) = rest.partition(compile(_).isDefined)
       this.pushedPredicate = pushed
-      unSupported
+      unSupported ++ unsupportedCharPad
     } else {
       predicates
     }
@@ -81,6 +103,8 @@ case class JDBCScanBuilder(
   private var pushedAggregateList: Array[String] = Array()
 
   private var pushedGroupBys: Option[Array[String]] = None
+
+  private var pushedAggregation: Option[Aggregation] = None
 
   override def supportCompletePushDown(aggregation: Aggregation): Boolean = {
     lazy val fieldNames = aggregation.groupByExpressions()(0) match {
@@ -94,11 +118,15 @@ case class JDBCScanBuilder(
 
   override def pushAggregation(aggregation: Aggregation): Boolean = {
     if (!jdbcOptions.pushDownAggregate) return false
+    if (aggregation.aggregateExpressions.exists(containsUnsupportedCharPad) ||
+        aggregation.groupByExpressions.exists(containsUnsupportedCharPad)) {
+      return false
+    }
 
-    val compiledAggs = aggregation.aggregateExpressions.flatMap(dialect.compileExpression)
+    val compiledAggs = aggregation.aggregateExpressions.flatMap(compile)
     if (compiledAggs.length != aggregation.aggregateExpressions.length) return false
 
-    val compiledGroupBys = aggregation.groupByExpressions.flatMap(dialect.compileExpression)
+    val compiledGroupBys = aggregation.groupByExpressions.flatMap(compile)
     if (compiledGroupBys.length != aggregation.groupByExpressions.length) return false
 
     // The column names here are already quoted and can be used to build sql string directly.
@@ -119,6 +147,7 @@ case class JDBCScanBuilder(
       finalSchema = JDBCRDD.getQueryOutputSchema(aggQuery, jdbcOptions, dialect)
       pushedAggregateList = selectList
       pushedGroupBys = Some(compiledGroupBys)
+      pushedAggregation = Some(aggregation)
       true
     } catch {
       case NonFatal(e) =>
@@ -186,6 +215,12 @@ case class JDBCScanBuilder(
       return false
     }
 
+    // Join pushdown uses the query option, which cannot be combined with partitionColumn.
+    if (jdbcOptions.partitionColumn.isDefined) {
+      logDebug("Skipping JDBC join pushdown because partitionColumn is defined.")
+      return false
+    }
+
     val joinTypeStringOption = joinType match {
       case JoinType.INNER_JOIN => Some("INNER JOIN")
       case JoinType.LEFT_OUTER_JOIN => Some("LEFT JOIN")
@@ -198,7 +233,11 @@ case class JDBCScanBuilder(
       return false
     }
 
-    val compiledCondition = dialect.compileExpression(condition)
+    if (containsUnsupportedCharPad(condition)) {
+      return false
+    }
+
+    val compiledCondition = compile(condition)
     if (!compiledCondition.isDefined) {
       logError(log"Failed to push down join to JDBC due to unsupported join condition " +
         log"${MDC(JOIN_CONDITION, condition)}")
@@ -263,10 +302,12 @@ case class JDBCScanBuilder(
     val quotedAliases = columnsWithAliases
       .map(col => Option(col.alias()).map(dialect.quoteIdentifier))
 
-    val builder = dialect
-      .getJdbcSQLQueryBuilder(jdbcOptions)
-      .withPredicates(pushedPredicate, JDBCPartition(whereClause = null, idx = 1))
-      .withAliasedColumns(quotedColumns, quotedAliases)
+    val builder = JdbcUtils.withLegacyIntegralCastPushdown(jdbcOptions.legacyIntegralCastPushdown) {
+      dialect
+        .getJdbcSQLQueryBuilder(jdbcOptions)
+        .withPredicates(pushedPredicate, JDBCPartition(whereClause = null, idx = 1))
+        .withAliasedColumns(quotedColumns, quotedAliases)
+    }
 
     tableSampleClause.foreach(builder.withTableSampleClause)
     builder
@@ -310,7 +351,9 @@ case class JDBCScanBuilder(
 
   override def pushTopN(orders: Array[SortOrder], limit: Int): Boolean = {
     if (jdbcOptions.pushDownLimit) {
-      val compiledOrders = orders.flatMap(dialect.compileExpression(_))
+      if (orders.exists(containsUnsupportedCharPad)) return false
+      if (!dialect.supportsTopN(orders, pushedAggregation)) return false
+      val compiledOrders = orders.flatMap(compile)
       if (orders.length != compiledOrders.length) return false
       pushedLimit = limit
       sortOrders = compiledOrders
@@ -345,7 +388,7 @@ case class JDBCScanBuilder(
     // "DEPT","NAME",MAX("SALARY"),MIN("BONUS"), instead of getting column names from
     // prunedSchema and quote them (will become "MAX(SALARY)", "MIN(BONUS)" and can't
     // be used in sql string.
-    JDBCScan(JDBCRelation(schema, parts, jdbcOptions, additionalMetrics)(session),
+    JDBCScan(JDBCRelation(schema, parts, jdbcOptions, additionalMetrics)(session, databaseMetadata),
       finalSchema, pushedPredicate, pushedAggregateList, pushedGroupBys,
       tableSampleClause, pushedLimit, sortOrders, pushedOffset)
   }

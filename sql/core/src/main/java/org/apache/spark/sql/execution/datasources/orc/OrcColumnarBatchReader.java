@@ -21,6 +21,7 @@ import java.io.IOException;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hive.ql.io.sarg.SearchArgument;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
@@ -130,6 +131,19 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
       InputSplit inputSplit,
       TaskAttemptContext taskAttemptContext,
       OrcTail orcTail) throws IOException {
+    initialize(inputSplit, taskAttemptContext, orcTail, null);
+  }
+
+  /**
+   * Initialize ORC file reader and batch record reader with the search argument to push down,
+   * or null if there is none.
+   * Please note that `initBatch` is needed to be called after this.
+   */
+  public void initialize(
+      InputSplit inputSplit,
+      TaskAttemptContext taskAttemptContext,
+      OrcTail orcTail,
+      SearchArgument sarg) throws IOException {
     FileSplit fileSplit = (FileSplit)inputSplit;
     Configuration conf = taskAttemptContext.getConfiguration();
     Reader reader = OrcFile.createReader(
@@ -140,6 +154,11 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
         .orcTail(orcTail));
     Reader.Options options =
       OrcInputFormat.buildOptions(conf, reader, fileSplit.getStart(), fileSplit.getLength());
+    if (sarg != null) {
+      // Set it directly rather than with `OrcInputFormat.setSearchArgument`, whose Kryo round
+      // trip truncates timestamp values to milliseconds.
+      options.searchArgument(sarg, reader.getSchema().getFieldNames().toArray(new String[0]));
+    }
     recordReader = reader.rows(options);
   }
 
@@ -178,6 +197,8 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
     orcVectorWrappers = new org.apache.spark.sql.vectorized.ColumnVector[resultSchema.length()];
 
     StructType requiredSchema = new StructType(requiredFields);
+    // Analyze the EXISTS_DEFAULT values once, and only when a column is missing.
+    Object[] defaultValues = null;
     for (int i = 0; i < requiredFields.length; i++) {
       DataType dt = requiredFields[i].dataType();
       if (requestedPartitionColIds[i] != -1) {
@@ -197,13 +218,14 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
           }
           // Check if the missing column has an associated default value in the schema metadata.
           // If so, fill the corresponding column vector with the value.
-          Object defaultValue = ResolveDefaultColumns.existenceDefaultValues(requiredSchema)[i];
+          if (defaultValues == null) {
+            defaultValues = ResolveDefaultColumns.existenceDefaultValues(requiredSchema);
+          }
+          Object defaultValue = defaultValues[i];
           if (defaultValue == null) {
             missingCol.putNulls(0, capacity);
-          } else if (missingCol.appendObjects(capacity, defaultValue).isEmpty()) {
-            throw new IllegalArgumentException("Cannot assign default column value to result " +
-              "column batch in vectorized Orc reader because the data type is not supported: " +
-              defaultValue);
+          } else {
+            missingCol.appendObjects(capacity, defaultValue);
           }
           missingCol.setIsConstant();
           orcVectorWrappers[i] = missingCol;

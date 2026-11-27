@@ -96,6 +96,9 @@ This is similar to `SELECT * EXCEPT (column)` in regular Spark SQL.
 `SET` replaces column values from the input table.<br>
 This is similar to `SELECT * REPLACE (expression AS column)` in regular Spark SQL.
 
+`EVAL` replaces column values from the input table, and appends a column that does not exist.<br>
+This works like `SET` for existing columns and like `EXTEND` for new ones.
+
 `AS` forwards the input table and introduces a new alias for each row.
 
 #### Aggregations
@@ -148,6 +151,7 @@ represents a valid query.<br>
 | [SELECT](#select)                                 | Evaluates the provided expressions over each of the rows of the input table.                                        |
 | [EXTEND](#extend)                                 | Appends new columns to the input table by evaluating the specified expressions over each of the input rows.         |
 | [SET](#set)                                       | Updates columns of the input table by replacing them with the result of evaluating the provided expressions.        |
+| [EVAL](#eval)                                     | Updates or appends columns of the input table with the result of evaluating the provided expressions.               |
 | [DROP](#drop)                                     | Drops columns of the input table by name.                                                                           |
 | [AS](#as)                                         | Retains the same rows and column names of the input table but with a new table alias.                               |
 | [WHERE](#where)                                   | Returns the subset of input rows passing the condition.                                                             |
@@ -299,6 +303,37 @@ VALUES (0), (1) tab(col)
 +---+
 ```
 
+#### EVAL
+
+```sql
+|> EVAL <column> = <expression>, ...
+```
+
+Sets columns of the input table to the result of evaluating the provided expressions. If a column
+appears in the input table, `EVAL` replaces it in place, as `SET` does. Otherwise, `EVAL` appends it
+after the existing columns, as `EXTEND` does. A name that matches more than one column of the
+input table fails with `AMBIGUOUS_REFERENCE`.
+
+It is possible to perform multiple assignments in a single `EVAL` clause. Each assignment may refer
+to the result of previous assignments, including columns that previous assignments appended.
+
+After an assignment, top-level column names are updated but table aliases still refer to the
+original row values, as with `SET`.
+
+For example:
+
+```sql
+VALUES (0), (1) tab(col)
+|> EVAL col = col * 2, half = col / 2;
+
++---+----+
+|col|half|
++---+----+
+|  0| 0.0|
+|  2| 1.0|
++---+----+
+```
+
 #### DROP
 
 ```sql
@@ -437,7 +472,8 @@ aggregate functions. The `GROUP BY` expressions may include one-based ordinals. 
 in which such ordinals refer to the expressions in the accompanying `SELECT` clause, in SQL pipe
 syntax, they refer to the columns of the relation produced by the preceding operator instead. For
 example, in `TABLE t |> AGGREGATE COUNT(*) GROUP BY 2`, we refer to the second column of the input
-table `t`.
+table `t`. An ordinal cannot be aliased, so `TABLE t |> AGGREGATE COUNT(*) GROUP BY 2 AS grp`
+returns an error. Other grouping expressions can be aliased.
 
 There is no need to repeat entire expressions between `GROUP BY` and `SELECT`, since the `AGGREGATE` 
 operator automatically includes the evaluated grouping expressions in its output. By the same token,

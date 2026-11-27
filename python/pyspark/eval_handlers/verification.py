@@ -17,12 +17,66 @@
 
 """Verification helpers for a UDF's result before it is written back to the JVM.
 
-Used by the eval type handlers and by the worker's ``read_udfs``.
+Used by the eval type handlers.
 """
 
-from typing import Any
+from collections.abc import Iterator
+from typing import TYPE_CHECKING, Any, Callable, Type, TypeVar, Union, cast, get_args, get_origin
 
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError
+from pyspark.sql.types import DataType, StructType
+
+if TYPE_CHECKING:
+    import pandas as pd
+    import pyarrow as pa
+
+T = TypeVar("T")
+
+
+def _top_level_package(t: type) -> str:
+    """Return the top-level package of ``t`` (``pandas`` for ``pd.DataFrame``)."""
+    return (t.__module__ or "").split(".", 1)[0]
+
+
+def verify_iter_result_row_count(
+    iterator: Iterator,
+    expected_rows: Callable[[], int],
+) -> Iterator:
+    """Yield elements and verify final row count matches expected exactly.
+
+    ``expected_rows`` is a callable because the expected count is only known once
+    the iterator is fully consumed (input rows are counted lazily as a side effect
+    of pulling batches), so it must be read after this generator is exhausted.
+    """
+    actual_rows = 0
+    for element in iterator:
+        actual_rows += len(element)
+        yield element
+
+    verify_result_row_count(actual_rows, expected_rows())
+
+
+def verify_iterator_exhausted(iterator: Iterator) -> None:
+    """Verify that an iterator has been fully consumed."""
+    try:
+        next(iterator)
+    except StopIteration:
+        pass
+    else:
+        raise PySparkRuntimeError(errorClass="INPUT_NOT_FULLY_CONSUMED", messageParameters={})
+
+
+def verify_output_row_limit(
+    iterator: Iterator,
+    max_rows: Union[int, Callable[[], int]],
+) -> Iterator:
+    """Yield elements while verifying total rows do not exceed a limit (fail-fast)."""
+    total_rows = 0
+    for element in iterator:
+        total_rows += len(element)
+        if total_rows > (max_rows() if callable(max_rows) else max_rows):
+            raise PySparkRuntimeError(errorClass="OUTPUT_EXCEEDS_INPUT_ROWS", messageParameters={})
+        yield element
 
 
 def verify_result_row_count(result_length: int, expected: int) -> None:
@@ -35,6 +89,48 @@ def verify_result_row_count(result_length: int, expected: int) -> None:
                 "input_length": str(expected),
             },
         )
+
+
+def verify_return_type(result: T, expected_type: Type[T]) -> T:
+    """
+    Verify a UDF return value against an expected type.
+
+    Returns ``result`` unchanged if ``isinstance(result, expected_type)``.
+    For ``Iterator[T]``, returns a lazy iterator that checks each element
+    against ``T`` on consumption. Raises ``PySparkTypeError`` on mismatch.
+    """
+    if get_origin(expected_type) is Iterator:
+        (element_type,) = get_args(expected_type)
+        label = f"iterator of {_top_level_package(element_type)}.{element_type.__name__}"
+
+        if not isinstance(result, Iterator):
+            raise PySparkTypeError(
+                errorClass="UDF_RETURN_TYPE",
+                messageParameters={"expected": label, "actual": type(result).__name__},
+            )
+
+        def check_element(element: T) -> T:
+            if not isinstance(element, element_type):
+                raise PySparkTypeError(
+                    errorClass="UDF_RETURN_TYPE",
+                    messageParameters={
+                        "expected": label,
+                        "actual": f"iterator of {type(element).__name__}",
+                    },
+                )
+            return element
+
+        return cast(T, map(check_element, result))
+
+    if not isinstance(result, expected_type):
+        raise PySparkTypeError(
+            errorClass="UDF_RETURN_TYPE",
+            messageParameters={
+                "expected": f"{_top_level_package(expected_type)}.{expected_type.__name__}",
+                "actual": type(result).__name__,
+            },
+        )
+    return result
 
 
 def verify_scalar_result(result: Any, num_rows: int) -> Any:
@@ -60,3 +156,107 @@ def verify_scalar_result(result: Any, num_rows: int) -> Any:
         )
     verify_result_row_count(result_length, num_rows)
     return result
+
+
+def _verify_column_schema(
+    actual_names: list, expected_names: list, *, assign_cols_by_name: bool
+) -> None:
+    """Check column names (by-name) or count (by-position) match the expected schema."""
+    if assign_cols_by_name:
+        actual_set = set(actual_names)
+        expected_set = set(expected_names)
+        missing = sorted(expected_set.difference(actual_set))
+        extra = sorted(actual_set.difference(expected_set))
+        if missing or extra:
+            raise PySparkRuntimeError(
+                errorClass="RESULT_COLUMN_NAMES_MISMATCH",
+                messageParameters={
+                    "missing": f" Missing: {', '.join(missing)}." if missing else "",
+                    "extra": f" Unexpected: {', '.join(extra)}." if extra else "",
+                },
+            )
+    elif len(actual_names) != len(expected_names):
+        raise PySparkRuntimeError(
+            errorClass="RESULT_COLUMN_SCHEMA_MISMATCH",
+            messageParameters={
+                "expected": str(len(expected_names)),
+                "actual": str(len(actual_names)),
+            },
+        )
+
+
+def verify_pandas_result(
+    result: Union["pd.DataFrame", "pd.Series"],
+    return_type: DataType,
+    assign_cols_by_name: bool,
+    truncate_return_schema: bool,
+) -> None:
+    import pandas as pd
+
+    if not isinstance(return_type, StructType):
+        verify_return_type(result, pd.Series)
+        return
+
+    verify_return_type(result, pd.DataFrame)
+
+    # Skip schema check on a fully empty result (no rows and no columns).
+    if result.empty and len(result.columns) == 0:
+        return
+
+    field_names = [field.name for field in return_type.fields]
+    actual_names = (
+        list(result.columns[: len(field_names)]) if truncate_return_schema else list(result.columns)
+    )
+    # By-name mode only applies when the result has string column names;
+    # a numeric RangeIndex falls back to a by-position count check.
+    by_name = assign_cols_by_name and any(isinstance(n, str) for n in result.columns)
+    _verify_column_schema(actual_names, field_names, assign_cols_by_name=by_name)
+
+
+def verify_arrow_result(
+    result: Union["pa.Table", "pa.RecordBatch"],
+    assign_cols_by_name: bool,
+    expected_cols_and_types: Union[dict[str, "pa.DataType"], list[tuple[str, "pa.DataType"]]],
+) -> None:
+    # Skip schema check on a fully empty result (no rows and no columns).
+    if result.num_columns == 0 and result.num_rows == 0:
+        return
+
+    actual_names = list(result.schema.names)
+    actual_types = list(result.schema.types)
+    # expected_cols_and_types is a dict in by-name mode, list of (name, type) by position.
+    if isinstance(expected_cols_and_types, dict):
+        expected_names = list(expected_cols_and_types.keys())
+    else:
+        expected_names = [name for name, _ in expected_cols_and_types]
+
+    _verify_column_schema(actual_names, expected_names, assign_cols_by_name=assign_cols_by_name)
+
+    if isinstance(expected_cols_and_types, dict):
+        actual_by_name = dict(zip(actual_names, actual_types))
+        column_types = [
+            (name, expected_cols_and_types[name], actual_by_name[name])
+            for name in sorted(expected_cols_and_types.keys())
+        ]
+    else:
+        column_types = [
+            (expected_name, expected_type, actual_type)
+            for (expected_name, expected_type), actual_type in zip(
+                expected_cols_and_types, actual_types
+            )
+        ]
+
+    type_mismatch = [
+        (name, expected, actual) for name, expected, actual in column_types if actual != expected
+    ]
+
+    if type_mismatch:
+        raise PySparkRuntimeError(
+            errorClass="RESULT_COLUMN_TYPES_MISMATCH",
+            messageParameters={
+                "mismatch": ", ".join(
+                    "column '{}' (expected {}, actual {})".format(name, expected, actual)
+                    for name, expected, actual in type_mismatch
+                )
+            },
+        )

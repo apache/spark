@@ -25,6 +25,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkUserAppException
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.{CONFIG, VALUE}
 import org.apache.spark.launcher.SparkLauncher.SPARK_API_MODE
 import org.apache.spark.launcher.SparkSubmitArgumentsParser
 import org.apache.spark.util.SparkExitCode
@@ -71,8 +72,9 @@ object SparkPipelines extends Logging {
           val apiMode = value.stripPrefix(s"$SPARK_API_MODE=").trim
           if (apiMode.toLowerCase(Locale.ROOT) != "connect") {
             logError(
-              s"$SPARK_API_MODE must be 'connect' (was '$apiMode'). " +
-                "Declarative Pipelines currently only supports Spark Connect."
+              log"${MDC(CONFIG, SPARK_API_MODE)} must be 'connect' (was " +
+                log"'${MDC(VALUE, apiMode)}'). " +
+                log"Declarative Pipelines currently only supports Spark Connect."
             )
             throw SparkUserAppException(SparkExitCode.EXIT_FAILURE)
           }

@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, GenericRow, Hex}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
-import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite, RewriteWithExpression}
+import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, EliminateOffsets, NestedColumnAliasingSuite, RewriteWithExpression}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression, Sort}
 import org.apache.spark.sql.connector.catalog.CatalogManager
@@ -4718,6 +4718,35 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     }
   }
 
+  test("SPARK-60943: Don't eliminate a cast from DECIMAL(19, 0) to BIGINT which can overflow") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTable("dt") {
+        sql("create table dt using parquet as select 9999999999999999999BD as d")
+        val msg = intercept[SparkArithmeticException] {
+          sql("select cast(cast(d as bigint) as double) from dt").collect()
+        }.getMessage
+        assert(msg.contains("[CAST_OVERFLOW]"))
+      }
+    }
+  }
+
+  test("SPARK-60943: Don't unwrap a comparison on a cast from DECIMAL(19, 0) to BIGINT") {
+    withTable("dt") {
+      sql("create table dt using parquet as select 9999999999999999999BD as d")
+      Seq("true", "false").foreach { ansi =>
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+          checkAnswer(sql("select try_cast(d as bigint) is not null from dt"), Row(false))
+          val query = sql("select d from dt where cast(d as bigint) > 0")
+          if (ansi == "true") {
+            intercept[SparkArithmeticException](query.collect())
+          } else {
+            checkAnswer(query, Seq.empty)
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-40903: Don't reorder Add for canonicalize if it is decimal type") {
     val tableName = "decimalTable"
     withTable(tableName) {
@@ -4965,18 +4994,21 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
   }
 
   test("SPARK-49659: Unsupported scalar subqueries in VALUES") {
-    checkError(
-      exception = intercept[AnalysisException](
-        sql("SELECT * FROM VALUES ((SELECT 1) + (SELECT 2))")
-      ),
-      condition = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.SCALAR_SUBQUERY_IN_VALUES",
-      parameters = Map(),
-      context = ExpectedContext(
-        fragment = "VALUES ((SELECT 1) + (SELECT 2))",
-        start = 14,
-        stop = 45
+    withSQLConf(SQLConf.INLINE_TABLE_NON_FOLDABLE_EXPRESSIONS_ENABLED.key -> "false") {
+      checkError(
+        exception = intercept[AnalysisException](
+          sql("SELECT * FROM VALUES ((SELECT 1) + (SELECT 2))")
+        ),
+        condition = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.SCALAR_SUBQUERY_IN_VALUES",
+        parameters = Map(),
+        context = ExpectedContext(
+          fragment = "VALUES ((SELECT 1) + (SELECT 2))",
+          start = 14,
+          stop = 45
+        )
       )
-    )
+    }
+    checkAnswer(sql("SELECT * FROM VALUES ((SELECT 1) + (SELECT 2))"), Row(3))
   }
 
   test("SPARK-49743: OptimizeCsvJsonExpr does not change schema when pruning struct") {
@@ -5353,6 +5385,41 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
       checkAnswer(
         sql("SELECT x BETWEEN 1 AND 2 AS in_range FROM (VALUES (3)) AS t(x)"),
         Row(false))
+    }
+  }
+
+  test("SPARK-59044: OFFSET 0 succeeds when EliminateOffsets is in excludedRules") {
+    // EliminateOffsets normally removes an OFFSET 0 (a no-op) before physical planning. When the
+    // rule is excluded the Offset node survives; before the fix this failed the assertion in
+    // CollectLimitExec/GlobalLimitExec during physical planning.
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> EliminateOffsets.ruleName) {
+      // Collected to the driver -> SpecialLimits -> CollectLimitExec path.
+      checkAnswer(sql("SELECT 1 AS x OFFSET 0"), Row(1))
+      // Non-terminal OFFSET 0 -> BasicOperators -> GlobalLimitExec path.
+      checkAnswer(
+        sql("SELECT * FROM (SELECT id FROM range(3) OFFSET 0) ORDER BY id"),
+        Seq(Row(0), Row(1), Row(2)))
+    }
+  }
+
+  test("SPARK-62092: a limit pushed into an outer join keeps the top rows of ORDER BY LIMIT") {
+    // sorted_t has four files of 250 values each, in descending order, so no file starts with 0
+    // to 4. A local limit in place of LIMIT 5 would keep the first rows of each file.
+    withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "4") {
+      withTable("sorted_t", "join_r") {
+        sql("CREATE TABLE sorted_t USING parquet AS SELECT id AS a FROM range(999, -1, -1, 4)")
+        sql("CREATE TABLE join_r USING parquet AS SELECT id AS b FROM range(0, 1000, 1, 4)")
+        val top5 = "(SELECT a FROM sorted_t ORDER BY a LIMIT 5)"
+        Seq(
+          s"SELECT l.a FROM $top5 l LEFT JOIN join_r r ON l.a = r.b LIMIT 3",
+          s"SELECT l.a FROM join_r r RIGHT JOIN $top5 l ON l.a = r.b LIMIT 3").foreach { query =>
+          val rows = sql(query).collect().map(_.getLong(0))
+          assert(rows.length == 3 && rows.forall(_ < 5), rows.mkString(", "))
+        }
+      }
     }
   }
 }

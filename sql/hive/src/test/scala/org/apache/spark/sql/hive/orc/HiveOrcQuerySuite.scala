@@ -30,7 +30,7 @@ import org.apache.spark.sql.execution.datasources.orc.OrcQueryTest
 import org.apache.spark.sql.hive.{HiveSessionCatalog, HiveUtils}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.TimeType
+import org.apache.spark.sql.types.{GeographyType, GeometryType, TimeType}
 import org.apache.spark.util.Utils
 
 class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
@@ -439,6 +439,48 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
             "columnName" -> "`t`",
             "columnType" -> s"\"${TimeType().sql}\"",
             "format" -> "ORC"))
+      }
+    }
+  }
+
+  test("SPARK-60519: geospatial types are unsupported in Hive ORC") {
+    withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> "hive") {
+      withTempDir { dir =>
+        val tempDir = new File(dir, "files").getCanonicalPath
+        // WKB of POINT(1 2).
+        val wkb = "0101000000000000000000F03F0000000000000040"
+        Seq(
+          s"ST_GeomFromWKB(X'$wkb', 4326)" -> GeometryType(4326),
+          s"ST_GeogFromWKB(X'$wkb')" -> GeographyType(4326)).foreach { case (expr, dt) =>
+          val expectedParams = Map(
+            "columnName" -> "`g`",
+            "columnType" -> s"\"${dt.sql}\"",
+            "format" -> "ORC")
+          // write path
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"select $expr as g").write.format("orc").mode("overwrite").save(tempDir)
+            },
+            condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+            parameters = expectedParams)
+          // read path
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"select X'$wkb' as g").write.format("orc").mode("overwrite").save(tempDir)
+              spark.read.schema(s"g ${dt.sql}").format("orc").load(tempDir).collect()
+            },
+            condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+            parameters = expectedParams)
+          // CREATE TABLE
+          withTable("t") {
+            checkError(
+              exception = intercept[AnalysisException] {
+                sql(s"CREATE TABLE t (g ${dt.sql}) USING ORC")
+              },
+              condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+              parameters = expectedParams)
+          }
+        }
       }
     }
   }

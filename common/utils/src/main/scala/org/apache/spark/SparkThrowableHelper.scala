@@ -98,6 +98,10 @@ private[spark] object SparkThrowableHelper {
     errorReader.getMessageParameters(errorClass)
   }
 
+  def canRender(errorClass: String, messageParameters: Map[String, String]): Boolean = {
+    errorReader.canRender(errorClass, messageParameters)
+  }
+
   def getBreakingChangeInfo(errorClass: String): Option[BreakingChangeInfo] = {
     if (errorClass == null) {
       None

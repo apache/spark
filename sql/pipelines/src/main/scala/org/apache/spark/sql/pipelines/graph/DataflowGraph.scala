@@ -222,7 +222,7 @@ case class DataflowGraph(
             destinationTableIdentifier -> spec
           }
       }
-    }.toMap
+    }
   }
 
   /** Ensure that the [[DataflowGraph]] is valid and throws errors if not. */
@@ -249,6 +249,7 @@ case class DataflowGraph(
     validateEveryDatasetHasFlow()
     validateTablesAreResettable()
     validateFlowStreamingness()
+    validateNoAutoCdcIgnoreNullSelection()
   }.failed
 
   /**

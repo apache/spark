@@ -40,8 +40,10 @@ trait RetainsOriginalJoinOutput {
    * changed when metadata columns are added to [[Project]] nodes below the [[Join]]. This is
    * necessary in order to stay compatible with fixed-point analyzer. For an intermediate
    * [[Join]], this must be done after resolving the parent because the parent determines whether
-   * the metadata column is part of its output. A top-level [[Join]] or an alias boundary can use
-   * this method directly because no parent can consume the hidden output. For example consider the
+   * the metadata column is part of its output. A top-level [[Join]] whose condition references
+   * hidden output is wrapped by [[JoinResolver]] itself (see
+   * `JoinResolver.retainTopLevelJoinOutput`), and other boundaries where no parent can consume
+   * the hidden output use `retainOriginalJoinOutputAtBoundary`. For example consider the
    * following query:
    *
    * {{{

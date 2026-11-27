@@ -98,7 +98,7 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
   }
 
   @Override
-  public int getNumRecords() {
+  public long getNumRecords() {
     return numRecords;
   }
 

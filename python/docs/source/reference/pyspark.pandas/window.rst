@@ -40,6 +40,12 @@ Standard moving window functions
    Rolling.mean
    Rolling.quantile
    Rolling.median
+   Rolling.sem
+   Rolling.std
+   Rolling.var
+   Rolling.skew
+   Rolling.kurt
+   RollingGroupby.median
 
 Standard expanding window functions
 -----------------------------------
@@ -54,6 +60,12 @@ Standard expanding window functions
    Expanding.mean
    Expanding.quantile
    Expanding.median
+   Expanding.sem
+   Expanding.std
+   Expanding.var
+   Expanding.skew
+   Expanding.kurt
+   ExpandingGroupby.median
 
 Exponential moving window functions
 -----------------------------------

@@ -35,9 +35,9 @@ import java.util.List;
  *
  * Data schema:
  * c1: int
- * c2: struct<f1: int, f2: float>
- * c3: map<key: int, value: string>
- * c4: array<int>
+ * c2: {@code struct<f1: int, f2: float>}
+ * c3: {@code map<key: int, value: string>}
+ * c4: {@code array<int>}
  *
  *                        OrcColumnStatistics
  *                                | (children)

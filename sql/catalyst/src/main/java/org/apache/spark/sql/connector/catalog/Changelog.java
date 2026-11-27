@@ -29,6 +29,11 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * post-processing (carry-over removal, update detection, net change computation) based on
  * the properties declared by the connector.
  * <p>
+ * Spark uses the connector's {@code equals} and {@code hashCode} implementations when comparing
+ * changelog reads for plan reuse. Implementations that override these methods must include all
+ * captured state affecting the schema, metadata, and data read. Spark also compares the requested
+ * changelog context and each relation's read options.
+ * <p>
  * The columns returned by {@link #columns()} must include the following metadata columns:
  * <ul>
  *   <li>{@code _change_type} (STRING) — the kind of change: {@code insert}, {@code delete},
@@ -180,7 +185,8 @@ public interface Changelog {
    * The default implementation throws {@link UnsupportedOperationException}. Connectors must
    * override this method when any of {@link #containsCarryoverRows()},
    * {@link #representsUpdateAsDeleteAndInsert()}, or {@link #containsIntermediateChanges()}
-   * returns {@code true}. Each referenced column must be non-nullable.
+   * returns {@code true}. References may name columns returned by {@link #metadataColumns()}.
+   * Each referenced column must be non-nullable, including metadata columns.
    */
   default NamedReference[] rowId() {
     throw new UnsupportedOperationException("rowId is not supported.");
@@ -207,10 +213,28 @@ public interface Changelog {
    * <p>
    * The default implementation throws {@link UnsupportedOperationException}. Connectors must
    * override this method when {@link #containsCarryoverRows()} or
-   * {@link #representsUpdateAsDeleteAndInsert()} returns {@code true}. The referenced
-   * column must be non-nullable.
+   * {@link #representsUpdateAsDeleteAndInsert()} returns {@code true}. The reference may name
+   * a column returned by {@link #metadataColumns()}. The referenced column must be non-nullable,
+   * including when it is a metadata column.
    */
   default NamedReference rowVersion() {
     throw new UnsupportedOperationException("rowVersion is not supported.");
+  }
+
+  /**
+   * Returns metadata columns exposed when scanning this Changelog.
+   * <p>
+   * These are additional columns in the sense of {@link SupportsMetadataColumns}, separate
+   * from the required {@code _change_type}, {@code _commit_version} and
+   * {@code _commit_timestamp} columns, which {@link #columns()} must return. See
+   * {@link SupportsMetadataColumns} for how they are requested from the scan and how name
+   * conflicts with data columns are handled.
+   * <p>
+   * The default implementation returns an empty array.
+   *
+   * @since 4.4.0
+   */
+  default MetadataColumn[] metadataColumns() {
+    return new MetadataColumn[0];
   }
 }

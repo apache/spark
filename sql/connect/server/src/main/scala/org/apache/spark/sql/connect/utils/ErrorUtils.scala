@@ -33,7 +33,7 @@ import io.grpc.stub.StreamObserver
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods
 
-import org.apache.spark.{QueryContextType, SparkEnv, SparkException, SparkThrowable}
+import org.apache.spark.{QueryContextType, SparkEnv, SparkException, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.api.python.PythonException
 import org.apache.spark.connect.proto.FetchErrorDetailsResponse
 import org.apache.spark.internal.Logging
@@ -45,6 +45,32 @@ import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 private[connect] object ErrorUtils extends Logging {
+
+  private def compatibleErrorClass(error: SparkThrowable): (String, Map[String, String]) = {
+    val parameters = Option(error.getMessageParameters)
+      .map(_.asScala.toMap)
+      .getOrElse(Map.empty[String, String])
+    if (error.getCondition == "FAILED_JDBC.WRITE") {
+      // Connect clients have no negotiated error-catalog capability. Keep the URL supplied
+      // by the WRITE error; it has already been redacted by JDBCOptions.
+      (
+        "FAILED_JDBC.UNCLASSIFIED",
+        Map(
+          "url" -> parameters.getOrElse("url", "jdbc:"),
+          "message" -> s"Write rows to the table ${parameters.getOrElse("tableName", "")}."))
+    } else {
+      (error.getCondition, parameters)
+    }
+  }
+
+  private def compatibleErrorMessage(error: Throwable): String = error match {
+    case sparkThrowable: SparkThrowable if sparkThrowable.getCondition == "FAILED_JDBC.WRITE" =>
+      val (errorClass, parameters) = compatibleErrorClass(sparkThrowable)
+      // Python clients retain the server message, while Scala clients render the condition.
+      // Both channels must name the projected condition that an older client can reconstruct.
+      SparkThrowableHelper.getMessage(errorClass, parameters)
+    case _ => error.getMessage
+  }
 
   private def allClasses(cl: Class[_]): Seq[Class[_]] = {
     val classes = ArrayBuffer.empty[Class[_]]
@@ -85,7 +111,10 @@ private[connect] object ErrorUtils extends Logging {
     while (buffer.size < MAX_ERROR_CHAIN_LENGTH && currentError != null) {
       val builder = FetchErrorDetailsResponse.Error
         .newBuilder()
-        .setMessage(currentError.getMessage)
+        .setMessage(
+          Option(compatibleErrorMessage(currentError))
+            .filter(_.nonEmpty)
+            .getOrElse(currentError.getClass.getName))
         .addAllErrorTypeHierarchy(
           ErrorUtils.allClasses(currentError.getClass).map(_.getName).asJava)
 
@@ -113,8 +142,9 @@ private[connect] object ErrorUtils extends Logging {
         case sparkThrowable: SparkThrowable =>
           val sparkThrowableBuilder = FetchErrorDetailsResponse.SparkThrowable
             .newBuilder()
-          if (sparkThrowable.getCondition != null) {
-            sparkThrowableBuilder.setErrorClass(sparkThrowable.getCondition)
+          val (errorClass, parameters) = compatibleErrorClass(sparkThrowable)
+          if (errorClass != null) {
+            sparkThrowableBuilder.setErrorClass(errorClass)
           }
           for (queryCtx <- sparkThrowable.getQueryContext) {
             val builder = FetchErrorDetailsResponse.QueryContext
@@ -166,7 +196,7 @@ private[connect] object ErrorUtils extends Logging {
           // FetchErrorDetails RPC doesn't crash with a NullPointerException.
           val messageParameters = sparkThrowable.getMessageParameters
           if (messageParameters != null) {
-            sparkThrowableBuilder.putAllMessageParameters(messageParameters)
+            sparkThrowableBuilder.putAllMessageParameters(parameters.asJava)
           }
           builder.setSparkThrowable(sparkThrowableBuilder.build())
         case _ =>
@@ -237,18 +267,19 @@ private[connect] object ErrorUtils extends Logging {
         }
         val errorClass = e.getCondition
         if (errorClass != null && errorClass.nonEmpty) {
-          val messageParameters = JsonMethods.compact(
-            JsonMethods.render(map2jvalue(e.getMessageParameters.asScala.toMap)))
+          val (compatibleClass, compatibleParameters) = compatibleErrorClass(e)
+          val messageParameters =
+            JsonMethods.compact(JsonMethods.render(map2jvalue(compatibleParameters)))
           if (messageParameters.length <= maxMetadataSize) {
-            errorInfo.putMetadata("errorClass", errorClass)
+            errorInfo.putMetadata("errorClass", compatibleClass)
             errorInfo.putMetadata("messageParameters", messageParameters)
           }
         }
       case _ =>
     }
 
-    val enrichErrorEnabled = sessionHolderOpt.exists(
-      _.session.sessionState.conf.getConf(Connect.CONNECT_ENRICH_ERROR_ENABLED))
+    val enrichErrorEnabled =
+      sessionHolderOpt.exists(_.session.sqlConf.getConf(Connect.CONNECT_ENRICH_ERROR_ENABLED))
     if (enrichErrorEnabled) {
       // Generate a new unique key for this exception.
       val errorId = UUID.randomUUID().toString
@@ -260,8 +291,8 @@ private[connect] object ErrorUtils extends Logging {
     }
 
     lazy val stackTrace = Option(Utils.stackTraceToString(st))
-    val stackTraceEnabled = sessionHolderOpt.exists(
-      _.session.sessionState.conf.getConf(SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED))
+    val stackTraceEnabled =
+      sessionHolderOpt.exists(_.session.sqlConf.getConf(SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED))
     val withStackTrace =
       if (stackTraceEnabled && stackTrace.nonEmpty) {
         val maxSize = Math.min(
@@ -294,7 +325,7 @@ private[connect] object ErrorUtils extends Logging {
    * an error whose description is empty.
    */
   private def errorDescription(e: Throwable): String = {
-    val message = e.getMessage
+    val message = compatibleErrorMessage(e)
     if (message != null && message.nonEmpty) {
       Utils.abbreviate(message, 2048)
     } else {
@@ -346,6 +377,10 @@ private[connect] object ErrorUtils extends Logging {
           log"Error details will not be available for FetchErrorDetails.")
     }
 
+    def fallbackStatus(e: Throwable): StatusRuntimeException = {
+      Status.UNKNOWN.withCause(e).withDescription(errorDescription(e)).asRuntimeException()
+    }
+
     // Convert throwable to StatusRuntimeException with appropriate error metadata
     val wrapped: StatusRuntimeException = st match {
       case se: SparkException if isPythonExecutionException(se) =>
@@ -355,11 +390,16 @@ private[connect] object ErrorUtils extends Logging {
       case e: Throwable if e.isInstanceOf[SparkThrowable] || NonFatal.apply(e) =>
         StatusProto.toStatusRuntimeException(buildStatusFromThrowable(e, sessionHolderOpt))
 
-      case e: Throwable =>
-        Status.UNKNOWN
-          .withCause(e)
-          .withDescription(errorDescription(e))
-          .asRuntimeException()
+      // Linkage errors are excluded by NonFatal but still need structured JVM error details.
+      case e: LinkageError =>
+        try {
+          StatusProto.toStatusRuntimeException(buildStatusFromThrowable(e, sessionHolderOpt))
+        } catch {
+          // Preserve the original error if constructing structured details also fails.
+          case NonFatal(_) | _: LinkageError => fallbackStatus(e)
+        }
+
+      case e: Throwable => fallbackStatus(e)
     }
 
     // Log the error based on context

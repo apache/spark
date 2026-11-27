@@ -166,7 +166,6 @@ private[spark] class DTStatsAggregator(
       s"DTStatsAggregator.merge requires that both aggregators have the same length stats vectors."
         + s" This aggregator is of length $allStatsSize, but the other is ${other.allStatsSize}.")
     var i = 0
-    // TODO: Test BLAS.axpy
     while (i < allStatsSize) {
       allStats(i) += other.allStats(i)
       i += 1

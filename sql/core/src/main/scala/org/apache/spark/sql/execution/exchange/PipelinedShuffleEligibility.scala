@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.{CLASS_NAME, CONFIG, CONFIG2}
 import org.apache.spark.internal.config
 import org.apache.spark.shuffle.local.pipelined.PipelinedChannelShuffleManager
 import org.apache.spark.sql.execution.{CoalesceExec, CollectLimitExec, CollectTailExec, DeserializeToObjectExec, ExternalRDDScanExec, RDDScanExec, SparkPlan, TakeOrderedAndProjectExec}
@@ -121,11 +122,11 @@ private[sql] object PipelinedShuffleEligibility extends Logging {
       // the user has to act on, unlike the plan-shape fallbacks (reuse, coalesce) which are normal
       // outcomes and stay at DEBUG.
       if (mismatchWarned.compareAndSet(false, true)) {
-        logWarning(s"${SQLConf.LOCAL_PIPELINED_SHUFFLE_ENABLED.key} is enabled but " +
-          s"${config.SHUFFLE_MANAGER_INCREMENTAL.key} is not the in-process channel manager, so " +
-          s"no shuffle will be pipelined. Set it to " +
-          s"${classOf[PipelinedChannelShuffleManager].getName} to enable the feature, or unset " +
-          s"the SQL flag to silence this warning.")
+        logWarning(log"${MDC(CONFIG, SQLConf.LOCAL_PIPELINED_SHUFFLE_ENABLED.key)} is enabled " +
+          log"but ${MDC(CONFIG2, config.SHUFFLE_MANAGER_INCREMENTAL.key)} is not the in-process " +
+          log"channel manager, so no shuffle will be pipelined. Set it to " +
+          log"${MDC(CLASS_NAME, classOf[PipelinedChannelShuffleManager].getName)} to enable the " +
+          log"feature, or unset the SQL flag to silence this warning.")
       }
       return false
     }

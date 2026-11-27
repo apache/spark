@@ -26,8 +26,12 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, InvalidFormat}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.Cast._
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, GenerateUnsafeProjection}
+import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.util.CharsetProvider
+import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.catalyst.util.ToNumberParser
 import org.apache.spark.sql.errors.QueryExecutionErrors.toSQLId
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
@@ -1060,6 +1064,48 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(StringTrim(Literal("xxxbarxxx"), Literal("x")), "bar")
   }
 
+  test("default trim uses collation-aware space matching") {
+    val nbsp = 0xA0.toChar.toString
+    val source = nbsp + "abc" + nbsp
+
+    // Case-insensitive ICU collations treat NBSP as equal to ASCII space, so the default
+    // (unary) trim removes it, matching the explicit two-argument form with a space trim string.
+    for (collationName <- Seq("UNICODE_CI", "UNICODE_CI_AI", "en_CI")) {
+      val collationId = CollationFactory.collationNameToId(collationName)
+      val src = Literal.create(source, StringType(collationId))
+      val space = Literal.create(" ", StringType(collationId))
+
+      checkEvaluation(StringTrimLeft(src), "abc" + nbsp)
+      checkEvaluation(StringTrimRight(src), nbsp + "abc")
+      checkEvaluation(StringTrim(src), "abc")
+
+      // The unary form matches the explicit two-argument form with a space trim string.
+      checkEvaluation(StringTrimLeft(src), StringTrimLeft(src, space).eval())
+      checkEvaluation(StringTrimRight(src), StringTrimRight(src, space).eval())
+      checkEvaluation(StringTrim(src), StringTrim(src, space).eval())
+
+      // Mixed padding of NBSP and ASCII space is fully trimmed.
+      val mixed = Literal.create(nbsp + " abc " + nbsp, StringType(collationId))
+      checkEvaluation(StringTrim(mixed), "abc")
+
+      // A string consisting solely of space separators trims to empty.
+      val allSpaces = Literal.create(nbsp + " " + nbsp, StringType(collationId))
+      checkEvaluation(StringTrimLeft(allSpaces), "")
+      checkEvaluation(StringTrimRight(allSpaces), "")
+      checkEvaluation(StringTrim(allSpaces), "")
+    }
+
+    // Case-sensitive collations keep the existing binary behavior: NBSP is preserved.
+    for (collationName <- Seq("UNICODE", "UTF8_BINARY", "UTF8_LCASE")) {
+      val collationId = CollationFactory.collationNameToId(collationName)
+      val src = Literal.create(source, StringType(collationId))
+
+      checkEvaluation(StringTrimLeft(src), source)
+      checkEvaluation(StringTrimRight(src), source)
+      checkEvaluation(StringTrim(src), source)
+    }
+  }
+
   test("LTRIM") {
     val s = $"a".string.at(0)
     checkEvaluation(StringTrimLeft(Literal(" aa  ")), "aa  ", create_row(" abdef "))
@@ -1595,6 +1641,54 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.create(null, IntegerType), Literal.create(null, StringType)), null)
     checkEvaluation(FormatNumber(
       Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null)
+  }
+
+  for ((expression, expected) <- Seq(
+      (ToNumber(Literal("12"), Literal("99")), Decimal(12)),
+      (TryToNumber(Literal("12"), Literal("99")), Decimal(12)),
+      (ToCharacter(Literal(Decimal(12)), Literal("99")), "12"))) {
+    test(s"number format evaluator copies isolate parser state: ${expression.prettyName}") {
+      checkEvaluation(expression, expected)
+      val first = expression.freshCopyIfContainsStatefulExpression()
+      val second = expression.freshCopyIfContainsStatefulExpression()
+      assert(first ne expression)
+      assert(second ne first)
+      checkEvaluation(first, expected)
+      checkEvaluation(second, expected)
+      val contexts = Seq(first, second).map { copy =>
+        val context = new CodegenContext
+        copy.genCode(context)
+        context.references.collect { case parser: ToNumberParser => parser }.toSeq
+      }
+      assert(contexts.forall(_.size == 1))
+      assert(contexts.head.head ne contexts.last.head)
+      checkEvaluation(expression.withNewChildren(Seq(
+        Literal.create(null, expression.children.head.dataType), Literal("99"))), null)
+    }
+
+    test(s"number format expressions preserve constant folding: ${expression.prettyName}") {
+      val copies = Seq(expression,
+        expression.freshCopyIfContainsStatefulExpression(),
+        expression.freshCopyIfContainsStatefulExpression())
+      copies.foreach { copy =>
+        assert(copy.foldable)
+        val project = Project(Seq(Alias(copy, "result")()), OneRowRelation())
+        val optimized = ConstantFolding(project).asInstanceOf[Project]
+        assert(optimized.projectList.head.asInstanceOf[Alias].child ==
+          Literal.create(expected, expression.dataType))
+      }
+
+      val input = AttributeReference("input", expression.children.head.dataType)()
+      val nonFoldable = expression.withNewChildren(Seq(input, Literal("99")))
+      val nonFoldableCopies = Seq(nonFoldable,
+        nonFoldable.freshCopyIfContainsStatefulExpression(),
+        nonFoldable.freshCopyIfContainsStatefulExpression())
+      nonFoldableCopies.foreach { copy =>
+        assert(!copy.foldable)
+        val project = Project(Seq(Alias(copy, "result")()), LocalRelation(input))
+        assert(ConstantFolding(project) === project)
+      }
+    }
   }
 
   test("ToNumber: positive tests") {
@@ -2231,6 +2325,47 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
       checkEvaluation(expr, expected)
     }
+  }
+
+  test("ToCharacter: zero value with no digits after the decimal point") {
+    def toChar(decimal: Decimal, format: String): Expression = {
+      val expr = ToCharacter(Literal(decimal), Literal(format))
+      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      expr
+    }
+    // (input, format, result, result with the legacy config)
+    Seq(
+      (Decimal(0), "9", "0", " "),
+      (Decimal(0), "999", "  0", "   "),
+      (Decimal("0.00"), "999", "  0", "   "),
+      (Decimal(0), "9G999", "    0", "     "),
+      (Decimal(0), "$999", "$  0", "$   "),
+      (Decimal(0), "999S", "  0+", "+   "),
+      (Decimal(0), "S999", "  +0", "   +"),
+      (Decimal(0), "999MI", "  0 ", "    "),
+      (Decimal(0), "999PR", "  0  ", "     "),
+      // These formats already rendered the zero, so the legacy config does not change them.
+      (Decimal(0), "099", "000", "000"),
+      (Decimal(0), "999.", "  0 ", "  0 "),
+      (Decimal(0), "999.9", "  0.0", "  0.0")
+    ).foreach { case (decimal, format, expected, expectedLegacy) =>
+      checkEvaluation(toChar(decimal, format), expected)
+      withSQLConf(SQLConf.LEGACY_TO_CHAR_FORMAT_ZERO_AS_BLANK.key -> "true") {
+        checkEvaluation(toChar(decimal, format), expectedLegacy)
+      }
+    }
+    val legacyExpr = withSQLConf(SQLConf.LEGACY_TO_CHAR_FORMAT_ZERO_AS_BLANK.key -> "true") {
+      toChar(Decimal(0), "999")
+    }
+    // The config value is captured when the expression is built, not when it is evaluated.
+    checkEvaluation(legacyExpr, "   ")
+    val rebuilt = legacyExpr.withNewChildren(
+      Seq(Literal(Decimal(0), DecimalType(20, 0)), legacyExpr.children(1)))
+    assert(rebuilt ne legacyExpr)
+    checkEvaluation(rebuilt, "   ")
+    val defaultExpr = toChar(Decimal(0), "999")
+    assert(!defaultExpr.semanticEquals(legacyExpr))
+    assert(defaultExpr.toString == legacyExpr.toString)
   }
 
   test("find in set") {
