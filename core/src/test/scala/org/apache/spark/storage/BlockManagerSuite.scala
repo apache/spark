@@ -17,8 +17,9 @@
 
 package org.apache.spark.storage
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, File, InputStream, IOException, ObjectInputStream, ObjectOutputStream}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, File, InputStream, InterruptedIOException, IOException, ObjectInputStream, ObjectOutputStream}
 import java.nio.ByteBuffer
+import java.nio.channels.ClosedByInterruptException
 import java.nio.file.Files
 import java.util.UUID
 import java.util.concurrent.ThreadLocalRandom
@@ -2366,6 +2367,119 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       removedFromMemory = false, removedFromDisk = true)
   }
 
+  /** A disk-backed store whose disk reads of a MEMORY_AND_DISK block fail with `readFailure`. */
+  private def putBlockWithFailingDiskRead(
+      blockId: BlockId,
+      readFailure: () => Throwable): BlockManager = {
+    conf.set(TEST_MEMORY, 1200L)
+    val serializerManager = new SerializerManager(
+      createKryoSerializerWithDiskCorruptedInputStream(readFailure), conf)
+    val transfer = new NettyBlockTransferService(
+      conf, securityMgr, serializerManager, "localhost", "localhost", 0, 1)
+    val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
+    val store = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
+      serializerManager, conf, memoryManager, mapOutputTracker,
+      shuffleManager, transfer, securityMgr, None)
+    allStores += store
+    store.initialize("app-id")
+    // An object array, so the block uses the test serializer (primitive arrays get the
+    // SerializerManager's own Kryo). Too large for the 1200-byte memory store: disk only.
+    case class Record(id: Long, name: String)
+    store.putSingle(blockId, new Array[Record](300), StorageLevel.MEMORY_AND_DISK)
+    assert(store.diskStore.contains(blockId) && !store.memoryStore.contains(blockId))
+    store
+  }
+
+  test("SPARK-62400: a disk read interrupted by ClosedByInterruptException keeps the block") {
+    val blockId = RDDBlockId(0, 0)
+    val store = putBlockWithFailingDiskRead(blockId, () => new ClosedByInterruptException())
+    val e = intercept[KryoException] {
+      store.get(blockId)
+    }
+    assert(e.getCause.isInstanceOf[ClosedByInterruptException])
+    assert(store.diskStore.contains(blockId), "an interrupted read must not delete the block")
+    assert(store.getStatus(blockId).exists(_.isCached))
+  }
+
+  test("SPARK-62400: an IO error while the task is interrupted keeps the block") {
+    val blockId = RDDBlockId(0, 1)
+    val store = putBlockWithFailingDiskRead(blockId, () => new IOException("Stream closed"))
+    val context = TaskContext.empty()
+    store.registerTask(context.taskAttemptId)
+    context.markInterrupted("killed by test")
+    TaskContext.setTaskContext(context)
+    try {
+      intercept[KryoException] {
+        store.get(blockId)
+      }
+    } finally {
+      TaskContext.unset()
+    }
+    assert(store.diskStore.contains(blockId), "a read failing during a task kill must keep it")
+    assert(store.getStatus(blockId).exists(_.isCached))
+  }
+
+  test("SPARK-62400: an IO error while the reading thread is interrupted keeps the block") {
+    val blockId = RDDBlockId(0, 4)
+    val store = putBlockWithFailingDiskRead(blockId, () => new IOException("Stream closed"))
+    Thread.currentThread().interrupt()
+    try {
+      intercept[KryoException] {
+        store.get(blockId)
+      }
+    } finally {
+      Thread.interrupted() // clear the flag so it does not leak into later tests
+    }
+    assert(store.diskStore.contains(blockId), "a read failing on an interrupted thread keeps it")
+    assert(store.getStatus(blockId).exists(_.isCached))
+  }
+
+  test("SPARK-62400: isInterruptRelated classifies interrupt causes") {
+    val store = makeBlockManager(2000)
+    def nest(e: Throwable, depth: Int): Throwable =
+      (1 to depth).foldLeft(e)((cause, i) => new IOException(s"wrapper $i", cause))
+    assert(store.isInterruptRelated(new InterruptedIOException(), None))
+    assert(store.isInterruptRelated(new KryoException(new InterruptedIOException()), None))
+    Thread.currentThread().interrupt()
+    try {
+      assert(store.isInterruptRelated(new IOException("Stream closed"), None))
+    } finally {
+      Thread.interrupted() // clear the flag so it does not leak into later checks or tests
+    }
+    assert(store.isInterruptRelated(new IOException(new InterruptedException()), None))
+    assert(store.isInterruptRelated(nest(new ClosedByInterruptException(), 3), None))
+    assert(!store.isInterruptRelated(new IOException("Input/output error"), None))
+    assert(!store.isInterruptRelated(new IOException("bad", new IOException("worse")), None))
+    // A cyclic cause chain without an interrupt terminates.
+    val cycA = new IOException("a")
+    val cycB = new IOException("b", cycA)
+    cycA.initCause(cycB)
+    assert(!store.isInterruptRelated(cycA, None))
+    val context = TaskContext.empty()
+    assert(!store.isInterruptRelated(new IOException("Stream closed"), Some(context)))
+    context.markInterrupted("killed by test")
+    assert(store.isInterruptRelated(new IOException("Stream closed"), Some(context)))
+  }
+
+  test("SPARK-62400: an IO error in a live task that is not interrupted still removes the block") {
+    val blockId = RDDBlockId(0, 3)
+    val store = putBlockWithFailingDiskRead(blockId, () => new IOException("Input/output error"))
+    val context = TaskContext.empty()
+    store.registerTask(context.taskAttemptId)
+    TaskContext.setTaskContext(context)
+    try {
+      val e = intercept[KryoException] {
+        store.get(blockId)
+      }
+      assert(e.getMessage === "java.io.IOException: Input/output error")
+    } finally {
+      TaskContext.unset()
+    }
+    assert(!store.diskStore.contains(blockId))
+    assertUpdateBlockInfoReportedForRemovingBlock(store, blockId,
+      removedFromMemory = false, removedFromDisk = true)
+  }
+
   test("check KryoException when saving blocks into memory and 'Input/output error' is occurred") {
     val kryoSerializerWithDiskCorruptedInputStream
       = createKryoSerializerWithDiskCorruptedInputStream()
@@ -3112,9 +3226,11 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     assert(store.blockInfoManager.sessionBlockIds(sessionId).isEmpty)
   }
 
-  private def createKryoSerializerWithDiskCorruptedInputStream(): KryoSerializer = {
+  private def createKryoSerializerWithDiskCorruptedInputStream(
+      readFailure: () => Throwable = () => new IOException("Input/output error")
+      ): KryoSerializer = {
     class TestDiskCorruptedInputStream extends InputStream {
-      override def read(): Int = throw new IOException("Input/output error")
+      override def read(): Int = throw readFailure()
     }
 
     class TestKryoDeserializationStream(serInstance: KryoSerializerInstance,
