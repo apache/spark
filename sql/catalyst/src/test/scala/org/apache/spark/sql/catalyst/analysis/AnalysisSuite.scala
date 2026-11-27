@@ -2495,9 +2495,9 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     getAnalyzer.execute(Project(Seq(UnresolvedAttribute(Seq("t", "a"))), plan))
 
     // Each PipeSetInput instance derives its retained row once, so the leaf is asked for its
-    // metadata output about as often as analysis rebuilds the lowest marker. Re-deriving the row
+    // metadata output only as often as analysis rebuilds the lowest marker. Re-deriving the row
     // on every lookup instead makes this grow with the attribute references and iterations.
-    assert(leaf.metadataOutputCalls <= 4 * assignmentCount, leaf.metadataOutputCalls)
+    assert(leaf.metadataOutputCalls <= assignmentCount, leaf.metadataOutputCalls)
   }
 
   test("SPARK-59146: pipe SET cleanup skips analyzed sub-plans") {
