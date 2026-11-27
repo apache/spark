@@ -120,7 +120,9 @@ def select_lookup_predicates(reader: DataSourceLookupReader, candidates: List[Fi
     list, so Python checks it, as the JVM does: the positions refer to the offered order. It
     also checks that each position is one of a candidate, as a Java `int` cannot hold every
     Python `int`. The JVM then checks the rest with the same errors as for a Scala connector: it
-    rejects a duplicate and an empty selection.
+    rejects a duplicate and an empty selection. As the JVM reports the first violation in the
+    order of the selection, Python checks the positions in that order, and returns the selection
+    only up to its first repeated position, which the JVM then reports.
     """
     method = "DataSourceLookupReader.selectLookupPredicates()"
     expected = "a sequence of ints"
@@ -140,13 +142,18 @@ def select_lookup_predicates(reader: DataSourceLookupReader, candidates: List[Fi
     if len(selected) > 0:
         check_candidates_unchanged(offered, candidates)
     # The positions refer to the offered candidates, not to any that the reader appended.
-    for position in selected:
+    positions = list(selected)
+    seen = set()
+    for index, position in enumerate(positions):
         if not 0 <= position < len(offered):
             raise LookupContractViolation(
                 "INVALID_SELECTED_PREDICATE_POSITION",
                 {"position": str(position), "maxPosition": str(len(offered) - 1)},
             )
-    return list(selected)
+        if position in seen:
+            return positions[: index + 1]
+        seen.add(position)
+    return positions
 
 
 def check_candidates_unchanged(offered: List[Filter], candidates: List[Filter]) -> None:

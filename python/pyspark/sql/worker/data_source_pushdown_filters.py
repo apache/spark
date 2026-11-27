@@ -45,7 +45,6 @@ from pyspark.sql.datasource import (
     StringStartsWith,
 )
 from pyspark.sql.types import StructType, VariantVal, _parse_datatype_json_string
-from pyspark.sql.worker.plan_data_source_read import write_read_func_and_partitions
 from pyspark.sql.worker.utils import (
     check_pushdown_not_disabled,
     is_method_overridden,
@@ -296,7 +295,10 @@ def _main(infile: IO, outfile: IO) -> None:
         write_int(int(send_read_info), outfile)
         if send_read_info:
             # Planning here in the same worker as filter/limit pushdown avoids an extra Python
-            # worker call.
+            # worker call. It is imported here, as it loads PyArrow and NumPy, which the lookup
+            # planner, a user of this module's filter helpers, does not need.
+            from pyspark.sql.worker.plan_data_source_read import write_read_func_and_partitions
+
             write_read_func_and_partitions(
                 outfile,
                 reader=reader,

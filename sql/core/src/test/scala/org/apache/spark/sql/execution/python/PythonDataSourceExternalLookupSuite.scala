@@ -202,8 +202,10 @@ class PythonDataSourceExternalLookupSuite extends PythonDataSourceSuiteBase {
   test("Python data sources keep their capabilities when external lookups are disabled") {
     assume(shouldTestPandasUDFs)
     registerLookupSource(lookupSourceScript(batchReader = None))
+    // A lookup-only source has no reader() for a batch pushdown pass to call.
     withSQLConf(
         SQLConf.PYTHON_EXTERNAL_LOOKUP_ENABLED.key -> "false",
+        SQLConf.PYTHON_FILTER_PUSHDOWN_ENABLED.key -> "false",
         SQLConf.UNSUPPORTED_OPERATION_CHECK_ENABLED.key -> "false") {
       val lookup = lookupTable()
       assert(lookup.queryExecution.analyzed.isInstanceOf[DataSourceV2Relation])
@@ -332,6 +334,19 @@ class PythonDataSourceExternalLookupSuite extends PythonDataSourceSuiteBase {
         exception = planningError("[0, 0]"),
         condition = "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.DUPLICATE_SELECTED_PREDICATE",
         parameters = Map("table" -> quotedName, "position" -> "0", "predicate" -> "id = ?"))
+      // The first violation in the order of the selection is reported, as for a Scala
+      // connector: a repeat before a position out of range, and a position out of range before
+      // a repeat.
+      Seq("[0, 0, 1]", "[0, 0, 2 ** 40]").foreach { select =>
+        checkError(
+          exception = planningError(select),
+          condition = "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.DUPLICATE_SELECTED_PREDICATE",
+          parameters = Map("table" -> quotedName, "position" -> "0", "predicate" -> "id = ?"))
+      }
+      checkError(
+        exception = planningError("[0, 1, 0]"),
+        condition = "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.INVALID_SELECTED_PREDICATE_POSITION",
+        parameters = Map("table" -> quotedName, "position" -> "1", "maxPosition" -> "0"))
       // Spark rejects the selection before it asks for the request size, as for a Scala
       // connector, so a request size that would break the contract does not matter then.
       checkError(

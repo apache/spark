@@ -19,6 +19,8 @@ import io
 import json
 import logging
 import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from dataclasses import dataclass
@@ -380,6 +382,9 @@ class PythonDataSourceLookupPlanningTests(unittest.TestCase):
             (range(2), [0, 1]),
             # A duplicate selection is passed on for the JVM to reject.
             ([0, 0], [0, 0]),
+            # Up to its first repeat, which the JVM reports first, as for a Scala connector.
+            ([0, 0, 5], [0, 0]),
+            ([1, 0, 1, 2**40], [1, 0, 1]),
             # An empty selection too.
             ([], []),
         ]:
@@ -407,6 +412,23 @@ class PythonDataSourceLookupPlanningTests(unittest.TestCase):
                         {"position": str(position), "maxPosition": "1"},
                     ),
                 )
+        # A position out of range before a repeat is reported first.
+        self.assertEqual(
+            self._contract_violation(self._SelectingReader(lambda _: [0, 5, 0]), candidates),
+            ("INVALID_SELECTED_PREDICATE_POSITION", {"position": "5", "maxPosition": "1"}),
+        )
+
+    def test_lookup_planner_loads_neither_pyarrow_nor_numpy(self):
+        # Lookup planning uses no Arrow, so a fresh planner process does not pay for loading it.
+        code = (
+            "import sys; import pyspark.sql.worker.plan_data_source_lookup; "
+            "print(sorted(m for m in ('pyarrow', 'numpy') if m in sys.modules))"
+        )
+        env = dict(os.environ, SPARK_PYTHON_RUNTIME="PYTHON_WORKER")
+        output = subprocess.run(
+            [sys.executable, "-c", code], check=True, env=env, capture_output=True, text=True
+        )
+        self.assertEqual(output.stdout.strip(), "[]")
 
     def test_plan_lookup_rejects_a_changed_list_of_candidates(self):
         from pyspark.sql.datasource import LookupParameter

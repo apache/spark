@@ -295,12 +295,13 @@ class DataSource(ABC):
         when a streaming query starts, to check that the join can be planned, and discard the
         result.
 
-        Spark pushes filters into a scan before it knows that the scan is a lookup. So for a data
-        source that also implements :meth:`reader`, while `spark.sql.python.filterPushdown.enabled`
-        is true, each planning of a lookup first plans a batch read, as for any batch read: Spark
-        creates a batch reader with :meth:`reader`, calls its
-        :meth:`DataSourceReader.pushFilters` and, while `spark.sql.python.limitPushdown.enabled` is
-        false, its :meth:`DataSourceReader.partitions`, and then discards that plan.
+        Spark pushes the filters into the scan of a lookup before it tells the scan that it serves
+        a lookup. So for a data source that also implements :meth:`reader`, while
+        `spark.sql.python.filterPushdown.enabled` is true and there is a filter to push, a planning
+        of a lookup first plans a batch read, as for any batch read: Spark creates a batch reader
+        with :meth:`reader`, calls its :meth:`DataSourceReader.pushFilters` and, while
+        `spark.sql.python.limitPushdown.enabled` is false, its :meth:`DataSourceReader.partitions`,
+        and then discards that plan.
 
         .. versionadded:: 4.5.0
 
@@ -1272,9 +1273,10 @@ class DataSourceLookupReader(ABC):
         integral type, DECIMAL, DATE, TIMESTAMP or TIMESTAMP_NTZ, and only when the parameter
         cannot fail to evaluate. It offers no predicate on VARCHAR under
         `spark.sql.charVarchar.standardSemantics.enabled`, and never one on FLOAT, DOUBLE,
-        CHAR, a string with another collation or a complex type. It also offers an equality of
+        CHAR, a string with another collation or a complex type. It also offers a comparison of
         a column with a constant from a filter, such as the constant tenant of a composite key,
-        whether or not :meth:`pushFilters` accepted it.
+        whether or not :meth:`pushFilters` accepted it, under the same rules: an equality on the
+        columns above, and a range only when the constant cannot fail to evaluate.
 
         Selecting a range predicate whose value reads a stream column makes every request hold
         exactly one parameter row, and turns off Spark's lookup cache for that join. Leave such
@@ -1332,8 +1334,8 @@ class DataSourceLookupReader(ABC):
         :meth:`pushFilters` receives filters with literal values and returns the ones that the
         reader leaves to Spark. This method receives candidates with :class:`LookupParameter`
         values and returns positions, whose order defines the parameter rows. For example, for
-        this join of a stream `s` with a lookup source `t`, a reader may answer as follows,
-        where Spark may also pass filters that it infers, such as `IsNotNull`:
+        this join of a stream `s` with a lookup source `t` whose `tier` is an INT, a reader may
+        answer as follows, where Spark may also pass filters that it infers, such as `IsNotNull`:
 
         .. code-block:: text
 
@@ -1346,9 +1348,10 @@ class DataSourceLookupReader(ABC):
             selectLookupPredicates([tenant = ?,          -> [1, 0, 2]
                                     event_time >= ?,
                                     event_time < ?,
-                                    region = ?])
+                                    region = ?,
+                                    tier >= ?])
             => each parameter row is (s.start, s.tenant, s.end);
-               Spark evaluates region = ? itself on the returned rows
+               Spark evaluates region = ? and tier >= 2 itself on the returned rows
 
         The two predicates on `event_time` are two fields of the parameter row, in the order of
         their positions. A reader that selects them so:

@@ -161,8 +161,9 @@ class PythonScanBuilder(
   override def isPartiallyPushed(): Boolean = true
 
   // Called by Spark only on the builder of a lookup scan, after `pushFilters` and at most once.
-  // Spark calls `pushFilters` before it knows whether the scan is a lookup, so for a data source
-  // that also serves batch reads, that call pushed the filters into the batch reader. The lookup
+  // Spark pushes the filters into the scan before it calls this method, which is where the builder
+  // learns that the scan is a lookup, so for a data source that also serves batch reads, a filter
+  // that reached Python was pushed into the batch reader. The lookup
   // plan replays them into the lookup reader instead, whose answer only decides which rows the
   // reader may omit, and which filters the scan reports as pushed: Spark evaluates every filter
   // of a lookup scan again on the returned rows. Spark calls no `pushLimit` on a lookup builder.
