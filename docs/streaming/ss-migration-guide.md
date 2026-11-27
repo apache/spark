@@ -23,6 +23,27 @@ Note that this migration guide describes the items specific to Structured Stream
 Many items of SQL migration can be applied when migrating Structured Streaming to higher versions.
 Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-guide.html).
 
+## Upgrading from Structured Streaming 4.4 to 4.5
+
+- Since Spark 4.5, a new streaming query in append mode fails when its first micro-batch is
+  planned if an operator that drops late rows, such as a window aggregation, follows a
+  stream-stream join and its event time can come from an input of the join that has a watermark
+  but whose state is never evicted, for example an input of a join on a key without a watermark
+  and without a time range on that input, or an input that has its event time only inside a
+  struct, array or map column. Such a query could drop joined rows as late. The check
+  follows the event time down to the join through projections, unions and the operators that pass
+  their input's columns through, and leaves a path through another operator that drops late rows
+  to that operator's own check when the path carries only columns that check follows. When the
+  join emits such an input's rows, it also fails a query whose
+  path to the join passes another stateful operator, such as flatMapGroupsWithState without an
+  event-time timeout, or an operator none of whose inputs outputs all the columns it follows.
+  Add a watermark in the join keys, or a range condition that bounds that input by the other
+  input's watermark. An input that has its event time only inside a struct, array or map column
+  needs that event time kept as a top-level column before a range condition can bound it. Setting
+  `spark.sql.streaming.statefulOperator.checkCorrectness.enabled` to false runs such a query with
+  a warning, and also turns the existing check of chained stateful operators into a warning.
+  Queries restarted from checkpoints written before Spark 4.5 only log a warning.
+
 ## Upgrading from Structured Streaming 4.3 to 4.4
 
 - Since Spark 4.4, a new streaming query whose only stateful operator is a stream-stream join

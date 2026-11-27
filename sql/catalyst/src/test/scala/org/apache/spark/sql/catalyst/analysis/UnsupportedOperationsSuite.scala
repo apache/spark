@@ -24,14 +24,15 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, MonotonicallyIncreasingID, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, CreateArray, CreateNamedStruct, Explode, Expression, GetArrayItem, GetMapValue, GetStructField, Literal, MonotonicallyIncreasingID, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StatefulProcessor, TimeMode, TimerValues}
-import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder, StructType}
+import org.apache.spark.sql.types.{ArrayType, IntegerType, LongType, MapType, Metadata, MetadataBuilder, StringType, StructType, TimestampType}
+import org.apache.spark.unsafe.types.CalendarInterval
 
 /** A dummy command for testing unsupported operations. */
 case class DummyCommand() extends LeafCommand
@@ -1066,7 +1067,256 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     Update
   )
 
-  private def scalaTransformWithState(child: LogicalPlan): TransformWithState = {
+  // A key-only join of two watermarked inputs, so the state of either input has no cutoff.
+  private val (leftKey, rightKey, thirdKey) = (
+    AttributeReference("lk", IntegerType)(), AttributeReference("rk", IntegerType)(),
+    AttributeReference("tk", IntegerType)())
+  private val Seq(leftTime, rightTime, thirdTime) = Seq("lt", "rt", "tt").map(
+    AttributeReference(_, TimestampType, metadata = watermarkMetadata)())
+  private def joinOf(left: Seq[Attribute], right: Seq[Attribute], condition: Expression) =
+    Join(TestStreamingRelation(left), TestStreamingRelation(right), Inner, Some(condition),
+      JoinHint.NONE)
+  private val keyOnlyJoin =
+    joinOf(Seq(leftKey, leftTime), Seq(rightKey, rightTime), leftKey === rightKey)
+      .select(leftKey, leftTime)
+
+  // Each operator that drops late rows rejects the key-only join, naming its left input.
+  Seq[(String, LogicalPlan => LogicalPlan, Boolean)](
+    ("flatMapGroupsWithState with an event-time timeout", child => TestFlatMapGroupsWithState(
+      null, att, att, Seq(att), Seq(att), att, null, Append, isMapGroupsWithState = false,
+      GroupStateTimeout.EventTimeTimeout, child), true),
+    ("flatMapGroupsWithState without a timeout", child => TestFlatMapGroupsWithState(
+      null, att, att, Seq(att), Seq(att), att, null, Append, isMapGroupsWithState = false,
+      GroupStateTimeout.NoTimeout, child), false),
+    ("applyInPandasWithState with an event-time timeout", FlatMapGroupsInPandasWithState(
+      Literal(1), Seq(leftKey), Seq(att), new StructType(), Append,
+      GroupStateTimeout.EventTimeTimeout, _), true),
+    ("applyInPandasWithState without a timeout", FlatMapGroupsInPandasWithState(
+      Literal(1), Seq(leftKey), Seq(att), new StructType(), Append,
+      GroupStateTimeout.NoTimeout, _), false),
+    ("transformWithState in event-time mode", scalaTransformWithState(_, EventTime), true),
+    ("transformWithState in processing-time mode",
+      scalaTransformWithState(_, ProcessingTime), false),
+    ("transformWithStateInPandas in event-time mode", pythonTransformWithState(_, EventTime),
+      true),
+    ("transformWithStateInPandas in processing-time mode",
+      pythonTransformWithState(_, ProcessingTime), false),
+    ("dropDuplicatesWithinWatermark", DeduplicateWithinWatermark(Seq(leftKey), _), true),
+    ("a stream-stream join",
+      Join(_, TestStreamingRelation(Seq(thirdKey, thirdTime)), Inner,
+        Some(leftKey === thirdKey), JoinHint.NONE), true)
+  ).foreach { case (name, operator, rejected) =>
+    test(s"join output watermark: key-only join before $name") {
+      val check = () => UnsupportedOperationChecker.checkStreamStreamJoinOutputWatermark(
+        operator(keyOnlyJoin), Append)
+      if (rejected) {
+        val e = intercept[AnalysisException](check())
+        assert(e.getMessage.contains(
+          "the state of the left input of a stream-stream join has no cutoff"))
+        assert(e.getMessage.contains("Add a watermark in the join keys or a range condition"))
+      } else {
+        check()
+      }
+    }
+  }
+
+  // Each of these passes only because of one condition: the left semi join emits only its left
+  // input, an operator whose input has no event time filters no joined row, and a join input
+  // without an event time emits none. transformWithState in processing-time mode is a stateful
+  // operator through which the trace does not follow, so it isolates the first two conditions.
+  Seq[(String, LogicalPlan)](
+    "a left semi join bounded on its left input" -> Aggregate(Seq(leftTime), Seq(leftTime),
+      scalaTransformWithState(Join(TestStreamingRelation(Seq(leftKey, leftTime)),
+        TestStreamingRelation(Seq(rightKey, rightTime)), LeftSemi,
+        Some(leftKey === rightKey && leftTime > rightTime), JoinHint.NONE), ProcessingTime)),
+    "an operator whose input has no event time" ->
+      Deduplicate(Seq(att), scalaTransformWithState(keyOnlyJoin, ProcessingTime)),
+    "a watermark above a join of inputs without one" -> {
+      val (lt, rt) = (leftTime.withMetadata(Metadata.empty), rightTime.withMetadata(Metadata.empty))
+      val watermarked = EventTimeWatermark(java.util.UUID.randomUUID(), lt,
+        new CalendarInterval(0, 0, 1000000L),
+        joinOf(Seq(leftKey, lt), Seq(rightKey, rt), leftKey === rightKey))
+      val time = watermarked.output.find(_.semanticEquals(lt)).get
+      Aggregate(Seq(time), Seq(time), watermarked)
+    }
+  ).foreach { case (name, plan) =>
+    test(s"join output watermark: accept $name") {
+      UnsupportedOperationChecker.checkStreamStreamJoinOutputWatermark(plan, Append)
+    }
+  }
+
+  // A path that carries no event time of the join counts no input, wherever it leaves the join:
+  // a time computed from a literal, or one that only a static relation outputs.
+  private val (dimKey, dimTime) = (AttributeReference("dk", IntegerType)(),
+    AttributeReference("dt", TimestampType, metadata = watermarkMetadata)())
+  private val joinWithStatic = Join(keyOnlyJoin, LocalRelation(dimKey, dimTime), Inner,
+    Some(leftKey === dimKey), JoinHint.NONE)
+  private def groupByLiteralTime(child: LogicalPlan): LogicalPlan = {
+    val time = Alias(Literal(0L, TimestampType), "lit")(explicitMetadata = Some(watermarkMetadata))
+    Aggregate(Seq(time.toAttribute), Seq(time.toAttribute), Project(child.output :+ time, child))
+  }
+  Seq[(String, LogicalPlan)](
+    "a literal time above a join with a static relation" -> groupByLiteralTime(joinWithStatic),
+    "a literal time above transformWithState in processing-time mode" ->
+      groupByLiteralTime(scalaTransformWithState(keyOnlyJoin, ProcessingTime)),
+    "a time that only a static relation outputs" ->
+      Aggregate(Seq(dimTime), Seq(dimTime), joinWithStatic)
+  ).foreach { case (name, plan) =>
+    test(s"join output watermark: key-only join before $name") {
+      UnsupportedOperationChecker.checkStreamStreamJoinOutputWatermark(plan, Append)
+    }
+  }
+
+  // A join with a static relation on a range is not a stream-stream join, so it does not skip the
+  // check.
+  test("join output watermark: key-only join before a range join with a static relation") {
+    val (start, end) = (AttributeReference("s", TimestampType)(),
+      AttributeReference("e", TimestampType)())
+    val e = intercept[AnalysisException](
+      UnsupportedOperationChecker.checkStreamStreamJoinOutputWatermark(Aggregate(Seq(leftTime),
+        Seq(leftTime), Join(keyOnlyJoin, LocalRelation(start, end), Inner,
+          Some(leftTime >= start && leftTime < end), JoinHint.NONE)), Append))
+    assert(e.getMessage.contains(
+      "the state of the left input of a stream-stream join has no cutoff"))
+  }
+
+  // Planning rejects this join with its own error. The right input has no cutoff, so the check
+  // would reject the plan without its early return.
+  test("join output watermark: a stream-stream join without an equality predicate") {
+    UnsupportedOperationChecker.checkStreamStreamJoinOutputWatermark(Aggregate(Seq(rightTime),
+      Seq(rightTime), joinOf(Seq(leftTime), Seq(rightTime), leftTime > rightTime)), Append)
+  }
+
+  // The check covers append mode only; this plan is rejected in append mode.
+  test("join output watermark: key-only join before an aggregation outside append mode") {
+    Seq(Update, Complete).foreach { mode =>
+      UnsupportedOperationChecker.checkStreamStreamJoinOutputWatermark(
+        Aggregate(Seq(leftTime), Seq(leftTime), keyOnlyJoin), mode)
+    }
+  }
+
+  // Only the right input has no cutoff. A union maps the traced columns by position into each of
+  // its inputs that holds the join, and a later join traces each of its inputs.
+  private val oneSidedJoin = joinOf(Seq(leftKey, leftTime), Seq(rightKey, rightTime),
+    leftKey === rightKey && rightTime <= leftTime)
+  private val (otherKey, otherTime) = (AttributeReference("ok", IntegerType)(),
+    AttributeReference("ot", TimestampType, metadata = watermarkMetadata)())
+  Seq[(String, Attribute => LogicalPlan)](
+    "a union with a watermarked stream" -> (time => Aggregate(Seq(otherTime), Seq(otherTime),
+      Union(Seq(TestStreamingRelation(Seq(otherKey, otherTime)),
+        oneSidedJoin.select(leftKey, time))))),
+    "a projection to the attributes of a union" -> (time => Aggregate(Seq(otherTime),
+      Seq(otherTime), Project(Seq(Alias(leftKey, "ok")(otherKey.exprId),
+        Alias(time, "ot")(otherTime.exprId)), oneSidedJoin))),
+    "a later join of two projections of one join" -> (time => Join(
+      oneSidedJoin.select(leftKey, leftTime), oneSidedJoin.select(rightKey, time), Inner,
+      Some(leftKey === rightKey), JoinHint.NONE))
+  ).foreach { case (name, plan) =>
+    test(s"join output watermark: one-sided range join through $name") {
+      UnsupportedOperationChecker.checkStreamStreamJoinOutputWatermark(plan(leftTime), Append)
+      val e = intercept[AnalysisException](
+        UnsupportedOperationChecker.checkStreamStreamJoinOutputWatermark(plan(rightTime), Append))
+      assert(e.getMessage.contains(
+        "the state of the right input of a stream-stream join has no cutoff"))
+    }
+  }
+  // The trace follows only the left time here, yet the check rejects, naming the right input:
+  // the path passes a stateful operator that does not drop late rows, or a node that creates the
+  // traced column, and for such a path every input of the join counts. A path through a
+  // deduplication, which drops late rows and is checked itself, ends there.
+  test("join output watermark: one-sided range join through a path the trace cannot follow") {
+    val narrowed = oneSidedJoin.select(leftKey, leftTime)
+    UnsupportedOperationChecker.checkStreamStreamJoinOutputWatermark(
+      Aggregate(Seq(leftTime), Seq(leftTime), Deduplicate(Seq(leftTime), narrowed)), Append)
+    val generatedTime = AttributeReference("gt", TimestampType, metadata = watermarkMetadata)()
+    Seq(Aggregate(Seq(leftTime), Seq(leftTime), scalaTransformWithState(narrowed, ProcessingTime)),
+      Aggregate(Seq(generatedTime), Seq(generatedTime), Generate(
+        Explode(CreateArray(Seq(leftTime))), Nil, outer = false, None, Seq(generatedTime),
+        narrowed))
+    ).foreach { plan =>
+      val e = intercept[AnalysisException](
+        UnsupportedOperationChecker.checkStreamStreamJoinOutputWatermark(plan, Append))
+      assert(e.getMessage.contains(
+        "the state of the right input of a stream-stream join has no cutoff"))
+    }
+  }
+
+  // The left input has its time only in a struct: eviction only uses a top-level event-time
+  // column, so that input has no cutoff, even when a range bounds an unwatermarked copy of its
+  // time. With no watermark metadata in the struct, the input has no event time. The time read
+  // above the join is an event time either way.
+  private def timeFromStruct(fieldMetadata: Metadata, holder: String, withCopy: Boolean) = {
+    val structType = new StructType().add("lt", TimestampType, nullable = true, fieldMetadata)
+    val payload = AttributeReference("payload", holder match {
+      case "an array" => ArrayType(structType)
+      case "a map" => MapType(StringType, structType)
+      case "a struct" => new StructType().add("inner", structType)
+      case _ => structType
+    })()
+    val struct = holder match {
+      case "an array" => GetArrayItem(payload, Literal(0))
+      case "a map" => GetMapValue(payload, Literal("k"))
+      case "a struct" => GetStructField(payload, 0, Some("inner"))
+      case _ => payload
+    }
+    val copy = AttributeReference("lc", TimestampType)()
+    val join = joinOf(Seq(leftKey, payload) ++ Seq(copy).filter(_ => withCopy),
+      Seq(rightKey, rightTime),
+      if (withCopy) leftKey === rightKey && copy > rightTime else leftKey === rightKey)
+    val time = Alias(GetStructField(struct, 0, Some("lt")), "t")(
+      explicitMetadata = Some(watermarkMetadata))
+    Aggregate(Seq(time.toAttribute), Seq(time.toAttribute), Project(Seq(time), join))
+  }
+  Seq(("a struct", "", false), ("a struct inside an array", "an array", false),
+    ("a struct inside a map", "a map", false), ("a struct inside a struct", "a struct", false),
+    ("a struct next to an unwatermarked copy that a range bounds", "", true)
+  ).foreach { case (name, holder, withCopy) =>
+    test(s"join output watermark: key-only join of an input with its time only in $name") {
+      val e = intercept[AnalysisException](
+        UnsupportedOperationChecker.checkStreamStreamJoinOutputWatermark(
+          timeFromStruct(watermarkMetadata, holder, withCopy), Append))
+      assert(e.getMessage.contains(
+        "the state of the left input of a stream-stream join has no cutoff"))
+      assert(e.getMessage.contains("Its event time is only inside a struct, array or map column"))
+    }
+  }
+  test("join output watermark: accept a join of an input with a struct without an event time") {
+    UnsupportedOperationChecker.checkStreamStreamJoinOutputWatermark(
+      timeFromStruct(Metadata.empty, holder = "", withCopy = false), Append)
+  }
+
+  // A path ends at another operator that drops late rows only if its own check traces the
+  // columns of the path. These carry the time in a struct, through a deduplication, and through
+  // an aggregation that extracts the time from a struct it groups by.
+  test("join output watermark: an event time in a struct past another late-dropping operator") {
+    def struct(time: Attribute, name: String): Alias =
+      Alias(CreateNamedStruct(Seq(Literal(time.name), time)), name)()
+    def field(struct: Attribute): Alias = Alias(GetStructField(struct, 0, None), "t")()
+    def groupBy(time: NamedExpression, child: LogicalPlan): Aggregate =
+      Aggregate(Seq(time.toAttribute), Seq(time.toAttribute), Project(Seq(time), child))
+    val payload = struct(leftTime, "payload")
+    val deduplicated = Deduplicate(Seq(leftKey), Project(Seq(leftKey, payload), keyOnlyJoin))
+    val s = struct(rightTime, "s")
+    val extracted = field(s.toAttribute)
+    val aggregated = Aggregate(Seq(leftTime, s.toAttribute), Seq(leftTime, extracted),
+      Project(Seq(leftTime, s), oneSidedJoin))
+    Seq((groupBy(field(payload.toAttribute), deduplicated), "left"),
+      (Aggregate(Seq(extracted.toAttribute), Seq(extracted.toAttribute), aggregated), "right")
+    ).foreach { case (plan, side) =>
+      val e = intercept[AnalysisException](
+        UnsupportedOperationChecker.checkStreamStreamJoinOutputWatermark(plan, Append))
+      assert(e.getMessage.contains(
+        s"the state of the $side input of a stream-stream join has no cutoff"))
+    }
+  }
+
+  private def pythonTransformWithState(child: LogicalPlan, timeMode: TimeMode) =
+    TransformWithStateInPySpark(Literal(1), 1, Seq(att), Append, timeMode,
+      TransformWithStateInPySpark.UserFacingDataType.PANDAS, child, hasInitialState = false,
+      LocalRelation(Seq.empty[Attribute]), 0, new StructType())
+
+  private def scalaTransformWithState(
+      child: LogicalPlan, timeMode: TimeMode = NoTime): TransformWithState = {
     val statefulProcessor = new StatefulProcessor[Any, Any, Any] {
       override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {}
 
@@ -1083,7 +1333,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       groupingAttributes = Seq(attribute),
       dataAttributes = Seq(attribute),
       statefulProcessor = statefulProcessor,
-      timeMode = NoTime,
+      timeMode = timeMode,
       outputMode = Update,
       keyEncoder = keyEncoder,
       outputObjAttr = attribute,

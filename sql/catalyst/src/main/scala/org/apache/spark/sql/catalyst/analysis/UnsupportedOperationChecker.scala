@@ -23,14 +23,16 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{ANALYSIS_ERROR, QUERY_PLAN}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, CurrentDate, CurrentTimestampLike, Expression, GroupingSets, LocalTimestamp, LocalTimestampNanos, MonotonicallyIncreasingID, NamedExpression, SessionWindow, WindowExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, CurrentDate, CurrentTimestampLike, Expression, GroupingSets, LocalTimestamp, LocalTimestampNanos, MonotonicallyIncreasingID, NamedExpression, SessionWindow, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType}
 
 /**
  * Analyzes the presence of unsupported operations in a logical plan.
@@ -155,6 +157,164 @@ object UnsupportedOperationChecker extends Logging {
         logWarning(log"${MDC(ANALYSIS_ERROR, e.message)};\n${MDC(QUERY_PLAN, plan)}", e)
     }
   }
+
+  /**
+   * Checks, in append mode, for an operator that drops late rows after a stream-stream join, when
+   * its event time can come from an input of the join that has a watermark but no state cutoff, as
+   * [[checkStreamingQueryGlobalWatermarkLimit]] does for other operators. It takes the optimized
+   * plan, whose join conditions eviction uses, and in which the optimizer has replaced every CTE
+   * reference, MATERIALIZED ones included. Below `STREAMING_JOIN_CORRECTNESS_VERSION` 1, as for a
+   * query from a checkpoint without it, it only logs a warning.
+   */
+  def checkStreamStreamJoinOutputWatermark(plan: LogicalPlan, outputMode: OutputMode): Unit = {
+    // TODO: Update mode is not checked, although its aggregations also drop late rows.
+    if (outputMode != InternalOutputModes.Append) {
+      return
+    }
+    // A stream-stream join without an equality predicate fails in planning with its own error.
+    val hasJoinWithoutEquality = plan.exists {
+      case j @ Join(l, r, _, _, _) => l.isStreaming && r.isStreaming &&
+        ExtractEquiJoinKeys.unapply(j).isEmpty
+      case _ => false
+    }
+    if (hasJoinWithoutEquality) {
+      return
+    }
+    val failWhenDetected = SQLConf.get.statefulOperatorCorrectnessCheckEnabled &&
+      SQLConf.get.getConf(SQLConf.STREAMING_JOIN_CORRECTNESS_VERSION) >= 1
+    try {
+      plan.foreach { subPlan =>
+        if (dropsLateRows(subPlan)) {
+          subPlan.foreach {
+            case j: Join if j ne subPlan =>
+              // An input counts unless the operator's event times come only from other inputs.
+              lazy val sources = eventTimeSources(subPlan, j)
+              joinInputWithoutStateCutoff(j,
+                  input => sources.forall(_.exists(input.outputSet.contains))).foreach {
+                case (side, nestedOnly) =>
+                  val fix = if (nestedOnly) {
+                    "Its event time is only inside a struct, array or map column, which state " +
+                      "eviction does not use, so keep it as a top-level column of that input " +
+                      "and bound it by a range condition on the other input's watermark, or add " +
+                      "a watermark in the join keys"
+                  } else {
+                    "Add a watermark in the join keys or a range condition that bounds that " +
+                      "input by the other input's watermark"
+                  }
+                  throwError("Detected pattern of possible 'correctness' issue: the state of " +
+                    s"the $side input of a stream-stream join has no cutoff, so the join can " +
+                    "emit its old rows below its output watermark, and a later stateful operator " +
+                    s"drops them as late. $fix, or set " +
+                    "`spark.sql.streaming.statefulOperator.checkCorrectness.enabled` to false.")(j)
+              }
+            case _ =>
+          }
+        }
+      }
+    } catch {
+      case e: AnalysisException if !failWhenDetected =>
+        logWarning(log"${MDC(ANALYSIS_ERROR, e.message)};\n${MDC(QUERY_PLAN, plan)}", e)
+    }
+  }
+
+  // An input of a stream-stream join with an event time but no state cutoff, as eviction derives
+  // it: no watermark in the join keys, and no range condition that bounds the input by the
+  // watermark of the other input. Eviction only uses a top-level event-time column, so an input
+  // whose event time is only nested in a struct, array or map has no cutoff. A left semi join
+  // only emits left rows. Returns the side, and whether its event time is only nested.
+  // TODO: An input evicted by another column is not checked yet, such as the right input of
+  //   `leftKey = rightKey AND leftTime = rightTs`, evicted by rightTs, not its event time.
+  private def joinInputWithoutStateCutoff(
+      join: Join, counts: LogicalPlan => Boolean): Option[(String, Boolean)] = join match {
+    case Join(left, right, joinType, condition, _) if left.isStreaming && right.isStreaming &&
+        !StreamingJoinHelper.isWatermarkInJoinKeys(join) =>
+      Seq(("left", left, right), ("right", right, left)).take(if (joinType == LeftSemi) 1 else 2)
+        .collectFirst {
+          case (side, input, other) if input.output.exists(hasEventTimeCol) &&
+              StreamingJoinHelper.getStateValueWatermark(
+                input.outputSet, other.outputSet, condition, Some(1000000)).isEmpty &&
+              counts(input) => (side, false)
+          case (side, input, _) if !input.output.exists(hasEventTimeCol) &&
+              input.output.exists(a => nestsEventTime(a.dataType)) && counts(input) => (side, true)
+        }
+    case _ => None
+  }
+
+  private def nestsEventTime(dataType: DataType): Boolean = dataType match {
+    case s: StructType => s.fields.exists { f =>
+      f.metadata.contains(EventTimeWatermark.delayKey) || nestsEventTime(f.dataType)
+    }
+    case a: ArrayType => nestsEventTime(a.elementType)
+    case m: MapType => nestsEventTime(m.keyType) || nestsEventTime(m.valueType)
+    case _ => false
+  }
+
+  // The columns of `join`'s output that the event-time columns by which `operator` drops late rows
+  // are computed from, traced from its `lateRowColumns` in each of its inputs.
+  // Projections and the expansion of a sliding window map their columns to the columns they read,
+  // and a union maps them by position into each of its inputs that contains the join; any other
+  // node that is not stateful is followed into the one child that outputs all the traced columns.
+  // A path ends at another operator that drops late rows if its own check traces every traced
+  // column: each is one of its `lateRowColumns`, or for an aggregation, computed only from them.
+  // A path that no longer carries a traced column or the join counts no input. None as soon as
+  // one path cannot be followed, such as one through any other stateful operator.
+  private def eventTimeSources(operator: LogicalPlan, join: Join): Option[AttributeSet] = {
+    def traceAll(paths: Seq[(LogicalPlan, Seq[Attribute])]): Option[AttributeSet] =
+      paths.foldLeft(Option(AttributeSet.empty)) { case (sources, (plan, attrs)) =>
+        sources.flatMap(s => trace(plan, AttributeSet(attrs)).map(s ++ _))
+      }
+    def trace(plan: LogicalPlan, attrs: AttributeSet): Option[AttributeSet] = plan match {
+      case p if p eq join => Some(attrs)
+      // A path without traced columns, or without the join, carries none of its event times.
+      case p if attrs.isEmpty || !p.exists(_ eq join) => Some(AttributeSet.empty)
+      case Project(list, child) =>
+        trace(child, AttributeSet(list.filter(e => attrs.contains(e.toAttribute))
+          .flatMap(_.references)))
+      case Expand(projections, output, child) =>
+        trace(child, AttributeSet(output.indices.filter(i => attrs.contains(output(i)))
+          .flatMap(i => projections.flatMap(_(i).references))))
+      case u: Union =>
+        val positions = u.output.indices.filter(i => attrs.contains(u.output(i)))
+        traceAll(u.children.map(c => c -> positions.map(c.output)))
+      case p if dropsLateRows(p) && attrs.forall { a =>
+          val own = AttributeSet(p.children.flatMap(lateRowColumns(p, _)))
+          p match {
+            case agg: Aggregate => agg.aggregateExpressions.exists { e =>
+              e.toAttribute.exprId == a.exprId && e.references.nonEmpty &&
+                e.references.subsetOf(own)
+            }
+            case _ => own.contains(a)
+          }
+        } => Some(AttributeSet.empty)
+      case p if !isStatefulOperation(p) =>
+        p.children.filter(c => attrs.subsetOf(c.outputSet)) match {
+          case Seq(child) => trace(child, attrs)
+          case _ => None
+        }
+      case _ => None
+    }
+    traceAll(operator.children.map(c => c -> lateRowColumns(operator, c)))
+  }
+
+  // The event-time columns of `child` by which `operator` drops late rows: an aggregation's
+  // grouping columns, or else that input's columns.
+  private def lateRowColumns(operator: LogicalPlan, child: LogicalPlan): Seq[Attribute] =
+    operator match {
+      case a: Aggregate => a.groupingExpressions.flatMap(_.references).filter(hasEventTimeCol)
+      case _ => child.output.filter(hasEventTimeCol)
+    }
+
+  // A stateful operator that drops the input rows below its watermark for late rows, by an
+  // event-time column of its input.
+  private def dropsLateRows(p: LogicalPlan): Boolean = p.isStreaming && (p match {
+      case _: Aggregate | _: Distinct | _: Deduplicate | _: DeduplicateWithinWatermark => true
+      case Join(left, right, _, _, _) => left.isStreaming && right.isStreaming
+      case f: FlatMapGroupsWithState => f.timeout == GroupStateTimeout.EventTimeTimeout
+      case f: FlatMapGroupsInPandasWithState => f.timeout == GroupStateTimeout.EventTimeTimeout
+      case t: TransformWithState => t.timeMode == EventTime
+      case t: TransformWithStateInPySpark => t.timeMode == EventTime
+      case _ => false
+    })
 
   private def checkAvroSupportForStatefulOperator(p: LogicalPlan): Option[String] = p match {
     // TODO: remove operators from this list as support for avro encoding is added
