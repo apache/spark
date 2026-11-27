@@ -149,6 +149,12 @@ EXAMPLES:
         'examples/**/*',
         ]
 
+GRAPH:
+  - changed-files:
+    - any-glob-to-any-file: [
+        '**/graph/**/*',
+        ]
+
 GRAPHX:
   - changed-files:
     - any-glob-to-any-file: [
