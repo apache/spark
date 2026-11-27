@@ -60,6 +60,7 @@ RUN apt-get update && apt-get install -y \
     qpdf \
     tzdata \
     software-properties-common \
+    unzip \
     wget \
     zlib1g-dev \
     zstd \
