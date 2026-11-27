@@ -152,7 +152,7 @@ EXAMPLES:
 GRAPH:
   - changed-files:
     - any-glob-to-any-file: [
-        '**/graph/**/*',
+        'graph/**/*',
         ]
 
 GRAPHX:
