@@ -100,6 +100,31 @@ class StreamingJoinWatermarkDirectionSuite extends StreamTest {
       CheckNewAnswer((1, 15L, 5L)))
   }
 
+  test("a key computed before the right input renames its event time bounds the left state") {
+    val (leftInput, rightInput, left, right) = watermarkedInputs()
+    val renamed = right.withColumn("rs", $"rt" + expr("INTERVAL 10 SECONDS"))
+      .withColumnRenamed("rt", "rtime")
+    val joined = left.join(renamed, expr("lk = rk AND lt = rs"), "left_outer")
+      .select($"lk", $"lt".cast("long"), $"rtime".cast("long"))
+    testStream(joined)(
+      AddData(leftInput, (1, 15, 0)),
+      AddData(rightInput, (1, 5, 0)),
+      CheckNewAnswer((1, 15L, 5L)))
+  }
+
+  test("the end of a window that the right input adds beside its event time bounds the left " +
+      "state") {
+    val (leftInput, rightInput, left, right) = watermarkedInputs()
+    // Column pruning drops the unreferenced rt, so late-row filtering compares the window.
+    val windowed = right.withColumn("rw", window($"rt", "10 seconds"))
+    val joined = left.join(windowed, expr("lk = rk AND lt = rw.end"), "left_outer")
+      .select($"lk", $"lt".cast("long"), $"rw.end".cast("long"))
+    testStream(joined)(
+      AddData(leftInput, (1, 10, 0)),
+      AddData(rightInput, (1, 5, 0)),
+      CheckNewAnswer((1, 10L, 10L)))
+  }
+
   test("a key shifted backward from the right event time does not bound the left state") {
     val (leftInput, _, left, right) = watermarkedInputs()
     val joined = left.join(right, expr("lk = rk AND lt = rt - INTERVAL 10 SECONDS"), "left_outer")
@@ -111,6 +136,8 @@ class StreamingJoinWatermarkDirectionSuite extends StreamTest {
     assert(e.getMessage.contains("without a watermark on the right input that bounds the " +
       "state of the left input"))
     assert(e.getMessage.contains("optionally shifted forward by a constant"))
+    // Eviction uses the key and ignores a range condition, so the message does not offer one.
+    assert(!e.getMessage.contains("range condition"), e.getMessage)
   }
 
   // A DataFrame column reference keeps the metadata of the plan it was taken from, but late-row

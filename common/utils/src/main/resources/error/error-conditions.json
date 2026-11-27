@@ -8882,7 +8882,7 @@
     "subClass" : {
       "EQUALITY_KEY" : {
         "message" : [
-          "The join evicts the state by the equality <equality>, whose <otherSide> side must be the <otherSide> input's event-time column or the end of its window, optionally shifted forward by a constant, unless a range condition bounds the <stateSide> input by the <otherSide> input's watermark. Otherwise, a later row of the <otherSide> input can match a <stateSide> row that the join already evicted. To skip this check, set <config> to false."
+          "The join evicts the state by the equality <equality>, whose <otherSide> side must be the <otherSide> input's event-time column or the end of its window, optionally shifted forward by a constant. Otherwise, a later row of the <otherSide> input can match a <stateSide> row that the join already evicted. To skip this check, set <config> to false."
         ]
       },
       "NO_EVICTION" : {

@@ -18,10 +18,12 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import java.time.{Duration, Period}
-import java.util.Locale
+import java.util.{Locale, UUID}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -746,6 +748,57 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       val plan = new TestStreamingRelation(Seq(leftKey, lt)).join(right, joinType = LeftOuter,
         condition = Some(lt === key))
       val testName = s"LeftOuter join on event time with a right key computed as $name"
+      if (supported) {
+        assertSupportedInStreamingPlan(testName, plan, OutputMode.Append())
+      } else {
+        assertNotSupportedInStreamingPlan(testName, plan, OutputMode.Append(),
+          Seq("without a watermark on the right input"),
+          condition = "STREAM_STREAM_JOIN_WATERMARK_DOES_NOT_BOUND_STATE.EQUALITY_KEY")
+      }
+    }
+
+    // An input can rename its watermarked column after computing a key from it, and reach the
+    // join through a View or below an EventTimeWatermark. It can also have more than one
+    // watermarked column, such as a window over its event time, or both event times of an inner
+    // join, of which only the one the join condition names reaches the join.
+    val rtime = Alias(rtWithWatermark, "rtime")()
+    val rbWithWatermark = AttributeReference("rb", TimestampType)().withMetadata(watermarkMetadata)
+    val view = CatalogTable(
+      identifier = TableIdentifier("v"),
+      tableType = CatalogTableType.VIEW,
+      storage = CatalogStorageFormat.empty,
+      schema = forwardShift._2.schema)
+    val (_, rightBeforeWatermark, keyBeforeWatermark, _) = computed("", forward(rightTime, 10),
+      true, Seq(rightKey, rightTime), new TestStreamingRelation(Seq(rightKey, rightTime)))
+    val innerJoin = new TestStreamingRelation(Seq(rightKey, rtWithWatermark)).join(
+      new TestStreamingRelation(Seq(rbWithWatermark)), joinType = Inner,
+      condition = Some(rtWithWatermark === rbWithWatermark))
+    val shiftedBesideRename = Alias(forward(rtWithWatermark, 10), "rc")()
+    val shiftedFromSecond = Alias(forward(rbWithWatermark, 10), "rc")()
+    Seq(
+      ("a forward shift, then a rename of rt",
+        Project(Seq(rightKey, rtime, forwardShift._3), forwardShift._2), forwardShift._3, true),
+      ("a forward shift and a rename of rt in one projection",
+        Project(Seq(rightKey, rtime, shiftedBesideRename), rightInput),
+        shiftedBesideRename.toAttribute, true),
+      ("a forward shift below a View", View(view, isTempView = true, forwardShift._2),
+        forwardShift._3, true),
+      ("a forward shift below an EventTimeWatermark", EventTimeWatermark(UUID.randomUUID(),
+        rightTime, new CalendarInterval(0, 0, MICROS_PER_SECOND), rightBeforeWatermark),
+        keyBeforeWatermark, true),
+      ("the end of a window beside its time column",
+        new TestStreamingRelation(Seq(rightKey, rtWithWatermark, rwWithWatermark)),
+        GetStructField(rwWithWatermark, 1, Some("end")), true),
+      ("the second event time of an inner join", innerJoin, rbWithWatermark, true),
+      ("a forward shift of a watermarked column that is not the first",
+        Project(Seq(rightKey, rtWithWatermark, rbWithWatermark, shiftedFromSecond),
+          new TestStreamingRelation(Seq(rightKey, rtWithWatermark, rbWithWatermark))),
+        shiftedFromSecond.toAttribute, false)
+    ).foreach { case (name, right, key, supported) =>
+      assert(key.resolved, name)
+      val plan = new TestStreamingRelation(Seq(leftKey, lt)).join(right, joinType = LeftOuter,
+        condition = Some(lt === key))
+      val testName = s"LeftOuter join on event time with a right key from $name"
       if (supported) {
         assertSupportedInStreamingPlan(testName, plan, OutputMode.Append())
       } else {
