@@ -334,6 +334,64 @@ class SortMergeAsOfJoinScannerSuite extends SparkFunSuite with LocalSparkContext
     }
   }
 
+  test("nearest cursor scan reads the ON key of a waiting right row only when the cursor moves") {
+    sc = new SparkContext("local", "SortMergeAsOfJoinScannerSuite", new SparkConf(false))
+    // Rows are (ON key, as-of key). ON key 1 has one right row, above all its left rows. ON key 2
+    // has no right rows, and the next right row has ON key 3.
+    val rightRows = Seq(1 -> 100, 3 -> 0)
+    for (leftRowsPerKey <- Seq(1, 4); useCursorScan <- Seq(false, true)) {
+      withClue(s"$leftRowsPerKey left rows per ON key, cursor scan $useCursorScan: ") {
+        val leftRows = Seq(1, 2).flatMap(on => (0 until leftRowsPerKey).map(on -> _)) :+ (3 -> 5)
+        val (matches, evaluations) = sc.parallelize(Seq(0), 1)
+          .mapPartitions { _ =>
+            val leftOn = AttributeReference("leftOn", IntegerType)()
+            val leftAsOf = AttributeReference("leftAsOf", IntegerType)()
+            val rightOn = AttributeReference("rightOn", IntegerType)()
+            val rightAsOf = AttributeReference("rightAsOf", IntegerType)()
+            val count = new AtomicInteger()
+            val scanner = new SortMergeAsOfJoinScanner(
+              leftIter = leftRows.iterator.map { case (on, asOf) => InternalRow(on, asOf) },
+              rightIter = rightRows.iterator.map { case (on, asOf) => InternalRow(on, asOf) },
+              leftOutput = Seq(leftOn, leftAsOf),
+              rightOutput = Seq(rightOn, rightAsOf),
+              leftKeys = Seq(leftOn),
+              rightKeys = Seq(CountedEvaluation(rightOn, count)),
+              leftSortExprs = Seq(leftAsOf),
+              rightSortExprs = Seq(rightAsOf),
+              asOfCondition = Literal.TrueLiteral,
+              joinType = LeftOuter,
+              residualCondition = None,
+              numOutputRows = new SQLMetric("sum"),
+              spillSize = new SQLMetric("sum"),
+              direction = Nearest,
+              inMemoryThreshold = 256,
+              sizeInBytesSpillThreshold = Long.MaxValue,
+              spillThreshold = 256,
+              useCursorScan = useCursorScan,
+              numAsOfCursorTasks = new SQLMetric("sum"))
+            try {
+              val matched = scanner.iterator.map { row =>
+                if (row.isNullAt(3)) None else Some(row.getInt(3))
+              }.toList
+              Iterator.single((matched, count.get()))
+            } finally {
+              scanner.close()
+            }
+          }.collect().head
+
+        val expected =
+          Seq.fill(leftRowsPerKey)(Some(100)) ++ Seq.fill(leftRowsPerKey)(None) :+ Some(0)
+        assert(matches == expected)
+        if (useCursorScan) {
+          // A group start reads the ON key of each right row it skips once, and of the row it
+          // stops at twice: 2 for ON key 1, 3 for ON key 2 and 2 for ON key 3. Then the cursor
+          // moves once, to the input end, which has no ON key. So 7, whatever the left row count.
+          assert(evaluations == 7, s"evaluated the right ON key $evaluations times")
+        }
+      }
+    }
+  }
+
   test("cursor scan accepts each comparison of the sort keys in the join direction, left " +
       "side first") {
     val l = AttributeReference("l", IntegerType)()

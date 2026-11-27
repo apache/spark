@@ -666,8 +666,9 @@ private[joins] class SortMergeAsOfJoinScanner(
   private lazy val cursorKeys: (Expression, Expression) =
     (bindReference(leftSortExprs.head, leftOutput), bindReference(rightSortExprs.head, rightOutput))
 
-  // Lazy, since only the cursor scan reads them. The cursor moves on the comparison of the as-of
-  // keys alone, and checks the tolerance bound, if any, only on the closest right row.
+  // Lazy, since only the backward and forward cursor reads them. The cursor moves on the
+  // comparison of the as-of keys alone, and checks the tolerance bound, if any, only on the
+  // closest right row.
   private lazy val (cursorKeysCond, boundToleranceCond): (BasePredicate, Option[BasePredicate]) = {
     val (keysCondition, toleranceBound) =
       orderedScanStrategy.get.cursorConditions(asOfCondition, residualCondition)
@@ -707,6 +708,8 @@ private[joins] class SortMergeAsOfJoinScanner(
   private var cursorBest: UnsafeRow = _
   private var cursorBestBuffer: UnsafeRow = _
   private var cursorBestKey: Any = _
+  // Whether `rightPeek` is in the cursor group. Only the nearest cursor reads and updates it.
+  private var cursorPeekInGroup: Boolean = false
 
   // Projection to convert right rows to UnsafeRow for the buffer
   private val rightToUnsafe = UnsafeProjection.create(rightOutput, rightOutput)
@@ -978,7 +981,7 @@ private[joins] class SortMergeAsOfJoinScanner(
     if (leftValue == null) return null
     cursorKeyValues.update(0, leftValue)
 
-    // The scanner checked that the direction has a strategy when it was built.
+    // Only backward and forward joins, which have a strategy, reach here from findWithCursor.
     val strategy = orderedScanStrategy.get
     if (!strategy.matchOutlivesLeftRow && cursorBest != null) {
       // The cursor is already past the best row, and every row before it failed.
@@ -1039,11 +1042,11 @@ private[joins] class SortMergeAsOfJoinScanner(
     if (leftValue == null) return null
 
     // The group's right rows end at the first row of a later group.
-    while (rightPeek != null && compareToRightPeek(leftKey) == 0) {
+    while (cursorPeekInGroup) {
       val rightValue = rightKeyExpr.eval(rightPeek)
       if (rightValue == null) {
         // A NULL right as-of key: no left row can match it.
-        advanceRightPeek()
+        advanceNearestCursor()
       } else if (keyOrdering.lt(rightValue, leftValue)) {
         // Of equal keys, keep the first row.
         if (cursorBest == null || keyOrdering.lt(cursorBestKey, rightValue)) {
@@ -1051,7 +1054,7 @@ private[joins] class SortMergeAsOfJoinScanner(
           cursorBest = copyToCursorBestBuffer(rightPeek)
           cursorBestKey = InternalRow.copyValue(rightValue)
         }
-        advanceRightPeek()
+        advanceNearestCursor()
       } else if (keyOrdering.equiv(rightValue, leftValue) || cursorBest == null ||
           isAfterCloser(cursorBestKey, leftValue, rightValue, leftKeyExpr.dataType)) {
         // An exact match wins first, even for an infinite key (Inf - Inf is NaN). The cursor
@@ -1062,6 +1065,12 @@ private[joins] class SortMergeAsOfJoinScanner(
       }
     }
     cursorBest
+  }
+
+  /** Moves the nearest cursor to the next right row, and records if that row is in the group. */
+  private def advanceNearestCursor(): Unit = {
+    advanceRightPeek()
+    cursorPeekInGroup = rightPeek != null && compareToRightPeek(cursorGroupKey) == 0
   }
 
   /** Starts the cursor group of `leftKey`, unless the cursor is in it already. */
@@ -1085,6 +1094,7 @@ private[joins] class SortMergeAsOfJoinScanner(
       advanceRightPeek()
     }
     cursorGroupHasRight = rightPeek != null && compareToRightPeek(leftKey) == 0
+    cursorPeekInGroup = cursorGroupHasRight
   }
 
   /**
@@ -1201,11 +1211,12 @@ private[execution] object SortMergeAsOfJoinScanner {
    * Whether the scan can read the right side once with a cursor, instead of buffering each
    * right-side group and scanning it again for every left row.
    *
-   * This needs a backward or forward join whose as-of condition compares the two sort keys. One
+   * A backward or forward join needs an as-of condition that compares the two sort keys. One
    * tolerance bound (see [[isToleranceBound]]) can follow the comparison, or be the whole
    * residual condition. Both sides are sorted on exactly those keys, so the right rows that pass
-   * the comparison move forward as the left key grows. Anything else, such as another residual
-   * condition, a tuple, or an operand cast that the sort key does not have, keeps the buffer.
+   * the comparison move forward as the left key grows. Any other backward or forward join, such
+   * as one with another residual condition, a tuple, or an operand cast that the sort key does
+   * not have, keeps the buffer.
    *
    * The comparison must name the left key first. The cursor reads the left key of each left
    * row, for its NULL check, before any right key. With the right key first, the buffered scan

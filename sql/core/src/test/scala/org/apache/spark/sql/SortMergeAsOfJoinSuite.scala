@@ -1948,6 +1948,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
       // Both keys fail. The left key comes first.
       ("('a', 'bad')", "('a', '30', 'r30')", Left("CAST_INVALID_INPUT")),
       ("('a', '30')", "('a', 'bad', 'bad')", Left("ARITHMETIC_OVERFLOW")),
+      // The left key fails, and the only right row has a NULL key.
       ("('a', 'bad')", "('a', CAST(NULL AS STRING), 'null')", Left("CAST_INVALID_INPUT")),
       // The right key fails, and a left row with its ON key reads it.
       ("('a', '1')", "('a', 'bad', 'bad')", Left("CAST_INVALID_INPUT")),
