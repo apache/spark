@@ -1093,6 +1093,19 @@ object SQLConf {
       .longConf
       .createWithDefault(67108864L)
 
+  val LEGACY_BLOOM_FILTER_AGGREGATE_VERSION =
+    buildConf("spark.sql.legacy.bloomFilterAggregate.version")
+      .internal()
+      .doc("The binary format version of the bloom filters that runtime bloom filter joins and " +
+        "`DataFrameStatFunctions.bloomFilter` build. Version 3 keeps the expected false " +
+        "positive probability of small filters. Spark versions before 4.5 cannot read it, Spark " +
+        "Connect clients of those versions included. Version 2 is what those versions build.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .checkValues(Set(2, 3))
+      .createWithDefault(3)
+
   val RUNTIME_ROW_LEVEL_OPERATION_GROUP_FILTER_ENABLED =
     buildConf("spark.sql.optimizer.runtime.rowLevelOperationGroupFilter.enabled")
       .doc("Enables runtime filtering for group-based and delta-based row-level operations. " +

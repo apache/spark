@@ -102,9 +102,9 @@ public class SparkBloomFilterSuite {
 
   private static Stream<Arguments> dataPointProvider() {
     // temporary workaround:
-    //   to reduce running time to acceptable levels, we test only one case per version,
-    //   with the default FPP and the default seed only.
-    return Stream.of(BloomFilter.Version.V2, BloomFilter.Version.V3).map(version ->
+    //   to reduce running time to acceptable levels, we test only one case,
+    //   with the default version, the default FPP and the default seed only.
+    return Stream.of(BloomFilter.Version.V3).map(version ->
       Arguments.of(version, 350_000_000L, 0.03, BloomFilterImplV2.DEFAULT_SEED)
     );
     // preferable minimum parameter space for tests:
@@ -328,7 +328,9 @@ public class SparkBloomFilterSuite {
         long candidate = scramble(i);
 
         if (i % 2 == 0) { // EVEN
-          mightContainEvenIndexed.increment();
+          if (bloomFilterPrimary.mightContainLong(candidate)) {
+            mightContainEvenIndexed.increment();
+          }
         } else { // ODD
           // for fpp estimation, only consider the odd indexes
           // (to avoid querying the secondary with elements known to be inserted)

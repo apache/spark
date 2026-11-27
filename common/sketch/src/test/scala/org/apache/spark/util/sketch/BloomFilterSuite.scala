@@ -224,9 +224,12 @@ class BloomFilterSuite extends AnyFunSuite { // scalastyle:ignore funsuite
       "000000030000000D0000000000000003BCA1BEA6303CE97B9E04A02633051A3A396061BBE7689C56")
   }
 
-  test("V2 keeps the serialVersionUID of earlier versions") {
+  test("V2 and V3 keep their serialVersionUID") {
+    // V2 keeps the one of earlier versions.
     assert(ObjectStreamClass.lookup(classOf[BloomFilterImplV2]).getSerialVersionUID ==
       -7609404176825362195L)
+    assert(ObjectStreamClass.lookup(classOf[BloomFilterImplV3]).getSerialVersionUID ==
+      9151286223420309825L)
   }
 
   test("V3 maps a 64-bit value below the number of bits as the unsigned product does") {

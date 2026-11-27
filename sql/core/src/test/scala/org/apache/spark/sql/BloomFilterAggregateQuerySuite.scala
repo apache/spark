@@ -319,6 +319,25 @@ class BloomFilterAggregateQuerySuite extends SharedSparkSession with AdaptiveSpa
       Row(true, false))
   }
 
+  test("SPARK-62421: bloom_filter_agg builds the version that the legacy conf sets") {
+    // The version number is the first integer of a serialized filter.
+    def versionOf(bytes: Array[Byte]): Int = java.nio.ByteBuffer.wrap(bytes).getInt
+    def check(version: Int): Unit = {
+      val bytes = spark.sql("SELECT bloom_filter_agg(CAST(id AS LONG)) FROM range(10)")
+        .head().getAs[Array[Byte]](0)
+      assert(versionOf(bytes) == version)
+      val filter = spark.range(10).stat.bloomFilter("id", 10, 0.03)
+      val out = new java.io.ByteArrayOutputStream()
+      filter.writeTo(out)
+      assert(versionOf(out.toByteArray) == version)
+      assert((0L until 10L).forall(filter.mightContainLong))
+    }
+    check(3)
+    withSQLConf(SQLConf.LEGACY_BLOOM_FILTER_AGGREGATE_VERSION.key -> "2") {
+      check(2)
+    }
+  }
+
   // Whole-stage codegen, expression codegen alone, and no codegen at all.
   private val codegenModes = Seq(
     Seq(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true"),

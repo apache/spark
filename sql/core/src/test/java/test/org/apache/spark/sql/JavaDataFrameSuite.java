@@ -481,13 +481,13 @@ public class JavaDataFrameSuite {
     // `expectedFpp` estimates the probability from the share of set bits. For a filter of its
     // expected number of items at 3%, that is 2.9% on average, with a deviation of about 0.1%.
     BloomFilter filter1 = df.stat().bloomFilter("id", 1000, 0.03);
-    Assertions.assertTrue(filter1.expectedFpp() - 0.03 < 5e-3);
+    Assertions.assertTrue(filter1.expectedFpp() - 0.03 < 2e-3);
     for (int i = 0; i < 1000; i++) {
       Assertions.assertTrue(filter1.mightContain(i));
     }
 
     BloomFilter filter2 = df.stat().bloomFilter(col("id").multiply(3), 1000, 0.03);
-    Assertions.assertTrue(filter2.expectedFpp() - 0.03 < 5e-3);
+    Assertions.assertTrue(filter2.expectedFpp() - 0.03 < 2e-3);
     for (int i = 0; i < 1000; i++) {
       Assertions.assertTrue(filter2.mightContain(i * 3));
     }

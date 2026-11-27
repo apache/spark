@@ -19,6 +19,7 @@ package org.apache.spark.util.sketch;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.Serial;
 
 /**
  * A {@link BloomFilterImplV2} that takes each bit position of an item from its own mix of the
@@ -27,6 +28,10 @@ import java.io.InputStream;
  * V2 filter also has only as many patterns of positions as the square of its number of bits.
  */
 class BloomFilterImplV3 extends BloomFilterImplV2 {
+
+  // Pinned, so that later changes to this class keep V3 filters readable with Java serialization.
+  @Serial
+  private static final long serialVersionUID = 9151286223420309825L;
 
   BloomFilterImplV3(int numHashFunctions, long numBits, int seed) {
     super(numHashFunctions, numBits, seed);

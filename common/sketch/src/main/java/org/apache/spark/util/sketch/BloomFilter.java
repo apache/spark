@@ -144,7 +144,8 @@ public abstract class BloomFilter {
 
   /**
    * Determines whether a given bloom filter is compatible with this bloom filter. For two
-   * bloom filters to be compatible, they must have the same bit size.
+   * bloom filters to be compatible, they must have the same version, bit size, number of hash
+   * functions and seed.
    *
    * @param other The bloom filter to check for compatibility.
    */
