@@ -34,11 +34,14 @@ import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
  *
  * The node reports no partitioning and no ordering, so it goes at the lowest point on that path
  * where the plan still meets every operator's requirements, checked with `ValidateRequirements`.
- * That is directly above the scan unless an operator on the path relies on the scan's ordering,
- * such as a partial sort aggregate with no sort between it and the scan. The node then goes above
- * that operator. Directly below the shuffle is the last candidate, and is kept even if the check
- * fails there, since a shuffle requires nothing of its child. The operators above the node run
- * once per packed partition, and those below it once per input.
+ * That is directly above the scan unless an operator on the path relies on the scan's ordering or
+ * partitioning, such as a partial sort aggregate with no sort between it and the scan or a global
+ * sort that a keyed scan's layout satisfies. The node then goes above that operator. It also goes
+ * above every operator with a non-deterministic expression, such as `monotonically_increasing_id()`
+ * or a seeded `rand()`, so that the expression sees each input's partition index, as in a plan of
+ * the same scan that no shuffle reads. Directly below the shuffle is the last candidate, and is
+ * kept even if the check fails there, since a shuffle requires nothing of its child. The operators
+ * above the node run once per packed partition, and those below it once per input.
  *
  * Above the shuffle, only an AQE local read with one mapper per task reports the layout from
  * before the shuffle. Over a packed shuffle that read reports none, and AQE keeps the full shuffle
@@ -81,11 +84,15 @@ object PackV2ScanPartitions extends Rule[SparkPlan] {
 
   /**
    * Tries the node above each operator below `top`, the shuffle's child, on its path from the scan
-   * up, and keeps the first plan that passes `ValidateRequirements`. Otherwise the node goes
-   * directly above `top`.
+   * up, no lower than the highest operator with a non-deterministic expression, and keeps the first
+   * plan that passes `ValidateRequirements`. Otherwise the node goes directly above `top`.
    */
   private def packAtLowestSafePoint(top: SparkPlan, packing: V2ScanPartitionPacking): SparkPlan = {
-    pathToScan(top).tail.reverseIterator
+    val path = pathToScan(top)
+    // The path runs down from `top`, so this is the highest such operator, if any.
+    val highest = path.indexWhere(_.expressions.exists(!_.deterministic))
+    val candidates = if (highest < 0) path.tail else path.slice(1, highest + 1)
+    candidates.reverseIterator
       .map(packAbove(top, _, packing))
       .find(ValidateRequirements.validate)
       .getOrElse(PackScanPartitionsExec(top, packing))

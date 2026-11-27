@@ -707,9 +707,11 @@ storage-partitioned join or an aggregation on its keys uses; a scan that reaches
 another operator, such as a union, a coalesce, the build side of a broadcast hash join, or an
 expand; and scans of file-based V2 sources, which `spark.sql.files.*` already sizes. Spark packs at
 the lowest point between the scan and the shuffle where no operator above relies on the scan's
-partitioning or ordering. That is directly above the scan, unless an operator relies on the order
-the scan reports, such as a sort aggregation with no sort of its own. Spark then packs above that
-operator.
+partitioning or ordering, or has a non-deterministic expression. That is directly above the scan,
+unless an operator on the path relies on the order or the partitioning the scan reports, such as a
+sort aggregation with no sort of its own or a global sort that a keyed scan's layout satisfies, or
+has a non-deterministic expression, such as `monotonically_increasing_id()` or a seeded `rand()`.
+Spark then packs above the highest such operator.
 
 When every input of a scan reports a non-negative `HasPartitionStatistics.sizeInBytes()`, Spark
 packs consecutive inputs into tasks as it packs files: a file joins the current task unless its size
@@ -717,18 +719,21 @@ would take the task past the target, and an input joins only if all of the files
 Each input adds its size plus an opening cost for each file it reports through
 `HasPartitionStatistics.filesCount()`, and at least one. Unlike files, which Spark sorts by size
 before packing, the inputs keep the order the scan reads them in. The suggested minimum count helps
-retain parallelism for small scans. Packing never divides a connector input, however large.
-Reported sizes are estimates, so this is not a bound on runtime memory or CPU. As with
+retain parallelism for small scans. Packing never divides a connector input, however large. Reported
+sizes are estimates, so this is not a bound on runtime memory or CPU. As with
 `spark.sql.files.maxPartitionNum`, when packing by size gives more tasks than
 `spark.sql.sources.v2.scanPartitionPacking.maxPartitionNum`, Spark packs the inputs again with a
 target of the scan's total size divided by that cap, ignoring
-`spark.sql.sources.v2.scanPartitionPacking.maxPartitionBytes`. Unlike for files, that target is
-never smaller than the first one, which could only give more tasks. If any input of a scan reports
-no valid size, Spark leaves the scan's inputs as they are, unless
-`spark.sql.sources.v2.scanPartitionPacking.maxPartitionNum` is set. Then it groups all of the scan's
-inputs by count into at most that many tasks, which balances input counts, not bytes. This applies
-to any eligible V2 scan with such an input, such as a scan of a Python data source or of a connector
-whose inputs do not implement `HasPartitionStatistics`, but not to file-based V2 sources.
+`spark.sql.sources.v2.scanPartitionPacking.maxPartitionBytes`. Unlike for files, it packs them again
+only when that target is larger than the first one, since a target no larger could only give as many
+tasks or more. If any input of a scan reports no valid size, Spark leaves the scan's inputs as they
+are, unless `spark.sql.sources.v2.scanPartitionPacking.maxPartitionNum` is set. Then it groups all
+of the scan's inputs by count into at most that many tasks, which balances input counts, not bytes.
+This applies to any eligible V2 scan with such an input, such as a scan of a Python data source or
+of a connector whose inputs do not implement `HasPartitionStatistics`, but not to file-based V2
+sources. Spark plans the packing for every eligible scan before any input reports a size, so EXPLAIN
+shows its `PackScanPartitions` node, and a local shuffle read over the shuffle reports no keyed
+layout, even when no input gets packed.
 
 Spark decides the tasks when the shuffle's map stage runs, from the inputs that runtime filtering,
 such as dynamic partition pruning, leaves. An input that runtime filtering emptied joins the task of
@@ -736,19 +741,19 @@ the input before it, or the first task when no input precedes it, even when Spar
 inputs as they are. EXPLAIN shows a `PackScanPartitions` node between the scan and the shuffle, and
 its SQL metrics show the number of input partitions, the number of partitions it packed them into,
 and the largest number of input partitions in one partition. The operators above the node run once
-per packed task, so a partial aggregation there emits its rows per task, and built-in expressions
-there that take the partition index, such as `spark_partition_id()`, see the packed task's index.
-The operators below the node, if any, run as they do without packing, once per input, and
-`spark_partition_id()` there sees the input's index. Code that reads `TaskContext.partitionId()`,
-such as a UDF, sees the packed task's index wherever it runs, and so does the shuffle, so a
-round-robin repartition can place rows differently. A task that packs several inputs prefers the
-host that more of them prefer than any other host or, when no host is ahead, the hosts of the first
-of them that reports any, so inputs that prefer other hosts can be read remotely. Packing can reduce
-useful parallelism, and fewer map tasks limit how finely AQE can split a skewed shuffle partition,
-for skew joins and rebalances alike. Under AQE, a local shuffle read with one mapper per task over a
-packed shuffle no longer reports the scan's keyed layout, so where an operator needs that layout,
-AQE keeps the full shuffle read. The default is off; connectors that already size their inputs need
-not enable it.
+per packed task, so a partial aggregation there emits its rows per task. The operators below the
+node, if any, run as they do without packing, once per input. Built-in expressions that take the
+partition index, such as `spark_partition_id()`, `monotonically_increasing_id()` or a seeded
+`rand()`, are non-deterministic, so they stay below the node and see the input's index, as in other
+plans of the same scan. Code that reads `TaskContext.partitionId()`, such as a UDF, sees the packed
+task's index wherever it runs, and so does the shuffle, so a round-robin repartition can place rows
+differently. A task that packs several inputs prefers the host that more of them prefer than any
+other host or, when no host is ahead, the hosts of the first of them that reports any, so inputs
+that prefer other hosts can be read remotely. Packing can reduce useful parallelism, and fewer map
+tasks limit how finely AQE can split a skewed shuffle partition, for skew joins and rebalances
+alike. Under AQE, a local shuffle read with one mapper per task over a packed shuffle no longer
+reports the scan's keyed layout, so where an operator needs that layout, AQE keeps the full shuffle
+read. The default is off; connectors that already size their inputs need not enable it.
 
 <table class="spark-config">
   <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
@@ -771,15 +776,6 @@ not enable it.
     <td>4.5.0</td>
   </tr>
   <tr>
-    <td><code>spark.sql.sources.v2.scanPartitionPacking.openCostInBytes</code></td>
-    <td>4MB</td>
-    <td>
-      Estimated cost of opening a file, expressed as scanned bytes. Each input adds it once for each
-      file it reports through <code>HasPartitionStatistics.filesCount()</code>, and at least once.
-    </td>
-    <td>4.5.0</td>
-  </tr>
-  <tr>
     <td><code>spark.sql.sources.v2.scanPartitionPacking.minPartitionNum</code></td>
     <td>(none)</td>
     <td>
@@ -794,9 +790,10 @@ not enable it.
     <td>
       Suggested maximum count of packed tasks for a scan. As with
       <code>spark.sql.files.maxPartitionNum</code>, if packing by size gives more tasks, Spark packs
-      the inputs again by the scan's total size divided by this value, but never with a smaller
-      target than the first. A scan with an input that reports no valid size is grouped by count
-      into at most this many tasks. Never applies to scans of file-based V2 sources.
+      the inputs again with a target of the scan's total size divided by this value, but unlike
+      for files only when that target is larger than the first. A scan with an input that reports
+      no valid size is grouped by count into at most this many tasks. Never applies to scans of
+      file-based V2 sources.
     </td>
     <td>4.5.0</td>
   </tr>

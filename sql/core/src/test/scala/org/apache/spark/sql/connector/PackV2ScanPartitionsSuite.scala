@@ -31,14 +31,14 @@ import org.apache.spark.sql.connector.catalog.Column
 import org.apache.spark.sql.connector.expressions.Expressions.identity
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.HasPartitionStatistics
-import org.apache.spark.sql.execution.{SortExec, SparkPlan}
+import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SortExec, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEShuffleReadExec, QueryStageExec}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.datasources.{FilePartition, PartitionedFile}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, PackScanPartitionsExec, PackV2ScanPartitions, V2ScanPartitionPacking}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeLike, EnsureRequirements, ShuffleExchangeExec, ValidateRequirements}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
-import org.apache.spark.sql.functions.{broadcast, max}
+import org.apache.spark.sql.functions.{broadcast, max, monotonically_increasing_id, rand}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StringType}
 import org.apache.spark.tags.DataSourceV2Test
@@ -92,8 +92,6 @@ class PackV2ScanPartitionsSuite extends KeyGroupedPartitioningSuiteBase {
       override def numRows(): OptionalLong = OptionalLong.empty()
       override def filesCount(): OptionalLong = OptionalLong.empty()
     }
-    // Above maxPartitionNum, the inputs keep the first target as a floor, which files do not.
-    // These cases don't reach that difference.
     val mb = 1024L * 1024
     // (sizes, maxPartitionBytes, openCostInBytes, minPartitionNum, maxPartitionNum)
     val fixed = Seq(
@@ -106,14 +104,26 @@ class PackV2ScanPartitionsSuite extends KeyGroupedPartitioningSuiteBase {
       (Seq(1L, 3L, 1L), 5L, 2L, 1, Some(2)),
       // Above the cap, and still 3 groups after packing again, as for files.
       (Seq(120 * mb, 10 * mb, 124 * mb), 128 * mb, 4 * mb, 1, Some(2)),
-      (Seq.fill(8)(100L), 100L, 0L, 1, Some(2)))
+      (Seq.fill(8)(100L), 100L, 0L, 1, Some(2)),
+      // The first target never falls below the opening cost: 32 / 16 = 2 MB is raised to 4 MB.
+      (Seq.fill(8)(0L), 128 * mb, 4 * mb, 16, None))
     val random = new Random(60265)
     val generated = Seq.fill(300) {
       val sizes = Seq.fill(1 + random.nextInt(40))(random.nextLong(200 * mb))
       (sizes, Seq(64 * mb, 128 * mb)(random.nextInt(2)), Seq(0L, 4 * mb)(random.nextInt(2)),
         1 + random.nextInt(8), Option.when(random.nextBoolean())(1 + random.nextInt(sizes.size)))
     }
-    (fixed ++ generated).foreach { case (sizes, maxBytes, openCost, minNum, maxNum) =>
+    // Above maxPartitionNum, files are packed again however small the cap's target is, and the
+    // inputs only when it is larger than the first target, so the comparison leaves out the cases
+    // where it is smaller.
+    def capBelowFirstTarget(c: (Seq[Long], Long, Long, Int, Option[Int])): Boolean = {
+      val (sizes, maxBytes, openCost, minNum, maxNum) = c
+      val total = sizes.map(_ + openCost).sum
+      val first = math.min(maxBytes, math.max(openCost, total / minNum))
+      maxNum.exists(cap => (total + cap - 1) / cap < first)
+    }
+    val compared = (fixed ++ generated).filterNot(capBelowFirstTarget)
+    compared.foreach { case (sizes, maxBytes, openCost, minNum, maxNum) =>
       val conf = Seq(SQLConf.FILES_MAX_PARTITION_BYTES.key -> maxBytes.toString,
         SQLConf.FILES_OPEN_COST_IN_BYTES.key -> openCost.toString,
         SQLConf.FILES_MIN_PARTITION_NUM.key -> minNum.toString) ++
@@ -272,6 +282,75 @@ class PackV2ScanPartitionsSuite extends KeyGroupedPartitioningSuiteBase {
       val df = sql(s"SELECT name, count(*) FROM testcat.ns.$items GROUP BY name")
       checkAnswer(df, (1 to 24).map(i => Row(s"split$i", 2L)))
       assert(packNodes(df.queryExecution.executedPlan).head.execute().getNumPartitions === 4)
+    }
+  }
+
+  test("SPARK-60265: non-deterministic expressions agree across plans of the same scan") {
+    createSplits()
+    for (adaptive <- Seq(false, true)) {
+      withSQLConf(enabled -> "true", minPartitionNum -> "1",
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString) {
+        // The join's streamed side is packed and its broadcast build side is not. The project
+        // computing the id stays below the node, so both sides see each input's partition index,
+        // and every row finds its match.
+        val withId = spark.table(s"testcat.ns.$items")
+          .withColumn("rid", monotonically_increasing_id())
+        val joined = withId.select("rid", "name")
+          .join(broadcast(withId.select("rid", "price")), "rid")
+          .groupBy("name").count()
+        checkAnswer(joined, (1 to 24).map(i => Row(s"split$i", 2L)))
+        val plan = joined.queryExecution.executedPlan
+        withClue(plan.treeString) {
+          val nodes = packNodes(plan)
+          assert(nodes.map(_.execute().getNumPartitions) === Seq(2))
+          assert(nodes.forall(_.child.exists(_.isInstanceOf[ProjectExec])))
+          // Directly above the project, below the join, which runs once per packed task.
+          assert(nodes.forall(!_.child.exists(_.isInstanceOf[BroadcastHashJoinExec])))
+        }
+        // A seeded filter keeps the same rows whether a shuffle reads the scan or not.
+        val filtered = spark.table(s"testcat.ns.$items").where(rand(42) < 0.5)
+        assert(filtered.count() === filtered.collect().length)
+      }
+    }
+  }
+
+  test("SPARK-60265: the node goes directly above the highest operator with a " +
+      "non-deterministic expression") {
+    createSplits()
+    // A seeded filter over a project with monotonically_increasing_id(), which the optimizer keeps
+    // apart, and a project with a seeded rand() that the shuffle reads directly. Each expression
+    // sees the input's partition index, as without packing.
+    def sampled: DataFrame = spark.table(s"testcat.ns.$items")
+      .withColumn("rid", monotonically_increasing_id())
+      .where(rand(42) < 0.5)
+      .groupBy("name").agg(max("rid"))
+    def drawn: DataFrame = spark.table(s"testcat.ns.$items")
+      .select($"name", rand(42).as("r")).repartition(2)
+    for (adaptive <- Seq(false, true)) {
+      val aqe = SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString
+      val (expectedSampled, expectedDrawn) = withSQLConf(aqe) {
+        (sampled.collect().toSeq, drawn.collect().toSeq)
+      }
+      withSQLConf(enabled -> "true", minPartitionNum -> "1", aqe) {
+        val df = sampled
+        checkAnswer(df, expectedSampled)
+        withClue(df.queryExecution.executedPlan.treeString) {
+          val nodes = packNodes(df.queryExecution.executedPlan)
+          assert(nodes.map(_.execute().getNumPartitions) === Seq(2))
+          // Directly above the filter, the higher of the two, and below the partial aggregation.
+          assert(nodes.forall(node => node.child.exists(_.isInstanceOf[FilterExec]) &&
+            !node.child.exists(_.isInstanceOf[BaseAggregateExec])))
+        }
+        // The shuffle reads the project directly, so the node goes directly below the shuffle.
+        val repartitioned = drawn
+        checkAnswer(repartitioned, expectedDrawn)
+        withClue(repartitioned.queryExecution.executedPlan.treeString) {
+          val exchanges = collect(repartitioned.queryExecution.executedPlan) {
+            case s: ShuffleExchangeExec => s
+          }
+          assert(exchanges.map(_.child.getClass) === Seq(classOf[PackScanPartitionsExec]))
+        }
+      }
     }
   }
 
@@ -470,11 +549,12 @@ object PackV2ScanPartitionsSuite extends AdaptiveSparkPlanHelper {
 class KeyGroupedPartitioningPackScanPartitionsSuite extends KeyGroupedPartitioningSuite {
   override def sparkConf: SparkConf = PackV2ScanPartitionsSuite.withPacking(super.sparkConf)
 
-  // With packing, the node sits directly above a scan that a shuffle reads, and the node reports
-  // no keyed layout. So the split keyed layout that the first test sets up never reaches a local
-  // read. The second test fails only its setup check where a side is shuffled: the project it
-  // inspects for the collapsed layout reads the node. What it checks there, no grouping and the
-  // shuffle counts, is decided before packing, and its plans without a shuffle are not packed.
+  // With packing, the node goes between a scan and the shuffle that reads it, in these tests
+  // directly above the scan, and reports no keyed layout. So the split keyed layout that the first
+  // test sets up never reaches a local read. The second test fails only its setup check where a
+  // side is shuffled: the project it inspects for the collapsed layout reads the node. What it
+  // checks there, no grouping and the shuffle counts, is decided before packing, and its plans
+  // without a shuffle are not packed.
   override protected def excluded: Seq[String] = super.excluded ++ Seq(
     "SPARK-59671: an AQE local read over a split scan does not lose matches",
     "SPARK-58974: the collapse skew guard applies regardless of requireAllClusterKeys")

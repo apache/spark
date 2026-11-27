@@ -48,8 +48,8 @@ case class V2ScanPartitionPacking(
    * order and never splitting an input. Each input costs its size plus the opening cost for each
    * file it reports through `filesCount`, and at least one, and it joins a group only if all of its
    * files would fit there. As with `spark.sql.files.maxPartitionNum`, when that gives more groups
-   * than `maxPartitionNum`, the groups are sized by the cap instead, but unlike for files never
-   * with a smaller target than the first. If any input lacks a valid size, the whole scan is
+   * than `maxPartitionNum`, the groups are sized by the cap instead, but unlike for files only
+   * when that target is larger than the first. If any input lacks a valid size, the whole scan is
    * grouped by count into at most `maxPartitionNum` balanced ranges when that cap is set. Returns
    * None when every input stays a partition of its own, without building a group for each.
    */
@@ -94,13 +94,14 @@ case class V2ScanPartitionPacking(
       // As FilePartition.maxSplitBytes.
       val target = math.min(maxPartitionBytes, math.max(openCostInBytes, total / minGroups))
       val groups = bySize(sizes, openCosts, target)
-      // As spark.sql.files.maxPartitionNum: above the cap, size the groups by the cap instead. Next
-      // fit leaves room at the end of each group, so the cap's target can be smaller than the first
-      // one, which could only give more groups, and the first target stays the floor.
+      // As spark.sql.files.maxPartitionNum: above the cap, size the groups by the cap instead, but
+      // only with a larger target than the first. Next fit leaves room at the end of each group,
+      // so the cap's target can still be at or below the first one, and packing with it would then
+      // give as many groups or more.
       val numGroups = groups.fold(numInputs)(_.size)
-      maxPartitionNum.filter(numGroups > _) match {
+      maxPartitionNum.filter(cap => numGroups > cap && ceilDiv(total, cap) > target) match {
         case Some(cap) =>
-          val capped = bySize(sizes, openCosts, math.max(target, ceilDiv(total, cap)))
+          val capped = bySize(sizes, openCosts, ceilDiv(total, cap))
           logWarning(log"The number of partitions is ${MDC(NUM_PARTITIONS, numGroups)}, " +
             log"which exceeds the maximum number configured: ${MDC(MAX_NUM_PARTITIONS, cap)}. " +
             log"Spark rescales it to " +

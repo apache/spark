@@ -36,7 +36,8 @@ class V2ScanPartitionPackingSuite extends SparkFunSuite {
   private def inputs(sizes: Long*): Seq[InputPartition] =
     sizes.map(size => Sized(Some(size)))
 
-  test("pack actual input sizes, keeping oversized splits separate and covering each input once") {
+  test("SPARK-60265: pack actual input sizes, keeping oversized splits separate and covering " +
+      "each input once") {
     val policy = V2ScanPartitionPacking(100, 0, Some(1), None)
     val parts = inputs(30, 40, 200, 20, 30, 90)
     val groups = policy.pack(parts, 4)
@@ -46,7 +47,7 @@ class V2ScanPartitionPackingSuite extends SparkFunSuite {
     assert(policy.pack(inputs(0, 0, 0), 4) === Some(Seq(Seq(0, 1, 2))))
   }
 
-  test("opening cost and suggested parallelism constrain small inputs") {
+  test("SPARK-60265: opening cost and suggested parallelism constrain small inputs") {
     // As for files, an input joins a group while its size fits, and then adds its opening cost.
     assert(V2ScanPartitionPacking(100, 10, Some(1), None).pack(inputs(40, 40, 15), 4) ===
       Some(Seq(Seq(0, 1), Seq(2))))
@@ -60,7 +61,7 @@ class V2ScanPartitionPackingSuite extends SparkFunSuite {
     assert(V2ScanPartitionPacking(128, 4, Some(5), None).pack(inputs(12, 0, 4, 7), 1).isEmpty)
   }
 
-  test("an input adds the opening cost once for each file it reports") {
+  test("SPARK-60265: an input adds the opening cost once for each file it reports") {
     case class Files(bytes: Long, files: OptionalLong) extends HasPartitionStatistics {
       override def sizeInBytes(): OptionalLong = OptionalLong.of(bytes)
       override def numRows(): OptionalLong = OptionalLong.empty()
@@ -91,7 +92,7 @@ class V2ScanPartitionPackingSuite extends SparkFunSuite {
       .pack(Seq(Files(10, files(1L << 62))) ++ inputs(10, 10), 1) === Some(Seq(Seq(0), Seq(1, 2))))
   }
 
-  test("an unset minimum count uses the default given at packing time") {
+  test("SPARK-60265: an unset minimum count uses the default given at packing time") {
     val unset = V2ScanPartitionPacking(1000, 0, None, None)
     val parts = inputs(100, 100, 100, 100)
     assert(unset.pack(parts, 1) === Some(Seq(Seq(0, 1, 2, 3))))
@@ -100,7 +101,8 @@ class V2ScanPartitionPackingSuite extends SparkFunSuite {
     assert(unset.copy(minPartitionNum = Some(1)).pack(parts, 3) === Some(Seq(Seq(0, 1, 2, 3))))
   }
 
-  test("above the maximum count, sized inputs are packed by the total size over that count") {
+  test("SPARK-60265: above the maximum count, sized inputs are packed by the total size over " +
+      "that count") {
     val parts = inputs(Seq.fill(8)(10L): _*)
     assert(V2ScanPartitionPacking(10, 0, Some(1), None).pack(parts, 1).isEmpty)
     assert(V2ScanPartitionPacking(10, 0, Some(1), Some(2)).pack(parts, 1) ===
@@ -118,18 +120,29 @@ class V2ScanPartitionPackingSuite extends SparkFunSuite {
       Some(Seq(Seq(0, 1), Seq(2, 3))))
     // As for files, the cap is suggested: inputs that do not fit together stay apart.
     assert(V2ScanPartitionPacking(30, 0, Some(1), Some(2)).pack(inputs(30, 30, 30), 1).isEmpty)
-    // Unlike for files, the cap's target is never smaller than the first. Inputs of 60, 60 and
-    // 70 MB make 20 groups at 128 MB, and a cap of 17 would otherwise target 2020 / 17 = 119 MB
-    // and leave all 30 apart. A cap of 15 targets 135 MB.
+    // Unlike for files, the inputs are packed again only when the cap's target is larger than the
+    // first. Inputs of 60, 60 and 70 MB make 20 groups at 128 MB, and a cap of 17 would otherwise
+    // target 2020 / 17 = 119 MB and leave all 30 apart. A cap of 15 targets 135 MB.
     val mb = 1024L * 1024
     val mixed = inputs(Seq.fill(10)(Seq(60 * mb, 60 * mb, 70 * mb)).flatten: _*)
     Seq(None -> 20, Some(19) -> 20, Some(17) -> 20, Some(15) -> 15).foreach { case (cap, num) =>
       assert(V2ScanPartitionPacking(128 * mb, 4 * mb, Some(1), cap).pack(mixed, 1).map(_.size) ===
         Some(num), s"maxPartitionNum=$cap")
     }
+    // The warning reports only a rescale that happens.
+    def capWarnings(cap: Int): Seq[String] = {
+      val appender = new LogAppender("cap warning")
+      withLogAppender(appender) {
+        V2ScanPartitionPacking(128 * mb, 4 * mb, Some(1), Some(cap)).pack(mixed, 1)
+      }
+      appender.loggingEvents.map(_.getMessage.getFormattedMessage)
+        .filter(_.contains("exceeds the maximum number configured")).toSeq
+    }
+    assert(capWarnings(17).isEmpty)
+    assert(capWarnings(15).exists(_.contains("rescales it to 15")))
   }
 
-  test("missing, mixed and negative sizes require an explicit count fallback") {
+  test("SPARK-60265: missing, mixed and negative sizes require an explicit count fallback") {
     val unknown = new InputPartition {}
     Seq(unknown, Sized(None), Sized(Some(-1))).foreach { p =>
       val parts = inputs(30, 40) :+ p
@@ -140,7 +153,7 @@ class V2ScanPartitionPackingSuite extends SparkFunSuite {
     }
   }
 
-  test("sizes are read only up to the first input without one") {
+  test("SPARK-60265: sizes are read only up to the first input without one") {
     val reads = new AtomicInteger()
     case class Counted(bytes: Option[Long]) extends HasPartitionStatistics {
       override def sizeInBytes(): OptionalLong = {
@@ -159,7 +172,7 @@ class V2ScanPartitionPackingSuite extends SparkFunSuite {
     assert(reads.get() === 4)
   }
 
-  test("an unchanged scan builds no group per input") {
+  test("SPARK-60265: an unchanged scan builds no group per input") {
     val bean = ManagementFactory.getThreadMXBean.asInstanceOf[com.sun.management.ThreadMXBean]
     assume(bean.isThreadAllocatedMemorySupported && bean.isThreadAllocatedMemoryEnabled)
     def allocated(groups: => Option[Seq[Range]]): Long = {
@@ -191,16 +204,21 @@ class V2ScanPartitionPackingSuite extends SparkFunSuite {
     assert(allocated(noCap.packSlots(unsizedSlots, 1)) < n)
   }
 
-  test("overflow and exact limits") {
+  test("SPARK-60265: overflow and exact limits") {
     val policy = V2ScanPartitionPacking(Long.MaxValue, 10, Some(1), None)
     assert(policy.pack(inputs(Long.MaxValue, 1), 1).isEmpty)
     assert(policy.pack(inputs(Long.MaxValue - 20, 1, 1), 1) === Some(Seq(Seq(0, 1), Seq(2))))
     assert(V2ScanPartitionPacking(100, 0, Some(1), None).pack(inputs(100, 1), 1).isEmpty)
     assert(V2ScanPartitionPacking(100, 0, Some(1), None).pack(inputs(100, 1, 1), 1) ===
       Some(Seq(Seq(0), Seq(1, 2))))
+    // Balanced count ranges without Int overflow: 21475 * 100000 is past Int.MaxValue.
+    val ranges = V2ScanPartitionPacking(100, 0, Some(1), Some(60000))
+      .pack(Seq.fill(100000)(Sized(None)), 1).get
+    assert(ranges.size === 60000 && ranges.flatten === (0 until 100000))
   }
 
-  test("partitions emptied by runtime filtering join a neighbor's range, each covered once") {
+  test("SPARK-60265: partitions emptied by runtime filtering join a neighbor's range, each " +
+      "covered once") {
     val policy = V2ScanPartitionPacking(100, 0, Some(1), None)
     def slots(sizes: Option[Long]*): IndexedSeq[Option[InputPartition]] =
       sizes.map(_.map(size => Sized(Some(size)): InputPartition)).toIndexedSeq

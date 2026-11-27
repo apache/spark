@@ -36,7 +36,7 @@ import org.apache.spark.sql.connector.expressions.Expressions.{identity, sort}
 import org.apache.spark.sql.connector.expressions.filter.{Predicate => V2Predicate}
 import org.apache.spark.sql.connector.read.{Batch, HasPartitionKey, HasPartitionStatistics, InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder, SupportsReportOrdering, SupportsReportPartitioning, SupportsRuntimeV2Filtering}
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, Partitioning, UnknownPartitioning}
-import org.apache.spark.sql.execution.{ColumnarToRowExec, FormattedMode, InputAdapter, PartialReducerPartitionSpec, ProjectedBroadcastValueSubqueryExec, SimpleMode, SortExec, SparkPlan}
+import org.apache.spark.sql.execution.{ColumnarToRowExec, FormattedMode, InputAdapter, PartialReducerPartitionSpec, ProjectedBroadcastValueSubqueryExec, ProjectExec, SimpleMode, SortExec, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEShuffleReadExec, ShuffleQueryStageExec}
 import org.apache.spark.sql.execution.aggregate.{BaseAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, FileScan, PackScanPartitionsExec}
@@ -191,10 +191,14 @@ class PackV2ScanPartitionsReadSuite extends KeyGroupedPartitioningSuiteBase {
         val capped = sized(unsized).repartition(2)
         checkAnswer(capped, expected(5))
         assert(rowsPerPackedTask(capped) === Seq(1, 5, 9))
+        assert(packNodes(capped.queryExecution.executedPlan).head
+          .metrics("maxPartitionsPerGroup").value === 2)
       }
       val unchanged = sized(unsized).repartition(2)
       checkAnswer(unchanged, expected(5))
       assert(rowsPerPackedTask(unchanged) === Seq(1, 2, 3, 4, 5))
+      assert(packNodes(unchanged.queryExecution.executedPlan).head
+        .metrics("maxPartitionsPerGroup").value === 1)
     }
   }
 
@@ -428,7 +432,8 @@ class PackV2ScanPartitionsReadSuite extends KeyGroupedPartitioningSuiteBase {
           Seq(("n0", 3), ("n1", 3)))
         val plan = df.queryExecution.executedPlan
         withClue(plan.treeString) {
-          assert(collect(plan) { case s: ShuffleExchangeExec => s }.size === 1)
+          val exchanges = collect(plan) { case s: ShuffleExchangeExec => s }
+          assert(exchanges.size === 1)
           val nodes = packNodes(plan)
           assert(nodes.size === 1)
           assert(nodes.head.child.exists {
@@ -436,6 +441,12 @@ class PackV2ScanPartitionsReadSuite extends KeyGroupedPartitioningSuiteBase {
             case _ => false
           })
           assert(rowsPerPackedTask(df) === Seq(3, 3))
+          // Directly above the sort, not below the shuffle: the partial aggregate reads the node
+          // and runs once per packed task, ids 1 to 3 and 4 to 6, each with both names.
+          val aggregate = collect(exchanges.head.child) { case a: BaseAggregateExec => a }.head
+          assert(aggregate.child.isInstanceOf[PackScanPartitionsExec])
+          assert(aggregate.execute().mapPartitions(rows => Iterator.single(rows.size))
+            .collect().toSeq === Seq(2, 2))
           assert(meetsRequirements(plan))
         }
       }
@@ -505,10 +516,11 @@ class PackV2ScanPartitionsReadSuite extends KeyGroupedPartitioningSuiteBase {
     }
   }
 
-  test("SPARK-60265: partition-dependent expressions above the node see the packed task") {
+  test("SPARK-60265: a project with partition-dependent expressions stays below the node") {
     populate()
-    // The node goes directly above the scan, so the built-in expression and code that reads the
-    // task's partition id, such as this UDF, both see the packed task.
+    // The project's expressions are non-deterministic, so it stays below the node, and the
+    // built-in expression sees the input's partition, as without packing. Code that reads the
+    // task's partition id, such as this UDF, sees the packed task.
     val taskPartition = udf(() => TaskContext.getPartitionId()).asNondeterministic()
     for (packing <- Seq(false, true)) {
       withSQLConf(enabled -> packing.toString) {
@@ -518,10 +530,12 @@ class PackV2ScanPartitionsReadSuite extends KeyGroupedPartitioningSuiteBase {
         val rows = ids.collect()
         val nodes = packNodes(ids.queryExecution.executedPlan)
         assert(nodes.map(_.execute().getNumPartitions) === (if (packing) Seq(2) else Nil))
-        assert(nodes.forall(_.child.isInstanceOf[BatchScanExec]))
-        val tasks = if (packing) 2 else 6
+        assert(nodes.forall(_.child.exists(_.isInstanceOf[ProjectExec])))
+        // Directly above the project: the partial aggregation runs once per packed task.
+        assert(nodes.forall(!_.child.exists(_.isInstanceOf[BaseAggregateExec])))
+        // Two packed tasks of three inputs each.
         assert(rows.map(row => (row.getInt(0), row.getInt(1))).toSet ===
-          (0 until tasks).map(task => (task, task)).toSet)
+          (0 until 6).map(input => (input, if (packing) input / 3 else input)).toSet)
         assert(rows.map(_.getLong(2)).sum === 6L)
       }
     }
