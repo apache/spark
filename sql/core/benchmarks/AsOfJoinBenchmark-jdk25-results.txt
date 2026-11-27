@@ -2,28 +2,34 @@
 AS-OF Join Benchmark
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1019-azure
+OpenJDK 64-Bit Server VM 25.0.5.1+2-LTS on Linux 7.0.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 AS-OF Join (left=10000, right=10000, groups=100):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------------
-Correlated subquery (baseline)                            39869          39899          43          0.0     3986866.9       1.0X
-Sort-merge AS-OF join, buffered scan                         34             48          10          0.3        3403.0    1171.6X
-Sort-merge AS-OF join, cursor scan                           27             47          12          0.4        2662.3    1497.5X
+Correlated subquery (baseline)                            38795          38927         187          0.0     3879514.0       1.0X
+Sort-merge AS-OF join, buffered scan                         35             49          13          0.3        3535.7    1097.2X
+Sort-merge AS-OF join, cursor scan                           26             36           8          0.4        2629.3    1475.5X
+Sort-merge nearest AS-OF join, buffered scan                 32             40           9          0.3        3167.5    1224.8X
+Sort-merge nearest AS-OF join, cursor scan                   25             38          12          0.4        2534.4    1530.7X
 
-OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1019-azure
+OpenJDK 64-Bit Server VM 25.0.5.1+2-LTS on Linux 7.0.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 AS-OF Join (left=10000, right=10000, groups=10):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------------
-Correlated subquery (baseline)                           38672          39182         721          0.0     3867234.9       1.0X
-Sort-merge AS-OF join, buffered scan                        43             52          10          0.2        4334.5     892.2X
-Sort-merge AS-OF join, cursor scan                          24             30           4          0.4        2424.1    1595.3X
+Correlated subquery (baseline)                           38279          38406         179          0.0     3827896.6       1.0X
+Sort-merge AS-OF join, buffered scan                        38             43           7          0.3        3838.6     997.2X
+Sort-merge AS-OF join, cursor scan                          21             27           6          0.5        2090.2    1831.4X
+Sort-merge nearest AS-OF join, buffered scan                66             83          20          0.2        6598.1     580.1X
+Sort-merge nearest AS-OF join, cursor scan                  29             39           8          0.3        2931.8    1305.7X
 
-OpenJDK 64-Bit Server VM 25.0.5.0.3+1-LTS on Linux 7.0.0-1019-azure
+OpenJDK 64-Bit Server VM 25.0.5.1+2-LTS on Linux 7.0.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 AS-OF Join no equi-key (left=10000, right=10000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------------
-Correlated subquery (baseline)                            24413          24420          10          0.0     2441256.1       1.0X
-Sort-merge AS-OF join, buffered scan                        186            191           8          0.1       18582.8     131.4X
-Sort-merge AS-OF join, cursor scan                           17             23           7          0.6        1680.2    1452.9X
+Correlated subquery (baseline)                            25076          25114          53          0.0     2507590.5       1.0X
+Sort-merge AS-OF join, buffered scan                        182            184           3          0.1       18237.3     137.5X
+Sort-merge AS-OF join, cursor scan                           14             19           5          0.7        1394.8    1797.8X
+Sort-merge nearest AS-OF join, buffered scan                471            480           9          0.0       47083.8      53.3X
+Sort-merge nearest AS-OF join, cursor scan                   13             21           9          0.8        1332.9    1881.4X
 
 
