@@ -20,9 +20,11 @@ import functools
 import importlib
 import inspect
 import os
+import sys
 import textwrap
 import threading
 import time
+import types
 import unittest
 import uuid
 from collections.abc import Generator
@@ -1024,9 +1026,43 @@ class SparkConnectClientTestCase(unittest.TestCase):
         object called `name`, so that the real stack helper treats its frames as PySpark code.
         """
         filename = os.path.join(os.path.dirname(pyspark.sql.connect.__file__), "_fake_api.py")
+        return SparkConnectClientTestCase._define_in_file(source, name, filename)
+
+    @staticmethod
+    def _define_in_file(source, name, filename):
+        """
+        Compile `source` under `filename` and return the object called `name`, so that stack
+        frames of its code carry that filename.
+        """
         namespace = {"functools": functools}
         exec(compile(textwrap.dedent(source), filename, "exec"), namespace)
         return namespace[name]
+
+    @contextlib.contextmanager
+    def _fake_python_layout(self, site_packages_in_stdlib):
+        """
+        Make `_is_non_user_source` see a fake standard library directory, with fake IPython (a
+        package) and decorator (a single module) installed in a site-packages directory that
+        is either inside it, as in conda, pyenv or Docker images, or outside it, as in a venv.
+        The function only compares path strings, so the files do not need to exist.
+        """
+        root = os.path.join(os.sep, "fake-python")
+        stdlib = os.path.join(root, "lib", "python3")
+        if site_packages_in_stdlib:
+            site_packages = os.path.join(stdlib, "site-packages")
+        else:
+            site_packages = os.path.join(root, "venv", "site-packages")
+        fake_ipython = types.ModuleType("IPython")
+        fake_ipython.__file__ = os.path.join(site_packages, "IPython", "__init__.py")
+        fake_decorator = types.ModuleType("decorator")
+        fake_decorator.__file__ = os.path.join(site_packages, "decorator.py")
+        with (
+            # Replace the real standard library directories with the fake one.
+            mock.patch.object(core, "_STDLIB_DIRS", (os.path.join(stdlib, ""),)),
+            # `_is_non_user_source` finds the notebook packages through `sys.modules`.
+            mock.patch.dict(sys.modules, {"IPython": fake_ipython, "decorator": fake_decorator}),
+        ):
+            yield types.SimpleNamespace(stdlib=stdlib, site_packages=site_packages)
 
     def test_analyze_logs_duration_and_call_site(self):
         test = self
@@ -1204,8 +1240,27 @@ class SparkConnectClientTestCase(unittest.TestCase):
         )
 
     def test_notebook_display_sources_are_not_user_code(self):
-        # IPython 8 wraps its display formatters with the decorator package, so its frames
-        # sit between the notebook cell and PySpark even when IPython 9 does not use it.
+        for site_packages_in_stdlib in (True, False):
+            with (
+                self.subTest(site_packages_in_stdlib=site_packages_in_stdlib),
+                self._fake_python_layout(site_packages_in_stdlib) as layout,
+            ):
+                is_non_user = core._is_non_user_source
+                site = layout.site_packages
+                self.assertTrue(is_non_user(os.path.join(site, "IPython", "lib", "pretty.py")))
+                self.assertTrue(is_non_user(os.path.join(site, "decorator.py")))
+                self.assertTrue(is_non_user(os.path.join(layout.stdlib, "functools.py")))
+                self.assertFalse(is_non_user(os.path.join(site, "mylib", "helpers.py")))
+                self.assertFalse(is_non_user(os.path.join(site, "decorator_extras.py")))
+                self.assertFalse(is_non_user(os.path.join(os.sep, "app", "my_job.py")))
+        # decorator releases before 5.0 compile wrappers under synthetic filenames.
+        self.assertTrue(core._is_non_user_source("<decorator-gen-17>"))
+        self.assertFalse(core._is_non_user_source("<stdin>"))
+
+    def test_installed_notebook_display_sources_are_not_user_code(self):
+        # IPython versions that wrap their display formatters with the decorator package, such as
+        # IPython 8 and 9.2, put its frames between the notebook cell and PySpark, so check each
+        # of these packages that is installed.
         checked = 0
         for name in ("IPython", "ipykernel", "decorator"):
             try:
@@ -1216,8 +1271,50 @@ class SparkConnectClientTestCase(unittest.TestCase):
             checked += 1
         if checked == 0:
             self.skipTest("No notebook display package is installed")
-        self.assertTrue(core._is_non_user_source(functools.__file__))
-        self.assertFalse(core._is_non_user_source("/app/my_job.py"))
+
+    def test_analyze_call_site_skips_fake_notebook_display_frames(self):
+        # Runs without IPython installed: a display function compiled under a notebook package
+        # path or a generated decorator filename calls a PySpark API, as IPython does when a
+        # notebook cell ends in a DataFrame.
+        FakeDataFrame = self._define_as_pyspark_source(
+            """
+            class FakeDataFrame:
+                def __init__(self, client):
+                    self._client = client
+
+                def __repr__(self):
+                    self._client._analyze(method="spark_version")
+                    return "FakeDataFrame"
+            """,
+            "FakeDataFrame",
+        )
+        display_source = """
+            def display(obj):
+                return repr(obj)
+            """
+        for site_packages_in_stdlib in (True, False):
+            with self._fake_python_layout(site_packages_in_stdlib) as layout:
+                display_files = [
+                    os.path.join(layout.site_packages, "IPython", "core", "formatters.py"),
+                    "<decorator-gen-1>",
+                ]
+                for display_file in display_files:
+                    display = self._define_in_file(display_source, "display", display_file)
+                    df = FakeDataFrame(self._analyze_client())
+                    with (
+                        self.subTest(layout=layout.site_packages, display_file=display_file),
+                        self._user_code_in_this_file(),
+                        self._info_logging() as records,
+                    ):
+                        expected_line = inspect.currentframe().f_lineno + 1
+                        display(df)
+                    self.assertEqual(len(records), 1)
+                    self.assertTrue(
+                        records[0]
+                        .getMessage()
+                        .endswith(f"triggered by __repr__ at {__file__}:{expected_line}"),
+                        records[0].getMessage(),
+                    )
 
     def test_analyze_does_not_capture_call_site_when_logging_disabled(self):
         client = self._analyze_client()

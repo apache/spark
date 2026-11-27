@@ -815,8 +815,11 @@ def _is_pyspark_source(filename: str) -> bool:
 
 
 # Packages that call into PySpark on behalf of user code when a notebook displays a cell
-# result. IPython 8 wraps its display formatters with the `decorator` package.
+# result. Some IPython versions wrap their display formatters with the `decorator` package.
 _NOTEBOOK_DISPLAY_MODULES = ("IPython", "ipykernel", "decorator")
+
+# decorator releases before 5.0 compile each wrapper under a synthetic filename with this prefix.
+_DECORATOR_GENERATED_PREFIX = "<decorator-gen-"
 
 # Directories of the Python standard library. Frames carry the path that modules were loaded
 # from, which may differ from the configured one when it goes through a symlink.
@@ -832,9 +835,14 @@ def _is_non_user_source(filename: str) -> bool:
     """
     for stdlib_dir in _STDLIB_DIRS:
         if filename.startswith(stdlib_dir):
-            # Third-party packages may be installed under the standard library directory.
+            # Third-party packages may be installed under the standard library directory, as in
+            # conda, pyenv or Docker images without a venv. Those are checked below.
             top_level = filename[len(stdlib_dir) :].split(os.sep, 1)[0]
-            return top_level not in ("site-packages", "dist-packages")
+            if top_level not in ("site-packages", "dist-packages"):
+                return True
+            break
+    if filename.startswith(_DECORATOR_GENERATED_PREFIX):
+        return True
     for name in _NOTEBOOK_DISPLAY_MODULES:
         module_file = getattr(sys.modules.get(name), "__file__", None)
         if module_file is None:
