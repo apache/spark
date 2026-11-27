@@ -174,6 +174,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
   private def checkCompact(d: Decimal, expected: Boolean): Unit = {
     val isCompact = d.invokePrivate(decimalVal()).eq(null)
     assert(isCompact == expected, s"$d ${if (expected) "was not" else "was"} compact")
+    assert(d.isCompact == isCompact, s"isCompact disagrees with the representation of $d")
   }
 
   test("small decimals represented as unscaled long") {

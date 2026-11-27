@@ -230,6 +230,12 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     }
   }
 
+  /**
+   * Whether this Decimal is in the compact representation, i.e. backed by an unscaled Long (see
+   * `toUnscaledLong`) rather than by a BigDecimal.
+   */
+  private[sql] def isCompact: Boolean = decimalVal.eq(null)
+
   override def toString: String = toBigDecimal.toString()
 
   def toPlainString: String = toJavaBigDecimal.toPlainString
