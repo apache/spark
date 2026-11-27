@@ -3177,7 +3177,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(publicFileLiteral(), FileType()), fileRow())
   }
 
-  test("cast struct to FILE: case-insensitive field names") {
+  test("cast struct to FILE: field names are matched with the session resolver") {
     val srcType = StructType(Seq(
       StructField("URI", StringType),
       StructField("Offset", LongType),
@@ -3185,7 +3185,47 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       StructField("CONTENT_TYPE", StringType),
       StructField("Checksum", StringType)))
     val src = publicFileLiteral().copy(dataType = srcType)
-    checkEvaluation(cast(src, FileType()), fileRow())
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      checkEvaluation(cast(src, FileType()), fileRow())
+    }
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      assert(cast(src, FileType()).checkInputDataTypes().isFailure)
+      checkEvaluation(cast(publicFileLiteral(), FileType()), fileRow())
+    }
+  }
+
+  test("cast struct to FILE: a field casts to its FILE field by the rules of the mode") {
+    // A DATE casts to a BIGINT only without ANSI, and so does a DATE offset to a FILE.
+    val srcType = StructType(
+      FileType.PUBLIC_FIELDS.updated(FileType.OFFSET_INDEX, StructField("offset", DateType)))
+    val result = cast(Literal.create(null, srcType), FileType()).checkInputDataTypes()
+    assert(result.isSuccess == (evalMode == EvalMode.LEGACY), result)
+  }
+
+  test("cast nested structs to FILE: a struct without a uri in a collection") {
+    val struct = StructType(FileType.PUBLIC_FIELDS)
+    val noUri = publicFileLiteral(uri = null).value
+    val array = cast(Literal.create(
+      new GenericArrayData(Array[Any](publicFileLiteral().value, noUri)), ArrayType(struct)),
+      ArrayType(FileType()))
+    val map = cast(Literal.create(
+      ArrayBasedMapData(Array[Any](UTF8String.fromString("a"), UTF8String.fromString("b")),
+        Array[Any](publicFileLiteral().value, noUri)), MapType(StringType, struct)),
+      MapType(StringType, FileType()))
+    val outer = cast(Literal.create(InternalRow(noUri, 1),
+      new StructType().add("f", struct).add("i", IntegerType)),
+      new StructType().add("f", FileType()).add("i", IntegerType))
+    if (evalMode == EvalMode.TRY) {
+      // Under TRY, only the struct without a uri becomes NULL.
+      checkEvaluation(array, Seq(fileRow(), null))
+      checkEvaluation(map, Map("a" -> fileRow(), "b" -> null))
+      checkEvaluation(outer, InternalRow(null, 1))
+    } else {
+      Seq(array, map, outer).foreach { c =>
+        checkErrorInExpression[SparkRuntimeException](c, "CAST_TO_FILE_TYPE.NULL_URI",
+          Map("sourceType" -> toSQLType(struct)))
+      }
+    }
   }
 
   test("cast struct to FILE: field values are cast to the types of the FILE fields") {
@@ -3237,6 +3277,45 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       new StructType().add("f", struct).add("i", IntegerType))
     checkEvaluation(cast(outer, new StructType().add("f", FileType()).add("i", IntegerType)),
       InternalRow(fileRow(), 1))
+  }
+
+  test("cast struct to FILE: needs the time zone when a field cast does") {
+    def fileStruct(uriType: DataType): StructType =
+      StructType(StructField("uri", uriType) +: FileType.PUBLIC_FIELDS.drop(1))
+    Seq(TimestampType, ArrayType(TimestampType), VariantType).foreach { t =>
+      assert(Cast.needsTimeZone(fileStruct(t), FileType()), t)
+      assert(Cast.needsTimeZone(ArrayType(fileStruct(t)), ArrayType(FileType())), t)
+      assert(Cast.needsTimeZone(
+        new StructType().add("f", fileStruct(t)), new StructType().add("f", FileType())), t)
+    }
+    Seq(StringType, TimestampNTZType).foreach { t =>
+      assert(!Cast.needsTimeZone(fileStruct(t), FileType()), t)
+    }
+    val ts = Literal.create(InternalRow(0L, null, 5L, null, null), fileStruct(TimestampType))
+    val utc = cast(ts, FileType(), Some("UTC"))
+    val la = cast(ts, FileType(), Some("America/Los_Angeles"))
+    assert(!utc.semanticEquals(la))
+    assert(utc.canonicalized != la.canonicalized)
+  }
+
+  test("cast struct to FILE: TRY does not put a FILE into a slot that is not nullable") {
+    val struct = StructType(FileType.PUBLIC_FIELDS)
+    val pairs = Seq(
+      new StructType().add("f", struct, nullable = false) ->
+        new StructType().add("f", FileType(), nullable = false),
+      ArrayType(struct, containsNull = false) -> ArrayType(FileType(), containsNull = false),
+      MapType(StringType, struct, valueContainsNull = false) ->
+        MapType(StringType, FileType(), valueContainsNull = false),
+      ArrayType(ArrayType(struct, containsNull = false)) ->
+        ArrayType(ArrayType(FileType(), containsNull = false)))
+    pairs.foreach { case (from, to) =>
+      val result = cast(Literal.create(null, from), to).checkInputDataTypes()
+      // Under TRY a struct without a uri becomes NULL, which the slot cannot hold; the other
+      // modes fail on such a value instead.
+      assert(result.isFailure == (evalMode == EvalMode.TRY), s"$from -> $to: $result")
+      assert(cast(Literal.create(null, from), to.asNullable).checkInputDataTypes().isSuccess,
+        s"$from -> ${to.asNullable}")
+    }
   }
 
   test("cast variant to FILE: returns the FILE value") {

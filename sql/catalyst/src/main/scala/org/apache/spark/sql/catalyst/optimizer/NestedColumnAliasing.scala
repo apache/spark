@@ -376,12 +376,16 @@ object GeneratorNestedColumnAliasing {
         plan, attrToExtractValuesNotOnGenerator)
 
       // A FILE is not pruned, so a field extractor cannot be pushed into a FILE that the
-      // generator produces, such as an element of an `ARRAY<FILE>`.
-      val accessesGeneratorFileField = projectList.exists(_.exists {
-        case gsf: GetStructField =>
-          gsf.child.dataType.isInstanceOf[FileType] && gsf.references.subsetOf(generatorOutputSet)
-        case _ => false
-      })
+      // generator produces, such as an element of an `ARRAY<FILE>`. Only a generator whose
+      // output holds a FILE can produce one, so the project list is walked only then.
+      val accessesGeneratorFileField =
+        g.qualifiedGeneratorOutput.exists(_.dataType.existsRecursively(_.isInstanceOf[FileType])) &&
+          projectList.exists(_.exists {
+            case gsf: GetStructField =>
+              gsf.child.dataType.isInstanceOf[FileType] &&
+                gsf.references.subsetOf(generatorOutputSet)
+            case _ => false
+          })
       if (accessesGeneratorFileField) {
         return Some(pushedThrough)
       }

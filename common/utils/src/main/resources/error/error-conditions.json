@@ -1071,7 +1071,7 @@
         ]
       }
     },
-    "sqlState" : "42846"
+    "sqlState" : "22023"
   },
   "CATALOG_NOT_FOUND" : {
     "message" : [

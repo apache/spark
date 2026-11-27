@@ -2785,7 +2785,7 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         exception = intercept[SparkRuntimeException](
           evalInUtc(variantGet(json, "$", FileType()))),
         condition = condition,
-        sqlState = "42846",
+        sqlState = "22023",
         parameters = parameters)
     }
 

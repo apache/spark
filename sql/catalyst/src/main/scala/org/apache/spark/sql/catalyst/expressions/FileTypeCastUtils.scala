@@ -51,7 +51,7 @@ object FileTypeCastUtils {
 
   /**
    * Validates a row that a cast of a value of `sourceType` to FILE produced, and returns it. A
-   * FILE value must have a uri.
+   * FILE that a cast produces must have a uri.
    */
   def validateFileTypeRow(row: InternalRow, sourceType: DataType): InternalRow = {
     if (!isValidFileTypeRow(row)) {

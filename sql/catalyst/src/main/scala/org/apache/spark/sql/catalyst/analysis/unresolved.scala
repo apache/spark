@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.catalog.TableWritePrivilege
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.types.{DataType, Metadata, StructType}
+import org.apache.spark.sql.types.{DataType, FileType, Metadata, StructType}
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils}
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.ArrayImplicits._
@@ -742,6 +742,13 @@ case class UnresolvedStarExceptOrReplace(
     @scala.annotation.tailrec
     def getRootColumn(expr: Expression, nestedColumn: Seq[String] = Nil)
       : (NamedExpression, Seq[String]) = expr match {
+      // A field of a FILE is read through a GetStructField, but a FILE is not a struct whose
+      // fields can be removed.
+      case GetStructField(fileExpr, _, _) if fileExpr.dataType.isInstanceOf[FileType] =>
+        throw new AnalysisException(
+          errorClass = "EXCEPT_NESTED_COLUMN_INVALID_TYPE",
+          messageParameters = Map(
+            "columnName" -> fileExpr.sql, "dataType" -> fileExpr.dataType.toString))
       case GetStructField(fieldExpr, _, Some(fieldName)) =>
         getRootColumn(fieldExpr, fieldName +: nestedColumn)
       case e: NamedExpression => e -> nestedColumn

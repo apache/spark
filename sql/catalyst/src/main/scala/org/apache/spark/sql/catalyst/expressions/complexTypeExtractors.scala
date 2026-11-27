@@ -83,8 +83,11 @@ object ExtractValue {
    *     Map        |   map key type     |         GetMapValue
    *
    * A FILE shares the GetStructField row because it is physically a struct of
-   * `FileType.FIELDS`: `GetStructField.childSchema` unwraps it, so the rules that handle
-   * GetStructField, such as schema pruning and nested column aliasing, apply to it as well.
+   * `FileType.FIELDS`: `GetStructField.childSchema` unwraps it, so evaluation and code
+   * generation handle it as a struct. A FILE is not pruned to the fields that are read, so code
+   * that walks GetStructField chains and assumes or builds a struct child, such as schema
+   * pruning, nested column aliasing and star EXCEPT, needs a FileType case that keeps the FILE
+   * whole.
    */
   def extractValue(
       child: Expression,

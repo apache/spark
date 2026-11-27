@@ -22,6 +22,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkConf, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.connector.catalog.InMemoryCatalog
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -223,7 +224,7 @@ class FileTypeDatasetSuite extends QueryTest with SharedSparkSession {
     val struct = "named_struct('uri', 's3://bucket/dir/doc.pdf', 'offset', 10L, " +
       "'size', 2048, 'content_type', 'application/pdf', 'checksum', 'MD5:abc')"
     Seq("true", "false").foreach { ansi =>
-      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi, SQLConf.CASE_SENSITIVE.key -> "false") {
         val df = sql(s"SELECT CAST($struct AS FILE) AS f")
         assert(df.schema("f").dataType === FileType())
         checkAnswer(df, Row(f1))
@@ -243,7 +244,7 @@ class FileTypeDatasetSuite extends QueryTest with SharedSparkSession {
           exception = intercept[SparkRuntimeException](
             sql(s"SELECT CAST($nullUri AS FILE)").collect()),
           condition = "CAST_TO_FILE_TYPE.NULL_URI",
-          sqlState = "42846",
+          sqlState = "22023",
           parameters = Map("sourceType" ->
             ("\"STRUCT<uri: STRING, offset: BIGINT NOT NULL, size: BIGINT NOT NULL, " +
               "content_type: STRING NOT NULL, checksum: STRING NOT NULL>\"")))
@@ -282,7 +283,7 @@ class FileTypeDatasetSuite extends QueryTest with SharedSparkSession {
       exception = intercept[SparkRuntimeException](
         sql("""SELECT CAST(parse_json('{"uri":"a","URI":"b"}') AS FILE)""").collect()),
       condition = "CAST_TO_FILE_TYPE.DUPLICATE_FIELD",
-      sqlState = "42846",
+      sqlState = "22023",
       parameters = Map("sourceType" -> "\"VARIANT\"", "fieldName" -> "`uri`"))
   }
 
@@ -314,6 +315,61 @@ class FileTypeDatasetSuite extends QueryTest with SharedSparkSession {
       checkAnswer(cached, Seq(Row(1, f1, Seq(f2)), Row(2, null, Nil)))
     } finally {
       cached.unpersist()
+    }
+  }
+
+  test("lambdas that read a FILE field keep the FILE whole under nested schema pruning") {
+    withTable("testcat.docs") {
+      sql("CREATE TABLE testcat.docs (id INT, docs ARRAY<STRUCT<name: STRING, f: FILE EXTERNAL>>)")
+      sql("INSERT INTO testcat.docs SELECT 1, array(named_struct('name', 'a', 'f', " +
+        "CAST(named_struct('uri', 's3://bucket/a.txt', 'offset', CAST(NULL AS BIGINT), " +
+        "'size', 5L, 'content_type', CAST(NULL AS STRING), 'checksum', CAST(NULL AS STRING)) " +
+        "AS FILE)))")
+      val queries = Seq(
+        "SELECT docs, transform(docs, d -> d.f.uri) FROM testcat.docs",
+        "SELECT docs, exists(docs, d -> d.f.uri LIKE 's3://%') FROM testcat.docs",
+        "SELECT docs, forall(docs, d -> d.f.uri LIKE 's3://%') FROM testcat.docs",
+        "SELECT transform(docs, d -> d.f.uri), docs[0].f.uri FROM testcat.docs",
+        "SELECT transform(docs, d -> d.f.uri) FROM testcat.docs WHERE size(docs) > 0",
+        "SELECT transform(docs, d -> d.f.uri) FROM testcat.docs WHERE docs IS NOT NULL",
+        "SELECT filter(docs, d -> d.f.uri LIKE 's3://%')[0].f FROM testcat.docs",
+        "SELECT transform(docs, d -> named_struct('u', d.f.uri, 'g', d.f)) FROM testcat.docs",
+        "SELECT transform(docs, d -> d.f.size), docs[0].name FROM testcat.docs")
+      queries.foreach { query =>
+        val expected = withSQLConf(SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> "false") {
+          sql(query).collect().toSeq
+        }
+        withSQLConf(SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> "true") {
+          checkAnswer(sql(query), expected)
+        }
+      }
+      // The FILE is read whole, with its mode, while the other fields of the element are pruned.
+      val plan = sql("SELECT transform(docs, d -> d.f.uri) FROM testcat.docs")
+        .queryExecution.optimizedPlan
+      val scanned = plan.collect { case s: DataSourceV2ScanRelation => s.schema }
+      assert(scanned == Seq(StructType(Seq(StructField("docs",
+        ArrayType(StructType(Seq(StructField("f", FileType.external)))))))), plan)
+    }
+  }
+
+  test("SELECT * EXCEPT of a field of a FILE is rejected") {
+    withTempView("v") {
+      sql("CREATE TEMPORARY VIEW v AS SELECT 1 AS id, f, named_struct('f', f, 'n', 1) AS s " +
+        "FROM (SELECT CAST(named_struct('uri', '/data/b.txt', 'offset', CAST(NULL AS BIGINT), " +
+        "'size', CAST(NULL AS BIGINT), 'content_type', CAST(NULL AS STRING), " +
+        "'checksum', CAST(NULL AS STRING)) AS FILE) AS f)")
+      Seq("false", "true").foreach { singlePass =>
+        withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass) {
+          Seq("f.uri" -> "v.f", "s.f.uri" -> "v.s.`f`").foreach { case (except, column) =>
+            val e = intercept[AnalysisException](sql(s"SELECT * EXCEPT ($except) FROM v"))
+            assert(e.getCondition == "EXCEPT_NESTED_COLUMN_INVALID_TYPE", e)
+            assert(e.getMessageParameters.asScala == Map(
+              "columnName" -> column, "dataType" -> "FileType(UNKNOWN)"), e)
+          }
+        }
+      }
+      checkAnswer(sql("SELECT * EXCEPT (f) FROM v"), Row(1, Row(f2, 1)))
+      checkAnswer(sql("SELECT * EXCEPT (s.n) FROM v"), Row(1, f2, Row(f2)))
     }
   }
 

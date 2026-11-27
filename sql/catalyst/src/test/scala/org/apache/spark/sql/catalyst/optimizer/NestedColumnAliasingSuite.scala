@@ -100,6 +100,17 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
       .select($"f".getField("uri"))
       .analyze
     comparePlans(optimized, expected)
+
+    // The same holds for a FILE in a struct that the generator produces.
+    val docs = AttributeReference("docs", ArrayType(
+      StructType(Seq(StructField("f", FileType.external), StructField("n", IntegerType)))))()
+    val docsQuery = LocalRelation(AttributeReference("id", IntegerType)(), docs)
+      .generate(Explode(docs), outputNames = Seq("d"))
+      .select($"d".getField("f").getField("uri"))
+      .analyze
+    val docsOptimized = Optimize.execute(docsQuery)
+    assert(docsOptimized.resolved)
+    assert(!docsOptimized.expressions.exists(_.exists(_.isInstanceOf[GetArrayStructFields])))
   }
 
   test("Pushing multiple nested field projection") {

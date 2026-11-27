@@ -216,7 +216,33 @@ object Cast extends QueryErrorsBase {
 
   // If the target data type is a complex type which can't have Null values, we should guarantee
   // that the casting between the element types won't produce Null results.
-  def canTryCast(from: DataType, to: DataType): Boolean = (from, to) match {
+  def canTryCast(from: DataType, to: DataType): Boolean =
+    !tryCastPutsFileInNotNullSlot(from, to) && canTryCastInternal(from, to)
+
+  // Under TRY, a struct without a uri casts to a NULL FILE, so a FILE cast from a struct cannot
+  // fill a slot that is not nullable, at any depth. `forceNullable` does not say so, as the other
+  // modes fail on such a struct instead of returning NULL.
+  private def tryCastPutsFileInNotNullSlot(from: DataType, to: DataType): Boolean = {
+    def structToFile(from: DataType, to: DataType): Boolean =
+      from.isInstanceOf[StructType] && to.isInstanceOf[FileType]
+    (from, to) match {
+      case (ArrayType(fromType, _), ArrayType(toType, toNull)) =>
+        (!toNull && structToFile(fromType, toType)) ||
+          tryCastPutsFileInNotNullSlot(fromType, toType)
+      case (MapType(fromKey, fromValue, _), MapType(toKey, toValue, toNull)) =>
+        structToFile(fromKey, toKey) || (!toNull && structToFile(fromValue, toValue)) ||
+          tryCastPutsFileInNotNullSlot(fromKey, toKey) ||
+          tryCastPutsFileInNotNullSlot(fromValue, toValue)
+      case (StructType(fromFields), StructType(toFields)) if fromFields.length == toFields.length =>
+        fromFields.zip(toFields).exists { case (fromField, toField) =>
+          (!toField.nullable && structToFile(fromField.dataType, toField.dataType)) ||
+            tryCastPutsFileInNotNullSlot(fromField.dataType, toField.dataType)
+        }
+      case _ => false
+    }
+  }
+
+  private def canTryCastInternal(from: DataType, to: DataType): Boolean = (from, to) match {
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
       canCast(fromType, toType) &&
         resolvableNullability(fn || forceNullable(fromType, toType), tn)
@@ -482,6 +508,8 @@ object Cast extends QueryErrorsBase {
           case (fromField, toField) =>
             needsTimeZone(fromField.dataType, toField.dataType)
         }
+    // A struct casts to a FILE field by field, as to a struct of the public FILE fields.
+    case (s: StructType, _: FileType) => needsTimeZone(s, StructType(FileType.PUBLIC_FIELDS))
     // `castToString` recurses into ARRAY/MAP/STRUCT and formats each LTZ or VARIANT leaf with
     // `zoneId`, while the complex-to-complex cases above only match a target of the same shape.
     case (from, _: StringType) => from.existsRecursively(needsTimeZoneToString)

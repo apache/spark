@@ -462,7 +462,7 @@ class SchemaPruningSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("pruneSchema keeps the FileType of the relation when a struct of its fields is requested") {
-    // A second column is pruned, so that pruneSchema runs sortLeftFieldsByRight on the FILE.
+    // The second column checks that a sibling struct column is still pruned next to the FILE.
     val schema = StructType(Seq(
       StructField("file_data", FileType.external, nullable = true),
       StructField("other",
