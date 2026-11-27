@@ -41,7 +41,7 @@ import org.apache.spark.annotation.Unstable;
  * <p>A FileRef is a value: two FileRefs are equal when all their fields are equal. This is
  * unrelated to the FILE type in SQL, which defines no equality.
  *
- * @since 4.4.0
+ * @since 4.5.0
  */
 @Unstable
 public final class FileRef implements Serializable {
