@@ -10766,6 +10766,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_VIEW_CHANGE" : {
+    "message" : [
+      "Unsupported view change: <message>"
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_XML_CHAR_VARCHAR_MAP_KEY" : {
     "message" : [
       "The XML name <key> is not a valid key for the map key type <dataType>.",
