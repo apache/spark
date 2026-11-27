@@ -4891,6 +4891,19 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_ALLOW_TEMP_FUNCTION_IN_PERSISTED_SQL_FUNCTION =
+    buildConf("spark.sql.legacy.allowTempFunctionInPersistedSQLFunction")
+      .internal()
+      .doc("When true, CREATE FUNCTION for a persistent SQL function rejects only the temporary " +
+        "function references that earlier versions detected, and accepts the others again, such " +
+        "as a call to a temporary table function, a call through an IDENTIFIER clause, or a use " +
+        "through another SQL function. Called from a session without the temporary function, " +
+        "such a function fails or calls another function of the same name.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val ALLOW_NON_EMPTY_LOCATION_IN_CTAS =
     buildConf("spark.sql.legacy.allowNonEmptyLocationInCTAS")
       .internal()
@@ -7948,6 +7961,21 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_JDBC_ROUND_INTEGRAL_CAST_PUSHDOWN =
+    buildConf("spark.sql.legacy.jdbc.roundIntegralCastPushdown.enabled")
+      .internal()
+      .doc("When true, casts pushed down to a JDBC data source compile to the SQL that Spark 4.4 " +
+        "sent. A cast from a fractional type to an integral type then follows the database's own " +
+        "semantics, so databases that round it return different results than Spark, which " +
+        "truncates toward zero. Such casts are pushed down again to dialects that can't " +
+        "truncate, and so are casts from datetime types to numeric types, although databases " +
+        "convert them differently than Spark. Casts that the database rejects fail again, or, " +
+        "in an aggregate, are evaluated by Spark.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_JDBC_TIME_MAPPING_ENABLED =
     buildConf("spark.sql.legacy.jdbc.timeMapping.enabled")
       .internal()
@@ -10595,6 +10623,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyJdbcTimeMappingEnabled: Boolean =
     getConf(LEGACY_JDBC_TIME_MAPPING_ENABLED)
+
+  def legacyJdbcRoundIntegralCastPushdown: Boolean =
+    getConf(LEGACY_JDBC_ROUND_INTEGRAL_CAST_PUSHDOWN)
 
   override def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value =
     getConf(SQLConf.LEGACY_TIME_PARSER_POLICY)

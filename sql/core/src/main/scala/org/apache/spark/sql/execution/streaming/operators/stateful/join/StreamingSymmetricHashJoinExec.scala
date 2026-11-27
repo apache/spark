@@ -26,7 +26,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.StreamingJoinHelper
 import org.apache.spark.sql.catalyst.analysis.WidenStatefulOpNullability
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, GenericInternalRow, JoinedRow, Literal, Predicate, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, GenericInternalRow, JoinedRow, Literal, Predicate, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -765,9 +765,9 @@ case class StreamingSymmetricHashJoinExec(
         (_, _) => false
       }
 
-    // V4 range scan for time-interval joins (SPARK-55147). Extracts constant interval
-    // offsets from the join condition using getStateValueWatermark(eventWatermark=0).
-    // The -1 eviction adjustment widens range by ~1ms/side; postJoinFilter handles exact bounds.
+    // V4 range scan for time-interval joins (SPARK-55147). Takes the offsets of the other side's
+    // event time from the comparisons of the join condition that give them exactly; see
+    // StreamingJoinHelper.getRangeScanOffsets. postJoinFilter handles exact bounds.
     private[this] val scanRangeOffsets: Option[(Long, Long)] = {
       val isV4TimeIntervalJoin = stateFormatVersion >= 4 && (stateWatermarkPredicate match {
         case Some(_: JoinStateValueWatermarkPredicate) => true
@@ -786,19 +786,14 @@ case class StreamingSymmetricHashJoinExec(
         // Bounds on other columns cannot limit this scan. If either event-time bound is
         // missing, scan all rows for the join key.
         val thisEventTime = WatermarkSupport.findEventTimeColumn(
-          thisSideAttrs, !allowMultipleStatefulOperators).toSeq
+          thisSideAttrs, !allowMultipleStatefulOperators)
         val otherEventTime = WatermarkSupport.findEventTimeColumn(
-          otherSideAttrs, !allowMultipleStatefulOperators).toSeq
-        val lowerBoundMs = StreamingJoinHelper.getStateValueWatermark(
-          AttributeSet(otherEventTime), AttributeSet(thisEventTime), condition.full, Some(0L))
-        val upperBoundMs = StreamingJoinHelper.getStateValueWatermark(
-          AttributeSet(thisEventTime), AttributeSet(otherEventTime), condition.full, Some(0L))
-
-        (lowerBoundMs, upperBoundMs) match {
-          case (Some(lower), Some(upper)) =>
-            Some((lower * 1000L, -upper * 1000L)) // ms -> us
-          case _ => None
-        }
+          otherSideAttrs, !allowMultipleStatefulOperators)
+        for {
+          thisTime <- thisEventTime
+          otherTime <- otherEventTime
+          offsets <- StreamingJoinHelper.getRangeScanOffsets(condition.full, thisTime, otherTime)
+        } yield offsets
       }
     }
 
@@ -890,8 +885,13 @@ case class StreamingSymmetricHashJoinExec(
         // condition no matter what other side row it's matched with. This allows us to avoid
         // adding it to the state, and generate an outer join row immediately (or do nothing in
         // the case of inner join).
-        if (preJoinFilter(thisRow)) {
-          val key = keyGenerator(thisRow)
+        val key = if (preJoinFilter(thisRow)) keyGenerator(thisRow) else null
+        // A row whose watermarked join key is NULL can never match, and eviction by that key may
+        // never reach it, so it is handled as a row that fails the pre join filter.
+        // TODO(SPARK-61382): NULLs in the other equality keys still reach the state and can match
+        //   each other. Rows with a NULL watermarked key that a checkpoint already holds are not
+        //   drained: state formats V2 and V3 never evict them.
+        if (key != null && !joinKeyOrdinalForWatermark.exists(key.isNullAt)) {
           // If the join type is Left Semi and this is the right side, we can remove the matched
           // row from the other (left) side's state, since the row won't be produced anymore for
           // the following input rows.

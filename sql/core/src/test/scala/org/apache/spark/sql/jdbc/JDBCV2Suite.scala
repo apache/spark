@@ -1638,6 +1638,53 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     }
   }
 
+  test("SPARK-58372: fractional to integral cast pushed down to H2 truncates like Spark") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      // Each value is between 1 and 2 (bonus / 800 up to 1.625, salary / 8000 up to 1.5), so
+      // truncation gives 1 everywhere while H2's own cast rounds some of them to 2.
+      Seq("bonus / 800", "salary / 8000").foreach { expr =>
+        val filtered = sql(s"SELECT name FROM h2.test.employee WHERE CAST($expr AS INT) = 1")
+        checkFiltersRemoved(filtered)
+        checkAnswer(filtered,
+          Seq(Row("amy"), Row("alex"), Row("cathy"), Row("david"), Row("jen")))
+
+        val aggregated = sql(s"SELECT SUM(CAST($expr AS INT)) FROM h2.test.employee")
+        checkAggregateRemoved(aggregated)
+        checkAnswer(aggregated, Seq(Row(5L)))
+      }
+    }
+  }
+
+  test("SPARK-58372: tasks compile pushed filters as pushdown did") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val allRows = Seq(Row("amy"), Row("alex"), Row("cathy"), Row("david"), Row("jen"))
+      val df = withSQLConf(SQLConf.LEGACY_JDBC_ROUND_INTEGRAL_CAST_PUSHDOWN.key -> "false") {
+        val df = sql("SELECT name FROM h2.test.employee WHERE CAST(bonus / 800 AS INT) = 1")
+        checkFiltersRemoved(df)
+        checkAnswer(df, allRows)
+        df
+      }
+      // Recompiling in the tasks under the legacy conf would drop TRUNC, so H2 would round.
+      withSQLConf(SQLConf.LEGACY_JDBC_ROUND_INTEGRAL_CAST_PUSHDOWN.key -> "true") {
+        checkAnswer(df, allRows)
+      }
+
+      // `inputFiles` pushes the filter down without planning the scan. Recompiling the filter
+      // without the legacy conf would refuse it, so it would drop out of the WHERE clause.
+      val datetimeDf =
+        withSQLConf(SQLConf.LEGACY_JDBC_ROUND_INTEGRAL_CAST_PUSHDOWN.key -> "true") {
+          val df = sql("SELECT name FROM h2.test.datetime WHERE CAST(time1 AS BIGINT) < 0")
+          df.inputFiles
+          df
+        }
+      withSQLConf(SQLConf.LEGACY_JDBC_ROUND_INTEGRAL_CAST_PUSHDOWN.key -> "false") {
+        // H2 rejects the legacy SQL, so the error shows the filter reached the database.
+        val e = intercept[SparkException](datetimeDf.collect())
+        assert(e.getMessage.contains("TIMESTAMP to BIGINT"))
+      }
+    }
+  }
+
   test("scan with filter push-down with date time functions") {
     val df1 = sql("SELECT name FROM h2.test.datetime WHERE " +
       "dayofyear(date1) > 100 AND dayofmonth(date1) > 10 ")

@@ -215,6 +215,11 @@ object DataTypeUtils {
       case (w, r) if DataTypeUtils.sameType(w, r) && !w.isInstanceOf[NullType] =>
         true
 
+      // A FILE of any mode is stored as a FILE EXTERNAL: the file is external to the table that
+      // stores it, and the value does not change.
+      case (_: FileType, FileType(FileTypeMode.EXTERNAL)) =>
+        true
+
       // If write-side data type is a user-defined type, check with its underlying data type.
       case (w, r) if w.isInstanceOf[UserDefinedType[_]] && !r.isInstanceOf[UserDefinedType[_]] =>
         canWrite(tableName, w.asInstanceOf[UserDefinedType[_]].sqlType, r, byName, resolver,
