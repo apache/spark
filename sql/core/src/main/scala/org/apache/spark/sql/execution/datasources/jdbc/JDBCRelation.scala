@@ -121,7 +121,7 @@ private[sql] object JDBCRelation extends Logging {
         partitioning.numPartitions
       } else {
         logWarning(log"The number of partitions is reduced because the specified number of " +
-          log"partitions is less than the difference between upper bound and lower bound. " +
+          log"partitions is greater than the difference between upper bound and lower bound. " +
           log"Updated number of partitions: ${MDC(NEW_VALUE, upperBound - lowerBound)}; " +
           log"Input number of partitions: ${MDC(OLD_VALUE, partitioning.numPartitions)}; " +
           log"Lower bound: ${MDC(LOWER_BOUND, boundValueToString(lowerBound))}; " +
