@@ -66,7 +66,6 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
       .set(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key, "true")
       .set(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_JOIN_INPUTS_ENABLED.key, "true")
       .set(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_JOIN_BRANCHES_ENABLED.key, "true")
-      .set(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_WITH_SUBQUERIES_ENABLED.key, "true")
       .set(SQLConf
         .PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_PARTITION_KEYS_SUBSET_OF_CLUSTER_KEYS_ENABLED.key,
         "true")
@@ -3518,7 +3517,40 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
     }
   }
 
-  test("SPARK-60379: injected Bloom filter subqueries follow the query-wide gate") {
+  test("SPARK-62401: a union with a directly adjacent shuffle blocks push-down") {
+    withTempView("t1", "t2") {
+      createTables()
+      // The union has a REPARTITION_BY_COL child, a shape the rewrite retargets in place in
+      // general; whether it would here, and whether a subquery shares the child, is not decidable
+      // at the gate, so the shape freezes the query.
+      val sql =
+        """
+          |SELECT id, v, row_number() OVER (PARTITION BY id ORDER BY v) AS rn
+          |FROM (
+          |  SELECT id, v FROM (SELECT id, v FROM t1 DISTRIBUTE BY id)
+          |  UNION ALL
+          |  SELECT /*+ REPARTITION(8, v) */ id, v FROM t1
+          |)
+          |WHERE v > (SELECT min(v) FROM (SELECT id, v FROM t1 DISTRIBUTE BY id) s)
+          |""".stripMargin
+      val df = spark.sql(sql)
+      checkAnswer(df, expectedResult(sql))
+      val adaptive = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+      assert(numShufflesOnUnion(adaptive.initialPlan) === 1)
+
+      // The override lifts the freeze, which shows the shape is otherwise eligible.
+      withSQLConf(
+          SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_WITH_SUBQUERIES_ENABLED.key -> "true") {
+        val forced = spark.sql(sql)
+        checkAnswer(forced, expectedResult(sql))
+        val forcedAdaptive =
+          forced.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+        assert(numShufflesOnUnion(forcedAdaptive.initialPlan) === 0)
+      }
+    }
+  }
+
+  test("SPARK-62401: injected Bloom filter subqueries do not block union shuffle push-down") {
     withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
@@ -3546,7 +3578,7 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
             }))
             assert(hasBloom === bloom)
             assert(adaptive.context.queryContainsSubqueries === bloom)
-            assert(numShufflesOverUnion(adaptive.initialPlan) === (if (bloom) 1 else 0))
+            assert(numShufflesOverUnion(adaptive.initialPlan) === 0)
           }
         }
       }
@@ -3565,8 +3597,9 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
         assert(!plainAdaptive.context.queryContainsSubqueries)
         assert(numShufflesOnUnion(plainAdaptive.initialPlan) === 0)
 
-        val df = spark.sql(query + " WHERE v > (SELECT min(v) FROM t2)")
-        checkAnswer(df, expectedResult(query + " WHERE v > (SELECT min(v) FROM t2)"))
+        // The subquery holds the union's shuffle, so the whole adaptive query stays unrewritten.
+        val df = spark.sql(query + s" WHERE v > (SELECT min(rn) FROM ($query))")
+        checkAnswer(df, expectedResult(query + s" WHERE v > (SELECT min(rn) FROM ($query))"))
         val adaptive = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
         assert(adaptive.context.queryContainsSubqueries)
         val subqueries = adaptive.initialPlan.subqueriesAll.flatMap(_.collect {
@@ -3575,6 +3608,77 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
         assert(subqueries.nonEmpty)
         assert(subqueries.forall(_.context eq adaptive.context))
         assert(numShufflesOnUnion(adaptive.initialPlan) === 1)
+      }
+    }
+  }
+
+  test("SPARK-62401: only a shuffle over a union in a subquery freezes the query") {
+    withTempView("t1", "t2") {
+      createTables()
+      // A subquery without a union does not block the push-down of the main query's union.
+      val scalar = query + " WHERE v > (SELECT min(v) FROM t2)"
+      val df = spark.sql(scalar)
+      checkAnswer(df, expectedResult(scalar))
+      val adaptive = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+      assert(adaptive.context.queryContainsSubqueries)
+      assert(numShufflesOnUnion(adaptive.initialPlan) === 0)
+
+      // A union without a hash or keyed shuffle above it is not a site, so it does not block.
+      val plainUnionSub = query +
+        s""" WHERE v > (SELECT sum(v) FROM (
+           | SELECT id, v FROM t1 UNION ALL SELECT id, v FROM t2))""".stripMargin
+      val plainUnionDf = spark.sql(plainUnionSub)
+      checkAnswer(plainUnionDf, expectedResult(plainUnionSub))
+      val plainUnionAdaptive =
+        plainUnionDf.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+      assert(numShufflesOnUnion(plainUnionAdaptive.initialPlan) === 0)
+
+      // The frozen subquery keeps its own shuffle as well.
+      val unionSub = query + s" WHERE v > (SELECT min(rn) FROM ($query))"
+      val unionDf = spark.sql(unionSub)
+      checkAnswer(unionDf, expectedResult(unionSub))
+      val unionAdaptive =
+        unionDf.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+      val subqueries = unionAdaptive.initialPlan.subqueriesAll.flatMap(_.collect {
+        case subquery: AdaptiveSparkPlanExec => subquery
+      })
+      assert(subqueries.nonEmpty)
+      assert(subqueries.forall(a => numShufflesOnUnion(a.initialPlan) === 1))
+
+      // A union site one level down, inside a subquery without one of its own, still blocks.
+      val nestedSub = query +
+        s" WHERE v > (SELECT min(v) FROM t2 WHERE v > (SELECT min(rn) FROM ($query)))"
+      val nestedDf = spark.sql(nestedSub)
+      checkAnswer(nestedDf, expectedResult(nestedSub))
+      val nestedAdaptive =
+        nestedDf.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+      assert(numShufflesOnUnion(nestedAdaptive.initialPlan) === 1)
+
+      // A hash exchange over a union under a join input freezes the query even when the
+      // rewrite may not act on join inputs: the gate does not read the exchange's consumer.
+      withSQLConf(
+          SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_JOIN_INPUTS_ENABLED.key -> "false",
+          SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_LOOK_THROUGH_OPERATORS_ENABLED.key -> "true",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+          SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false") {
+        val joinSub = query + s""" WHERE v > (SELECT max(u.k) FROM (
+          | SELECT s.id AS k FROM (SELECT id FROM t1 UNION ALL SELECT id FROM t2) s
+          | JOIN t2 d ON s.id = d.id) u)""".stripMargin
+        val joinDf = spark.sql(joinSub)
+        checkAnswer(joinDf, expectedResult(joinSub))
+        val joinAdaptive =
+          joinDf.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+        assert(numShufflesOnUnion(joinAdaptive.initialPlan) === 1)
+      }
+
+      // The internal override rewrites the query anyway.
+      withSQLConf(
+          SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_WITH_SUBQUERIES_ENABLED.key -> "true") {
+        val forced = spark.sql(unionSub)
+        checkAnswer(forced, expectedResult(unionSub))
+        val forcedAdaptive =
+          forced.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+        assert(numShufflesOnUnion(forcedAdaptive.initialPlan) === 0)
       }
     }
   }

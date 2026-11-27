@@ -117,12 +117,14 @@ case class AdaptiveSparkPlanExec(
   @transient private val unionConf = UnionConfSnapshot(context.session.sessionState.conf)
 
   // One value for the rule, EnsureRequirements and the cost evaluator: a rule gated off adds no
-  // marks, and treating those unions as pushed would skew the plan comparison.
+  // marks, and treating those unions as pushed would skew the plan comparison. Unless
+  // `allowWithSubqueries` is set, the rule runs only on the query's root plan, and not while the
+  // rewrite could break reuse in another adaptive subquery plan.
   @transient private val pushDownShuffleThroughUnionEnabled = {
     unionConf.outputPartitioning &&
       conf.pushDownShuffleThroughUnionEnabled &&
-      (!context.queryContainsSubqueries || conf.getConf(
-        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_WITH_SUBQUERIES_ENABLED))
+      (conf.getConf(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_WITH_SUBQUERIES_ENABLED) ||
+        (!isSubquery && !PushDownShuffleExchangeThroughUnion.mayBreakReuse(inputPlan, conf)))
   }
 
   @transient private val costEvaluator =
