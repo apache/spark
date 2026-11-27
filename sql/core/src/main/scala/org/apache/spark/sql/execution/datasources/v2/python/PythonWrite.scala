@@ -18,6 +18,8 @@ package org.apache.spark.sql.execution.datasources.v2.python
 
 import org.apache.spark.JobArtifactSet
 import org.apache.spark.sql.classic.SparkSession
+import org.apache.spark.sql.connector.distributions.Distribution
+import org.apache.spark.sql.connector.expressions.SortOrder
 import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.connector.write.{BatchWrite, _}
 import org.apache.spark.sql.connector.write.streaming.StreamingWrite
@@ -41,6 +43,33 @@ class PythonWrite(
 
   override def supportedCustomMetrics(): Array[CustomMetric] =
     ds.source.createPythonMetrics()
+}
+
+/**
+ * A [[PythonWrite]] that reports the distribution and ordering the Python writer requires.
+ * [[PythonWriteBuilder]] only builds it when the feature is enabled for a batch write, so other
+ * writes skip the planner's requirement handling entirely.
+ */
+class PythonWriteWithRequirements(
+    ds: PythonDataSourceV2,
+    shortName: String,
+    info: LogicalWriteInfo,
+    isTruncate: Boolean
+  ) extends PythonWrite(ds, shortName, info, isTruncate) with RequiresDistributionAndOrdering {
+
+  // The planner calls each method below separately; cache to run the Python worker once.
+  private lazy val requirements: PythonWriteRequirements =
+    ds.source.writeDistributionAndOrderingInPython(info.schema(), info.options(), isTruncate)
+
+  override def requiredDistribution(): Distribution = requirements.distribution
+
+  override def distributionStrictlyRequired(): Boolean = requirements.distributionStrictlyRequired
+
+  override def requiredNumPartitions(): Int = requirements.requiredNumPartitions
+
+  override def advisoryPartitionSizeInBytes(): Long = requirements.advisoryPartitionSizeInBytes
+
+  override def requiredOrdering(): Array[SortOrder] = requirements.ordering
 }
 
 /**
