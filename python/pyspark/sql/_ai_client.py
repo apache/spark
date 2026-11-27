@@ -1,0 +1,564 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+"""Worker-side transport for the experimental AI query API."""
+
+import json
+import logging
+import math
+import random
+import re
+import threading
+import time
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+from contextlib import contextmanager
+from dataclasses import dataclass
+from datetime import timezone
+from email.utils import parsedate_to_datetime
+from itertools import islice
+from typing import TYPE_CHECKING, Any, Callable, Iterator, Mapping, Optional, TypeVar, Union
+from urllib.parse import quote, urlsplit
+
+from pyspark.errors import (
+    PySparkException,
+    PySparkRuntimeError,
+    PySparkTypeError,
+    PySparkValueError,
+)
+
+if TYPE_CHECKING:
+    import pandas as pd
+    from requests import Session
+
+_T = TypeVar("_T")
+_MAX_DATABRICKS_RESPONSE_BYTES = 16 * 1024 * 1024
+
+
+@dataclass(frozen=True)
+class _ModelEndpoint:
+    model_id: str
+    provider: str
+    profile: Optional[str] = None
+    region: Optional[str] = None
+    max_concurrency: int = 4
+    timeout: float = 60.0
+    max_retries: int = 2
+    auth_type: Optional[str] = None
+    max_tokens: int = 2048
+    temperature: float = 0.0
+
+    def __post_init__(self) -> None:
+        _validate_endpoint_options(self)
+        _validate_non_empty_string("model_id", self.model_id)
+        if self.provider == "databricks":
+            if self.auth_type is not None:
+                _validate_oauth(self.auth_type)
+            if self.region is not None:
+                raise PySparkValueError(
+                    errorClass="AI_QUERY_UNSUPPORTED_OPTION",
+                    messageParameters={"arg_name": "region", "target": "Databricks models"},
+                )
+            max_temperature = 2
+        elif self.provider == "bedrock":
+            if self.auth_type is not None:
+                raise PySparkValueError(
+                    errorClass="AI_QUERY_UNSUPPORTED_OPTION",
+                    messageParameters={"arg_name": "auth_type", "target": "Bedrock models"},
+                )
+            if self.region is not None:
+                _validate_non_empty_string("region", self.region)
+            max_temperature = 1
+        else:
+            raise PySparkValueError(
+                errorClass="VALUE_NOT_ALLOWED",
+                messageParameters={"arg_name": "provider", "allowed_values": "databricks, bedrock"},
+            )
+        _validate_integer("max_tokens", self.max_tokens, 1)
+        if (
+            isinstance(self.temperature, bool)
+            or not isinstance(self.temperature, (int, float))
+            or not math.isfinite(self.temperature)
+            or not 0 <= self.temperature <= max_temperature
+        ):
+            raise PySparkValueError(
+                errorClass="VALUE_NOT_BETWEEN",
+                messageParameters={
+                    "arg_name": "temperature",
+                    "min": "0",
+                    "max": str(max_temperature),
+                },
+            )
+
+
+def _validate_non_empty_string(name: str, value: object) -> None:
+    if not isinstance(value, str):
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": name,
+                "expected_type": "str",
+                "arg_type": type(value).__name__,
+            },
+        )
+    if not value.strip():
+        raise PySparkValueError(
+            errorClass="VALUE_NOT_NON_EMPTY_STR",
+            messageParameters={"arg_name": name, "arg_value": value},
+        )
+
+
+def _validate_integer(name: str, value: object, minimum: int) -> None:
+    if type(value) is not int:
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": name,
+                "expected_type": "int",
+                "arg_type": type(value).__name__,
+            },
+        )
+    if value < minimum:
+        raise PySparkValueError(
+            errorClass="VALUE_NOT_POSITIVE" if minimum else "NEGATIVE_VALUE",
+            messageParameters={"arg_name": name, "arg_value": str(value)},
+        )
+
+
+def _invocation_error(target: str, condition: str, **parameters: str) -> PySparkRuntimeError:
+    return PySparkRuntimeError(
+        errorClass=f"AI_QUERY_INVOCATION_FAILED.{condition}",
+        messageParameters={"target": target, **parameters},
+    )
+
+
+def _validate_oauth(auth_type: str) -> None:
+    if auth_type not in ("oauth-m2m", "databricks-cli"):
+        raise PySparkValueError(
+            errorClass="VALUE_NOT_ALLOWED",
+            messageParameters={
+                "arg_name": "auth_type",
+                "allowed_values": "oauth-m2m, databricks-cli",
+            },
+        )
+
+
+def _validate_endpoint_options(endpoint: _ModelEndpoint) -> None:
+    if endpoint.profile is not None:
+        _validate_non_empty_string("profile", endpoint.profile)
+    for name, minimum in (("max_concurrency", 1), ("max_retries", 0)):
+        _validate_integer(name, getattr(endpoint, name), minimum)
+    if (
+        isinstance(endpoint.timeout, bool)
+        or not isinstance(endpoint.timeout, (int, float))
+        or not math.isfinite(endpoint.timeout)
+        or endpoint.timeout <= 0
+    ):
+        raise PySparkValueError(errorClass="AI_QUERY_INVALID_TIMEOUT", messageParameters={})
+
+
+def _retry_delay(
+    headers: Mapping[str, str], failures: int, deadline: float, status: Optional[int]
+) -> float:
+    value = headers.get("Retry-After", "0")
+    try:
+        retry_after = float(value)
+    except ValueError:
+        try:
+            retry_date = parsedate_to_datetime(value)
+            if retry_date.tzinfo is None:
+                retry_date = retry_date.replace(tzinfo=timezone.utc)
+            retry_after = retry_date.timestamp() - time.time()
+        except (TypeError, ValueError, OverflowError):
+            retry_after = 0.0
+    if not math.isfinite(retry_after):
+        retry_after = 0.0
+    remaining = max(0, deadline - time.monotonic())
+    if retry_after > 0 and retry_after >= remaining:
+        raise _invocation_error(
+            "Databricks model",
+            "RETRY_AFTER_EXCEEDS_TIMEOUT",
+            status=str(status),
+            retry_after=str(retry_after),
+        )
+    backoff = 2 ** min(failures, 3) * random.uniform(0.5, 1.0)
+    return min(max(backoff, retry_after), remaining)
+
+
+def _databricks_authentication(action: Callable[[], _T]) -> _T:
+    import requests
+
+    try:
+        return action()
+    except (requests.RequestException, PySparkException):
+        raise
+    except Exception:
+        raise _invocation_error(
+            "Databricks model", "PERMISSION_DENIED", code="SDK_AUTHENTICATION_ERROR"
+        ) from None
+
+
+def _databricks_session() -> "Session":
+    import requests
+
+    session = requests.Session()
+    # Keep the SDK's Authorization header even when a matching netrc entry exists.
+    session.auth = lambda request: request
+    return session
+
+
+def _databricks_url(url: Optional[str]) -> str:
+    try:
+        parsed = urlsplit(url or "")
+        port = parsed.port
+    except ValueError:
+        raise _invocation_error("Databricks model", "INVALID_URL") from None
+    if (
+        not url
+        or parsed.scheme != "https"
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or "?" in url
+        or "#" in url
+        or port == 0
+    ):
+        raise _invocation_error("Databricks model", "INVALID_URL")
+    return url.rstrip("/")
+
+
+class _ChatCompletionsClient:
+    def __init__(self, endpoint: _ModelEndpoint) -> None:
+        from databricks.sdk import WorkspaceClient
+
+        self.endpoint = endpoint
+        self.workspace = _databricks_authentication(
+            lambda: WorkspaceClient(
+                profile=endpoint.profile, auth_type=endpoint.auth_type or "oauth-m2m"
+            )
+        )
+        host = _databricks_url(self.workspace.config.host)
+        self.url = host + "/serving-endpoints/" + quote(endpoint.model_id, safe="") + "/invocations"
+        self.http = _databricks_session()
+
+    def close(self) -> None:
+        self.http.close()
+
+    @staticmethod
+    def _remaining_timeout(deadline: float, retry_status: Optional[int] = None) -> float:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            if retry_status is not None:
+                raise _invocation_error(
+                    "Databricks model", "HTTP_RETRIES_EXHAUSTED", status=str(retry_status)
+                )
+            raise _invocation_error("Databricks model", "TIMEOUT")
+        return remaining
+
+    def invoke(self, request: str, *, deadline: Optional[float] = None) -> str:
+        import requests
+        from urllib3.exceptions import ReadTimeoutError
+
+        body: dict[str, Any] = {
+            "messages": [{"role": "user", "content": request}],
+            "max_tokens": self.endpoint.max_tokens,
+            "temperature": self.endpoint.temperature,
+        }
+        if deadline is None:
+            deadline = time.monotonic() + self.endpoint.timeout
+        attempt = 0
+        last_retry_status: Optional[int] = None
+        while True:
+            self._remaining_timeout(deadline, last_retry_status)
+            retry_headers: Mapping[str, str] = {}
+            retry_status: Optional[int] = None
+            try:
+                headers = _databricks_authentication(self.workspace.config.authenticate)
+                remaining = self._remaining_timeout(deadline, last_retry_status)
+                with self.http.post(
+                    self.url,
+                    headers=headers,
+                    json=body,
+                    timeout=remaining,
+                    allow_redirects=False,
+                    stream=True,
+                ) as response:
+                    status = response.status_code
+                    if status == 429 or status in (500, 502, 503, 504):
+                        if attempt == self.endpoint.max_retries:
+                            raise _invocation_error(
+                                "Databricks model", "HTTP_RETRIES_EXHAUSTED", status=str(status)
+                            )
+                        retry_headers = response.headers
+                        retry_status = status
+                        last_retry_status = status
+                    elif status in (401, 403):
+                        raise _invocation_error(
+                            "Databricks model", "PERMISSION_DENIED", code=str(status)
+                        )
+                    elif not 200 <= status < 300:
+                        raise _invocation_error(
+                            "Databricks model", "HTTP_ERROR", status=str(status)
+                        )
+                    else:
+                        try:
+                            response_body = bytearray()
+                            for chunk in response.iter_content(chunk_size=64 * 1024):
+                                if len(response_body) + len(chunk) > _MAX_DATABRICKS_RESPONSE_BYTES:
+                                    raise _invocation_error(
+                                        "Databricks model", "INVALID_RESPONSE"
+                                    ) from None
+                                response_body.extend(chunk)
+                            text = json.loads(response_body)["choices"][0]["message"]["content"]
+                        except (KeyError, IndexError, TypeError, ValueError):
+                            raise _invocation_error(
+                                "Databricks model", "INVALID_RESPONSE"
+                            ) from None
+                        if not isinstance(text, str) or not text.strip():
+                            raise _invocation_error("Databricks model", "EMPTY_RESPONSE")
+                        # A response received after the budget expires cannot become a success.
+                        self._remaining_timeout(deadline)
+                        return text
+            except requests.exceptions.InvalidProxyURL:
+                raise
+            except requests.exceptions.InvalidURL:
+                raise _invocation_error("Databricks model", "INVALID_URL") from None
+            except requests.exceptions.ContentDecodingError:
+                raise _invocation_error("Databricks model", "INVALID_RESPONSE") from None
+            except (
+                requests.Timeout,
+                requests.ConnectionError,
+                requests.exceptions.ChunkedEncodingError,
+            ) as error:
+                if attempt == self.endpoint.max_retries:
+                    cause = error.args[0] if error.args else None
+                    read_timeout = isinstance(error, requests.ReadTimeout) or isinstance(
+                        cause, ReadTimeoutError
+                    )
+                    condition = "TIMEOUT" if read_timeout else "CONNECTION_ERROR"
+                    raise _invocation_error("Databricks model", condition) from None
+            time.sleep(_retry_delay(retry_headers, attempt, deadline, retry_status))
+            attempt += 1
+
+
+_BEDROCK_PERMISSION_CODES = frozenset(
+    {
+        "AccessDeniedException",
+        "UnauthorizedException",
+        "UnrecognizedClientException",
+        "ExpiredTokenException",
+    }
+)
+
+
+# Only known inference and transient failures are eligible for a null result.
+_BEDROCK_NULLABLE_CODES = frozenset(
+    {
+        "ConnectTimeoutError",
+        "ConnectionClosedError",
+        "EndpointConnectionError",
+        "InternalServerException",
+        "ModelErrorException",
+        "ModelNotReadyException",
+        "ModelTimeoutException",
+        "ReadTimeoutError",
+        "ServiceUnavailableException",
+        "ThrottlingException",
+        "ValidationException",
+    }
+)
+
+
+def _bedrock_error(error: Exception) -> PySparkRuntimeError:
+    from botocore.exceptions import ClientError
+
+    code = type(error).__name__
+    status = None
+    if isinstance(error, ClientError):
+        status = error.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+        service_code = error.response.get("Error", {}).get("Code")
+        if isinstance(service_code, str) and re.fullmatch(r"[A-Za-z0-9_]{1,80}", service_code):
+            code = service_code
+    if status in (401, 403) or code in _BEDROCK_PERMISSION_CODES:
+        return _invocation_error("Bedrock model", "PERMISSION_DENIED", code=code)
+    return _invocation_error("Bedrock model", "SDK_ERROR", code=code)
+
+
+class _ConverseClient:
+    def __init__(self, endpoint: _ModelEndpoint) -> None:
+        import boto3
+        from botocore.config import Config
+        from botocore.exceptions import BotoCoreError, ClientError
+
+        self.endpoint = endpoint
+        try:
+            session = boto3.Session(profile_name=endpoint.profile, region_name=endpoint.region)
+            self.client = session.client(
+                "bedrock-runtime",
+                config=Config(
+                    connect_timeout=min(5, endpoint.timeout),
+                    read_timeout=endpoint.timeout,
+                    retries={"mode": "adaptive", "total_max_attempts": endpoint.max_retries + 1},
+                ),
+            )
+        except (BotoCoreError, ClientError) as error:
+            raise _bedrock_error(error) from None
+
+    def close(self) -> None:
+        self.client.close()
+
+    def invoke(self, request: str) -> str:
+        from botocore.exceptions import BotoCoreError, ClientError
+
+        try:
+            response = self.client.converse(
+                modelId=self.endpoint.model_id,
+                messages=[{"role": "user", "content": [{"text": request}]}],
+                inferenceConfig={
+                    "maxTokens": self.endpoint.max_tokens,
+                    "temperature": self.endpoint.temperature,
+                },
+            )
+        except (BotoCoreError, ClientError) as error:
+            raise _bedrock_error(error) from None
+        content = response.get("output", {}).get("message", {}).get("content", [])
+        text = "".join(block["text"] for block in content if "text" in block)
+        if not text.strip():
+            raise _invocation_error("Bedrock model", "EMPTY_RESPONSE")
+        return text
+
+
+def _can_return_null(error: PySparkRuntimeError) -> bool:
+    condition = error.getCondition()
+    parameters = error.getMessageParameters() or {}
+    if condition == "AI_QUERY_INVOCATION_FAILED.SDK_ERROR":
+        return parameters.get("code", "") in _BEDROCK_NULLABLE_CODES
+    if condition == "AI_QUERY_INVOCATION_FAILED.HTTP_ERROR":
+        return parameters.get("status", "") in ("400", "408", "413", "422")
+    return condition in (
+        "AI_QUERY_INVOCATION_FAILED.CONNECTION_ERROR",
+        "AI_QUERY_INVOCATION_FAILED.EMPTY_RESPONSE",
+        "AI_QUERY_INVOCATION_FAILED.HTTP_RETRIES_EXHAUSTED",
+        "AI_QUERY_INVOCATION_FAILED.INVALID_RESPONSE",
+        "AI_QUERY_INVOCATION_FAILED.RETRY_AFTER_EXCEEDS_TIMEOUT",
+        "AI_QUERY_INVOCATION_FAILED.TIMEOUT",
+    )
+
+
+def _validate_requests(requests: "pd.Series", arg_name: str = "request") -> None:
+    import pandas as pd
+
+    if not isinstance(requests, pd.Series):
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": arg_name,
+                "expected_type": "pandas.Series",
+                "arg_type": type(requests).__name__,
+            },
+        )
+    for value in requests:
+        if isinstance(value, str) or (pd.api.types.is_scalar(value) and pd.isna(value)):
+            continue
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": arg_name,
+                "expected_type": "str",
+                "arg_type": type(value).__name__,
+            },
+        )
+
+
+@contextmanager
+def _query_session(
+    endpoint: _ModelEndpoint,
+    *,
+    on_error: str = "raise",
+) -> Iterator[Callable[["pd.Series"], "pd.Series"]]:
+    import pandas as pd
+
+    local = threading.local()
+    clients: list[Union[_ConverseClient, _ChatCompletionsClient]] = []
+    lock = threading.Lock()
+    factory: Callable[[_ModelEndpoint], Union[_ConverseClient, _ChatCompletionsClient]]
+    if endpoint.provider == "bedrock":
+        factory = _ConverseClient
+    else:
+        factory = _ChatCompletionsClient
+
+    def invoke(request: Any) -> Optional[str]:
+        if pd.api.types.is_scalar(request) and pd.isna(request):
+            return None
+        deadline = None
+        if endpoint.provider == "databricks":
+            deadline = time.monotonic() + endpoint.timeout
+        if not hasattr(local, "client"):
+            local.client = factory(endpoint)
+            with lock:
+                clients.append(local.client)
+        try:
+            if deadline is not None:
+                return local.client.invoke(request, deadline=deadline)
+            return local.client.invoke(request)
+        except PySparkRuntimeError as error:
+            if on_error == "null" and _can_return_null(error):
+                return None
+            raise
+
+    try:
+        with ThreadPoolExecutor(max_workers=endpoint.max_concurrency) as pool:
+
+            def query(requests: "pd.Series") -> "pd.Series":
+                _validate_requests(requests)
+                rows = iter(enumerate(requests))
+                values: list[Optional[str]] = [None] * len(requests)
+                pending = {
+                    pool.submit(invoke, request): index
+                    for index, request in islice(rows, endpoint.max_concurrency)
+                }
+                try:
+                    while pending:
+                        done, _ = wait(pending, return_when=FIRST_COMPLETED)
+                        for future in done:
+                            values[pending.pop(future)] = future.result()
+                        for index, request in islice(rows, len(done)):
+                            pending[pool.submit(invoke, request)] = index
+                finally:
+                    for future in pending:
+                        future.cancel()
+                return pd.Series(values, dtype="object")
+
+            yield query
+    finally:
+        for client in clients:
+            try:
+                client.close()
+            except Exception:
+                logging.getLogger(__name__).warning(
+                    "Failed to close an AI query client for provider %s", endpoint.provider
+                )
+
+
+def _query_batches(
+    endpoint: _ModelEndpoint,
+    batches: Iterator["pd.Series"],
+    *,
+    on_error: str = "raise",
+) -> Iterator["pd.Series"]:
+    with _query_session(endpoint, on_error=on_error) as query:
+        for requests in batches:
+            yield query(requests)
