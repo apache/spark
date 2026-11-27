@@ -35,12 +35,13 @@ import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.rdd.{MapPartitionsWithEvaluatorRDD, RDD}
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SaveMode}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, Cast, CodegenObjectFactoryMode, Expression, IsNotNull, Literal, TransformExpression, With}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, Cast, CodegenObjectFactoryMode, Expression, IsNotNull, Literal, TransformExpression, Unnest, With}
 import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAndComment, CodegenContext, CodeGenerator, ExprCode, ExprValue, GlobalValue, JavaCode, WholeStageSplit, WholeStageSplitKey}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, LeftSingle}
-import org.apache.spark.sql.catalyst.plans.logical.{MergeRows, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Generate, MergeRows, Project}
 import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Keep, Update}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.classic
 import org.apache.spark.sql.connector.catalog.functions.{BucketFunction, YearsFunction}
 import org.apache.spark.sql.errors.DataTypeErrors.{toSQLConf, toSQLId}
@@ -377,6 +378,112 @@ class WholeStageCodegenSuite extends SharedSparkSession
           Map("hair" -> "black", "eye" -> "brown"), "hair", "black"),
         Row("James", List("Java", "Scala"),
           Map("hair" -> "black", "eye" -> "brown"), "eye", "brown")))
+  }
+
+  private def checkGenerateCodegen(
+      df: DataFrame,
+      codegenEnabled: String,
+      expected: Seq[Row]): Unit = {
+    // Whether GenerateExec is compiled into this stage. Stop at InputAdapter: what is below it
+    // runs outside this stage (a stage further down is checked on its own).
+    def inStage(node: SparkPlan): Boolean = node match {
+      case _: GenerateExec => true
+      case _: InputAdapter => false
+      case other => other.children.exists(inStage)
+    }
+    val plan = df.queryExecution.executedPlan
+    val inCodegenStage = plan.exists {
+      case stage: WholeStageCodegenExec => inStage(stage.child)
+      case _ => false
+    }
+    assert(inCodegenStage == codegenEnabled.toBoolean, plan)
+    checkAnswer(df, expected)
+  }
+
+  testWithWholeStageCodegenOnAndOff("SPARK-62412: UNNEST should be included in " +
+    "WholeStageCodegen") { codegenEnabled =>
+    withTempView("t") {
+      // An empty array, a NULL array, NULL elements, and arrays of different lengths.
+      spark.range(5).selectExpr(
+        "id",
+        "CASE id WHEN 0 THEN CAST(array() AS ARRAY<INT>) WHEN 1 THEN NULL " +
+          "ELSE transform(sequence(1, id), x -> IF(x = 2, NULL, CAST(x AS INT))) END AS xs",
+        "IF(id = 3, NULL, array(concat('s', id))) AS ys",
+        "array(named_struct('a', id, 'b', 'x')) AS ss")
+        .createOrReplaceTempView("t")
+
+      checkGenerateCodegen(
+        sql("SELECT id, x, o FROM t, LATERAL UNNEST(xs) WITH ORDINALITY AS u(x, o)"),
+        codegenEnabled,
+        Seq(
+          Row(2L, 1, 1L), Row(2L, null, 2L),
+          Row(3L, 1, 1L), Row(3L, null, 2L), Row(3L, 3, 3L),
+          Row(4L, 1, 1L), Row(4L, null, 2L), Row(4L, 3, 3L), Row(4L, 4, 4L)))
+
+      // Several arrays: shorter or NULL arrays are padded with NULLs.
+      checkGenerateCodegen(
+        sql("SELECT id, x, y, o FROM t, LATERAL UNNEST(xs, ys) WITH ORDINALITY AS u(x, y, o)"),
+        codegenEnabled,
+        Seq(
+          Row(0L, null, "s0", 1L),
+          Row(1L, null, "s1", 1L),
+          Row(2L, 1, "s2", 1L), Row(2L, null, null, 2L),
+          Row(3L, 1, null, 1L), Row(3L, null, null, 2L), Row(3L, 3, null, 3L),
+          Row(4L, 1, "s4", 1L), Row(4L, null, null, 2L), Row(4L, 3, null, 3L),
+          Row(4L, 4, null, 4L)))
+
+      checkGenerateCodegen(
+        sql("SELECT id, s.a, s.b FROM t, LATERAL UNNEST(ss) AS u(s)"),
+        codegenEnabled,
+        (0L until 5L).map(i => Row(i, i, "x")))
+    }
+  }
+
+  testWithWholeStageCodegenOnAndOff("SPARK-62412: UNNEST in an outer Generate") { codegenEnabled =>
+    // SQL does not produce an outer Generate for UNNEST yet, so build the plan directly.
+    val child = spark.range(4).selectExpr(
+      "id",
+      "CASE id WHEN 0 THEN NULL WHEN 3 THEN CAST(array() AS ARRAY<BIGINT>) " +
+        "ELSE sequence(1, id) END AS xs",
+      "IF(id >= 2, NULL, array('a')) AS ys").logicalPlan
+    val unnest = Unnest(Seq(child.output(1), child.output(2)), withOrdinality = true)
+    val generate = Generate(
+      unnest,
+      unrequiredChildIndex = Seq(1, 2),
+      outer = true,
+      qualifier = None,
+      generatorOutput = DataTypeUtils.toAttributes(unnest.elementSchema)
+        .map(_.withNullability(true)),
+      child = child)
+    val df = classic.Dataset.ofRows(spark, generate)
+    // The row for id 3 has no elements in any array, so the outer Generate adds one row of NULLs
+    // for it, including the ordinality.
+    checkGenerateCodegen(df, codegenEnabled, Seq(
+      Row(0L, null, "a", 1L),
+      Row(1L, 1L, "a", 1L),
+      Row(2L, 1L, null, 1L), Row(2L, 2L, null, 2L),
+      Row(3L, null, null, null)))
+
+    // The ordinality read in split aggregate functions.
+    withSQLConf(
+        SQLConf.WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR.key -> "false",
+        SQLConf.CODEGEN_SPLIT_AGGREGATE_FUNC.key -> "true",
+        SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1") {
+      checkAnswer(df.selectExpr("count(ordinality)", "sum(ordinality)"), Row(4L, 5L))
+    }
+  }
+
+  test("SPARK-62412: UNNEST ordinality read in split aggregate functions") {
+    withSQLConf(
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+        // Pass the ordinality to the aggregate as generated, not as a consume function parameter.
+        SQLConf.WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR.key -> "false",
+        SQLConf.CODEGEN_SPLIT_AGGREGATE_FUNC.key -> "true",
+        SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1") {
+      val df = sql("SELECT count(o), sum(o) FROM range(3), " +
+        "LATERAL UNNEST(sequence(0, id)) WITH ORDINALITY AS u(x, o)")
+      checkAnswer(df, Row(6L, 10L))
+    }
   }
 
   test("HashAggregate with grouping keys should be included in WholeStageCodegen") {
