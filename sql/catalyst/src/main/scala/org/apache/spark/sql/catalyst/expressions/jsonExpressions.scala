@@ -539,12 +539,14 @@ case class JsonTable(
   @transient private lazy val columnKinds: Array[JsonTableColumnKind] = columns.map(_.kind).toArray
 
   // Prefix trie over the column paths, built once so every row's value/EXISTS columns are resolved
-  // in a single traversal of the item rather than one re-parse per column. Ordinality columns have
+  // in a single traversal of the row rather than one re-parse per column. Ordinality columns have
   // no path and are excluded (their empty path must not be confused with a root path `$`, which is
-  // an included column reading the whole item).
+  // an included column reading the whole row). EXISTS columns only need to know whether their path
+  // matches, not the matched value.
   @transient private lazy val columnTrie: JsonTablePathTrie = {
     val include = columnKinds.map(_ != JsonTableColumnKind.Ordinality)
-    rowEvaluator.buildPathTrie(columnPaths, include)
+    val needsValue = columnKinds.map(_ == JsonTableColumnKind.Value)
+    rowEvaluator.buildPathTrie(columnPaths, include, needsValue)
   }
 
   // One reusable Cast per non-ordinality column, evaluated against a single-slot mutable input
@@ -571,11 +573,10 @@ case class JsonTable(
     columnCasts(i).eval(castInput)
   }
 
-  private def projectRow(item: UTF8String, ordinal: Long): InternalRow = {
+  // `resolved` holds the result of every value/EXISTS column of a row; ordinality slots are not in
+  // the trie and come back as Missing (filled below).
+  private def projectRow(resolved: Array[JsonPathResult], ordinal: Long): InternalRow = {
     val numColumns = columnKinds.length
-    // Resolve every value/EXISTS column in a single traversal of the item; ordinality slots are
-    // not in the trie and come back as Missing (filled below).
-    val resolved = rowEvaluator.navigateColumns(item, columnTrie, numColumns)
     val values = new Array[Any](numColumns)
     var i = 0
     while (i < numColumns) {
@@ -588,9 +589,9 @@ case class JsonTable(
           castColumn(i, exists)
         case JsonTableColumnKind.Value =>
           resolved(i) match {
-            // `raw` is a re-parseable JSON fragment; unquote a scalar string so the column gets
-            // its content (e.g. `"hi"` -> `hi`), then cast to the declared type.
-            case JsonPathResult.Found(raw) => castColumn(i, rowEvaluator.unquotedString(raw))
+            // `text` already holds a string's content (e.g. `hi` for `"hi"`); cast it to the
+            // declared type.
+            case JsonPathResult.Found(text) => castColumn(i, text)
             // A missing path and an explicit JSON null both yield SQL NULL for a value column.
             case _ => null
           }
@@ -602,14 +603,15 @@ case class JsonTable(
 
   override def eval(input: InternalRow): IterableOnce[InternalRow] = {
     val json = child.eval(input).asInstanceOf[UTF8String]
-    rowEvaluator.evaluate(json) match {
-      case Some(items) =>
+    rowEvaluator.evaluateRows(json, columnTrie, columnKinds.length) match {
+      case Some(rows) =>
         // A manual Long counter for FOR ORDINALITY: `zipWithIndex` is Int-based and would wrap
-        // past Int.MaxValue for a very large array, whereas ordinality is a BIGINT.
+        // past Int.MaxValue for a very large array, whereas ordinality is a BIGINT. Columns are
+        // cast as rows are pulled, so a downstream LIMIT does not cast the rows it never reads.
         var ordinal = 0L
-        items.map { item =>
+        rows.map { resolved =>
           ordinal += 1L
-          projectRow(item, ordinal)
+          projectRow(resolved, ordinal)
         }
       case None =>
         // `errorMode` governs the row-source JSON only (null / malformed input, or `[*]` over a

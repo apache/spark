@@ -24,7 +24,7 @@ import scala.util.parsing.combinator.RegexParsers
 import com.fasterxml.jackson.core._
 import com.fasterxml.jackson.core.json.JsonReadFeature
 
-import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow, GetJsonObject, SpecializedGetters}
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonGenerator, JacksonParser, JsonInferSchema, JSONOptions}
@@ -518,16 +518,21 @@ object JsonPathResult {
   case object Missing extends JsonPathResult
   /** The path matched a JSON `null` literal. */
   case object NullValue extends JsonPathResult
-  /** The path matched a value; `raw` is its verbatim JSON text (including quoted strings). */
-  case class Found(raw: UTF8String) extends JsonPathResult
+  /**
+   * The path matched a value. `text` is what a value column casts (see
+   * [[JsonTableEvaluator.valueText]]), or empty ([[Present]]) when only `EXISTS` columns end at
+   * the path.
+   */
+  case class Found(text: UTF8String) extends JsonPathResult
+  /** A match whose value is not read, because only `EXISTS` columns end at the path. */
+  val Present: Found = Found(UTF8String.EMPTY_UTF8)
 }
 
 /**
- * The result of a single-value [[JsonTableEvaluator.lookup]] for `JSON_VALUE`. Unlike
- * [[JsonPathResult]] -- whose `Found` carries verbatim JSON text for `JSON_TABLE` to unquote later
- * -- a `Scalar` here already holds the value's cast-ready text (a string's unquoted/unescaped
- * content, a number's or boolean's source text), and an object/array match is reported as
- * `NonScalar` without being serialized at all, since `JSON_VALUE` routes non-scalars to ON ERROR.
+ * The result of a single-value [[JsonTableEvaluator.lookup]] for `JSON_VALUE`. A `Scalar` holds
+ * the value's cast-ready text (a string's unquoted/unescaped content, a number's or boolean's
+ * source text); an object/array match is reported as `NonScalar` without being serialized at all,
+ * since `JSON_VALUE` routes non-scalars to ON ERROR.
  */
 sealed trait JsonValueLookup
 object JsonValueLookup {
@@ -584,6 +589,8 @@ object JsonQueryLookup {
 private[expressions] final class JsonTablePathTrie {
   // Result-slot indices of columns whose path terminates at this node.
   var terminals: List[Int] = Nil
+  // Whether a value column (not just EXISTS columns) ends here, so the matched value is read.
+  var needsValue: Boolean = false
   // Object-key children, keyed by field name.
   val named: mutable.HashMap[String, JsonTablePathTrie] = mutable.HashMap.empty
   // Array-index children, keyed by index.
@@ -599,7 +606,7 @@ private[expressions] final class JsonTablePathTrie {
  * The result of positioning a parser at a JSON path for the `JSON_TABLE` row source (see
  * `positionAt`). Like [[JsonPathResult]] it distinguishes a missing path from a JSON `null`, but
  * `AtValue` leaves the parser on the matched value's first token (rather than serializing it) so
- * the row source can be streamed.
+ * the caller can read the value from the same parser.
  */
 sealed trait PositionResult
 object PositionResult {
@@ -615,11 +622,11 @@ object PositionResult {
  * Token-aware navigation of a `containerPath` shared by the SQL/JSON functions. Three entry
  * points, each with its own path constraints -- so `containerPath` is NOT wildcard-free in general:
  *
- *   - [[evaluate]] -- `JSON_TABLE` row source: given the input, a wildcard-free container path, and
- *     whether the row path ended in `[*]`, produces the per-row JSON documents that the
- *     [[org.apache.spark.sql.catalyst.expressions.JsonTable]] generator projects into columns via
- *     [[navigateColumns]]. `$.items[*]` (containerPath `$.items`, `explodeRoot` = true) explodes an
- *     array into rows; `$` or `$.x` (`explodeRoot` = false) yields exactly one row.
+ *   - [[evaluateRows]] -- `JSON_TABLE` rows: given the input, a wildcard-free container path,
+ *     whether the row path ended in `[*]`, and the trie of the column paths, resolves the columns
+ *     of every row that the [[org.apache.spark.sql.catalyst.expressions.JsonTable]] generator
+ *     produces. `$.items[*]` (containerPath `$.items`, `explodeRoot` = true) explodes an array into
+ *     rows; `$` or `$.x` (`explodeRoot` = false) yields exactly one row.
  *   - [[lookup]] -- `JSON_VALUE` single-scalar extraction, over a wildcard-free path
  *     (`explodeRoot` = false).
  *   - [[pathExists]] -- `JSON_EXISTS` existence test. Here `containerPath` MAY contain wildcards
@@ -638,57 +645,72 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
   import SharedFactory._
 
   /**
-   * Returns the per-row JSON documents selected by the row path as an iterator, or `None` if the
-   * JSON is null or malformed, or if `[*]` was applied to a non-array (the caller maps `None` to
-   * the configured ON ERROR behavior). A well-formed input whose row path matches nothing returns
-   * `Some(empty iterator)`.
+   * Resolves the columns of every row selected by the row path, returning the per-column results
+   * of each row (see [[navigateAll]]), or `None` if the JSON is null or malformed, or if `[*]` was
+   * applied to a non-array (the caller maps `None` to the configured ON ERROR behavior). A
+   * well-formed input whose row path matches nothing returns no rows. The slots of columns that
+   * are not in `trie` (ordinality columns) stay `Missing`.
    *
-   * The input is first scanned once to validate it is a single well-formed JSON value (so trailing
-   * garbage is rejected consistently in both ON ERROR modes -- this pass is O(n) tokens and does
-   * not materialize values). For the array (`[*]`) case the elements are then serialized one at a
-   * time from a second parser, so the whole expanded payload is never held in memory at once.
+   * A single parser positions at the row source, resolves each row's columns directly from it
+   * (only a value whose path is a prefix of another column's path is serialized and parsed
+   * again), and then checks with [[drainToRootEnd]] that nothing follows the root value. The rows
+   * are buffered until that check passes, so that a valid prefix followed by trailing content
+   * yields `None` before any row is produced, as a fully malformed input does. The cost is that
+   * every row's column results are held at once.
    */
-  final def evaluate(json: UTF8String): Option[Iterator[UTF8String]] = {
-    if (json == null || !isSingleWellFormedValue(json)) return None
-    // The parser is positioned at the matched value and, for the array case, handed to a lazy
-    // iterator that reads elements directly from it -- the container is never serialized whole.
-    // Ownership of `parser` transfers to that iterator (which closes it on exhaustion); in every
-    // other branch we close it before returning.
+  final def evaluateRows(
+      json: UTF8String,
+      trie: JsonTablePathTrie,
+      numColumns: Int): Option[Iterator[Array[JsonPathResult]]] = {
+    if (json == null) return None
     val parser = CreateJacksonParser.utf8String(jsonFactory, json)
-    var transferred = false
     try {
-      parser.nextToken()
-      positionAt(parser, containerPath) match {
-        case PositionResult.Missing =>
-          // Well-formed JSON, but the row path matched nothing: no rows.
-          Some(Iterator.empty)
-        case PositionResult.NullValue =>
-          // The container is JSON null. `[*]` over a non-array is an error; otherwise one row.
-          if (explodeRoot) None else Some(Iterator.single(UTF8String.fromString("null")))
-        case PositionResult.AtValue =>
-          if (explodeRoot) {
-            // `[*]` requires an array; a non-array match is an error.
-            if (parser.currentToken != JsonToken.START_ARRAY) {
-              None
-            } else {
-              val it = arrayElementIterator(parser) // owns and eventually closes `parser`
-              transferred = true
-              Some(it)
-            }
-          } else {
-            Some(Iterator.single(serializeCurrentValue(parser)))
-          }
-      }
+      resolveRows(parser, trie, numColumns)
     } catch {
       case _: JsonProcessingException => None
     } finally {
-      if (!transferred) parser.close()
+      parser.close()
     }
+  }
+
+  private def resolveRows(
+      parser: JsonParser,
+      trie: JsonTablePathTrie,
+      numColumns: Int): Option[Iterator[Array[JsonPathResult]]] = {
+    if (parser.nextToken() == null) return None // empty or whitespace-only
+    val rows = mutable.ArrayBuffer.empty[Array[JsonPathResult]]
+    // Resolves the columns of the row at the parser's current token, consuming the row.
+    def resolveRow(): Unit = {
+      val out = Array.fill[JsonPathResult](numColumns)(JsonPathResult.Missing)
+      // No path columns (e.g. an ordinality-only table): nothing to resolve within the row.
+      if (trie.isEmpty) skipRest(parser) else navigateAll(parser, trie, out)
+      rows += out
+    }
+    positionAt(parser, containerPath) match {
+      case PositionResult.Missing =>
+        // The row path matched nothing: no rows, if the input is well-formed (checked below).
+      case PositionResult.NullValue =>
+        // The container is JSON null. `[*]` over a non-array is an error; otherwise one row.
+        if (explodeRoot) return None
+        resolveRow()
+      case PositionResult.AtValue if !explodeRoot =>
+        resolveRow()
+      case PositionResult.AtValue =>
+        // `[*]` requires an array; a non-array match is an error.
+        if (parser.currentToken != JsonToken.START_ARRAY) return None
+        var token = parser.nextToken()
+        while (token != JsonToken.END_ARRAY) {
+          if (token == null) return None // truncated
+          resolveRow()
+          token = parser.nextToken()
+        }
+    }
+    if (drainToRootEnd(parser)) Some(rows.iterator) else None
   }
 
   /**
    * Resolves `containerPath` against a single JSON value for `JSON_VALUE`, preserving the missing /
-   * JSON-null / found distinction that [[evaluate]] collapses. Returns:
+   * JSON-null / found distinction. Returns:
    *
    *   - `None` if the input is not a single well-formed JSON value (malformed / trailing garbage /
    *     empty);
@@ -706,7 +728,7 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
    * is captured (or the path is found missing), [[drainToRootEnd]] consumes the rest of the root
    * value and rejects any trailing content, so a valid prefix followed by garbage (or a second
    * root value) is rejected exactly as a fully malformed document is. This avoids the extra
-   * O(document size) validation pass a separate `isSingleWellFormedValue` scan would add per row.
+   * O(document size) pass that a separate validation scan would add per row.
    */
   final def lookup(json: UTF8String): Option[JsonValueLookup] = {
     Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, json)) { parser =>
@@ -720,7 +742,7 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
             case PositionResult.AtValue => scalarAt(parser)
           }
           // Reject a valid prefix trailed by extra content, keeping malformed-input semantics
-          // identical to the array row source (which validates the whole document up front).
+          // identical to the JSON_TABLE row source (see `evaluateRows`).
           if (drainToRootEnd(parser)) Some(result) else None
         }
       } catch {
@@ -796,8 +818,8 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
 
   /**
    * Classifies the value the parser is positioned at (the `AtValue` case of [[positionAt]]) for a
-   * `JSON_VALUE` [[lookup]], avoiding the serialize-then-reparse round trip that
-   * [[serializeCurrentValue]] followed by [[unquotedString]] would incur:
+   * `JSON_VALUE` [[lookup]], avoiding the round trip of serializing the value with
+   * [[serializeCurrentValue]] and parsing it again to remove a string's quotes:
    *
    *   - an object or array is consumed with `skipChildren` -- so [[drainToRootEnd]] can still walk
    *     back out and validate the document -- and reported as `NonScalar`, never serialized, since
@@ -845,8 +867,8 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
    * A single parser both navigates the path and validates well-formedness: after the match
    * decision, [[drainToRootEnd]] consumes the rest of the root value and rejects any trailing
    * content, so a valid prefix followed by garbage (or a second root value) is malformed exactly as
-   * a fully bad document is. This avoids the extra O(document size) pass a separate
-   * `isSingleWellFormedValue` scan would add per row.
+   * a fully bad document is. This avoids the extra O(document size) pass that a
+   * separate validation scan would add per row.
    */
   final def pathExists(json: UTF8String): Option[Boolean] = {
     Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, json)) { parser =>
@@ -991,9 +1013,8 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
   /**
    * Navigates `path` and leaves the parser positioned at the first token of the matched value
    * (returning `AtValue`), or returns `Missing`/`NullValue`. Unlike the column projection traversal
-   * ([[navigateColumns]]), this does not serialize the value or finish consuming the enclosing
-   * containers -- the caller either streams from the current position (array row source) or
-   * serializes the single matched value.
+   * ([[navigateAll]]), this does not read the value or finish consuming the enclosing containers --
+   * the caller reads the row or rows, or the single matched value, from the current position.
    */
   private def positionAt(parser: JsonParser, path: Seq[PathInstruction]): PositionResult = {
     path match {
@@ -1045,34 +1066,14 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
   }
 
   /**
-   * Returns true if the input is exactly one well-formed JSON value with no trailing content, so a
-   * valid prefix followed by garbage, or an empty document, is treated as malformed (consistently
-   * in both ON ERROR modes).
-   */
-  private def isSingleWellFormedValue(json: UTF8String): Boolean = {
-    try {
-      Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, json)) { parser =>
-        if (parser.nextToken() == null) {
-          false // empty or whitespace-only
-        } else {
-          parser.skipChildren() // consume the first value in full
-          parser.nextToken() == null // nothing must remain after it
-        }
-      }
-    } catch {
-      case _: JsonProcessingException => false
-    }
-  }
-
-  /**
    * Resolves every column of `trie` against the value at the parser's current token in a single
-   * traversal, writing each matched terminal's [[JsonPathResult]] into `out` at its slot index.
-   * Only the simple wildcard-free instruction set produced for `JSON_TABLE` paths is modeled by the
-   * trie (`Key`/`Named` object steps and `Subscript`/`Index` array steps).
+   * traversal, writing each matched terminal's [[JsonPathResult]] into `out` at its slot index, and
+   * consumes the value. Only the simple wildcard-free instruction set produced for `JSON_TABLE`
+   * paths is modeled by the trie (`Key`/`Named` object steps and `Subscript`/`Index` array steps).
    *
-   * Slots left untouched keep their initial `Missing`. A matched value is stored as its raw JSON
-   * text (`Found.raw`), i.e. strings keep their enclosing quotes so the fragment stays
-   * re-parseable; value columns unquote scalar strings afterwards via [[JsonTable]]'s extraction.
+   * Slots left untouched keep their initial `Missing`. A matched value is stored as the text that a
+   * value column casts (see [[valueText]]), or as [[JsonPathResult.Present]] when only `EXISTS`
+   * columns end at the path.
    */
   private def navigateAll(
       parser: JsonParser,
@@ -1084,25 +1085,40 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
       // Leaf node: every column terminates here, so just record the current value (or null) and
       // consume it. This is the common case for disjoint column paths.
       if (trie.terminals.nonEmpty) {
-        val result = if (isNull) JsonPathResult.NullValue
-          else JsonPathResult.Found(serializeCurrentValue(parser))
+        val result = if (isNull) {
+          JsonPathResult.NullValue
+        } else if (trie.needsValue) {
+          JsonPathResult.Found(valueText(parser))
+        } else {
+          skipRest(parser)
+          JsonPathResult.Present
+        }
         trie.terminals.foreach(out(_) = result)
       } else {
         skipRest(parser)
       }
     } else if (trie.terminals.nonEmpty && !isNull) {
-      // A column path both ends here and extends deeper (e.g. `$.a` alongside `$.a.b`). Serialize
-      // the value once for the terminals, then re-parse that fragment to resolve the deeper
-      // columns -- this rare prefix overlap is the only place *within a single traversal* that a
-      // value is parsed more than once, and even then the descendant columns are still resolved in
-      // a single sub-traversal. (Separately, an array row item is serialized by
-      // `arrayElementIterator` and parsed again here, once per row.)
-      val raw = serializeCurrentValue(parser)
-      val result = JsonPathResult.Found(raw)
-      trie.terminals.foreach(out(_) = result)
-      Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, raw)) { sub =>
-        sub.nextToken()
-        descendInto(sub, trie, out)
+      // A column path both ends here and extends deeper (e.g. `$.a` alongside `$.a.b`).
+      parser.currentToken match {
+        case JsonToken.START_OBJECT | JsonToken.START_ARRAY if trie.needsValue =>
+          // Serialize the value once for the terminals, then parse that fragment to resolve the
+          // deeper columns -- this rare prefix overlap is the only place a value is parsed more
+          // than once, and even then the deeper columns are resolved in a single sub-traversal.
+          val result = JsonPathResult.Found(serializeCurrentValue(parser))
+          trie.terminals.foreach(out(_) = result)
+          Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, result.text)) { sub =>
+            sub.nextToken()
+            descendInto(sub, trie, out)
+          }
+        case JsonToken.START_OBJECT | JsonToken.START_ARRAY =>
+          // Only EXISTS columns end here, so the value is not needed: descend directly.
+          trie.terminals.foreach(out(_) = JsonPathResult.Present)
+          descendInto(parser, trie, out)
+        case _ =>
+          // A scalar has no children, so the deeper columns stay Missing.
+          val result =
+            if (trie.needsValue) JsonPathResult.Found(valueText(parser)) else JsonPathResult.Present
+          trie.terminals.foreach(out(_) = result)
       }
     } else {
       // Descend for the deeper columns. Any terminal ending at this node resolves to `NullValue`:
@@ -1112,6 +1128,21 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
       if (trie.terminals.nonEmpty) trie.terminals.foreach(out(_) = JsonPathResult.NullValue)
       descendInto(parser, trie, out)
     }
+  }
+
+  /**
+   * Returns the text that a value column casts for the non-null value at the parser's current
+   * token, and consumes the value: a string's unescaped content, `true`/`false`, an object's or
+   * array's JSON text, or a number as [[serializeCurrentValue]] writes it (`BigDecimal.toString`
+   * for a fraction or exponent, so precision is kept), without creating a generator for scalars.
+   */
+  private def valueText(parser: JsonParser): UTF8String = parser.currentToken match {
+    case JsonToken.START_OBJECT | JsonToken.START_ARRAY =>
+      serializeCurrentValue(parser)
+    case JsonToken.VALUE_NUMBER_INT | JsonToken.VALUE_NUMBER_FLOAT =>
+      UTF8String.fromString(parser.getNumberValueExact.toString)
+    case _ =>
+      UTF8String.fromString(parser.getText)
   }
 
   /**
@@ -1176,8 +1207,7 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
   /**
    * Serializes the value at the parser's current token to its raw JSON text. Strings keep their
    * enclosing quotes, so the result is always a re-parseable JSON fragment (this matters because a
-   * matched value may be re-parsed as a row item). Value columns unquote scalar strings afterwards
-   * via [[JsonTableEvaluator.unquotedString]].
+   * matched value may be parsed again to resolve deeper `JSON_TABLE` columns).
    */
   private def serializeCurrentValue(parser: JsonParser): UTF8String = {
     val output = new ByteArrayOutputStream()
@@ -1190,103 +1220,32 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
     UTF8String.fromBytes(output.toByteArray)
   }
 
-  // The array parser currently owned by an outstanding `arrayElementIterator`, or null. Since
-  // `GenerateExec` evaluates rows sequentially and fully drains each row's iterator before the
-  // next `eval`, at most one such parser is open at a time per task. Tracked so a single
-  // task-completion listener (registered once below) can close it on early termination.
-  @transient private var openArrayParser: JsonParser = _
-  @transient private var completionListenerRegistered = false
-
   /**
-   * Streams the elements of the array the `parser` is currently positioned at (`START_ARRAY`),
-   * serializing one element at a time straight from the source parser -- the enclosing array is
-   * never materialized as a whole. The iterator owns `parser`: it closes it on exhaustion (the
-   * fast path). To also close it when the consumer stops early (e.g. a downstream `LIMIT`, or a
-   * per-column cast failure) -- the `Generator` API has no close hook -- a *single* task-completion
-   * listener is registered per evaluator (i.e. per task) that closes whichever parser is currently
-   * open, rather than one listener per input row, so processing many JSON rows does not accumulate
-   * an unbounded listener list. `Generate` can thus emit rows for a large array without holding the
-   * full expanded payload in memory.
-   */
-  private def arrayElementIterator(parser: JsonParser): Iterator[UTF8String] = {
-    openArrayParser = parser
-    if (!completionListenerRegistered) {
-      Option(TaskContext.get()).foreach { tc =>
-        tc.addTaskCompletionListener[Unit] { _ =>
-          val p = openArrayParser
-          if (p != null && !p.isClosed) p.close()
-        }
-        completionListenerRegistered = true
-      }
-    }
-    new Iterator[UTF8String] {
-      private var nextToken = parser.nextToken()
-
-      override def hasNext: Boolean = {
-        val more = nextToken != null && nextToken != JsonToken.END_ARRAY
-        if (!more) close()
-        more
-      }
-
-      override def next(): UTF8String = {
-        val element = serializeCurrentValue(parser)
-        nextToken = parser.nextToken()
-        element
-      }
-
-      // Close the parser and drop the evaluator's reference to it so the listener does not retain
-      // it (and does not double-close) after this iterator is exhausted.
-      private def close(): Unit = {
-        if (!parser.isClosed) parser.close()
-        if (openArrayParser eq parser) openArrayParser = null
-      }
-    }
-  }
-
-  /**
-   * If `raw` is a JSON string literal (e.g. `"hi"`), returns its unquoted, unescaped value;
-   * otherwise (numbers, booleans, objects, arrays) returns the raw JSON text unchanged. Used to
-   * give a value column the string's content rather than its quoted JSON form.
-   *
-   * `raw` is a Jackson-serialized fragment with no leading whitespace, so only a fragment whose
-   * first byte is `"` can be a string literal. Non-string values (the common case) are returned
-   * without constructing a parser at all.
-   */
-  def unquotedString(raw: UTF8String): UTF8String = {
-    if (raw.numBytes() == 0 || raw.getByte(0) != '"') return raw
-    try {
-      Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, raw)) { parser =>
-        if (parser.nextToken() == JsonToken.VALUE_STRING) {
-          UTF8String.fromString(parser.getText)
-        } else {
-          raw
-        }
-      }
-    } catch {
-      case _: JsonProcessingException => raw
-    }
-  }
-
-  /**
-   * Builds the prefix trie that lets [[navigateColumns]] resolve every column path in one pass. The
+   * Builds the prefix trie that lets [[evaluateRows]] resolve every column path in one pass. The
    * `paths` are indexed by result slot; a slot whose `include` is false (an ordinality column,
    * which has no JSON path) contributes nothing to the trie -- note this is distinct from a root
-   * path `$`, which is an *empty but included* path that must resolve to the whole item. Call once
-   * per `JSON_TABLE` invocation and reuse the result for every row.
+   * path `$`, which is an *empty but included* path that must resolve to the whole item. A slot
+   * whose `needsValue` is false (an EXISTS column) only needs to know whether its path matches.
+   * Call once per `JSON_TABLE` invocation and reuse the result for every row.
    */
   def buildPathTrie(
       paths: Array[Seq[PathInstruction]],
-      include: Array[Boolean]): JsonTablePathTrie = {
+      include: Array[Boolean],
+      needsValue: Array[Boolean]): JsonTablePathTrie = {
     val root = new JsonTablePathTrie
     var slot = 0
     while (slot < paths.length) {
-      if (include(slot)) insertPath(root, paths(slot), slot)
+      if (include(slot)) insertPath(root, paths(slot), slot, needsValue(slot))
       slot += 1
     }
     root
   }
 
-  private def insertPath(root: JsonTablePathTrie, path: Seq[PathInstruction], slot: Int): Unit = {
+  private def insertPath(
+      root: JsonTablePathTrie,
+      path: Seq[PathInstruction],
+      slot: Int,
+      needsValue: Boolean): Unit = {
     var node = root
     var rest = path
     var valid = true
@@ -1304,30 +1263,10 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
           valid = false
       }
     }
-    if (valid) node.terminals ::= slot
-  }
-
-  /**
-   * Resolves every column path (as built by [[buildPathTrie]]) within a single row item in one
-   * traversal, returning the per-slot results. Slots for ordinality columns (empty paths) are not
-   * in the trie and stay `Missing`; the caller fills them directly. Used to extract value and
-   * EXISTS columns with correct missing-vs-null semantics.
-   */
-  def navigateColumns(item: UTF8String, trie: JsonTablePathTrie, numColumns: Int)
-      : Array[JsonPathResult] = {
-    val out = Array.fill[JsonPathResult](numColumns)(JsonPathResult.Missing)
-    // No path columns (e.g. an ordinality-only table): skip parsing the item entirely.
-    if (trie.isEmpty) return out
-    try {
-      Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, item)) { parser =>
-        parser.nextToken()
-        navigateAll(parser, trie, out)
-      }
-    } catch {
-      // A malformed item leaves already-resolved slots in place and the rest as Missing.
-      case _: JsonProcessingException =>
+    if (valid) {
+      node.terminals ::= slot
+      node.needsValue ||= needsValue
     }
-    out
   }
 }
 
