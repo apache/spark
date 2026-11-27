@@ -2955,6 +2955,13 @@ class JDBCSuite extends SharedSparkSession {
     }.getMessage
     assert(e4.contains("Option `query` can not be empty."))
 
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        spark.read.format("jdbc").option("Url", urlWithUserAndPass).load()
+      },
+      condition = "_LEGACY_ERROR_TEMP_2079",
+      parameters = Map("jdbcTableName" -> "dbtable", "jdbcQueryString" -> "query"))
+
     // Option query and partitioncolumn are not allowed together.
     val expectedErrorMsg =
       s"""
