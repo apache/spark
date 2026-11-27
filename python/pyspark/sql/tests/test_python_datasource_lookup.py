@@ -559,7 +559,9 @@ class PythonDataSourceLookupWorkerTests(unittest.TestCase):
     def test_record_batch_form_gives_the_rows_of_the_tuple_form(self):
         parameters = [(2,), (None,), (3,), (7,)]
         tuple_rows = self.rows(self.client(EchoLookupReader()).lookup(*parameters)[0])
-        client = self.client(BatchLookupReader(self.echo_batches))
+        # A maximum batch size below the size of the reader's batch, which the worker does not
+        # apply to the RecordBatch form.
+        client = self.client(BatchLookupReader(self.echo_batches), max_arrow_batch_size=2)
         batches, status = client.lookup(*parameters)
         self.assertIn("lookup [(2,), (None,), (3,), (7,)]", events)
         self.assertEqual(sorted(self.rows(batches), key=str), sorted(tuple_rows, key=str))
