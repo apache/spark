@@ -25,10 +25,7 @@ The `JSON_TABLE` table-valued function shreds a JSON document into a relational 
 _row path_ selects a sequence of JSON items, and a `COLUMNS` clause projects a value out of each
 item into a typed column. This is the SQL-standard way (SQL:2016) to turn JSON into rows and
 columns, and is commonly used to migrate queries from other systems such as Oracle, DB2, and
-MySQL.
-
-Only the flat (non-nested) form is currently supported. `NESTED PATH` columns are not yet
-supported.
+MySQL. `NESTED PATH` expands nested arrays within each row into more rows in the same call.
 
 ### Syntax
 
@@ -38,7 +35,8 @@ JSON_TABLE ( json_expr, row_path COLUMNS ( column_definition [ , ... ] ) [ error
 column_definition
     { column_name FOR ORDINALITY
     | column_name data_type [ PATH json_path ]
-    | column_name data_type EXISTS [ PATH json_path ] }
+    | column_name data_type EXISTS [ PATH json_path ]
+    | NESTED [ PATH ] nested_path COLUMNS ( column_definition [ , ... ] ) }
 
 error_clause
     { NULL | ERROR } ON ERROR
@@ -59,7 +57,8 @@ error_clause
 
 * **column_name FOR ORDINALITY**
 
-    Declares a `BIGINT` column that is a 1-based sequential counter of the generated rows.
+    Declares a `BIGINT` column that is a 1-based sequential counter of the rows of its `COLUMNS`
+    clause. In a nested `COLUMNS` clause, the counter restarts at 1 for each parent row.
 
 * **column_name data_type [ PATH json_path ]**
 
@@ -74,6 +73,24 @@ error_clause
 
     An existence column. Evaluates to a truthy value when `json_path` matches and a falsy value
     otherwise, cast to `data_type` (for example `BOOLEAN`).
+
+* **NESTED [ PATH ] nested_path COLUMNS ( ... )**
+
+    Reads more rows from within each row. `nested_path` is relative to a row of the enclosing
+    `COLUMNS` clause and follows the same rules as `row_path`: a path ending in `[*]` reads each
+    element of the matched array as a row, and any other path reads the matched value as one row.
+    The nested columns are output in place of the `NESTED PATH` clause, and their names must be
+    unique among all columns. As in Oracle, MySQL and PostgreSQL:
+
+    * Each parent row is joined with its nested rows. A parent row whose nested paths match
+      nothing (for example a missing key or an empty array) is still returned once, with `NULL`
+      nested columns.
+    * Sibling `NESTED PATH` clauses in the same `COLUMNS` clause do not multiply rows: the rows of
+      each one follow those of the previous one, with `NULL` columns for the other siblings.
+
+    A nested path ending in `[*]` that matches a value other than an array (including a JSON
+    `null`) matches nothing, as in MySQL. For the row path, this is an error that `ON ERROR`
+    handles instead.
 
 * **{ NULL | ERROR } ON ERROR**
 
@@ -116,6 +133,26 @@ SELECT * FROM JSON_TABLE(
 | 10|  true|
 | 20| false|
 +---+------+
+
+-- Expand a nested array with NESTED PATH; an order without items is kept with NULLs
+SELECT * FROM JSON_TABLE(
+  '{"orders":[{"id":1,"items":[{"sku":"a","qty":2},{"sku":"b","qty":1}]},{"id":2}]}',
+  '$.orders[*]'
+  COLUMNS (
+    order_id BIGINT PATH '$.id',
+    NESTED PATH '$.items[*]' COLUMNS (
+      sku STRING PATH '$.sku',
+      qty INT    PATH '$.qty'
+    )
+  )
+) AS t;
++--------+----+----+
+|order_id| sku| qty|
++--------+----+----+
+|       1|   a|   2|
+|       1|   b|   1|
+|       2|NULL|NULL|
++--------+----+----+
 
 -- Join JSON_TABLE output against a base table using LATERAL
 SELECT d.id, t.k

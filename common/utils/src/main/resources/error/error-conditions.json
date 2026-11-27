@@ -2126,7 +2126,7 @@
       },
       "INVALID_JSON_TABLE_PATH" : {
         "message" : [
-          "The <location> of JSON_TABLE has an invalid or unsupported JSON path <path>. Only simple, wildcard-free paths are supported (a trailing '[*]' is allowed on the row path)."
+          "The <location> of JSON_TABLE has an invalid or unsupported JSON path <path>. Only simple, wildcard-free paths are supported (a trailing '[*]' is allowed on the row path and on nested paths)."
         ]
       },
       "INVALID_MAP_KEY_TYPE" : {
@@ -5834,7 +5834,7 @@
       },
       "DUPLICATE_JSON_TABLE_COLUMN" : {
         "message" : [
-          "JSON_TABLE has duplicate column name <columnName>. Column names in the COLUMNS clause must be unique."
+          "JSON_TABLE has duplicate column name <columnName>. Column names must be unique across all COLUMNS clauses, including nested ones."
         ]
       },
       "EMPTY_IN_PREDICATE" : {

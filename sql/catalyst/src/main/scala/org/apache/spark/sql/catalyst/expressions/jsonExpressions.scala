@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.core.{JsonFactory, JsonProcessingException}
@@ -29,8 +30,9 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGe
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.expressions.json.{GetJsonObjectEvaluator, JsonExpressionUtils,
   JsonObjectEvaluator, JsonPathParser, JsonPathResult, JsonQueryLookup, JsonTableEvaluator,
-  JsonTablePathTrie, JsonToStructsEvaluator, JsonTupleEvaluator, JsonValueLookup,
-  MultiGetJsonObjectEvaluator, PathInstruction, SchemaOfJsonEvaluator, StructsToJsonEvaluator}
+  JsonTableLevel, JsonTableNestedPath, JsonTableRow, JsonToStructsEvaluator, JsonTupleEvaluator,
+  JsonValueLookup, MultiGetJsonObjectEvaluator, PathInstruction, SchemaOfJsonEvaluator,
+  StructsToJsonEvaluator}
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
@@ -378,6 +380,26 @@ object JsonTableColumnKind {
 }
 
 /**
+ * An entry of a `JSON_TABLE` COLUMNS clause: a [[JsonTableColumn]] or a [[JsonTableNestedColumns]].
+ */
+sealed trait JsonTableColumnDefinition
+
+object JsonTableColumnDefinition {
+  /** The output columns of `definitions`: their columns, depth-first in declaration order. */
+  def flatten(definitions: Seq[JsonTableColumnDefinition]): Seq[JsonTableColumn] =
+    flattenWithNesting(definitions).map(_._1)
+
+  /** Like [[flatten]], with whether each column is in a nested COLUMNS clause. */
+  def flattenWithNesting(
+      definitions: Seq[JsonTableColumnDefinition],
+      nested: Boolean = false): Seq[(JsonTableColumn, Boolean)] =
+    definitions.flatMap {
+      case c: JsonTableColumn => Seq((c, nested))
+      case n: JsonTableNestedColumns => flattenWithNesting(n.columns, nested = true)
+    }
+}
+
+/**
  * A single column definition of a `JSON_TABLE` invocation.
  *
  * @param name     the output column name
@@ -389,7 +411,14 @@ case class JsonTableColumn(
     name: String,
     dataType: DataType,
     path: Option[String],
-    kind: JsonTableColumnKind)
+    kind: JsonTableColumnKind) extends JsonTableColumnDefinition
+
+/**
+ * A `NESTED [PATH] path COLUMNS (...)` entry. `path` is relative to a row of the enclosing COLUMNS
+ * clause and selects the rows of `columns`, as the row path does for the top-level clause.
+ */
+case class JsonTableNestedColumns(path: String, columns: Seq[JsonTableColumnDefinition])
+  extends JsonTableColumnDefinition
 
 /**
  * Behavior when the JSON input is malformed.
@@ -410,9 +439,14 @@ object JsonTableErrorMode {
  * [[org.apache.spark.sql.catalyst.plans.logical.Generate]] operator; no new execution operator is
  * introduced.
  *
- * Only the flat (non-`NESTED PATH`) subset of the standard is supported. Row-source and value
- * extraction use the token-aware [[JsonTableEvaluator]], which (unlike `get_json_object`)
- * distinguishes a missing path from a JSON `null` value; type coercion reuses [[Cast]].
+ * A [[JsonTableNestedColumns]] (`NESTED PATH`) expands a nested array within each row into more
+ * rows, following the standard's default plan, as Oracle, MySQL and PostgreSQL do: a row is
+ * joined with the rows of its nested paths by an outer join (it is kept, with NULL nested columns,
+ * when no nested path has a row), and sibling nested paths are combined by a union (their rows
+ * follow one another, each with NULL columns for the other siblings, rather than multiplying).
+ * Row-source and value extraction use the token-aware [[JsonTableEvaluator]], which (unlike
+ * `get_json_object`) distinguishes a missing path from a JSON `null` value; type coercion reuses
+ * [[Cast]].
  *
  * {{{
  *   SELECT t.* FROM json_table(
@@ -426,7 +460,7 @@ object JsonTableErrorMode {
 case class JsonTable(
     child: Expression,
     rowPath: String,
-    columns: Seq[JsonTableColumn],
+    columns: Seq[JsonTableColumnDefinition],
     errorMode: JsonTableErrorMode,
     timeZoneId: Option[String] = None,
     // Captured at plan-construction time so column casts do not change behavior if the session's
@@ -446,11 +480,15 @@ case class JsonTable(
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeWithCollation(supportsTrimCollation = true))
 
-  // ORDINALITY columns always hold a non-null counter; value/EXISTS columns may be null.
+  // The output columns, numbered in this order by `rootLevel`.
+  @transient private lazy val outputColumns: Seq[JsonTableColumn] =
+    JsonTableColumnDefinition.flatten(columns)
+
+  // A top-level ORDINALITY column always holds a counter. A nested one is NULL on a row that its
+  // nested path does not produce, and value/EXISTS columns may always be null.
   override def elementSchema: StructType =
-    StructType(columns.map { c =>
-      val nullable = c.kind != JsonTableColumnKind.Ordinality
-      StructField(c.name, c.dataType, nullable = nullable)
+    StructType(JsonTableColumnDefinition.flattenWithNesting(columns).map { case (c, nested) =>
+      StructField(c.name, c.dataType, nullable = nested || c.kind != JsonTableColumnKind.Ordinality)
     })
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
@@ -462,21 +500,23 @@ case class JsonTable(
     if (inputCheck.isFailure) {
       inputCheck
     } else {
-      // Validate the row path and every column path. A path is valid here iff it parses and is
-      // free of wildcards -- except the row path may end in a single `[*]`, which is stripped into
-      // `containerInstructions`, so the row path is checked on that already-stripped list.
-      val rowPathValid = JsonPathParser.parse(rowPath).isDefined &&
-        !containerInstructions.contains(PathInstruction.Wildcard)
-      val invalid: Option[(String, String)] = if (!rowPathValid) {
-        Some(("row path", rowPath))
-      } else {
-        columns.iterator.collect { case c if c.path.isDefined => (c.name, c.path.get) }
-          .collectFirst {
+      // Validate the row path, and every column and nested path in declaration order. A column
+      // path is valid iff it parses and is free of wildcards; the row path and nested paths may
+      // also end in a single `[*]` (see `parseRowSource`).
+      def invalidPath(definitions: Seq[JsonTableColumnDefinition]): Option[(String, String)] =
+        definitions.iterator.map {
+          case JsonTableColumn(name, _, Some(path), _) =>
             // Valid column path: parses and is wildcard-free, i.e. hasWildcard == Some(false).
-            case (name, path) if !JsonPathParser.hasWildcard(path).contains(false) =>
-              (s"column '$name'", path)
-          }
-      }
+            if (JsonPathParser.hasWildcard(path).contains(false)) None
+            else Some((s"column '$name'", path))
+          case JsonTableNestedColumns(path, nestedColumns) =>
+            if (parseRowSource(path).isEmpty) Some(("nested path", path))
+            else invalidPath(nestedColumns)
+          case _ =>
+            None
+        }.collectFirst { case Some(invalid) => invalid }
+      val invalid =
+        if (parseRowSource(rowPath).isEmpty) Some(("row path", rowPath)) else invalidPath(columns)
       invalid match {
         case Some((location, path)) =>
           DataTypeMismatch(
@@ -497,7 +537,7 @@ case class JsonTable(
           }
           def castable(src: DataType, target: DataType): Boolean =
             if (ansiEnabled) Cast.canAnsiCast(src, target) else Cast.canCast(src, target)
-          columns.iterator.flatMap(c => sourceType(c).map((c, _)))
+          outputColumns.iterator.flatMap(c => sourceType(c).map((c, _)))
             .collectFirst { case (c, src) if !castable(src, c.dataType) => (c, src) } match {
             case Some((c, srcType)) =>
               DataTypeMismatch(
@@ -512,39 +552,59 @@ case class JsonTable(
     }
   }
 
-  // The row path is `containerRowPath` plus an optional trailing `[*]`. Splitting on the parsed
-  // instruction list (rather than the raw string) is whitespace-insensitive and unambiguous.
-  // `checkInputDataTypes` guarantees the path parses and is wildcard-free at this point.
-  @transient private lazy val (containerInstructions, explodeRoot)
-      : (Seq[PathInstruction], Boolean) = {
-    val parsed = JsonPathParser.parse(rowPath).getOrElse(Nil)
-    parsed match {
-      case init :+ PathInstruction.Subscript :+ PathInstruction.Wildcard =>
-        (init, true)
-      case other =>
-        (other, false)
-    }
+  /**
+   * Parses the row path or a nested path into its container path and whether it ends in `[*]`,
+   * or returns None if the path does not parse or has any other wildcard. Splitting on the parsed
+   * instruction list (rather than the raw string) is whitespace-insensitive and unambiguous.
+   */
+  private def parseRowSource(path: String): Option[(Seq[PathInstruction], Boolean)] =
+    JsonPathParser.parse(path).map {
+      case init :+ PathInstruction.Subscript :+ PathInstruction.Wildcard => (init, true)
+      case other => (other, false)
+    }.filterNot(_._1.contains(PathInstruction.Wildcard))
+
+  // `checkInputDataTypes` guarantees the row path is valid at this point.
+  @transient private lazy val rowEvaluator: JsonTableEvaluator = {
+    val (containerInstructions, explodeRoot) = parseRowSource(rowPath).getOrElse((Nil, false))
+    JsonTableEvaluator(containerInstructions, explodeRoot)
   }
 
-  @transient private lazy val rowEvaluator: JsonTableEvaluator =
-    JsonTableEvaluator(containerInstructions, explodeRoot)
+  // Column kinds snapshotted into an array, like `columnCasts`: `outputColumns` may be a `List`,
+  // so indexing it per row would make each row O(n^2) in the column count.
+  @transient private lazy val columnKinds: Array[JsonTableColumnKind] =
+    outputColumns.map(_.kind).toArray
 
-  // Parsed instruction list per column (empty for ordinality columns, which have no path).
-  @transient private lazy val columnPaths: Array[Seq[PathInstruction]] =
-    columns.map(c => c.path.flatMap(JsonPathParser.parse).getOrElse(Nil)).toArray
-
-  // Column kinds snapshotted into an array, like `columnPaths` and `columnCasts`: `columns` is a
-  // `List` (the parser builds it with `.map(...).toSeq`), so `columns(i)` is O(i) and indexing it
-  // in the per-row projection loop would make `projectRow` O(n^2) in the column count.
-  @transient private lazy val columnKinds: Array[JsonTableColumnKind] = columns.map(_.kind).toArray
-
-  // Prefix trie over the column paths, built once so every row's value/EXISTS columns are resolved
-  // in a single traversal of the item rather than one re-parse per column. Ordinality columns have
-  // no path and are excluded (their empty path must not be confused with a root path `$`, which is
-  // an included column reading the whole item).
-  @transient private lazy val columnTrie: JsonTablePathTrie = {
-    val include = columnKinds.map(_ != JsonTableColumnKind.Ordinality)
-    rowEvaluator.buildPathTrie(columnPaths, include)
+  // The COLUMNS clauses as levels, built once so that each row's columns and nested paths are
+  // resolved in a single traversal. Ordinality columns have no path and are left out of the trie
+  // (their empty path must not be confused with a root path `$`, which reads the whole row), and
+  // EXISTS columns only need to know whether their path matches.
+  @transient private lazy val rootLevel: JsonTableLevel = {
+    var nextColumn = 0
+    def build(definitions: Seq[JsonTableColumnDefinition]): JsonTableLevel = {
+      val columnIndexes = mutable.ArrayBuffer.empty[Int]
+      val paths = mutable.ArrayBuffer.empty[Seq[PathInstruction]]
+      val kinds = mutable.ArrayBuffer.empty[JsonTableColumnKind]
+      val nestedPaths = mutable.ArrayBuffer.empty[Seq[PathInstruction]]
+      val nested = mutable.ArrayBuffer.empty[JsonTableNestedPath]
+      definitions.foreach {
+        case c: JsonTableColumn =>
+          columnIndexes += nextColumn
+          nextColumn += 1
+          paths += c.path.flatMap(JsonPathParser.parse).getOrElse(Nil)
+          kinds += c.kind
+        case n: JsonTableNestedColumns =>
+          val (container, explode) = parseRowSource(n.path).getOrElse((Nil, false))
+          nestedPaths += container
+          nested += new JsonTableNestedPath(explode, build(n.columns))
+      }
+      val trie = rowEvaluator.buildPathTrie(
+        paths.toArray,
+        include = kinds.map(_ != JsonTableColumnKind.Ordinality).toArray,
+        needsValue = kinds.map(_ == JsonTableColumnKind.Value).toArray,
+        nestedPaths.toSeq)
+      new JsonTableLevel(trie, columnIndexes.toArray, nested.toArray)
+    }
+    build(columns)
   }
 
   // One reusable Cast per non-ordinality column, evaluated against a single-slot mutable input
@@ -552,7 +612,7 @@ case class JsonTable(
   // row/column on the hot path. The source type is BooleanType for EXISTS, StringType otherwise.
   @transient private lazy val columnCasts: Array[Expression] = {
     val evalMode = EvalMode.fromBoolean(ansiEnabled)
-    columns.map { c =>
+    outputColumns.map { c =>
       c.kind match {
         case JsonTableColumnKind.Ordinality => null
         case JsonTableColumnKind.Exists =>
@@ -571,45 +631,129 @@ case class JsonTable(
     columnCasts(i).eval(castInput)
   }
 
-  private def projectRow(item: UTF8String, ordinal: Long): InternalRow = {
-    val numColumns = columnKinds.length
-    // Resolve every value/EXISTS column in a single traversal of the item; ordinality slots are
-    // not in the trie and come back as Missing (filled below).
-    val resolved = rowEvaluator.navigateColumns(item, columnTrie, numColumns)
-    val values = new Array[Any](numColumns)
-    var i = 0
-    while (i < numColumns) {
+  // Writes the columns of `row`, a row of `level`, into `values` at their output indexes.
+  // `ordinal` is the row's 1-based position among the rows of its level for one parent row.
+  private def fillColumns(
+      level: JsonTableLevel,
+      row: JsonTableRow,
+      ordinal: Long,
+      values: Array[Any]): Unit = {
+    var slot = 0
+    while (slot < level.columns.length) {
+      val i = level.columns(slot)
       values(i) = columnKinds(i) match {
         case JsonTableColumnKind.Ordinality =>
           ordinal
         case JsonTableColumnKind.Exists =>
           // Present (including an explicit JSON null) counts as existing; only Missing is false.
-          val exists = resolved(i) != JsonPathResult.Missing
-          castColumn(i, exists)
+          castColumn(i, row.values(slot) != JsonPathResult.Missing)
         case JsonTableColumnKind.Value =>
-          resolved(i) match {
-            // `raw` is a re-parseable JSON fragment; unquote a scalar string so the column gets
-            // its content (e.g. `"hi"` -> `hi`), then cast to the declared type.
-            case JsonPathResult.Found(raw) => castColumn(i, rowEvaluator.unquotedString(raw))
+          row.values(slot) match {
+            // `text` already holds a string's content (e.g. `hi` for `"hi"`); cast it to the
+            // declared type.
+            case JsonPathResult.Found(text) => castColumn(i, text)
             // A missing path and an explicit JSON null both yield SQL NULL for a value column.
             case _ => null
           }
       }
-      i += 1
+      slot += 1
     }
-    new GenericInternalRow(values)
+  }
+
+  // Sets the columns of `level` and of its nested paths back to NULL.
+  private def clearColumns(level: JsonTableLevel, values: Array[Any]): Unit = {
+    level.columns.foreach(values(_) = null)
+    level.nested.foreach(n => clearColumns(n.level, values))
+  }
+
+  /**
+   * The output rows of `row`, a top-level row, cast as they are pulled. A row is joined with the
+   * rows of each of its nested paths in turn, with NULL columns for the other nested paths
+   * (union), or is output alone with NULL nested columns if no nested path has a row (outer join).
+   */
+  private class NestedRowIterator(row: JsonTableRow, ordinal: Long)
+    extends Iterator[InternalRow] {
+
+    // A row being expanded: `k` is the nested path being read, `j` the number of its rows read.
+    private class Frame(val level: JsonTableLevel, val row: JsonTableRow) {
+      var k = 0
+      var j = 0
+      var hasNestedRows = false
+    }
+
+    private val values = new Array[Any](columnKinds.length)
+    // The rows being expanded, innermost first.
+    private var stack: List[Frame] = Nil
+    private var started = false
+    private var pending: InternalRow = _
+
+    private def enter(level: JsonTableLevel, row: JsonTableRow, ordinal: Long): Unit = {
+      fillColumns(level, row, ordinal, values)
+      stack = new Frame(level, row) :: stack
+    }
+
+    // The next output row, or null if there is none.
+    private def advance(): InternalRow = {
+      if (!started) {
+        started = true
+        enter(rootLevel, row, ordinal)
+      }
+      while (stack.nonEmpty) {
+        val frame = stack.head
+        if (frame.k < frame.level.nested.length) {
+          val nestedRows = frame.row.nested(frame.k)
+          val nestedLevel = frame.level.nested(frame.k).level
+          if (nestedRows != null && frame.j < nestedRows.length) {
+            frame.hasNestedRows = true
+            frame.j += 1
+            enter(nestedLevel, nestedRows(frame.j - 1), frame.j)
+          } else {
+            if (nestedRows != null) clearColumns(nestedLevel, values)
+            frame.k += 1
+            frame.j = 0
+          }
+        } else {
+          stack = stack.tail
+          if (!frame.hasNestedRows) return new GenericInternalRow(values.clone())
+        }
+      }
+      null
+    }
+
+    override def hasNext: Boolean = {
+      if (pending == null) pending = advance()
+      pending != null
+    }
+
+    override def next(): InternalRow = {
+      if (!hasNext) throw new NoSuchElementException
+      val result = pending
+      pending = null
+      result
+    }
   }
 
   override def eval(input: InternalRow): IterableOnce[InternalRow] = {
     val json = child.eval(input).asInstanceOf[UTF8String]
-    rowEvaluator.evaluate(json) match {
-      case Some(items) =>
+    rowEvaluator.evaluateRows(json, rootLevel) match {
+      case Some(rows) =>
         // A manual Long counter for FOR ORDINALITY: `zipWithIndex` is Int-based and would wrap
-        // past Int.MaxValue for a very large array, whereas ordinality is a BIGINT.
+        // past Int.MaxValue for a very large array, whereas ordinality is a BIGINT. Columns are
+        // cast as rows are pulled, so a downstream LIMIT does not cast the rows it never reads.
         var ordinal = 0L
-        items.map { item =>
-          ordinal += 1L
-          projectRow(item, ordinal)
+        if (rootLevel.nested.isEmpty) {
+          // Without nested paths, each row is one output row and needs no expansion state.
+          rows.map { row =>
+            ordinal += 1L
+            val values = new Array[Any](columnKinds.length)
+            fillColumns(rootLevel, row, ordinal, values)
+            new GenericInternalRow(values): InternalRow
+          }
+        } else {
+          rows.flatMap { row =>
+            ordinal += 1L
+            new NestedRowIterator(row, ordinal)
+          }
         }
       case None =>
         // `errorMode` governs the row-source JSON only (null / malformed input, or `[*]` over a
@@ -631,19 +775,22 @@ case class JsonTable(
   // the row path, columns, and ON ERROR mode. Render the full `JSON_TABLE(...)` syntax so
   // analysis/type-check diagnostics (e.g. INVALID_JSON_TABLE_PATH) point at the whole invocation.
   override def sql: String = {
-    val columnsSQL = columns.map { c =>
-      val pathSQL = c.path.map(p => s" PATH '$p'").getOrElse("")
-      c.kind match {
-        case JsonTableColumnKind.Ordinality => s"${c.name} FOR ORDINALITY"
-        case JsonTableColumnKind.Exists => s"${c.name} ${c.dataType.sql} EXISTS$pathSQL"
-        case JsonTableColumnKind.Value => s"${c.name} ${c.dataType.sql}$pathSQL"
-      }
+    def columnsSQL(definitions: Seq[JsonTableColumnDefinition]): String = definitions.map {
+      case c: JsonTableColumn =>
+        val pathSQL = c.path.map(p => s" PATH '$p'").getOrElse("")
+        c.kind match {
+          case JsonTableColumnKind.Ordinality => s"${c.name} FOR ORDINALITY"
+          case JsonTableColumnKind.Exists => s"${c.name} ${c.dataType.sql} EXISTS$pathSQL"
+          case JsonTableColumnKind.Value => s"${c.name} ${c.dataType.sql}$pathSQL"
+        }
+      case n: JsonTableNestedColumns =>
+        s"NESTED PATH '${n.path}' COLUMNS (${columnsSQL(n.columns)})"
     }.mkString(", ")
     val errorSQL = errorMode match {
       case JsonTableErrorMode.NullOnError => "NULL ON ERROR"
       case JsonTableErrorMode.ErrorOnError => "ERROR ON ERROR"
     }
-    s"JSON_TABLE(${child.sql}, '$rowPath' COLUMNS ($columnsSQL) $errorSQL)"
+    s"JSON_TABLE(${child.sql}, '$rowPath' COLUMNS (${columnsSQL(columns)}) $errorSQL)"
   }
 
   override protected def withNewChildInternal(newChild: Expression): JsonTable =

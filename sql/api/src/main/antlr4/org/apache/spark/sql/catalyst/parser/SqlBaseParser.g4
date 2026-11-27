@@ -1545,12 +1545,16 @@ unnest
 
 // The ANSI SQL:2016 JSON_TABLE table-valued function. Because the COLUMNS clause is not a normal
 // function-argument list, it has a dedicated production rather than going through
-// tableFunctionCall. Only the flat (non-NESTED) subset is currently supported.
+// tableFunctionCall.
 jsonTable
     : JSON_TABLE LEFT_PAREN jsonExpr=expression COMMA rowPath=stringLit
-        COLUMNS LEFT_PAREN jsonTableColumn (COMMA jsonTableColumn)* RIGHT_PAREN
+        jsonTableColumns
         jsonTableOnErrorClause?
       RIGHT_PAREN tableAlias
+    ;
+
+jsonTableColumns
+    : COLUMNS LEFT_PAREN jsonTableColumn (COMMA jsonTableColumn)* RIGHT_PAREN
     ;
 
 jsonTableColumn
@@ -1558,6 +1562,7 @@ jsonTableColumn
     | colName=errorCapturingIdentifier dataType
         EXISTS (PATH path=stringLit)?                                           #jsonTableExistsColumn
     | colName=errorCapturingIdentifier dataType (PATH path=stringLit)?          #jsonTableValueColumn
+    | NESTED PATH? path=stringLit jsonTableColumns                              #jsonTableNestedColumns
     ;
 
 jsonTableOnErrorClause
@@ -2780,6 +2785,7 @@ ansiNonReserved
     | NANOSECOND
     | NANOSECONDS
     | NEAREST
+    | NESTED
     | NEXT
     | NO
     | NONE
@@ -3250,6 +3256,7 @@ nonReserved
     | NANOSECOND
     | NANOSECONDS
     | NEAREST
+    | NESTED
     | NEXT
     | NO
     | NONE
