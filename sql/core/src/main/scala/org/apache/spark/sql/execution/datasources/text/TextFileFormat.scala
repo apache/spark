@@ -65,7 +65,7 @@ case class TextFileFormat()
     val textOptions = new TextOptions(options)
     if (textOptions.archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(path)) {
       SupportsArchiveFormat.checkNoDecompressionCodec(path, textOptions.decompressionCodec)
-      // A tar archive is read as one sequential stream (entry by entry), so it is never split.
+      // An archive is read whole by one reader, entry by entry, so it is never split.
       return false
     }
     super.isSplitable(sparkSession, options, path) && !textOptions.wholeText
@@ -118,9 +118,6 @@ case class TextFileFormat()
       SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
     val perFileReader = readToUnsafeMem(broadcastedHadoopConf, requiredSchema, textOptions)
     val archiveReader = readArchive(broadcastedHadoopConf, requiredSchema, textOptions)
-    // A tar archive (always a single split, see `isSplitable`) is streamed entry by entry when
-    // archive reads are enabled; otherwise the file is read directly. Archive scanning is wired
-    // into the V1 file source only, so this dispatch lives here rather than in a shared reader.
     (file: PartitionedFile) => {
       if (textOptions.archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(file.toPath)) {
         archiveReader(file)
@@ -131,11 +128,14 @@ case class TextFileFormat()
   }
 
   /**
-   * Streams a tar archive (`.tar`/`.tar.gz`/`.tgz`) entry by entry, emitting the same
+   * Streams an archive entry by entry, emitting the same
    * `value`-column rows the per-file reader produces -- each entry is read as if it were a
    * standalone text file (one row per line, or a single row holding the whole entry when
    * `wholeText` is set), without unpacking the archive to disk. The whole archive is a single
    * split (see `isSplitable`).
+   *
+   * Archive reads are wired into the V1 text source only, so the dispatch lives in `buildReader`
+   * rather than in a reader shared with the DSv2 text source.
    */
   private def readArchive(
       conf: Broadcast[SerializableConfiguration],
@@ -146,12 +146,9 @@ case class TextFileFormat()
       val entryGlob = textOptions.archivePathFilterPattern
       SupportsArchiveFormat.readArchiveEntries(
           file.toPath, confValue, archivePathFilter = entryGlob) { (_, in) =>
-        // Each entry is read as a standalone text file, so it gets its own row writer, exactly as
-        // `readToUnsafeMem` builds one per file.
         val emptyUnsafeRow = new UnsafeRow(0)
         val unsafeRowWriter = new UnsafeRowWriter(1)
-        // Mirrors `readToUnsafeMem`: an empty required schema (e.g. `count`) yields one empty row
-        // per record; otherwise each record is written into the single `value` column.
+        // An empty required schema (e.g. `count`) yields one empty row per record.
         def toRow(bytes: Array[Byte], length: Int): UnsafeRow = {
           if (requiredSchema.isEmpty) {
             emptyUnsafeRow

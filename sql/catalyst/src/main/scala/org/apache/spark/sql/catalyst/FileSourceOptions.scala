@@ -58,10 +58,10 @@ class FileSourceOptions(
   def hasStrictFileReads: Boolean = !ignoreCorruptFiles && !ignoreMissingFiles
 
   /**
-   * Whether the data source may read tar archives (.tar/.tar.gz/.tgz) by streaming their entries.
+   * Whether the data source may read archive files (tar, zip, 7z) as the entries they contain.
    * Gated by [[SQLConf.ARCHIVE_FORMAT_READER_ENABLED]] and resolved at construction (on the driver,
    * where SQLConf is instantiated) so the value is stable once the options are serialized to
-   * executors. Only the CSV data source currently honors this.
+   * executors.
    */
   val archiveFormatEnabled: Boolean = SQLConf.get.getConf(SQLConf.ARCHIVE_FORMAT_READER_ENABLED)
 

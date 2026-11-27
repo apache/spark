@@ -66,8 +66,7 @@ class ParquetFileFormat
   with Logging
   with Serializable {
 
-  // Reads every archive entry, matching a directory scan (Parquet part-files are often
-  // extensionless).
+  // Parquet part-files are often extensionless, so read every archive entry.
   override protected def archiveEntryFilter(name: String): Boolean = true
 
   override def shortName(): String = "parquet"
@@ -409,8 +408,6 @@ class ParquetFileFormat
       }
     }
 
-    // An archive is read by unpacking each Parquet entry to a local temp file and reading it with
-    // the plain reader (readSingleFile); readLocalizedEntries owns the unpack/iterate/cleanup.
     def readArchiveFile(file: PartitionedFile): Iterator[InternalRow] =
       readLocalizedEntries(
           file, broadcastedHadoopConf.value.value, "parquet-archive",
@@ -672,8 +669,7 @@ object ParquetFileFormat extends Logging {
         // ParquetFileReader.readFooter throws RuntimeException, instead of IOException,
         // when it can't read the footer.
         if (archiveEnabled && SupportsArchiveFormat.isArchivePath(currentFile.getPath)) {
-          // An archive is one file here; read each of its Parquet entries' footers (the archive is
-          // atomic under ignoreCorruptFiles, see readArchiveFooters).
+          // An archive is atomic under ignoreCorruptFiles: one corrupt entry skips all of it.
           readArchiveFooters(conf, currentFile, archivePathFilter)
         } else {
           Seq(new Footer(currentFile.getPath,

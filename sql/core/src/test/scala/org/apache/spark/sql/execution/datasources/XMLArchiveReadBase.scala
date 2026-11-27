@@ -28,7 +28,7 @@ import org.apache.spark.sql.types.StringType
  * Binds [[ArchiveReadSuiteBase]]'s file-format hooks to XML. XML opts into the shared
  * schema-inference and complex-type tests (see `supportsSchemaInference`/`supportsComplexTypes`),
  * and adds the XML-specific tests with no format-agnostic analogue: multi-line records,
- * element-union across entries, and attributes. Records are delimited by a `rowTag` (here `row`),
+ * attributes, and single-line mode. Records are delimited by a `rowTag` (here `row`),
  * so a single `rowTag` is used for both writing and reading. Reusable across archive formats: a
  * `XML<Container>ArchiveReadSuite` mixes this in alongside the archive-format trait.
  */
@@ -45,11 +45,6 @@ trait XMLArchiveReadBase extends ArchiveReadSuiteBase {
   override protected def readSchema: String = "id INT, name STRING"
 
   override protected def supportsDecompressionCodec: Boolean = true
-
-  // XML infers from record content, unions fields across inputs by name, and represents nested
-  // elements as structs, so it keeps all three `supports*` defaults (inference, schema-merge,
-  // complex types) and runs the full shared test set. Inference needs no trigger option, so
-  // `inferenceOptions` keeps its empty default.
 
   /** Raw XML bytes, for tests that need precise control over the record layout. */
   protected def xmlBytes(s: String): Array[Byte] = s.getBytes(StandardCharsets.UTF_8)
@@ -77,7 +72,7 @@ trait XMLArchiveReadBase extends ArchiveReadSuiteBase {
     // `c` is empty (NullType) in the archive entry and an integer in the loose file. A single
     // inference pass widens `c` to the integer type, exactly as a directory read does. Inferring
     // the archive and the loose file separately would canonicalize the archive's `c` to string
-    // first, then merge to string -- diverging from the directory read.
+    // first, then merge to string.
     val inArchive = xmlBytes("<rows><row><id>1</id><c></c></row></rows>")
     val loose = xmlBytes("<rows><row><id>2</id><c>5</c></row></rows>")
     withTempDir { dir =>
@@ -97,8 +92,7 @@ trait XMLArchiveReadBase extends ArchiveReadSuiteBase {
   }
 
   test("XML: single-line mode reads and infers an archive like a directory") {
-    // multiLine=false: each line is one record in both the scan and inference, matching a
-    // non-archive single-line read. (The default multiLine=true is covered by the tests above.)
+    // The default multiLine=true is covered by the tests above.
     val opts = Map("multiLine" -> "false")
     val entries = Seq(
       entryName(0) -> xmlBytes(
@@ -117,11 +111,9 @@ trait XMLArchiveReadBase extends ArchiveReadSuiteBase {
   }
 
   test("XML: a malformed record in an archive entry matches a directory read (both modes)") {
-    // Permissive mode (the default): a malformed record parses to nulls with its raw text echoed
-    // into `_corrupt_record`. The single-line archive path wires its own FailureSafeParser in
-    // `readStream`, and the multi-line path buffers the entry's bytes to echo the corrupt record --
-    // so assert the corrupt-record column matches a directory read of the same files in both the
-    // single-line and whole-document modes.
+    // The single-line archive path wires its own FailureSafeParser in `readStream`, and the
+    // multi-line path buffers the entry to echo the corrupt record, so check `_corrupt_record` in
+    // both modes.
     val corruptSchema = s"$readSchema, _corrupt_record STRING"
     // Single-line: a good record, then a malformed one on the next line.
     assertArchiveMatchesDir(

@@ -71,7 +71,7 @@ abstract class XmlDataSource extends Serializable with Logging with SupportsArch
       schema: StructType): Iterator[InternalRow]
 
   /**
-   * Streams a tar archive (`.tar`/`.tar.gz`/`.tgz`) entry by entry through the XML parser without
+   * Streams an archive entry by entry through the XML parser without
    * unpacking it to disk. The whole archive is a single split (see `XmlFileFormat.isSplitable`);
    * each entry's bytes are parsed exactly like a standalone XML file via [[readStream]], which each
    * mode overrides (single-line splits into lines, multi-line parses the whole entry). Each entry
@@ -377,16 +377,13 @@ object MultiLineXmlDataSource extends XmlDataSource {
     SupportsArchiveFormat.checkNoDecompressionCodecForArchives(
       inputPaths, parsedOptions.decompressionCodec)
     val baseRdd = createBaseRdd(sparkSession, inputPaths, parsedOptions)
-    // Inference must see the same entries the scan reads, so it honors archivePathFilter too.
-    // Capture the glob string: the compiled GlobPattern is not serializable, so each task
-    // compiles it once when the archive branch is taken.
+    // Capture the glob string: the compiled GlobPattern is not serializable.
     val archivePathFilterGlob = parsedOptions.archivePathFilter
     val ignoreCorruptFiles = parsedOptions.ignoreCorruptFiles
     val ignoreMissingFiles = parsedOptions.ignoreMissingFiles
 
     val tokenRDD: RDD[String] = baseRdd.mapPartitions { streams =>
-      // Compile at most once per partition: lazy so a partition of only loose files never
-      // compiles, while a partition with archives reuses one matcher across all of them.
+      // Lazy, so the glob is compiled at most once per partition and only if it has an archive.
       lazy val archivePathFilter =
         archivePathFilterGlob.map(FileSourceOptions.compileArchivePathFilter)
       streams.flatMap { stream =>
@@ -448,8 +445,8 @@ object MultiLineXmlDataSource extends XmlDataSource {
         try delegate.hasNext
         catch {
           case NonFatal(e) =>
-            // A mid-advance throw reaches neither exhaustion nor close, so close the failed
-            // iterator here to release its archive stream promptly rather than at task completion.
+            // Close the failed iterator now to release its archive stream, rather than at task
+            // completion.
             delegate match {
               case c: Closeable => try c.close() catch { case NonFatal(_) => }
               case _ =>

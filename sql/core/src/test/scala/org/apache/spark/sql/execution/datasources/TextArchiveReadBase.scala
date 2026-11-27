@@ -36,8 +36,9 @@ import org.apache.spark.util.Utils
  * Unlike CSV/JSON this does not extend [[ArchiveReadSuiteBase]]: the text data source has a single
  * fixed `value` column (one row per line, or per entry with `wholetext`) and no schema inference,
  * so the structured, two-column tests there do not apply. The container-writing hooks below are
- * supplied by a container trait the concrete suite mixes in ([[TarArchiveTestUtils]] /
- * [[ZipArchiveTestUtils]]); `corruptArchiveExtension` is supplied by the concrete suite.
+ * supplied by a container trait the concrete suite mixes in ([[TarArchiveTestUtils]],
+ * [[ZipArchiveTestUtils]] or [[SevenZArchiveTestUtils]]); `corruptArchiveExtension` is supplied
+ * by the concrete suite.
  */
 trait TextArchiveReadBase extends QueryTest with SharedSparkSession {
 

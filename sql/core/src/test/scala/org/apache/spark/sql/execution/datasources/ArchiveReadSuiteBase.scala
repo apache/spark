@@ -32,9 +32,9 @@ import org.apache.spark.sql.types.{DataType, StringType, StructType}
 import org.apache.spark.util.Utils
 
 /**
- * Format- and archive-agnostic end-to-end tests for reading archives of data files through the
- * streaming [[SupportsArchiveFormat]] path. Entries are streamed (never unpacked to disk), and the
- * central contract verified throughout is parity with reading the same files from a directory.
+ * Format- and archive-agnostic end-to-end tests for reading archives of data files through
+ * [[SupportsArchiveFormat]]. The central contract verified throughout is parity with reading the
+ * same files from a directory.
  *
  * A concrete suite binds the abstract hooks below by mixing in a file-format trait (e.g.
  * [[org.apache.spark.sql.execution.datasources.CSVArchiveReadBase]]) and an archive-format trait
@@ -146,7 +146,7 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
 
   /**
    * Whether this format can infer a read schema from the files (content or an embedded header).
-   * Gates the shared schema-inference tests; a format that cannot infer (e.g. ORC) sets it false.
+   * Gates the shared schema-inference tests; a format that cannot infer sets it false.
    * A format that infers but does not widen types across entries excludes that one test via
    * [[excluded]] (see Avro). CSV-style inference triggers also override [[inferenceOptions]].
    */
@@ -157,14 +157,14 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
 
   /**
    * Whether this format can represent nested/complex types (struct/array/map). Gates the shared
-   * complex-type round-trip test; JSON keeps it, CSV and text override it to false.
+   * complex-type round-trip test; JSON keeps it, CSV overrides it to false.
    */
   protected def supportsComplexTypes: Boolean = true
 
   /**
    * Whether inputs with different field sets are unioned by field name -- the self-describing,
-   * field-name-keyed model of JSON (and Avro/Parquet/XML), as opposed to CSV's positional,
-   * first-header-keyed model. Gates the shared differing-field read/inference tests; CSV and text
+   * field-name-keyed model of JSON and XML, as opposed to CSV's positional, first-header-keyed
+   * model. Gates the shared differing-field read/inference tests; CSV, Avro, Parquet and ORC
    * override it to false.
    */
   protected def supportsSchemaMerge: Boolean = true
@@ -361,8 +361,6 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
       writeArchive(new File(dir, s"good.${archiveExtensions.head}"),
         Seq(entryName(0) -> encodeFile(good)))
       writeCorruptArchive(new File(dir, s"bad.$corruptArchiveExtension"))
-      // A tar is one non-splittable unit, so corrupt handling is archive-granular: the corrupt
-      // archive is skipped in its entirety while the good archive's rows are still returned.
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
         checkAnswer(read(dir.getCanonicalPath), good)
       }
@@ -377,7 +375,6 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
         s"top.$fileExtension" -> encodeFile(sampleDf((1, "top"))),
         s"sub/keep.$fileExtension" -> encodeFile(sampleDf((2, "keep"))),
         s"other/skip.$fileExtension" -> encodeFile(sampleDf((3, "skip")))))
-      // `sub/*` matches the full inner path, so only the entry under `sub/` is ingested.
       checkAnswer(
         read(archive.getCanonicalPath, Map("archivePathFilter" -> "sub/*")).select("id", "name"),
         Seq(Row(2, "keep")))
@@ -390,8 +387,7 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
         s"top.$fileExtension" -> encodeFile(sampleDf((1, "top"))),
         s"sub/nested.$fileExtension" -> encodeFile(sampleDf((2, "nested"))),
         "sub/skip.other" -> encodeFile(sampleDf((3, "skip")))))
-      // `*` crosses `/`, so the glob keeps both entries of this extension at any depth, while the
-      // entry with a different extension is filtered out.
+      // `*` crosses `/`, so the glob matches at any depth.
       checkAnswer(
         read(archive.getCanonicalPath, Map("archivePathFilter" -> s"*.$fileExtension"))
           .select("id", "name"),
@@ -487,8 +483,6 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
     }
 
     test("inference merges archive entries with loose files in the same directory") {
-      // An archive entry and a loose file with the same schema infer one combined schema, matching
-      // a directory read of the same files.
       val inArchive = sampleDf((1, "Alice"), (2, "Bob"))
       val loose = sampleDf((3, "Carol"))
       withTempDir { dir =>
@@ -508,8 +502,6 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
     // Excludes formats that sample one file (Parquet): they can't widen types across entries.
     if (!inferenceSamplesOneFile) {
       test("archive inference widens a column's type across entries like a directory") {
-        // The column is integral in the first entry and string in the second; inference over all
-        // entries widens the merged type to string, exactly as a directory read would.
         withArchiveFile() { archive =>
           writeArchive(archive, Seq(
             entryName(0) -> encodeFile(Seq(1, 2).toDF("c")),
@@ -526,8 +518,6 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
 
   if (supportsSchemaMerge) {
     test("archive entries with differing fields read like a directory") {
-      // One entry carries an extra field the other lacks; read under a schema covering both, the
-      // missing field reads back null -- exactly as a directory read of the same files does.
       val withName = sampleDf((1, "Alice"), (2, "Bob"))
       val idOnly = Seq(3).toDF("id")
       assertArchiveMatchesDir(
@@ -535,8 +525,6 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
     }
 
     test("inference unions differing fields across archive entries and loose files") {
-      // The archive entry has fields (id, name); the loose file has (id, extra). A field-name-keyed
-      // format unions them by name -- exactly as a directory read of the same files does.
       val inArchive = sampleDf((1, "Alice"), (2, "Bob"))
       val loose = Seq((3, 30)).toDF("id", "extra")
       withTempDir { dir =>
@@ -563,8 +551,6 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
     // formats (Parquet) set `supportsSchemaMerge` off, so provide it here instead.
     if (!supportsSchemaMerge) {
       test("archive entries with differing fields read like a directory") {
-        // One entry carries an extra field the other lacks; read under a schema covering both, the
-        // missing field reads back null -- exactly as a directory read of the same files does.
         val withName = sampleDf((1, "Alice"), (2, "Bob"))
         val idOnly = Seq(3).toDF("id")
         assertArchiveMatchesDir(
@@ -689,10 +675,8 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
     }
 
     test("archive inference unions differing fields across entries with mergeSchema=true") {
-      // mergeSchema=true folds every entry's schema; over an archive, one unpacked entry at a time.
-      // Compare field name/type pairs as a set rather than by exact StructType equality: field
-      // order across archive entries follows the parallel merge order and is not a guaranteed
-      // contract, and some formats (ORC) merge entries unordered. Only the name/type union matters.
+      // Compare field name/type pairs as a set: field order follows the parallel merge order and
+      // is not a guaranteed contract.
       val withName = sampleDf((1, "Alice"), (2, "Bob"))
       val idExtra = Seq((3, 30)).toDF("id", "extra")
       val entries = Seq(entryName(0) -> encodeFile(withName), entryName(1) -> encodeFile(idExtra))
@@ -719,8 +703,6 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
   test("_metadata exposes the parent archive file's values, identical for every row") {
     archiveExtensions.foreach { ext =>
       withArchiveFile(ext) { archive =>
-        // Multiple entries, each multiple rows: the archive is one non-splittable PartitionedFile,
-        // so every row must carry the same parent-archive metadata (not any inner entry's).
         val parts = Seq(sampleDf((1, "Alice"), (2, "Bob")), sampleDf((3, "Carol"), (4, "Dan")))
         writeArchive(
           archive, parts.zipWithIndex.map { case (p, i) => entryName(i) -> encodeFile(p) })

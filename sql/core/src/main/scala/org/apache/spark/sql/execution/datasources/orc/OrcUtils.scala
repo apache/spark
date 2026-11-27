@@ -261,8 +261,7 @@ object OrcUtils extends Logging {
     try {
       entries = SupportsArchiveFormat.localizeEntries(
         archive.getPath, conf, tempDir, _ => true, archivePathFilter)
-      // With ignore flags off, a corrupt entry throws to the per-archive catch below. `.toList`
-      // reads every entry (whole archive atomic); `stopAtFirst` stays lazy and stops at the first.
+      // The ignore flags are off here so a corrupt entry throws to the per-archive catch below.
       val schemas = entries.flatMap { case (_, entryFile) =>
         try {
           readSchema(new Path(entryFile.toURI), conf, ignoreCorruptFiles = false,
