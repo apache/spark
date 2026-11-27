@@ -75,6 +75,12 @@ class FetchErrorDetailsHandlerSuite extends SharedSparkSession with ResourceHelp
 
   private val sessionId = UUID.randomUUID().toString
 
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    SparkConnectService.sessionManager.invalidateAllSessions()
+    SparkConnectService.sessionManager.initializeBaseSession(() => spark.newSession())
+  }
+
   private def fetchErrorDetails(
       userId: String,
       sessionId: String,
