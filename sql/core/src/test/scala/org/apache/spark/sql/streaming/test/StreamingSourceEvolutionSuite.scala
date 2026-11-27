@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.streaming.test
 
+import java.io.File
+import java.nio.file.Files
+
 import scala.concurrent.duration._
 
 import org.apache.hadoop.fs.Path
@@ -27,7 +30,7 @@ import org.scalatest.Tag
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetMap, OffsetSeqLog}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.StreamTest
+import org.apache.spark.sql.streaming.{StreamingQuery, StreamingQueryException, StreamTest}
 import org.apache.spark.sql.streaming.Trigger._
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
@@ -530,6 +533,164 @@ class StreamingSourceEvolutionSuite extends StreamTest {
       s"Expected default value 'false' for missing config in V2, but got: $valueV2")
   }
 
+  // ================================
+  // Checkpoint Source Tracking Tests
+  // ================================
+
+  test("restart that keeps the checkpoint's source tracking succeeds") {
+    val positionalCheckpoint = new Path(newMetadataDir)
+    withSQLConf(SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION.key -> "2") {
+      runQuery(testSource(None), positionalCheckpoint)
+      LastOptions.clear()
+      runQuery(testSource(None), positionalCheckpoint)
+    }
+    verifySourcePath(positionalCheckpoint, "0")
+
+    val namedCheckpoint = new Path(newMetadataDir)
+    withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
+      runQuery(testSource(Some("source1")), namedCheckpoint)
+      LastOptions.clear()
+      runQuery(testSource(Some("source1")), namedCheckpoint)
+    }
+    verifySourcePath(namedCheckpoint, "source1")
+  }
+
+  test("named checkpoint - restart without names is rejected before creating sources") {
+    val checkpointLocation = new Path(newMetadataDir)
+    withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
+      runQuery(testSource(Some("source1")), checkpointLocation)
+    }
+
+    LastOptions.clear()
+    checkError(
+      exception = startExpectingFailure(testSource(None), checkpointLocation),
+      condition = "STREAMING_QUERY_EVOLUTION_ERROR.CANNOT_DISABLE_ON_EXISTING_CHECKPOINT",
+      parameters = Map.empty)
+    verifyNoSourceCreated()
+  }
+
+  Seq(1, 2).foreach { version =>
+    test(s"positional v$version checkpoint - restart with names is rejected before creating " +
+        "sources") {
+      val checkpointLocation = new Path(newMetadataDir)
+      withSQLConf(SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION.key -> version.toString) {
+        runQuery(testSource(None), checkpointLocation)
+      }
+
+      LastOptions.clear()
+      withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
+        checkError(
+          exception = startExpectingFailure(testSource(Some("source1")), checkpointLocation),
+          condition = "STREAMING_QUERY_EVOLUTION_ERROR.CANNOT_ENABLE_ON_EXISTING_CHECKPOINT",
+          parameters = Map("existingVersion" -> version.toString))
+      }
+      verifyNoSourceCreated()
+    }
+  }
+
+  test("named and unnamed sources analyzed separately are rejected before creating sources") {
+    LastOptions.clear()
+    val checkpointLocation = new Path(newMetadataDir)
+    // The union is analyzed after each side, so no NamedStreamingRelation is left to check.
+    val unnamed = testSource(None)
+    withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
+      checkError(
+        exception = startExpectingFailure(
+          testSource(Some("source1")).union(unnamed), checkpointLocation),
+        condition = "STREAMING_QUERY_EVOLUTION_ERROR.UNNAMED_STREAMING_SOURCES_WITH_ENFORCEMENT",
+        parameters = Map("sourceInfo" -> "Leaf position 1 - dummySource"))
+    }
+    verifyNoSourceCreated()
+  }
+
+  test("new query with the config - unnamed source analyzed without it is rejected before " +
+      "creating sources") {
+    LastOptions.clear()
+    // Analyzed without the config, the source has no NamedStreamingRelation left to check.
+    val unnamed = testSource(None)
+    withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
+      checkError(
+        exception = startExpectingFailure(unnamed, new Path(newMetadataDir)),
+        condition = "STREAMING_QUERY_EVOLUTION_ERROR.UNNAMED_STREAMING_SOURCES_WITH_ENFORCEMENT",
+        parameters = Map("sourceInfo" -> "Leaf position 0 - dummySource"))
+    }
+    verifyNoSourceCreated()
+  }
+
+  test("new positional query accepts separately analyzed named and unnamed sources") {
+    val named = withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
+      testSource(Some("a"))
+    }
+    withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "false") {
+      val checkpointLocation = new Path(newMetadataDir)
+      LastOptions.clear()
+      runQuery(named.union(testSource(None)), checkpointLocation)
+      verifySourcePath(checkpointLocation, "a")
+      verifySourcePath(checkpointLocation, "0")
+      val offsets = new OffsetSeqLog(spark, s"$checkpointLocation/offsets").getLatest().get._2
+      assert(!offsets.metadataOpt.get.conf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key).toBoolean)
+    }
+  }
+
+  test("named checkpoint - restart with an unnamed source is rejected before creating sources") {
+    val checkpointLocation = new Path(newMetadataDir)
+    withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
+      runQuery(testSource(Some("a")).union(testSource(Some("b"))), checkpointLocation)
+    }
+
+    LastOptions.clear()
+    val unnamed = testSource(None)
+    withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
+      checkError(
+        exception = startExpectingFailure(
+          testSource(Some("a")).union(unnamed), checkpointLocation),
+        condition = "STREAMING_QUERY_EVOLUTION_ERROR.UNNAMED_STREAMING_SOURCES_WITH_ENFORCEMENT",
+        parameters = Map("sourceInfo" -> "Leaf position 1 - dummySource"))
+    }
+    verifyNoSourceCreated()
+  }
+
+  test("positional checkpoint - restart with named and unnamed sources is rejected before " +
+      "creating sources") {
+    val checkpointLocation = new Path(newMetadataDir)
+    withSQLConf(SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION.key -> "2") {
+      runQuery(testSource(None).union(testSource(None)), checkpointLocation)
+    }
+
+    LastOptions.clear()
+    val unnamed = testSource(None)
+    withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
+      checkError(
+        exception = startExpectingFailure(
+          testSource(Some("a")).union(unnamed), checkpointLocation),
+        condition = "STREAMING_QUERY_EVOLUTION_ERROR.CANNOT_ENABLE_ON_EXISTING_CHECKPOINT",
+        parameters = Map("existingVersion" -> "2"))
+    }
+    verifyNoSourceCreated()
+  }
+
+  test("positional checkpoint without offset metadata - restart with names is rejected before " +
+      "creating sources") {
+    val checkpointLocation = new Path(newMetadataDir)
+    runQuery(testSource(None), checkpointLocation)
+    // The offset log reads an empty metadata line as an entry without metadata.
+    val offsetFile = new File(checkpointLocation.toString, "offsets/0")
+    val lines = Files.readAllLines(offsetFile.toPath)
+    lines.set(1, "")
+    Files.write(offsetFile.toPath, lines)
+    new File(offsetFile.getParentFile, ".0.crc").delete()
+    val named = withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
+      testSource(Some("source1"))
+    }
+
+    LastOptions.clear()
+    checkError(
+      exception = startExpectingFailure(named, checkpointLocation),
+      condition = "STREAMING_QUERY_EVOLUTION_ERROR.CANNOT_ENABLE_ON_EXISTING_CHECKPOINT",
+      parameters = Map("existingVersion" -> "1"))
+    verifyNoSourceCreated()
+  }
+
   // ==============
   // Helper Methods
   // ==============
@@ -545,5 +706,36 @@ class StreamingSourceEvolutionSuite extends StreamTest {
         testBody
       }
     }
+  }
+
+  private def testSource(name: Option[String]): DataFrame = {
+    val reader = spark.readStream.format("org.apache.spark.sql.streaming.test")
+    name.fold(reader)(reader.name).load()
+  }
+
+  private def startQuery(df: DataFrame, checkpointLocation: Path): StreamingQuery = {
+    df.writeStream
+      .format("org.apache.spark.sql.streaming.test")
+      .option("checkpointLocation", checkpointLocation.toString)
+      .start()
+  }
+
+  private def runQuery(df: DataFrame, checkpointLocation: Path): Unit = {
+    val q = startQuery(df, checkpointLocation)
+    q.processAllAvailable()
+    q.stop()
+  }
+
+  /** Starts `df` on `checkpointLocation` and returns the error that fails the query. */
+  private def startExpectingFailure(df: DataFrame, checkpointLocation: Path): AnalysisException = {
+    val e = intercept[StreamingQueryException] {
+      startQuery(df, checkpointLocation).processAllAvailable()
+    }
+    e.cause.asInstanceOf[AnalysisException]
+  }
+
+  private def verifyNoSourceCreated(): Unit = {
+    verify(LastOptions.mockStreamSourceProvider, never())
+      .createSource(any(), any(), any(), any(), any())
   }
 }
