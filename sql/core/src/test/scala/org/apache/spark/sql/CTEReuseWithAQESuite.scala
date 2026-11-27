@@ -1039,6 +1039,34 @@ class CTEReuseWithAQESuite
     }
   }
 
+  test("a forced CTE in two WithCTE copies of one plan is materialized once") {
+    withCTEReuseEnabled {
+      // A query that reads a view twice holds the view's WithCTE, and so the definition of its
+      // forced CTE, twice. Every reference of both copies reads one shared inner plan, so all four
+      // see the same value for each id. The UDF returns a fresh value on every call, so a second
+      // materialization shows, which rand() with its fixed seed would hide.
+      spark.udf.register("withcte_copy_uuid",
+        udf(() => java.util.UUID.randomUUID().toString).asNondeterministic())
+      withTempView("forced_cte_view") {
+        sqlWithForcedCTEReuse(
+          """WITH c AS (SELECT id, withcte_copy_uuid() AS r FROM range(5))
+            |SELECT * FROM c UNION ALL SELECT * FROM c
+            |""".stripMargin).createOrReplaceTempView("forced_cte_view")
+        val df = sql("SELECT * FROM forced_cte_view UNION ALL SELECT * FROM forced_cte_view")
+        val defIds = df.queryExecution.analyzed.collectWithSubqueries {
+          case d: CTERelationDef if d.forceSkipInline => d.id
+        }
+        assert(defIds.size == 2 && defIds.distinct.size == 1,
+          s"Expected two copies of one forced definition:\n${df.queryExecution.analyzed}")
+        val rows = df.collect()
+        val valuesById = rows.groupBy(_.getLong(0)).view.mapValues(_.map(_.getString(1)).toSet)
+        assert(rows.length == 20 && valuesById.size == 5 && valuesById.values.forall(_.size == 1),
+          s"Expected one value per id across both copies:\n${rows.mkString("\n")}")
+        assertInnerAQEShared(df)
+      }
+    }
+  }
+
   // -----------------------------------------------------------------
   // Dynamic partition pruning with a sealed CTE as the broadcast build side
   // -----------------------------------------------------------------

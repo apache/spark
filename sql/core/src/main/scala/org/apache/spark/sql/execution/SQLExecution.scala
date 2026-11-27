@@ -232,7 +232,10 @@ object SQLExecution extends Logging {
    * scheduler's per-query job entries of the id once more. Each stage submission of the plan is
    * posted to the scheduler's event loop before its materialization completes, and the execution's
    * end updates its entry before its own cleanup is posted, so whichever of the two cleanups is
-   * posted last is handled after every job the plan registered.
+   * posted last is handled after every job the plan registered. The exception is a broadcast
+   * stage that a replan of the plan drops: such a stage is not cancelled and the plan does not
+   * wait for it, so a broadcast job still queued then can register after both cleanups, as a
+   * dropped broadcast of any adaptive plan can.
    */
   private[sql] def sharedCTEPlanFinished(sc: SparkContext, executionId: Long): Unit = {
     var ended = false

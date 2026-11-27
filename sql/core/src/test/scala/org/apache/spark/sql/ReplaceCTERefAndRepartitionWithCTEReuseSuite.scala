@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, AttributeReference, Literal, Rand, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Ascending, Attribute, AttributeReference, Literal, Rand, SortOrder}
 import org.apache.spark.sql.catalyst.optimizer.{PushdownPredicatesAndPruneColumnsForCTEDef, ReplaceCTERefWithRepartition, ReplaceRepartitionWithCTEReuse}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
@@ -823,6 +823,26 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
       s"Expected a streaming forced CTE not to be sealed:\n${result.treeString}")
   }
 
+  test("the CTE lowering rule does not ask a plan without a forced CTE whether it streams") {
+    // `isStreaming` walks the plan, so a batch plan that holds no forced definition, with the
+    // reuse flag on or off, must return before the rule asks for it.
+    Seq(true, false).foreach { enabled =>
+      Seq[(String, LogicalPlan => LogicalPlan)](
+        "no CTE" -> (leaf => Project(leaf.output, leaf)),
+        "an unforced CTE read twice" -> (leaf => withCteRefs(leaf, refCount = 2))
+      ).foreach { case (name, build) =>
+        val leaf = IsStreamingCountingRelation(Seq(AttributeReference("a", IntegerType)()))
+        val plan = build(leaf)
+        withSQLConf(cteReuseConfKey -> enabled.toString) {
+          ReplaceCTERefWithRepartition(plan)
+        }
+        assert(leaf.isStreamingCalls == 0,
+          s"$name, reuse flag $enabled: expected no isStreaming call, got " +
+            s"${leaf.isStreamingCalls}")
+      }
+    }
+  }
+
   test("forced CTEs with identical deterministic bodies share one plan-reuse id") {
     withCTEReuseEnabled {
       def cteIds(text: String): Set[Long] =
@@ -915,6 +935,39 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
       }
       assert(expected.size == 30)
       checkAnswer(df, expected)
+    }
+  }
+
+  test("a twin whose nested forced CTE is read only through it is sealed with its sealed twin") {
+    // `g1` and `g2` are forced and have the same deterministic body. `t` is MATERIALIZED, read
+    // twice and reads `g1`; `f` is forced, read twice and reads `g2`, which the query also reads
+    // directly. `t`'s body equals `f`'s, so `t` is sealed with `f`. Sealing `t` leaves `g1`, read
+    // only inside it, a single copy, but `g1` must stay sealed so that `t`'s root keeps equaling
+    // `f`'s and every reference of both reads one shared body.
+    val g1 = CTERelationDef(rel, forceSkipInline = true)
+    val g2 = CTERelationDef(rel, forceSkipInline = true)
+    def plusOne(g: CTERelationDef): LogicalPlan =
+      Project(Seq(Alias(Add(g.output.head, Literal(1)), "x")()), refTo(g))
+    val t = CTERelationDef(plusOne(g1), materialized = Some(true))
+    val f = CTERelationDef(plusOne(g2), forceSkipInline = true)
+    val plan = WithCTE(
+      Union(Seq(refTo(t), refTo(t), refTo(f), refTo(f), refTo(g2))), Seq(g1, g2, t, f))
+    val result = runReuseRules(plan)
+    val tAndF = result match {
+      case Union(children, _, _) => children.take(4)
+      case other => fail(s"Expected a union:\n${other.treeString}")
+    }
+    val reuses = tAndF.collect { case r: CTEReuseRelation => r }
+    withClue(s"Expected every reference of t and f to read one sealed body:\n$result\n") {
+      assertAllRefsShareOneNonzeroId(reuses, refCount = 4)
+    }
+    assert(numRepartitionLike(result) == 0,
+      s"Expected no plain copy of the t and f body:\n${result.treeString}")
+    reuses.foreach { r =>
+      val plain = r.sharedSubplan.collect {
+        case p: RepartitionByExpression if !p.isForPlanReuse => p
+      }
+      assert(plain.isEmpty, s"Expected no plain repartition in the shared body:\n$r")
     }
   }
 
@@ -1059,6 +1112,37 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
     reuses.head.partitioning
   }
 
+  test("a pinned forced CTE that only selects a retained CTE read elsewhere keeps its pin") {
+    // `forced` is pinned and its body only selects `retained`, which the query also reads
+    // directly. The pin takes precedence over sealing `retained` with `forced`: `forced` is sealed
+    // as the pin's repartition over `retained`'s own lowering, and the direct reference of
+    // `retained` keeps that lowering, a repartition with no plan-reuse id.
+    val base = rel
+    val retained = CTERelationDef(base, materialized = Some(true))
+    val key = retained.output.head
+    val forced = CTERelationDef(refTo(retained), forceSkipInline = true,
+      forcePartitioning = Some(HashPartitioning(Seq(key), 3)))
+    val result = runReuseRules(
+      WithCTE(Union(Seq(refTo(forced), refTo(forced), refTo(retained))), Seq(retained, forced)))
+    val children = result match {
+      case Union(children, _, _) => children
+      case other => fail(s"Expected a union:\n${other.treeString}")
+    }
+    val retainedLowering = RepartitionByExpression(Seq.empty, base, None)
+    val reuses = children.take(2).collect { case r: CTEReuseRelation => r }
+    assertAllRefsShareOneNonzeroId(reuses, refCount = 2)
+    reuses.foreach { r =>
+      assert(r.partitioning == HashPartitioning(Seq(key), 3),
+        s"Expected the pinned partitioning, got ${r.partitioning}")
+      val root = sharedRoot(r)
+      assert(root.partitionExpressions == Seq(key) && root.numPartitions == 3 &&
+        root.child == retainedLowering,
+        s"Expected the pin's repartition over the retained lowering:\n${r.sharedSubplan}")
+    }
+    assert(children(2) == retainedLowering && !retainedLowering.isForPlanReuse,
+      s"Expected the retained CTE's own lowering:\n${result.treeString}")
+  }
+
   test("forced under-subquery CTE seals (wrapped)") {
     val reuses = collectCTEReuseRelations(
       runReuseRules(forcedCteRefs(rel, refCount = 2, underSubquery = true)))
@@ -1085,4 +1169,14 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
     }
   }
 
+}
+
+/** A batch leaf that counts the calls of its `isStreaming`. */
+private case class IsStreamingCountingRelation(output: Seq[Attribute]) extends LeafNode {
+  var isStreamingCalls = 0
+
+  override def isStreaming: Boolean = {
+    isStreamingCalls += 1
+    false
+  }
 }

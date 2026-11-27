@@ -98,8 +98,9 @@ case class CTEReuseRelation(
   // `sharedSubplan` is metadata, not a child, so the tree-string traversal (which walks `children`)
   // never reaches it and EXPLAIN would render this node as an opaque leaf. Surface it as an inner
   // child so the CTE body shows up nested under the node, the same way
-  // `CTEReuseExchange`/`InMemoryTableScanExec` expose their metadata subplans. This affects only
-  // string rendering -- `innerChildren` is not part of the tree structure that
-  // analysis/optimization traverses.
+  // `CTEReuseExchange`/`InMemoryTableScanExec` expose their metadata subplans. Optimizer
+  // transformations do not descend into `innerChildren`, but checks that walk it, such as
+  // CheckAnalysis and TableCapabilityCheck, visit `sharedSubplan` when they run on a plan that
+  // holds this node.
   override def innerChildren: Seq[QueryPlan[_]] = Seq(sharedSubplan) ++ super.innerChildren
 }

@@ -1272,6 +1272,68 @@ class CTEReuseWithoutAQESuite
     }
   }
 
+  test("a twin whose nested forced CTE is read only through it reuses the sealed shuffle") {
+    withCTEReuseNoAQE {
+      withReuseSrc {
+        // `g1` and `g2` are forced with the same deterministic body. `t` is MATERIALIZED, read
+        // twice and reads `g1`; `f` is forced, read twice and reads `g2`, which the query also
+        // reads directly. `t`'s body equals `f`'s, so `t` is sealed with `f`, although sealing `t`
+        // leaves `g1`, read only inside it, a single copy: the body of `t` and `f` runs under one
+        // CTE shuffle, and no plain shuffle of it is left.
+        val text =
+          """WITH g1 AS (SELECT id, v FROM reuse_src), g2 AS (SELECT id, v FROM reuse_src),
+            |  t AS MATERIALIZED (SELECT id, v * 2 AS w FROM g1),
+            |  f AS (SELECT id, v * 2 AS w FROM g2)
+            |SELECT * FROM t UNION ALL SELECT * FROM t UNION ALL SELECT * FROM f
+            |UNION ALL SELECT * FROM f UNION ALL SELECT * FROM g2
+            |""".stripMargin
+        val forced = Set("g1", "g2", "f")
+        val df = sqlWithForcedCTEs(text, forced)
+        val expected = withSQLConf(cteReuseConf -> "false") {
+          sqlWithForcedCTEs(text, forced).collect().toSeq
+        }
+        assert(expected.size == 25)
+        checkAnswer(df, expected)
+        // One plan-reuse id for the body of `t` and `f`, and one for that of `g1` and `g2`.
+        assertCTEReuseApplied(df, expectedDistinctCTEs = 2)
+        val executed = df.queryExecution.executedPlan
+        assert(liveCTEShuffles(df).count(_.output.map(_.name) == Seq("id", "w")) == 1,
+          s"Expected one live CTE shuffle of the t and f body:\n${executed.treeString}")
+        assert(executed.collectWithSubqueries {
+          case s: ShuffleExchangeExec if s.shuffleOrigin == REBALANCE_PARTITIONS_BY_NONE => s
+        }.isEmpty, s"Expected no plain shuffle of the t and f body:\n${executed.treeString}")
+      }
+    }
+  }
+
+  test("a forced CTE in two WithCTE copies of one plan runs one CTE shuffle") {
+    withCTEReuseNoAQE {
+      // A query that reads a view twice holds the view's WithCTE, and so the definition of its
+      // forced CTE, twice. Both copies carry one plan-reuse id, so exchange reuse runs the body
+      // under one live CTE shuffle and all four references see the same value for each id. The
+      // UDF returns a fresh value on every call, so a second evaluation of the body shows.
+      spark.udf.register("withcte_copy_uuid",
+        udf(() => java.util.UUID.randomUUID().toString).asNondeterministic())
+      withTempView("forced_cte_view") {
+        sqlWithForcedCTEReuse(
+          """WITH c AS (SELECT id, withcte_copy_uuid() AS r FROM range(5))
+            |SELECT * FROM c UNION ALL SELECT * FROM c
+            |""".stripMargin).createOrReplaceTempView("forced_cte_view")
+        val df = sql("SELECT * FROM forced_cte_view UNION ALL SELECT * FROM forced_cte_view")
+        val defIds = df.queryExecution.analyzed.collectWithSubqueries {
+          case d: CTERelationDef if d.forceSkipInline => d.id
+        }
+        assert(defIds.size == 2 && defIds.distinct.size == 1,
+          s"Expected two copies of one forced definition:\n${df.queryExecution.analyzed}")
+        assertCTEReuseApplied(df)
+        val rows = df.collect()
+        val valuesById = rows.groupBy(_.getLong(0)).view.mapValues(_.map(_.getString(1)).toSet)
+        assert(rows.length == 20 && valuesById.size == 5 && valuesById.values.forall(_.size == 1),
+          s"Expected one value per id across both copies:\n${rows.mkString("\n")}")
+      }
+    }
+  }
+
   test("a CTE shuffle that is not the co-partition target is wrapped, not rewritten") {
     withCTEReuseNoAQE {
       // No inferred IS NOT NULL filter, so the CTE shuffle is the join's direct child.
