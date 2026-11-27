@@ -77,7 +77,7 @@ case class PushDownKeyedShuffleExchange(
       case _ => false
     }
 
-    // The rewrite one candidate reports, or `current` when it declines.
+    // Rewrites every exchange `select` accepts in one pass; one whose push-down declines stays.
     def rewrite(current: SparkPlan)(select: ShuffleExchangeExec => Boolean): SparkPlan =
       current.transformUp {
         case exchange: ShuffleExchangeExec if select(exchange) =>
@@ -87,9 +87,9 @@ case class PushDownKeyedShuffleExchange(
     def validated(plan: SparkPlan): Boolean =
       ValidateRequirements.validateWithOrigins(plan, ensureRequirements.requiredDistribution)
 
-    // One pass rewrites every candidate, and the whole plan is validated once. Only when that
-    // check refuses a rewrite does the per-candidate retry below run, so a refusal on one branch
-    // does not undo the others in the rare case that the whole-plan check fails.
+    // One pass rewrites every candidate and validates the whole plan once. If that fails, each
+    // candidate is retried in turn and kept when the whole plan still validates. A plan that fails
+    // before any rewrite, such as one with a computed one-side-shuffle key, keeps every shuffle.
     val pushed = rewrite(plan)(isCandidate)
     if (pushed.fastEquals(plan)) {
       plan
@@ -98,9 +98,9 @@ case class PushDownKeyedShuffleExchange(
     } else {
       // `collect` visits a node before its children, so a candidate above another is retried
       // first. A rewrite rebuilds only the path from the candidate to the root, copies the hash
-      // shuffle's child, and leaves a sibling subtree in place, so every other candidate keeps
-      // its instance: one cannot sit in another's crossed operators, where a walk stops at a
-      // keyed shuffle it cannot retarget.
+      // shuffle but keeps its child, and leaves sibling subtrees in place, so every other
+      // candidate keeps its instance: one cannot sit in another's crossed operators, where a
+      // walk stops at a keyed shuffle it cannot retarget.
       plan.collect { case exchange: ShuffleExchangeExec if isCandidate(exchange) => exchange }
         .foldLeft(plan) { (current, keyedExchange) =>
           val rewritten = rewrite(current)(_.eq(keyedExchange))

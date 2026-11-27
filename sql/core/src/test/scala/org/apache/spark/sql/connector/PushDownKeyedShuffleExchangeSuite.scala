@@ -20,14 +20,14 @@ package org.apache.spark.sql.connector
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, Encoder, Encoders, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Ascii, AttributeReference, Explode, Expression, Literal, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Ascending, Ascii, AttributeReference, Cast, Explode, Expression, Literal, RowNumber, SortOrder, TransformExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Partial
 import org.apache.spark.sql.catalyst.optimizer.BuildLeft
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, KeyedPartitioning, ROUTING_LOST}
+import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, HashPartitioning, KeyedPartitioning, ROUTING_LOST}
 import org.apache.spark.sql.connector.catalog.{Column, Identifier}
 import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.connector.expressions.Expressions._
-import org.apache.spark.sql.execution.{FilterExec, GenerateExec, LocalTableScanExec, ProjectExec, SortExec, SparkPlan}
+import org.apache.spark.sql.execution.{FilterExec, GenerateExec, LocalTableScanExec, ProjectExec, SortExec, SparkPlan, UnionExec}
 import org.apache.spark.sql.execution.adaptive.{PushDownKeyedShuffleExchange, ShuffleQueryStageExec}
 import org.apache.spark.sql.execution.aggregate.{BaseAggregateExec, HashAggregateExec, MergingSessionsExec, ObjectHashAggregateExec}
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, EnsureRequirements, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ValidateRequirements}
@@ -471,8 +471,9 @@ class PushDownKeyedShuffleExchangeSuite extends KeyGroupedPartitioningSuiteBase 
       Array(Column.create("code", StringType), Column.create("price", FloatType)), Array.empty)
     sql("INSERT INTO testcat.ns.codes VALUES ('1', 40.0), ('3', 15.5), ('n/a', 1.0)")
     // The keyed shuffle evaluates `cast(code as bigint)` only on the groups `having` keeps, so the
-    // rewrite must not move it below the filter, where the 'n/a' group would reach the cast.
-    // ANSI stays pinned: off, the cast is total and the layout would move below the filter.
+    // rewrite must not move it below the filter. The local gate refuses the cast under ANSI, and
+    // the whole-plan check refuses this plan in either ANSI mode: the join's one-side shuffle key
+    // is computed, so `KeyedShuffleSpec.keyPositions` gives the layout no position.
     withPushDownConf(SQLConf.ANSI_ENABLED.key -> "true") {
       val df = sql(
         s"""SELECT k.id, p.total FROM testcat.ns.keyed_codes k
@@ -493,6 +494,62 @@ class PushDownKeyedShuffleExchangeSuite extends KeyGroupedPartitioningSuiteBase 
          |) p ON i.id = p.item_id""".stripMargin,
       Seq(Row(1L, 40.0), Row(1L, 40.0), Row(3L, 25.5)),
       expectedShuffles = 1)
+  }
+
+  test("SPARK-61860: a failable transform layout is not moved below an operator that " +
+    "removes rows") {
+    loadBucketed()
+    createTable("flags", Array(Column.create("v", LongType)), Array.empty)
+    sql("INSERT INTO testcat.ns.flags VALUES (0)")
+    // The layout the aggregate side takes is `bucket(4, item_id)`, a transform, which
+    // `canEvaluateUnconditionally` rejects, so it cannot cross an operator that removes rows.
+    // A `HAVING` filter drops the groups it fails.
+    check(
+      s"""SELECT b.id, p.total FROM testcat.ns.bucketed b
+         |JOIN (
+         |  SELECT item_id, sum(price) AS total FROM testcat.ns.$purchases
+         |  GROUP BY item_id HAVING sum(price) > 15
+         |) p ON b.id = p.item_id""".stripMargin,
+      Seq(Row(1L, 20.0), Row(2L, 30.0), Row(3L, 40.0)),
+      expectedShuffles = 2)
+    // A non-outer explode drops the rows whose array is empty.
+    check(
+      s"""SELECT b.id, g.x FROM testcat.ns.bucketed b
+         |JOIN (
+         |  SELECT item_id, explode(array(total, total)) AS x FROM (
+         |    SELECT item_id, sum(price) AS total
+         |    FROM testcat.ns.$purchases GROUP BY item_id)
+         |) g ON b.id = g.item_id""".stripMargin,
+      Seq(Row(0L, 10.0), Row(0L, 10.0), Row(1L, 20.0), Row(1L, 20.0),
+        Row(2L, 30.0), Row(2L, 30.0), Row(3L, 40.0), Row(3L, 40.0)),
+      expectedShuffles = 2)
+    // A broadcast hash join drops the streamed rows that match no build-side row.
+    check(
+      s"""SELECT b.id, p.total FROM testcat.ns.bucketed b
+         |JOIN (
+         |  SELECT /*+ BROADCAST(s) */ a.item_id, a.total
+         |  FROM (
+         |    SELECT item_id, sum(price) AS total
+         |    FROM testcat.ns.$purchases GROUP BY item_id) a
+         |  JOIN (SELECT item_id FROM testcat.ns.$purchases WHERE price >= 0) s
+         |  ON a.item_id = s.item_id
+         |) p ON b.id = p.item_id""".stripMargin,
+      Seq(Row(0L, 10.0), Row(1L, 20.0), Row(2L, 30.0), Row(3L, 40.0)),
+      expectedShuffles = 2)
+    // A broadcast nested loop join drops the streamed rows its condition fails. The condition
+    // keeps a build-side column and `count(*)` keeps the isnotnull filter the optimizer pushes to
+    // the streamed side away, so the join itself is the operator that drops rows.
+    check(
+      s"""SELECT b.id, x.item_id FROM testcat.ns.bucketed b
+         |JOIN (
+         |  SELECT /*+ BROADCAST(f) */ a.item_id, a.cnt
+         |  FROM (
+         |    SELECT item_id, count(*) AS cnt
+         |    FROM testcat.ns.$purchases GROUP BY item_id) a
+         |  JOIN testcat.ns.flags f ON a.cnt > f.v
+         |) x ON b.id = x.item_id""".stripMargin,
+      Seq(Row(0L, 0L), Row(1L, 1L), Row(2L, 2L), Row(3L, 3L)),
+      expectedShuffles = 2)
   }
 
   test("window runs on the keyed shuffle") {
@@ -1210,6 +1267,69 @@ class PushDownKeyedShuffleExchangeSuite extends KeyGroupedPartitioningSuiteBase 
           exchange.copy(outputPartitioning = keyed.withLayout(_.copy(isGrouped = false)))
       }
       assert(rule.apply(ungrouped) eq ungrouped, ungrouped)
+    }
+  }
+
+  test("SPARK-61860: a failable layout is not moved below a final window group limit") {
+    val s = AttributeReference("s", StringType)()
+    val v = AttributeReference("v", LongType)()
+    // A final group limit keeps the top rows of each partition and drops the rest, so the layout
+    // has to be evaluable on the rows it drops. Under ANSI `cast(s AS BIGINT)` is not, while the
+    // identity layout is.
+    def plan(layoutOn: Expression, keys: Seq[InternalRow]): SparkPlan = {
+      val scan = new LocalTableScanExec(Seq(s, v),
+        Seq(InternalRow(UTF8String.fromString("1"), 1L)), None, false)
+      val hash = ShuffleExchangeExec(HashPartitioning(Seq(s), 2), scan, ENSURE_REQUIREMENTS)
+      val sort = SortExec(
+        Seq(SortOrder(s, Ascending), SortOrder(v, Ascending)), global = false, hash)
+      val limit = WindowGroupLimitExec(
+        Seq(s), Seq(SortOrder(v, Ascending)), RowNumber(), 1, Final, sort)
+      ShuffleExchangeExec(KeyedPartitioning(Seq(layoutOn), keys), limit, ENSURE_REQUIREMENTS)
+    }
+    val rule = PushDownKeyedShuffleExchange(EnsureRequirements(), queryContainsSubqueries = false)
+    withSQLConf(
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.PUSH_DOWN_KEYED_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.ANSI_ENABLED.key -> "true") {
+      val failable = plan(Cast(s, LongType), Seq(InternalRow(1L), InternalRow(2L)))
+      assert(rule.apply(failable) eq failable, failable)
+      val identity = plan(s, Seq(
+        InternalRow(UTF8String.fromString("1")), InternalRow(UTF8String.fromString("2"))))
+      assert(rule.apply(identity) ne identity, identity)
+    }
+  }
+
+  test("SPARK-61860: a union that stops merging refuses the rewrite") {
+    val a = AttributeReference("a", LongType)()
+    // The projection outputs the cluster key twice, once under an alias, so the rewritten branch
+    // reports two keyed members: the layout on `a` and the one on `k`. A union merges only children
+    // that each report a single `KeyedPartitioning`, so its report changes and the root
+    // requirement fails.
+    val k = Alias(a, "k")()
+    def branch(keys: Seq[InternalRow], partitions: Int): SparkPlan = {
+      val scan = new LocalTableScanExec(Seq(a), Seq(InternalRow(1L)), None, false)
+      val hash = ShuffleExchangeExec(HashPartitioning(Seq(a), partitions), scan,
+        ENSURE_REQUIREMENTS)
+      val project = ProjectExec(Seq(a, k), hash)
+      ShuffleExchangeExec(KeyedPartitioning(Seq(a), keys), project, ENSURE_REQUIREMENTS)
+    }
+    val required = ClusteredDistribution(Seq(a))
+    val rule = PushDownKeyedShuffleExchange(
+      EnsureRequirements(requiredDistribution = Some(required)), queryContainsSubqueries = false)
+    withSQLConf(
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.PUSH_DOWN_KEYED_SHUFFLE_ENABLED.key -> "true") {
+      // Nothing local refuses this shape: a lone branch is rewritten.
+      val single = branch(Seq(InternalRow(1L), InternalRow(2L)), partitions = 2)
+      assert(rule.apply(single) ne single, single)
+      // The branches' keys are disjoint, so the union's merged layout is grouped and satisfies the
+      // root requirement before the rewrite. Their shuffles differ so that the plan reuses none.
+      val union = UnionExec(Seq(
+        branch(Seq(InternalRow(1L), InternalRow(2L)), partitions = 2),
+        branch(Seq(InternalRow(3L), InternalRow(4L), InternalRow(5L)), partitions = 3)))
+      assert(union.outputPartitioning.isInstanceOf[KeyedPartitioning], union)
+      assert(ValidateRequirements.validateWithOrigins(union, Some(required)), union)
+      assert(rule.apply(union) eq union, union)
     }
   }
 

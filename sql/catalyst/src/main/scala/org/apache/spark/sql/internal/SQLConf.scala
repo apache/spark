@@ -3821,8 +3821,8 @@ object SQLConf {
         "operator during physical preparation, so one shuffle serves both. The operator then " +
         "runs on the keyed shuffle at its partition count. A hash shuffle that the plan reuses " +
         "elsewhere is kept. In an adaptive plan, removing the stage above the operator, which " +
-        "reports the operator's output size, can cost the join AQE's adaptive broadcast " +
-        "conversion or empty-output pruning. Requires " +
+        "reports the operator's output size, can cost the join AQE's adaptive broadcast or " +
+        "shuffled hash join conversion, or its empty-output pruning. Requires " +
         s"${V2_BUCKETING_SHUFFLE_ENABLED.key} to be enabled and " +
         s"${V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key} to be disabled.")
       .version("4.5.0")

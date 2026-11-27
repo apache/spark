@@ -1191,8 +1191,9 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     // answer in classic preparation. `conf` is live, so another thread turning
     // `UNION_OUTPUT_PARTITIONING` off in between would leave the parent's elided exchange standing
     // over a union that then concatenates. `SnapshotUnionPreparationConf` records the value ahead
-    // of `EnsureRequirements` for both to use. Driven rule by rule, because the two sit next to
-    // each other in the pipeline and no injected rule can run in the window.
+    // of `EnsureRequirements` for both to use. Driven rule by rule, because the snapshot and
+    // `EnsureRequirements` sit next to each other in the pipeline and no injected rule can run in
+    // the window.
     withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
         SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
