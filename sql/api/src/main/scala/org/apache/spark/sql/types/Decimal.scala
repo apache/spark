@@ -207,18 +207,18 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   }
 
   def toScalaBigInt: BigInt = {
-    if (decimalVal.ne(null)) {
-      decimalVal.toBigInt
-    } else {
+    if (hasActualLongVal) {
       BigInt(actualLongVal)
+    } else {
+      toBigDecimal.toBigInt
     }
   }
 
   def toJavaBigInteger: java.math.BigInteger = {
-    if (decimalVal.ne(null)) {
-      decimalVal.underlying().toBigInteger()
-    } else {
+    if (hasActualLongVal) {
       java.math.BigInteger.valueOf(actualLongVal)
+    } else {
+      toJavaBigDecimal.toBigInteger()
     }
   }
 
@@ -248,11 +248,17 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   private def actualLongVal: Long = longVal / POW_10(_scale)
 
+  // POW_10 has no entry to divide by for a scale outside 0 to 18, so a compact value with such a
+  // scale is converted the way a BigDecimal-backed value is. The scale is negative only with
+  // spark.sql.legacy.allowNegativeScaleOfDecimal; a cast that raises it can leave it above 18.
+  private def hasActualLongVal: Boolean =
+    decimalVal.eq(null) && _scale >= 0 && _scale <= MAX_LONG_DIGITS
+
   def toLong: Long = {
-    if (decimalVal.eq(null)) {
+    if (hasActualLongVal) {
       actualLongVal
     } else {
-      decimalVal.longValue
+      toBigDecimal.longValue
     }
   }
 
@@ -305,10 +311,10 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    * Long.
    */
   private def truncatedLong(integralType: IntegralType): Long = {
-    if (decimalVal.eq(null)) {
+    if (hasActualLongVal) {
       actualLongVal
     } else {
-      val bd = decimalVal.bigDecimal
+      val bd = toJavaBigDecimal
       // A non-zero value has precision - scale integral digits when that is positive (none
       // otherwise), and Long.MaxValue has MAX_LONG_DIGITS + 1. Reject longer ones before
       // toBigInteger expands them; compute in Long, since a negative scale can overflow Int.

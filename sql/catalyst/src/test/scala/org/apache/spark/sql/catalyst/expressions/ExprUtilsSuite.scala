@@ -390,8 +390,8 @@ class ExprUtilsSuite extends SparkFunSuite with SQLHelper {
         cast(AttributeReference("x", from)(), to, mode)), (from, to, mode))
     }
     // Not from or to a decimal of a negative scale (`spark.sql.legacy.allowNegativeScaleOfDecimal`)
-    // outside TRY mode, nor from a string in TRY mode, which runs the LEGACY cast: `Decimal.toLong`
-    // raises for one.
+    // outside TRY mode, nor from a string in TRY mode, which runs the LEGACY cast: these casts are
+    // left out conservatively.
     withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
       val negativeScale = DecimalType(3, -2)
       Seq[(Expression, DataType)]((AttributeReference("n", negativeScale)(), LongType),
@@ -413,8 +413,12 @@ class ExprUtilsSuite extends SparkFunSuite with SQLHelper {
         evalEach(from, Seq(-unscaled, unscaled).map(Decimal.createUnsafe(_, from.precision,
           from.scale)))(cast(_, to, mode))
       }
-      intercept[ArrayIndexOutOfBoundsException](cast(BoundReference(0, negativeScale, true),
-        LongType, EvalMode.LEGACY).eval(InternalRow(Decimal.createUnsafe(123L, 3, -2))))
+      // A LEGACY cast of one to a LONG, although not accepted, converts it (SPARK-62122), without
+      // and with code generation.
+      val toLong = cast(BoundReference(0, negativeScale, true), LongType, EvalMode.LEGACY)
+      val row = InternalRow(Decimal.createUnsafe(123L, 3, -2))
+      assert(toLong.eval(row) === 12300L)
+      assert(GenerateUnsafeProjection.generate(Seq(toLong))(row).getLong(0) === 12300L)
       // The accepted TRY casts do not raise.
       evalEach(negativeScale, Seq(Decimal.createUnsafe(123L, 3, -2)))(
         cast(_, LongType, EvalMode.TRY))

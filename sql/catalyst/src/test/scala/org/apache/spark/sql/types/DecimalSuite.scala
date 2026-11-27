@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.types
 
+import scala.util.{Failure, Success, Try}
+
 import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkFunSuite, SparkNumberFormatException}
@@ -122,6 +124,59 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
       checkDecimal(Decimal(BigDecimal(1.579e12), 4, -10), "1.58E+12", 4, -10)
       checkDecimal(Decimal(103050709L, 9, -10), "1.03050709E+18", 9, -10)
       checkDecimal(Decimal(1e8.toLong, 10, -10), "1.00000000E+18", 10, -10)
+    }
+  }
+
+  /** Check that a compact Decimal converts to integral types as a BigDecimal-backed one does */
+  private def checkIntegralConversions(compact: Decimal): Unit = {
+    assert(compact.toDebugString.startsWith("Decimal(compact"))
+    val expanded = Decimal(compact.toBigDecimal, compact.precision, compact.scale)
+    assert(expanded.toDebugString.startsWith("Decimal(expanded"))
+    assert(compact.toLong === expanded.toLong)
+    assert(compact.toInt === expanded.toInt)
+    assert(compact.toShort === expanded.toShort)
+    assert(compact.toByte === expanded.toByte)
+    assert(compact.toScalaBigInt === expanded.toScalaBigInt)
+    assert(compact.toJavaBigInteger === expanded.toJavaBigInteger)
+    Seq[Decimal => Any](_.roundToLong(), _.roundToInt(), _.roundToShort(), _.roundToByte())
+      .foreach { f =>
+        (Try(f(compact)), Try(f(expanded))) match {
+          case (Success(got), Success(want)) =>
+            assert(got === want, s"$compact")
+          case (Failure(got: SparkArithmeticException), Failure(want: SparkArithmeticException)) =>
+            assert(got.getCondition === "CAST_OVERFLOW", s"$compact")
+            assert(got.getCondition === want.getCondition, s"$compact")
+            assert(got.getMessageParameters === want.getMessageParameters, s"$compact")
+          case (got, want) =>
+            fail(s"$compact: compact returned $got but expanded returned $want")
+        }
+      }
+  }
+
+  test("SPARK-62122: integral conversions of compact decimals with negative scale") {
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      Seq(
+        (12L, 2, -1),
+        (123L, 5, -2),
+        (-123L, 5, -2),
+        (103050709L, 9, -10),
+        (999999999L, 9, -11),
+        (0L, 1, -30),
+        // 19 digits, above Long.MaxValue.
+        (95L, 2, -17)).foreach {
+        case (unscaled, precision, scale) =>
+          checkIntegralConversions(Decimal(unscaled, precision, scale))
+      }
+      assert(Decimal(123L, 5, -2).toLong === 12300L)
+    }
+  }
+
+  test("SPARK-62122: integral conversions of compact decimals with scale above 18") {
+    for (scale <- Seq(19, 20, 36); unscaled <- Seq(0L, 5L, -5L)) {
+      val compact = Decimal(unscaled, 38, scale - 17)
+      assert(compact.changePrecision(38, scale))
+      checkIntegralConversions(compact)
+      assert(compact.toLong === 0L)
     }
   }
 

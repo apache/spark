@@ -448,6 +448,16 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkCast(Decimal(1.5), "1.5")
   }
 
+  test("SPARK-62122: cast a compact decimal with scale above 18 to integral types") {
+    Seq(5L, 0L).foreach { unscaled =>
+      val wide = cast(Decimal(unscaled, 5, 2), DecimalType(38, 19))
+      checkEvaluation(cast(wide, LongType), 0L)
+      checkEvaluation(cast(wide, IntegerType), 0)
+      checkEvaluation(cast(wide, ShortType), 0.toShort)
+      checkEvaluation(cast(wide, ByteType), 0.toByte)
+    }
+  }
+
   test("cast from array") {
     val array = Literal.create(Seq("123", "true", "f", null),
       ArrayType(StringType, containsNull = true))
