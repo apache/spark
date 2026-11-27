@@ -40,13 +40,37 @@ from pyspark.sql.types import (
     _create_row,
     _parse_datatype_json_string,
 )
-from pyspark.sql.worker.utils import worker_run
+from pyspark.sql.worker.utils import is_method_overridden, worker_run
 from pyspark.worker_util import (
     get_sock_file_to_executor,
     pickleSer,
     read_command,
     utf8_deserializer,
 )
+
+
+def check_write_requirements_not_disabled(writer: DataSourceWriter) -> None:
+    """
+    Raise `DATA_SOURCE_WRITE_REQUIREMENTS_DISABLED` if `writer` implements a write requirement
+    method while the configuration that enables them is disabled, so that the requirement is not
+    silently ignored.
+    """
+    for method in (
+        "requiredDistribution",
+        "distributionStrictlyRequired",
+        "requiredNumPartitions",
+        "advisoryPartitionSizeInBytes",
+        "requiredOrdering",
+    ):
+        if is_method_overridden(writer, DataSourceWriter, method):
+            raise PySparkAssertionError(
+                errorClass="DATA_SOURCE_WRITE_REQUIREMENTS_DISABLED",
+                messageParameters={
+                    "type": type(writer).__name__,
+                    "method": method,
+                    "conf": "spark.sql.python.writeDistributionAndOrdering.enabled",
+                },
+            )
 
 
 def _main(infile: IO, outfile: IO) -> None:
@@ -145,6 +169,7 @@ def _main(infile: IO, outfile: IO) -> None:
 
         is_streaming = read_bool(infile)
         binary_as_bytes = read_bool(infile)
+        write_requirements_enabled = read_bool(infile)
 
         # Instantiate a data source.
         data_source = data_source_cls(options=options)
@@ -174,6 +199,8 @@ def _main(infile: IO, outfile: IO) -> None:
                         "actual": f"'{type(writer).__name__}'",
                     },
                 )
+            if not write_requirements_enabled:
+                check_write_requirements_not_disabled(writer)
 
     # Create a function that can be used in mapInArrow.
     import pyarrow as pa
