@@ -129,8 +129,8 @@ private[spark] class PythonExternalLookupWorker private (
 
   /** Fails the reads that do not end within `timeoutMs`, from now; a negative value disables. */
   def setReadTimeout(timeoutMs: Long): Unit = {
-    channel.deadlineNs =
-      if (timeoutMs < 0) 0L else System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs)
+    channel.setDeadline(
+      if (timeoutMs < 0) 0L else System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs))
   }
 
   /**
@@ -182,7 +182,7 @@ private[spark] class PythonExternalLookupWorker private (
           action = "close",
           tpe = "lookup reader",
           msg = s"close() did not return within $timeoutMs ms, the value of " +
-            s"${PYTHON_TASK_KILL_TIMEOUT.key}.")
+            s"${PYTHON_TASK_KILL_TIMEOUT.key}, or its default when the value is not positive.")
     } finally {
       setReadTimeout(-1)
     }
@@ -249,7 +249,8 @@ private[spark] object PythonExternalLookupWorker extends Logging {
   import PythonExternalLookupProtocol._
 
   /**
-   * Starts a worker for a reader in the current task, and initializes it.
+   * Starts a worker for a reader in the current task, and initializes it. `onCreate` receives the
+   * worker before its initialization, so that the caller can destroy a worker that is starting.
    *
    * The environment of the worker is the one that [[PythonPlannerRunner.runInPython]] builds,
    * with the session configurations read through `SQLConf.get`, which a task reads from the
@@ -261,7 +262,8 @@ private[spark] object PythonExternalLookupWorker extends Logging {
       context: TaskContext,
       runnerConf: Map[String, String],
       sessionUUID: Option[String],
-      jobArtifactUUID: Option[String])(writeInit: DataOutputStream => Unit)
+      jobArtifactUUID: Option[String],
+      onCreate: PythonExternalLookupWorker => Unit)(writeInit: DataOutputStream => Unit)
     : PythonExternalLookupWorker = {
     val env = SparkEnv.get
     val sparkConf = env.conf
@@ -318,6 +320,7 @@ private[spark] object PythonExternalLookupWorker extends Logging {
       sqlConf.pythonUDFWorkerIdleTimeoutSeconds, sqlConf.pythonUDFWorkerKillOnIdleTimeout,
       bufferSize)
     try {
+      onCreate(lookupWorker)
       // As the worker does on its side, in `disable_nagle`. Otherwise a cancel that reaches the
       // worker after the end of its response, which the worker does not answer, would hold the
       // next message until the worker's delayed acknowledgement, about 40 ms on Linux. A Unix
@@ -325,8 +328,8 @@ private[spark] object PythonExternalLookupWorker extends Logging {
       if (worker.channel.getLocalAddress.isInstanceOf[InetSocketAddress]) {
         worker.channel.setOption[java.lang.Boolean](StandardSocketOptions.TCP_NODELAY, true)
       }
-      // The worker runs no profiler: its results would travel through an accumulator that no
-      // executor-side path reads.
+      // The worker runs no profiler: `worker_run` would profile the whole serve loop, with its
+      // waits for the JVM's next request, rather than the reader's calls.
       lookupWorker.initialize(
         runnerConf - SQLConf.PYTHON_DATA_SOURCE_PROFILER.key, jobArtifactUUID, writeInit)
     } catch {
@@ -334,6 +337,10 @@ private[spark] object PythonExternalLookupWorker extends Logging {
         lookupWorker.destroy()
         throw QueryCompilationErrors.pythonDataSourceError(
           action = "initialize", tpe = "lookup reader", msg = e.getMessage)
+      // Another thread destroyed the worker while it started: the failure is that destroy, not
+      // a crash.
+      case e: IOException if lookupWorker.isReleasedOrClosed =>
+        throw e
       case e: IOException =>
         lookupWorker.destroy()
         throw lookupWorker.ioError(e)
@@ -368,7 +375,9 @@ private[spark] object PythonExternalLookupWorker extends Logging {
  * worker to blocking mode and back.
  *
  * A wait for the worker counts toward the idle timeout of [[BasePythonRunner.IdleTimeoutHandler]],
- * unless a deadline is set: a read then fails once the deadline passes. Between requests the JVM
+ * unless a deadline is set: a read then fails once the deadline has passed. The deadline bounds
+ * only the wait for the worker's reply: the bytes that are pending when it passes are still
+ * written, if the worker accepts them at once. Between requests the JVM
  * does not read, so a long gap between requests is never an idle timeout. It is used from one
  * thread at a time; the byte counts may be read from any thread.
  */
@@ -383,8 +392,16 @@ private class WorkerChannel(
   @volatile var bytesSent = 0L
   @volatile var bytesReceived = 0L
 
-  /** The time, by `System.nanoTime()`, after which a read fails, or 0 for none. */
-  var deadlineNs = 0L
+  // The time, by `System.nanoTime()`, after which a read fails, or 0 for none.
+  private[this] var deadline = 0L
+  // Whether the pending bytes were offered to the worker once after the deadline passed.
+  private[this] var flushedAfterDeadline = false
+
+  /** Sets the time, by `System.nanoTime()`, after which a read fails, or 0 for none. */
+  def setDeadline(deadlineNs: Long): Unit = {
+    deadline = deadlineNs
+    flushedAfterDeadline = false
+  }
 
   /**
    * Queues a message after the bytes that are still pending. A cancel stays pending when the rest
@@ -448,14 +465,20 @@ private class WorkerChannel(
   }
 
   private def waitForWorker(): Unit = {
-    if (deadlineNs == 0L) {
+    if (deadline == 0L) {
       idleTimeoutHandler.select(output.hasRemaining)
     } else {
-      val remainingMs = TimeUnit.NANOSECONDS.toMillis(deadlineNs - System.nanoTime())
-      if (remainingMs <= 0) {
+      val remainingNs = deadline - System.nanoTime()
+      if (remainingNs > 0) {
+        // Rounded up, so that less than a millisecond left is not taken for none.
+        worker.selector.select(TimeUnit.NANOSECONDS.toMillis(remainingNs + 999999))
+      } else if (output.hasRemaining && !flushedAfterDeadline) {
+        // A message that is queued when the deadline passes, such as a cancel, still leaves.
+        flushedAfterDeadline = true
+        worker.selector.selectNow()
+      } else {
         throw new WorkerReadTimeoutException
       }
-      worker.selector.select(remainingMs)
     }
   }
 }

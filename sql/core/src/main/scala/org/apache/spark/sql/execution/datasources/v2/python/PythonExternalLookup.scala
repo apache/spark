@@ -87,8 +87,8 @@ class PythonExternalLookup(
 
 /**
  * Creates the readers that look up rows on the executors with the planned Python lookup reader.
- * The session configurations are captured on the driver, because `SQLConf.get` on an executor is
- * not the session's.
+ * The configurations of the Python worker are captured on the driver, when the lookup join is
+ * planned, as the other Python runners capture theirs with `getPythonRunnerConfMap`.
  *
  * @param reader the planned lookup reader, pickled, with the Python environment of the source
  * @param parameterTypes the data type of each field of a parameter row
@@ -118,14 +118,15 @@ class PythonExternalLookupReaderFactory(
  * rows; its cursor reads the response batch by batch, as Python writes it.
  *
  * A cursor that Spark closes before the end of its response sends a cancel and reads the rest of
- * the response, which Python then ends early. If the response does not end within
- * `spark.python.task.killTimeout`, the reader destroys the worker, and starts a new one at the
- * next request.
+ * the response, which Python then ends early. If the response does not end within the wait bound,
+ * the reader destroys the worker, and starts a new one at the next request. The wait bound is
+ * `spark.python.task.killTimeout` when it is positive, and the default of that setting, 2
+ * seconds, otherwise.
  *
  * Closing the reader on the thread that made its last call, while the task is not interrupted,
  * ends the worker gracefully: Python calls `close()` on the lookup reader, and the worker is
  * released for reuse when `spark.python.worker.reuse` is on. If Python has not finished within
- * `spark.python.task.killTimeout`, the reader destroys the worker, and the close fails. A close
+ * the wait bound, the reader destroys the worker, and the close fails. A close
  * that fails while the task fails already, in the task's completion listener, is added to the
  * task's failure as suppressed, so it never replaces that failure. Any other close destroys the
  * worker without waiting, and Python runs no `close()`: a close from another thread, while that
@@ -143,7 +144,8 @@ class PythonExternalLookupReaderFactory(
  * The reader registers one interrupt listener, which destroys the worker if the task has not
  * completed within `spark.python.task.killTimeout` after it was killed, also when the task thread
  * is not interrupted, and one completion listener, which closes the reader. Both are per reader,
- * not per request.
+ * not per request. A new worker is published to the reader before its initialization, so that
+ * the listener, and a close from another thread, also destroy a worker that is still starting.
  */
 private class PythonExternalLookupReader(factory: PythonExternalLookupReaderFactory)
   extends ExternalLookupReader with Logging {
@@ -154,6 +156,10 @@ private class PythonExternalLookupReader(factory: PythonExternalLookupReaderFact
     throw SparkException.internalError("A Python external lookup reader runs only in a task")
   }
   private val killTimeoutMs = SparkEnv.get.conf.get(PYTHON_TASK_KILL_TIMEOUT)
+  // The bound of the graceful close and of the drain after a cancel. A value of 0 or less would
+  // fail every close, or remove the bound, so it falls back to the default of the setting.
+  private val waitTimeoutMs =
+    if (killTimeoutMs > 0) killTimeoutMs else PYTHON_TASK_KILL_TIMEOUT.defaultValue.get
   private val binaryAsBytes = factory.pythonRunnerConf
     .getOrElse(SQLConf.PYSPARK_BINARY_AS_BYTES.key,
       SQLConf.PYSPARK_BINARY_AS_BYTES.defaultValueString).toBoolean
@@ -161,7 +167,8 @@ private class PythonExternalLookupReader(factory: PythonExternalLookupReaderFact
   private val closed = new AtomicBoolean(false)
   private val ioLock = new ReentrantLock()
 
-  // Guarded by `ioLock`, except that a close from another thread reads `worker` to destroy it.
+  // Written under `ioLock`. Three readers do not hold it: a close from another thread and the
+  // scheduled kill of a killed task's worker, which destroy it, and `currentMetricsValues()`.
   @volatile private var worker: PythonExternalLookupWorker = null
   private var ownerThread: Thread = null
   private var activeCursor: PythonExternalLookupResultCursor = null
@@ -217,7 +224,7 @@ private class PythonExternalLookupReader(factory: PythonExternalLookupReaderFact
           if ((Thread.currentThread() eq ownerThread) && !context.isInterrupted()) {
             guarded(current) {
               Option(activeCursor).foreach(_.finish())
-              if (!current.isReleasedOrClosed) current.closeGracefully(killTimeoutMs)
+              if (!current.isReleasedOrClosed) current.closeGracefully(waitTimeoutMs)
             }
           } else {
             current.destroy()
@@ -256,7 +263,7 @@ private class PythonExternalLookupReader(factory: PythonExternalLookupReaderFact
   /**
    * Releases `ioLock`, after finishing a close that another thread made while it was held. That
    * close sets `closed` before it tries the lock, so a close that this check misses either takes
-   * the lock itself, or finds `closed` set by the check after unlocking.
+   * the lock itself, or is finished by the check after unlocking, which finds `closed` set.
    */
   private[python] def unlock(): Unit = {
     try {
@@ -272,7 +279,7 @@ private class PythonExternalLookupReader(factory: PythonExternalLookupReaderFact
   private[python] def isClosed: Boolean = closed.get()
   private[python] def readerAllocator = allocator
   private[python] def numValueColumns: Int = factory.readSchema.length
-  private[python] def cancelTimeoutMs: Long = killTimeoutMs
+  private[python] def cancelTimeoutMs: Long = waitTimeoutMs
 
   /**
    * Runs `call` on the worker, and destroys the worker if it fails: its stream is then at an
@@ -308,9 +315,11 @@ private class PythonExternalLookupReader(factory: PythonExternalLookupReaderFact
       bytesReceivedBefore += previous.bytesReceived
       worker = null
     }
+    // The worker is published as soon as it is created, before its initialization, which can
+    // take long, as when Python loads the planned reader.
     worker = PythonExternalLookupWorker.start(
       factory.reader, context, factory.pythonRunnerConf, factory.sessionUUID,
-      factory.jobArtifactUUID) { dataOut =>
+      factory.jobArtifactUUID, created => worker = created) { dataOut =>
       PythonWorkerUtils.writeUTF(parameterSchema.json, dataOut)
       PythonWorkerUtils.writeUTF(factory.readSchema.json, dataOut)
       dataOut.writeInt(factory.maxRecordsPerBatch)
@@ -447,8 +456,15 @@ private class PythonExternalLookupResultCursor(
       reader.guarded(worker) {
         worker.setReadTimeout(reader.cancelTimeoutMs)
         try {
-          if (arrowReader == null) startResponse()
-          worker.sendCancel()
+          if (arrowReader == null) {
+            // Python sends the start of the response once it has read the request, and its
+            // schema only with the first batch, so the cancel goes out between the two.
+            readResponseStart()
+            worker.sendCancel()
+            readResponseSchema()
+          } else {
+            worker.sendCancel()
+          }
           while (!finished) loadNextBatch()
         } catch {
           case _: WorkerReadTimeoutException =>
@@ -471,10 +487,20 @@ private class PythonExternalLookupResultCursor(
 
   /** Reads the start of the response, once Python has read the request, and its schema. */
   private def startResponse(): Unit = {
+    readResponseStart()
+    readResponseSchema()
+  }
+
+  /** Reads the start of the response, which Python sends once it has read the request. */
+  private def readResponseStart(): Unit = {
     worker.readReplyInt() match {
       case SpecialLengths.START_ARROW_STREAM =>
       case other => throw worker.protocolError(s"response start $other")
     }
+  }
+
+  /** Reads the schema of the response, which Python sends with its first batch, or its end. */
+  private def readResponseSchema(): Unit = {
     arrowReader = new ArrowStreamReader(worker.dataIn, reader.readerAllocator)
     val root = arrowReader.getVectorSchemaRoot
     val vectors = root.getFieldVectors.asScala

@@ -1481,10 +1481,12 @@ class DataSourceLookupReader(ABC):
         stream row. It then closes the generator, so `try`/`finally` and `with` blocks run. The
         stop takes effect at the end of a batch: Python reads the pairs in batches of
         `spark.sql.execution.arrow.maxRecordsPerBatch`, so the generator may run up to one batch
-        further. If the generator does not stop within `spark.python.task.killTimeout`, Spark
-        ends the Python worker: neither the generator's `finally` blocks nor :meth:`close` run
-        on that copy of the reader, and a later request of the task runs on a new copy of the
-        planned reader.
+        further. If the generator does not stop within `spark.python.task.killTimeout`, or
+        within 2 seconds when that is 0 or less, Spark ends the Python worker: neither the
+        generator's `finally` blocks nor :meth:`close` run on that copy of the reader, and a
+        later request of the task runs on a new copy of the planned reader.
+
+        `spark.sql.pyspark.dataSource.profiler` does not profile this method or :meth:`close`.
 
         Examples
         --------
@@ -1501,15 +1503,16 @@ class DataSourceLookupReader(ABC):
 
         Spark calls this method on an executor at most once on each copy of the reader, after
         its last :meth:`lookup` call, when the task ends, also when it fails. This method must
-        return within `spark.python.task.killTimeout`; otherwise, Spark ends the Python worker
-        and fails the task. An exception from this method fails the task too. When the task has
+        return within `spark.python.task.killTimeout`, or within 2 seconds when that is 0 or
+        less; otherwise, Spark ends the Python worker and fails the task. An exception from this method fails the task too. When the task has
         failed already, that failure stays the task's error, and Spark adds the failure of this
         method, a timeout or an exception, to it as suppressed.
 
         Spark does not call this method, and ends the Python worker instead, when the task is
         killed, when another thread closes the reader, when the Python worker has failed, as it
         does after :meth:`lookup` raises an exception, and for a copy whose :meth:`lookup` does
-        not stop within `spark.python.task.killTimeout`. So do not rely on it for correctness.
+        not stop in time after Spark stopped reading its result. So do not rely on it for
+        correctness.
         """
         ...
 

@@ -104,9 +104,10 @@ class LookupServer:
         self.max_arrow_batch_size = max_arrow_batch_size
         self.infile = infile
         self.outfile = outfile
+        # None for a type whose values need no conversion, such as an integral type.
         self.param_converters = [
             ArrowTableToRowsConversion._create_converter(
-                field.dataType, binary_as_bytes=binary_as_bytes
+                field.dataType, none_on_identity=True, binary_as_bytes=binary_as_bytes
             )
             for field in param_schema.fields
         ]
@@ -116,6 +117,13 @@ class LookupServer:
         self.response_schema = pa.schema(
             [pa.field("ordinal", pa.int32(), nullable=False)] + list(self.rows_converter.pa_schema)
         )
+        # `select.select` fails for a descriptor of 1024 or more, which a reused worker can reach,
+        # so the input is polled where `select.poll` exists, as the daemon polls, and selected
+        # only on Windows.
+        self.input_poll = None
+        if hasattr(select, "poll"):
+            self.input_poll = select.poll()
+            self.input_poll.register(self.infile, select.POLLIN)
 
     def serve(self) -> None:
         while True:
@@ -185,10 +193,10 @@ class LookupServer:
         return batches[0]
 
     def to_tuples(self, parameters: pa.RecordBatch) -> List[tuple]:
-        columns = [
-            [convert(value) for value in ArrowTableToRowsConversion._to_pylist(column)]
-            for convert, column in zip(self.param_converters, parameters.columns)
-        ]
+        columns = []
+        for convert, column in zip(self.param_converters, parameters.columns):
+            values = ArrowTableToRowsConversion._to_pylist(column)
+            columns.append(values if convert is None else [convert(value) for value in values])
         return list(zip(*columns))
 
     def cancel_requested(self) -> bool:
@@ -198,7 +206,10 @@ class LookupServer:
         request before it writes the response, so the input buffer of `infile` is empty here, and
         the socket alone tells whether a cancel arrived.
         """
-        readable, _, _ = select.select([self.infile], [], [], 0)
+        if self.input_poll is not None:
+            readable = bool(self.input_poll.poll(0))
+        else:
+            readable = bool(select.select([self.infile], [], [], 0)[0])
         if not readable:
             return False
         message = read_int(self.infile)

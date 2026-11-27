@@ -68,6 +68,7 @@ abstract class PythonExternalLookupTestBase extends PythonDataSourceSuiteBase {
 
   private def lookupSourceScript: String =
     s"""
+       |import logging
        |import os
        |import time
        |from pyspark import TaskContext
@@ -101,6 +102,8 @@ abstract class PythonExternalLookupTestBase extends PythonDataSourceSuiteBase {
        |            mark(self.options, behavior)
        |        if behavior == "hang":
        |            time.sleep(float(self.options.get("seconds", "30")))
+       |        if behavior == "log":
+       |            logging.getLogger("lookup_test").warning(f"lookup of {len(parameters)} rows")
        |        if behavior == "rlimit":
        |            import resource
        |            mark(self.options, f"rlimit {resource.getrlimit(resource.RLIMIT_AS)[0]}")
@@ -115,6 +118,8 @@ abstract class PythonExternalLookupTestBase extends PythonDataSourceSuiteBase {
        |                    if behavior == "block" and yielded == 1:
        |                        time.sleep(float(self.options.get("seconds", "30")))
        |                    if behavior == "sleep" and yielded == 0:
+       |                        time.sleep(float(self.options["seconds"]))
+       |                    if behavior == "slow":
        |                        time.sleep(float(self.options["seconds"]))
        |                    if behavior == "fail" and yielded == 1:
        |                        raise ValueError("lookup failed on purpose")
@@ -177,6 +182,14 @@ abstract class PythonExternalLookupTestBase extends PythonDataSourceSuiteBase {
         f(factory, markerDir)
       }
     }
+  }
+
+  /** Runs `f` with `spark.python.task.killTimeout` at `value`, which readers read when created. */
+  protected def withKillTimeout(value: String)(f: => Unit): Unit = {
+    val conf = SparkEnv.get.conf
+    val previous = conf.get(PYTHON_TASK_KILL_TIMEOUT.key)
+    conf.set(PYTHON_TASK_KILL_TIMEOUT.key, value)
+    try f finally conf.set(PYTHON_TASK_KILL_TIMEOUT.key, previous)
   }
 
   /** Runs `f` in a task of partition `partition`, with the session configurations. */
@@ -286,11 +299,18 @@ class PythonExternalLookupWorkerSuite extends PythonExternalLookupTestBase {
             val cursor = reader.lookupBatch(parameterRows(Seq(1L)))
             assert(cursor.next())
             val firstPid = cursor.get().getInt(1)
+            val before = metricValues(reader)
             val start = System.nanoTime()
             cursor.close()
             val closeMillis = (System.nanoTime() - start) / 1000000
             // The next request starts a new worker.
             assert(readAll(reader.lookupBatch(parameterRows(Seq(-1L)))).isEmpty)
+            // The metrics keep the bytes of the replaced worker, and add those of the new one.
+            val after = metricValues(reader)
+            val replacement = currentWorker(reader)
+            assert(after("pythonDataSent") >= before("pythonDataSent") + replacement.bytesSent)
+            assert(after("pythonDataReceived") >=
+              before("pythonDataReceived") + replacement.bytesReceived)
             (firstPid, closeMillis)
           } finally {
             reader.close()
@@ -324,9 +344,90 @@ class PythonExternalLookupWorkerSuite extends PythonExternalLookupTestBase {
           "action" -> "close",
           "type" -> "lookup reader",
           "msg" -> ("close() did not return within 2000 ms, the value of " +
-            "spark.python.task.killTimeout.")))
+            "spark.python.task.killTimeout, or its default when the value is not positive.")))
       assert(events(markerDir).map(_._2) === Seq("finally 1", "close"))
       assert(eventuallyDead(pid))
+    }
+  }
+
+  test("a kill timeout of 0 does not fail a graceful close or a cancel") {
+    withKillTimeout("0") {
+      withLookup("matches" -> "100000")(SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> "1") {
+        (factory, markerDir) =>
+          val pids = inTask() { _ =>
+            val reader = factory.createReader()
+            val cursor = reader.lookupBatch(parameterRows(Seq(1L)))
+            assert(cursor.next())
+            val firstPid = cursor.get().getInt(1)
+            // The cancel reaches Python, and the response ends.
+            cursor.close()
+            val next = reader.lookupBatch(parameterRows(Seq(-1L, 2L)))
+            assert(next.next())
+            val secondPid = next.get().getInt(1)
+            next.close()
+            // Python runs the reader's close().
+            reader.close()
+            Seq(firstPid, secondPid)
+          }
+          // The same worker served both requests and the close.
+          assert(pids.distinct.length === 1)
+          assert(events(markerDir).map(_._1).distinct === pids.distinct)
+          val finished = events(markerDir).map(_._2)
+          assert(finished.length === 3 && finished.last === "close", finished)
+          assert(finished.init.forall(_.startsWith("finally ")), finished)
+      }
+    }
+  }
+
+  test("a negative kill timeout still bounds a close() that blocks") {
+    withKillTimeout("-1") {
+      withLookup("closeBehavior" -> "block", "seconds" -> "30")() { (factory, markerDir) =>
+        val (pid, failure, closeMillis) = inTask() { _ =>
+          val reader = factory.createReader()
+          val pid = readAll(reader.lookupBatch(parameterRows(Seq(1L)))).head.pid
+          val start = System.nanoTime()
+          val failure = Try(reader.close()).failed.toOption
+          (pid, failure, (System.nanoTime() - start) / 1000000)
+        }
+        // The default of spark.python.task.killTimeout, 2 seconds, bounds the close.
+        assert(closeMillis >= 1500 && closeMillis < 20000, s"the close took $closeMillis ms")
+        checkError(
+          exception = failure.get.asInstanceOf[AnalysisException],
+          condition = "PYTHON_DATA_SOURCE_ERROR",
+          parameters = Map(
+            "action" -> "close",
+            "type" -> "lookup reader",
+            "msg" -> ("close() did not return within 2000 ms, the value of " +
+              "spark.python.task.killTimeout, or its default when the value is not positive.")))
+        assert(events(markerDir).map(_._2) === Seq("finally 1", "close"))
+        assert(eventuallyDead(pid))
+      }
+    }
+  }
+
+  test("closing a cursor that has not read its response cancels before the first batch") {
+    // Each row takes 1.2 seconds, and batches hold one row.
+    withLookup("matches" -> "3", "behavior" -> "slow", "seconds" -> "1.2")(
+        SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> "1") { (factory, markerDir) =>
+      val closeMillis = inTask() { _ =>
+        val reader = factory.createReader()
+        try {
+          val cursor = reader.lookupBatch(parameterRows(Seq(1L)))
+          val start = System.nanoTime()
+          cursor.close()
+          val closeMillis = (System.nanoTime() - start) / 1000000
+          assert(readAll(reader.lookupBatch(parameterRows(Seq(-1L)))).isEmpty)
+          closeMillis
+        } finally {
+          reader.close()
+        }
+      }
+      // The generator stopped at its first row, within the kill timeout of 2 seconds, and the
+      // same worker served the next request and the close. A generator closed at a `yield` has
+      // not counted the row of that `yield`.
+      assert(closeMillis < 2000, s"the close took $closeMillis ms")
+      assert(events(markerDir).map(_._2) === Seq("finally 0", "finally 0", "close"))
+      assert(events(markerDir).map(_._1).distinct.length === 1)
     }
   }
 
@@ -572,6 +673,40 @@ class PythonExternalLookupWorkerSuite extends PythonExternalLookupTestBase {
     }
   }
 
+  test("a task killed while its worker starts ends with that worker") {
+    // The worker loads the planned reader for 10 seconds, and the kill does not interrupt the
+    // task thread, so only the interrupt listener can end the start.
+    withLookup("startSeconds" -> "10")() { (factory, markerDir) =>
+      val sc = spark.sparkContext
+      val group = "python-lookup-kill-during-start"
+      val job = Future {
+        sc.setJobGroup(group, group, interruptOnCancel = false)
+        try {
+          inTask() { _ =>
+            val reader = factory.createReader()
+            readAll(reader.lookupBatch(parameterRows(Seq(1L))))
+          }
+        } finally {
+          sc.clearJobGroup()
+        }
+      }(ExecutionContext.global)
+      eventually(timeout(60.seconds), interval(50.millis)) {
+        assert(events(markerDir).map(_._2) === Seq("start"))
+      }
+      val Seq((pid, _)) = events(markerDir)
+      val start = System.nanoTime()
+      sc.cancelJobGroup(group)
+      caught(ThreadUtils.awaitResult(job, 60.seconds))
+      assert(eventuallyDead(pid))
+      // The interrupt listener destroyed the worker after the kill timeout, 2 seconds, long
+      // before the reader would have loaded.
+      val millis = (System.nanoTime() - start) / 1000000
+      assert(millis < 6000, s"the worker of the killed task ended after $millis ms")
+      // Python ran neither a lookup nor close().
+      assert(events(markerDir) === Seq(pid -> "start"))
+    }
+  }
+
   test("a task killed between lookups ends its worker without the reader's close()") {
     withLookup()() { (factory, markerDir) =>
       val sc = spark.sparkContext
@@ -641,6 +776,23 @@ class PythonExternalLookupWorkerSuite extends PythonExternalLookupTestBase {
         }
       }
       assert(noDelays.forall(_.forall(identity)), noDelays)
+    }
+  }
+
+  test("the logs of a lookup reader reach the Python worker logs of its session") {
+    withLookup("behavior" -> "log")(SQLConf.PYTHON_WORKER_LOGGING_ENABLED.key -> "true") {
+      (factory, _) =>
+        inTask() { _ =>
+          val reader = factory.createReader()
+          try readAll(reader.lookupBatch(parameterRows(Seq(1L, 2L)))) finally reader.close()
+        }
+        // The logs are collected from the worker's output asynchronously.
+        eventually(timeout(30.seconds), interval(100.millis)) {
+          val logs = spark.tvf.python_worker_logs()
+            .where("logger = 'lookup_test'").select("level", "msg").collect()
+          assert(logs.map(r => (r.getString(0), r.getString(1))).toSeq ===
+            Seq(("WARNING", "lookup of 2 rows")))
+        }
     }
   }
 
@@ -846,6 +998,10 @@ object PythonExternalLookupWorkerSuite {
     }
     (size("onCompleteCallbacks"), size("onInterruptCallbacks"))
   }
+
+  /** The current metrics of a reader, by name. */
+  def metricValues(reader: ExternalLookupReader): Map[String, Long] =
+    reader.currentMetricsValues().map(m => m.name() -> m.value()).toMap
 
   /**
    * The current worker of a reader, which is private to its package, read by reflection, as

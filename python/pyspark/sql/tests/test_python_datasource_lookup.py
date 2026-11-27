@@ -16,6 +16,7 @@
 #
 import json
 import os
+import select
 import socket
 import subprocess
 import sys
@@ -156,6 +157,7 @@ class LookupWorkerClient:
         max_arrow_batch_size: int = 1000,
         binary_as_bytes: bool = True,
         tcp: bool = False,
+        min_descriptor: int = 0,
     ):
         from pyspark.serializers import CloudPickleSerializer, write_int
 
@@ -171,6 +173,14 @@ class LookupWorkerClient:
                 self.python_socket, _ = server.accept()
         else:
             self.jvm_socket, self.python_socket = socket.socketpair()
+        if min_descriptor:
+            # The worker's side at the lowest free descriptor from `min_descriptor` up, as a
+            # reused worker can get it when earlier tasks left descriptors open.
+            import fcntl
+
+            descriptor = fcntl.fcntl(self.python_socket.fileno(), fcntl.F_DUPFD, min_descriptor)
+            self.python_socket.close()
+            self.python_socket = socket.socket(fileno=descriptor)
         self.jvm_in = self.jvm_socket.makefile("rb")
         self.jvm_out = self.jvm_socket.makefile("wb")
         self.error = None
@@ -402,6 +412,19 @@ class PythonDataSourceLookupWorkerTests(unittest.TestCase):
                 client = self.client(PairLookupReader(item))
                 error = client.lookup_error((1,))
                 self.assertEqual(error.getCondition(), "DATA_SOURCE_INVALID_RETURN_TYPE")
+        # A pair whose row is not a tuple, a list or a `Row`. A lookup cannot return a
+        # `pyarrow.RecordBatch` as a row.
+        client = self.client(PairLookupReader((0, 5)))
+        error = client.lookup_error((1,))
+        self.assertEqual(error.getCondition(), "DATA_SOURCE_INVALID_RETURN_TYPE")
+        self.assertEqual(
+            error.getMessageParameters(),
+            {
+                "type": "int",
+                "name": "PairLookupReader",
+                "supported_types": "tuple, list, `pyspark.sql.types.Row`",
+            },
+        )
         client = self.client(PairLookupReader((0, (1, "one", "extra"))))
         error = client.lookup_error((1,))
         self.assertEqual(error.getCondition(), "DATA_SOURCE_RETURN_SCHEMA_MISMATCH")
@@ -452,6 +475,28 @@ class PythonDataSourceLookupWorkerTests(unittest.TestCase):
         events.clear()
         client.send(client.protocol.LOOKUP_CANCEL)
         client.send_request(client.parameters((2,)))
+        response = client.start_response()
+        self.assertEqual(response.read_next_batch().num_rows, 1)
+        client.send(client.protocol.LOOKUP_CANCEL)
+        list(response)
+        self.assertEqual(client.end_response(), client.protocol.STATUS_CANCELLED)
+        self.assertEqual(client.close(), 0)
+        self.assertIsNone(client.error)
+
+    @unittest.skipIf(not hasattr(select, "poll"), "Requires select.poll")
+    def test_cancel_reaches_a_worker_whose_input_descriptor_is_1024_or_more(self):
+        # `select.select` cannot check a descriptor of 1024 or more, which a reused worker can get.
+        import resource
+
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        if soft < 2048:
+            if hard != resource.RLIM_INFINITY and hard < 2048:
+                self.skipTest(f"The limit of open files, {hard}, is below 2048")
+            resource.setrlimit(resource.RLIMIT_NOFILE, (2048, hard))
+            self.addCleanup(resource.setrlimit, resource.RLIMIT_NOFILE, (soft, hard))
+        client = self.client(EndlessLookupReader(), max_arrow_batch_size=1, min_descriptor=1024)
+        self.assertGreaterEqual(client.python_socket.fileno(), 1024)
+        client.send_request(client.parameters((1,)))
         response = client.start_response()
         self.assertEqual(response.read_next_batch().num_rows, 1)
         client.send(client.protocol.LOOKUP_CANCEL)

@@ -80,8 +80,12 @@ class RowsToArrowConverter:
         self.supported_types = supported_types
 
     def convert(self, rows: Iterable[Any]) -> pa.RecordBatch:
+        # Bound to locals, as the loop reads them for every row.
         num_cols = self.num_cols
         column_converters = self.column_converters
+        column_names = self.column_names
+        col_mapping = self.col_mapping
+        col_name_set = self.col_name_set
         pylist: List[List] = [[] for _ in range(num_cols)]
         for result in rows:
             # Validate the output row schema.
@@ -109,17 +113,17 @@ class RowsToArrowConverter:
             # named `Row` object.
             if isinstance(result, Row) and hasattr(result, "__fields__"):
                 # Check if the names are the same as the schema.
-                if set(result.__fields__) != self.col_name_set:
+                if set(result.__fields__) != col_name_set:
                     raise PySparkRuntimeError(
                         errorClass="DATA_SOURCE_RETURN_SCHEMA_MISMATCH",
                         messageParameters={
-                            "expected": str(self.column_names),
+                            "expected": str(column_names),
                             "actual": str(result.__fields__),
                         },
                     )
                 # Assign the values by name.
-                for name in self.column_names:
-                    idx = self.col_mapping[name]
+                for name in column_names:
+                    idx = col_mapping[name]
                     pylist[idx].append(column_converters[idx](result[name]))
             else:
                 for col in range(num_cols):
