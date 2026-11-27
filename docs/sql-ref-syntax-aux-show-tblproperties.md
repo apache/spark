@@ -20,23 +20,15 @@ license: |
 ---
 
 ### Description
-
-This statement returns the value of a table property given an optional value for
-a property key. If no key is specified then all the properties are returned. 
-
-For tables in [Data Source V2](sql-v2-data-sources.html) catalogs, the output may also include
-display-only properties supplied by the catalog. Spark itself does not remove these entries on
-`ALTER TABLE ... UNSET TBLPROPERTIES`; whether they remain depends on the catalog.
-`SHOW CREATE TABLE` does not include them. Stored properties take precedence over display-only
-entries with the same key. After unsetting a stored property other than `comment`, Spark displays
-the display-only value with that key if the catalog still supplies it. Display-only `comment`
-entries are ignored, even after unsetting the stored `comment`.
+The `SHOW TBLPROPERTIES table_identifier AS JSON` statement returns the value of a table properties 
+given an optional value for a property key. If no key is specified then all the properties are returned. 
 
 ### Syntax
 
 ```sql
 SHOW TBLPROPERTIES table_identifier 
    [ ( unquoted_property_key | property_key_as_string_literal ) ]
+   [ AS JSON ]
 ```
 
 ### Parameters
@@ -58,6 +50,29 @@ SHOW TBLPROPERTIES table_identifier
 * **property_key_as_string_literal**
 
     Specifies a property key value as a string literal.
+  
+* **AS JSON**
+
+    An optional parameter to return the table properties as a single-row JSON document
+    instead of the default tabular format. Supported for both V1 (session catalog / Hive
+    metastore) and V2 tables and views.
+
+    **Syntax:** `[ AS JSON ]`
+
+    **Output schema:** A single column named `json_metadata` of type `STRING NOT NULL`.
+
+    **Schema:**
+
+    Below is the full JSON schema.
+    ```json
+    {
+      "properties": [{"key": "k", "value": "v"}, ...]
+    }
+    ```
+
+    | Field | Type | Description |
+    |---|---|---|
+    | `properties` | array of objects | Each element maps a property `key` to its string `value` and If specific property key is requested and it is not set on the table, the array is empty. Sorted by key when all properties are listed.  |
 
 **Note**
 - Property value returned by this statement excludes some properties 
@@ -66,6 +81,7 @@ SHOW TBLPROPERTIES table_identifier
   - Property keys such as:  `EXTERNAL`, `comment`
   - All the properties generated internally by hive to store statistics. Some of these
     properties are: `numFiles`, `numPartitions`, `numRows`.
+    
 
 ### Examples
 
@@ -111,6 +127,30 @@ SHOW TBLPROPERTIES customer ('created.date');
 +----------+
 |01-01-2001|
 +----------+
+
+-- show all the user specified properties for table `customer` as JSON
+SHOW TBLPROPERTIES customer AS JSON;
++-----------------------------------------------------------------------------------------------------+
+|json_metadata                                                                                         |
++-----------------------------------------------------------------------------------------------------+
+|{"properties":[{"key":"created.by.user","value":"John"},{"key":"created.date","value":"01-01-2001"}]}|
++-----------------------------------------------------------------------------------------------------+
+
+-- show value for a specific property key as JSON
+SHOW TBLPROPERTIES customer ('created.date') AS JSON;
++------------------------------------------------------------+
+|json_metadata                                                |
++------------------------------------------------------------+
+|{"properties":[{"key":"created.date","value":"01-01-2001"}]}|
++------------------------------------------------------------+
+
+-- when the requested key is not set, AS JSON returns an empty array
+SHOW TBLPROPERTIES customer ('does.not.exist') AS JSON;
++-----------------+
+|json_metadata    |
++-----------------+
+|{"properties":[]}|
++-----------------+
 ```
 
 ### Related Statements
