@@ -1224,6 +1224,13 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       val analyzed = spark.sessionState.executePlan(transform(relation("k"))).analyzed
       // The key comes first, then the other left columns, then the other right columns.
       assert(analyzed.output.map(_.name) == Seq("k", "lts", "rts"))
+      // A streaming query that restarts from a checkpoint with both key columns finds the join
+      // by this mark, so the state above it gets both key columns back.
+      assert(
+        analyzed
+          .collectFirst { case j: AsOfJoin => j.fromDataFrameUsingColumns }
+          .contains(true))
+      assert(AsOfJoin.keepBothUsingColumns(analyzed).map(_.output) == Right(analyzed.output))
       val e = intercept[AnalysisException] {
         spark.sessionState.executePlan(transform(relation("missing"))).analyzed
       }

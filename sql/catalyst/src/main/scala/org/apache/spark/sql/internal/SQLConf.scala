@@ -1296,7 +1296,11 @@ object SQLConf {
         "both sides, as before Spark 4.4. When false, it returns one column per name, placed " +
         "first, as SQL ASOF JOIN ... USING does. A streaming DataFrame AS-OF join on column " +
         "names always keeps the key column of both sides, so a query that restarts from an " +
-        "existing checkpoint keeps the schema of its state.")
+        "existing checkpoint keeps the schema of its state. A streaming query keeps the value " +
+        "it started with in its checkpoint, also for the state above the batch joins in it and " +
+        "in the session of foreachBatch. A checkpoint written before this config reads true. " +
+        "For a checkpoint with false, a DataFrame built with true changes the schema of the " +
+        "state, and the query fails to restart.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf

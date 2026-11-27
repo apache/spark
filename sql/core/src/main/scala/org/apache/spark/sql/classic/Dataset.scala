@@ -916,7 +916,7 @@ class Dataset[T] private[sql](
         Option(tolerance).map(_.expr),
         allowExactMatches,
         AsOfJoinDirection(direction)
-      ).copy(usingColumns = usingColumns)
+      ).copy(usingColumns = usingColumns, fromDataFrameUsingColumns = usingColumns.isDefined)
       OptionalReferences.withResolvedNullReferenceOf(asOfJoin, joinPlan)
     }
 

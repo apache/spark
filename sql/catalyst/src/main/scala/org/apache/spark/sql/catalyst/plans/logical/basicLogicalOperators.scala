@@ -2712,6 +2712,8 @@ object LateralJoin {
  * @param requiresSortMergeAsOfJoin Execution strategy selected during analysis.
  * @param orderExpression Fallback distance; sort-merge joins do not compute one.
  * @param evalContext Arithmetic settings captured when the join is constructed.
+ * @param fromDataFrameUsingColumns Whether a DataFrame join on column names built this join. The
+ *                                  [[Project]] above it then returns one column per name.
  */
 case class AsOfJoin(
     left: LogicalPlan,
@@ -2730,7 +2732,8 @@ case class AsOfJoin(
     requiresSortMergeAsOfJoin: Boolean = false,
     allowExactMatches: Boolean = true,
     orderExpression: Option[Expression] = None,
-    evalContext: NumericEvalContext = NumericEvalContext.fromSQLConf(SQLConf.get))
+    evalContext: NumericEvalContext = NumericEvalContext.fromSQLConf(SQLConf.get),
+    fromDataFrameUsingColumns: Boolean = false)
     extends BinaryNode {
 
   require(Seq(Inner, LeftOuter).contains(joinType),
@@ -2813,6 +2816,83 @@ object AsOfJoin extends PredicateHelper {
     }
     val residual = residuals.reduceOption(And)
     (leftKeys.toSeq, rightKeys.toSeq, residual)
+  }
+
+  /**
+   * Gives each DataFrame join on column names the output it had before Spark 4.4: the key column
+   * of both sides. It removes the [[Project]] above the join that returns one column per name, so
+   * the operators above see the whole join output. A streaming query does this when its
+   * checkpoint was written with that output, so the state of its operators keeps its schema.
+   * The plan keeps its own output, so a sink still gets the columns of the DataFrame. Returns why
+   * instead when it cannot do this safely, and then the plan must stay as it is.
+   */
+  def keepBothUsingColumns(plan: LogicalPlan): Either[String, LogicalPlan] = {
+    // Also looks through a Project that returns all of its input but metadata columns. The
+    // analyzer puts one between the join and the Project with one column per name when a key of
+    // the join is a metadata column, and the single-pass analyzer can put one there too.
+    @scala.annotation.tailrec
+    def usingJoin(p: LogicalPlan): Option[AsOfJoin] = p match {
+      case j: AsOfJoin if j.fromDataFrameUsingColumns => Some(j)
+      case Project(projectList, child) if projectList.forall(_.isInstanceOf[Attribute]) &&
+          projectList.map(_.toAttribute).filterNot(_.isMetadataCol).map(_.exprId) ==
+            child.output.filterNot(_.isMetadataCol).map(_.exprId) =>
+        usingJoin(child)
+      case _ => None
+    }
+    // The Project only moves columns and drops keys of the right side, so every reference above
+    // stays valid, and the operators above get just those keys back. It keeps a key when a
+    // parent selects it.
+    def isUsingProject(p: Project, join: AsOfJoin): Boolean = {
+      val dropped = p.child.output.filterNot(a => a.isMetadataCol || p.outputSet.contains(a))
+      val rightKeys = join.condition.map(_.references.intersect(join.right.outputSet))
+        .getOrElse(AttributeSet.empty)
+      p.projectList.forall(e => e.isInstanceOf[Attribute] && p.child.outputSet.contains(e)) &&
+        dropped.forall(rightKeys.contains)
+    }
+    // A union, INTERSECT, EXCEPT and a CTE reference match columns by position, so new columns
+    // below them can move values to other columns.
+    def underPositionalMatch(p: LogicalPlan, under: Boolean): Boolean = p match {
+      case j: AsOfJoin if j.fromDataFrameUsingColumns && under => true
+      case _ =>
+        val childrenUnder = under || (p match {
+          case _: Union | _: SetOperation | _: CTERelationDef => true
+          case _ => false
+        })
+        p.children.exists(underPositionalMatch(_, childrenUnder))
+    }
+    def unmark(p: LogicalPlan): LogicalPlan = p match {
+      case j: AsOfJoin =>
+        val unmarked = j.copy(fromDataFrameUsingColumns = false)
+        unmarked.copyTagsFrom(j)
+        unmarked
+      case _ => p.withNewChildren(p.children.map(unmark))
+    }
+    val usingProjects = plan.collect {
+      case p @ Project(_, child) if usingJoin(child).isDefined => (p, usingJoin(child).get)
+    }
+    val joins = plan.collect { case j: AsOfJoin if j.fromDataFrameUsingColumns => j }
+    if (underPositionalMatch(plan, under = false)) {
+      scala.util.Left(
+        "a join is under a union, INTERSECT, EXCEPT or CTE, which match columns by position")
+    } else if (!usingProjects.forall { case (p, j) => isUsingProject(p, j) }) {
+      scala.util.Left("a Project above a join drops more than the keys of the right side")
+    } else if (!joins.forall(j => usingProjects.exists(_._2 eq j))) {
+      scala.util.Left("a join has no Project with one column per name above it")
+    } else {
+      val restored = plan.transformDown {
+        case Project(_, child) if usingJoin(child).isDefined => unmark(child)
+      }
+      // A sink, such as foreachBatch, reads the rows with the schema of the DataFrame.
+      if (!restored.resolved) {
+        scala.util.Left("the plan does not resolve with both key columns")
+      } else if (restored.output.map(_.exprId) == plan.output.map(_.exprId)) {
+        scala.util.Right(restored)
+      } else if (plan.output.forall(restored.outputSet.contains)) {
+        scala.util.Right(Project(plan.output, restored))
+      } else {
+        scala.util.Left("the plan loses columns with both key columns")
+      }
+    }
   }
 
   /**

@@ -21,7 +21,10 @@ import java.time.Duration
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeSet, MetadataAttribute}
 import org.apache.spark.sql.catalyst.plans.AsOfJoinDirection
+import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, Filter, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -313,6 +316,234 @@ class DataFrameAsOfJoinSuite extends SharedSparkSession
           }
         }
       }
+  }
+
+  // A streaming query that restarts from a checkpoint with both key columns runs
+  // AsOfJoin.keepBothUsingColumns on its plan. Fails if a filter above the join does not get the
+  // columns of the legacy flag, if the plan output or rows change, if a second run changes the
+  // plan, or if it changes a SQL USING join, which returned one column per name before Spark 4.4.
+  gridTest("usingColumns, keepBothUsingColumns gives the output of the legacy flag")(asOfConfs) {
+    case (singlePass, sortMerge, ansi) =>
+      withTempView("trades", "quotes") {
+        val (trades, quotes) = prepareTradesQuotes()
+        trades.createOrReplaceTempView("trades")
+        quotes.createOrReplaceTempView("quotes")
+        withAsOfConf(singlePass, sortMerge, ansi) {
+          for (using <- Seq(Seq("sym"), Seq("sym", "ex")); joinType <- Seq("inner", "left")) {
+            withClue(s"using $using, $joinType: ") {
+              val df = usingJoin(trades, quotes, using, joinType).where("qty > 0")
+              val plan = df.queryExecution.analyzed
+              val restored = restore(plan)
+              val legacy = withSQLConf(
+                  SQLConf.LEGACY_DATAFRAME_AS_OF_JOIN_KEEP_BOTH_USING_COLUMNS.key -> "true") {
+                usingJoin(trades, quotes, using, joinType)
+              }
+              val filter = restored.collectFirst { case f: Filter => f }.get
+              assert(DataTypeUtils.fromAttributes(filter.output) == legacy.schema)
+              assert(restored.output == plan.output)
+              assert(AsOfJoin.keepBothUsingColumns(restored) == Right(restored))
+              withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false") {
+                assert(sortedRows(classic.Dataset.ofRows(spark, restored)) == sortedRows(df))
+              }
+              val sqlPlan = sql(
+                s"""SELECT * FROM trades $joinType ASOF JOIN quotes
+                   |MATCH_CONDITION (trades.ts >= quotes.ts) USING (${using.mkString(", ")})"""
+                  .stripMargin).queryExecution.analyzed
+              assert(AsOfJoin.keepBothUsingColumns(sqlPlan) == Right(sqlPlan))
+            }
+          }
+        }
+      }
+  }
+
+  // Whether `plan` is a Project with one column per name above a join: it keeps every column of
+  // the join but some keys of the right side. A Project that only hides metadata columns can be
+  // between the two.
+  private def isOneKeyProject(plan: LogicalPlan): Boolean = {
+    def isMetadata(a: Attribute): Boolean = MetadataAttribute.isValid(a.metadata)
+    plan match {
+      case Project(projectList, child) =>
+        val join = child match {
+          case j: AsOfJoin => Some(j)
+          case Project(hiding, j: AsOfJoin)
+              if hiding.map(_.exprId) == j.output.filterNot(isMetadata).map(_.exprId) => Some(j)
+          case _ => None
+        }
+        join.exists { j =>
+          val rightKeys = j.condition.map(_.references.intersect(j.right.outputSet))
+            .getOrElse(AttributeSet.empty)
+          val dropped = child.output.filterNot(a => isMetadata(a) || plan.outputSet.contains(a))
+          dropped.nonEmpty && dropped.forall(rightKeys.contains)
+        }
+      case _ => false
+    }
+  }
+
+  private def restore(plan: LogicalPlan): LogicalPlan =
+    AsOfJoin.keepBothUsingColumns(plan).fold(reason => fail(reason), identity)
+
+  // Runs keepBothUsingColumns on the plan of `df`. Checks that the plan keeps its output and
+  // rows, that no Project with one column per name is left, and that a second run does not
+  // change the plan. Returns the new plan.
+  private def checkKeepBothUsingColumns(
+      df: DataFrame,
+      hasOneKeyProject: Boolean = true): LogicalPlan = {
+    val expectedRows = sortedRows(df)
+    val plan = df.queryExecution.analyzed
+    assert(plan.exists(isOneKeyProject) == hasOneKeyProject, plan)
+    val restored = restore(plan)
+    assert(restored.output == plan.output)
+    assert(!restored.exists(isOneKeyProject), restored)
+    assert(AsOfJoin.keepBothUsingColumns(restored) == Right(restored))
+    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false") {
+      assert(sortedRows(classic.Dataset.ofRows(spark, restored)) == expectedRows)
+    }
+    restored
+  }
+
+  // Two joins on column names, one on the output of the other. Fails if keepBothUsingColumns
+  // gives only one of them both key columns: the filter above then misses a column of the
+  // legacy flag output.
+  gridTest("usingColumns, keepBothUsingColumns gives two chained joins the legacy output")(
+    asOfConfs) { case (singlePass, sortMerge, ansi) =>
+    withAsOfConf(singlePass, sortMerge, ansi) {
+      val trades = Seq((5, "A", "X", 1), (7, "B", "Y", 2)).toDF("ts", "sym", "ex", "qty")
+        .asInstanceOf[classic.DataFrame]
+      val quotes = Seq((2, "A", 100), (6, "B", 200)).toDF("ts", "sym", "bid")
+        .asInstanceOf[classic.DataFrame]
+      val venues = Seq((1, "X", 7), (3, "Y", 8)).toDF("vts", "ex", "fee")
+        .asInstanceOf[classic.DataFrame]
+      def chain(): classic.DataFrame = {
+        val first = usingJoin(trades, quotes, Seq("sym"), "left")
+        first.joinAsOf(
+          venues, first.col("qty"), venues.col("vts"), usingColumns = Seq("ex"),
+          joinType = "left", tolerance = null, allowExactMatches = true, direction = "backward")
+      }
+      val legacy = withSQLConf(
+          SQLConf.LEGACY_DATAFRAME_AS_OF_JOIN_KEEP_BOTH_USING_COLUMNS.key -> "true") {
+        chain()
+      }
+      assert(legacy.columns.toSeq ==
+        Seq("ts", "sym", "ex", "qty", "ts", "sym", "bid", "vts", "ex", "fee"))
+      val restored = checkKeepBothUsingColumns(chain().where("qty > 0"))
+      val filter = restored.collectFirst { case f: Filter => f }.get
+      assert(DataTypeUtils.fromAttributes(filter.output) == legacy.schema)
+    }
+  }
+
+  // Other plans that DataFrame joins on column names build. Fails with INTERNAL_ERROR if
+  // keepBothUsingColumns does not know the Project above the join, or if one of the checks of
+  // checkKeepBothUsingColumns fails.
+  gridTest("usingColumns, keepBothUsingColumns handles self joins, aliases and unions")(
+    asOfConfs) { case (singlePass, sortMerge, ansi) =>
+    withAsOfConf(singlePass, sortMerge, ansi) {
+      val (trades, quotes) = prepareTradesQuotes()
+      // A self join gets new attributes on the right side.
+      checkKeepBothUsingColumns(
+        usingJoin(trades, trades, Seq("sym"), "left", allowExactMatches = false)
+          .where("sym > 'A'"))
+      // Aliased inputs, and an alias above the join.
+      val t = trades.as("t")
+      val q = quotes.as("q")
+      checkKeepBothUsingColumns(
+        t.joinAsOf(
+          q, t.col("ts"), q.col("ts"), usingColumns = Seq("sym", "ex"), joinType = "left",
+          tolerance = null, allowExactMatches = true, direction = "backward")
+          .as("j").where("j.qty > 0"))
+      // A parent that selects the hidden key of the right side. The analyzer then adds the key to
+      // the Project above the join. The analyzer accepts it as for a regular USING join.
+      val regularSelect = scala.util.Try {
+        trades.join(quotes, Seq("sym")).select(quotes.col("sym"), trades.col("qty")).schema
+      }
+      // The single-pass analyzer does not accept it yet.
+      assert(regularSelect.isSuccess || singlePass)
+      if (regularSelect.isSuccess) {
+        checkKeepBothUsingColumns(
+          usingJoin(trades, quotes, Seq("sym"), "inner")
+            .select(quotes.col("sym"), trades.col("qty")),
+          hasOneKeyProject = false)
+      }
+      // A second join whose key is the hidden key of the first join, where the analyzer accepts
+      // it as for a regular USING join.
+      val left = Seq((5, 1, "X", 10)).toDF("ts", "k", "x", "qty").asInstanceOf[classic.DataFrame]
+      val right = Seq((2, 1, 100)).toDF("ts", "k", "bid").asInstanceOf[classic.DataFrame]
+      val venues = Seq((0, "X", 7)).toDF("vk", "x", "fee").asInstanceOf[classic.DataFrame]
+      val regularHiddenKey = scala.util.Try {
+        left.join(right, Seq("k")).join(venues, Seq("x")).where(right.col("k") > 0).schema
+      }
+      assert(regularHiddenKey.isSuccess || singlePass)
+      if (regularHiddenKey.isSuccess) {
+        val first = usingJoin(left, right, Seq("k"), "left")
+        checkKeepBothUsingColumns(
+          first.joinAsOf(
+            venues, right.col("k"), venues.col("vk"), usingColumns = Seq("x"),
+            joinType = "left", tolerance = null, allowExactMatches = true,
+            direction = "backward").where("qty > 0"))
+      }
+      // A union, INTERSECT, EXCEPT or CTE reference matches columns by position, so the plan
+      // stays as it is: new columns there could move values to other columns.
+      def unchanged(df: DataFrame): Unit = {
+        val plan = df.queryExecution.analyzed
+        assert(plan.exists(isOneKeyProject), plan)
+        assert(AsOfJoin.keepBothUsingColumns(plan).isLeft, plan)
+      }
+      val bySym = usingJoin(trades, quotes, Seq("sym"), "inner")
+      val byEx = usingJoin(trades, quotes, Seq("ex"), "inner")
+      unchanged(bySym.union(usingJoin(trades, quotes, Seq("sym"), "left")))
+      unchanged(bySym.union(byEx))
+      unchanged(bySym.intersect(byEx))
+      unchanged(bySym.except(byEx))
+      unchanged(bySym.union(
+        Seq(("A", 1, "X", 1, 1, "X", 1)).toDF("a", "b", "c", "d", "e", "f", "g")))
+      if (!singlePass) {
+        withTempView("asof_using_join") {
+          bySym.createOrReplaceTempView("asof_using_join")
+          unchanged(sql("WITH c AS (TABLE asof_using_join) SELECT * FROM c"))
+        }
+      }
+    }
+  }
+
+  // The key of the left side is a field of the metadata column of a file source. The analyzer
+  // then puts a Project that hides the metadata column between the join and the Project with
+  // one column per name. Fails if keepBothUsingColumns removes the wrong one of the two: the
+  // filter then keeps one key column. The single-pass analyzer does not read files yet, and
+  // without the sort-merge join such a key fails with UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.
+  gridTest("usingColumns, keepBothUsingColumns handles a metadata column key")(
+      Seq(false, true)) { ansi =>
+    withTempPath { path =>
+      val (trades, quotes) = prepareTradesQuotes()
+      trades.write.parquet(path.getCanonicalPath)
+      withAsOfConf(false, true, ansi) {
+        val files = spark.read.parquet(path.getCanonicalPath).asInstanceOf[classic.DataFrame]
+        def join(): classic.DataFrame = files.joinAsOf(
+          quotes, files.col("_metadata.file_size"), quotes.col("ts").cast("long"),
+          usingColumns = Seq("sym"), joinType = "left", tolerance = null,
+          allowExactMatches = true, direction = "backward")
+        val legacy = withSQLConf(
+            SQLConf.LEGACY_DATAFRAME_AS_OF_JOIN_KEEP_BOTH_USING_COLUMNS.key -> "true") {
+          join()
+        }
+        val restored = checkKeepBothUsingColumns(join().where("qty > 0"))
+        val filter = restored.collectFirst { case f: Filter => f }.get
+        assert(DataTypeUtils.fromAttributes(filter.output) == legacy.schema)
+      }
+    }
+  }
+
+  // Fails if keepBothUsingColumns changes a plan where a DataFrame join on column names has no
+  // Project with one column per name above it, or where that Project drops other columns.
+  test("keepBothUsingColumns keeps a join on column names without its Project") {
+    val (trades, quotes) = prepareTradesQuotes()
+    val plan = usingJoin(trades, quotes, Seq("sym"), "inner").queryExecution.analyzed
+    val join = plan.collectFirst { case j: AsOfJoin => j }.get
+    assert(join.fromDataFrameUsingColumns)
+    Seq(
+      join,
+      Project(join.output.take(1).map(a => Alias(a, "k")()), join),
+      Project(join.output.dropRight(1), join)).foreach { p =>
+      assert(AsOfJoin.keepBothUsingColumns(p).isLeft, p)
+    }
   }
 
   // Fails with AMBIGUOUS_REFERENCE if the output keeps the key of both sides.
