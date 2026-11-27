@@ -60,9 +60,6 @@ ignore = [
     "python/pyspark/errors/error_classes.py" = ["E501"]
     # Examples contain some unused variables.
     "examples/src/main/python/sql/datasource.py" = ["F841"]
-    # DataFrame golden test scripts are executed by the framework with ``spark``
-    # injected into their namespace, so it is undefined at lint time.
-    "python/pyspark/sql/tests/df_golden/scripts/**/*.py" = ["F821"]
 
 [dependency-groups]
 internal_py4j = ["py4j>=0.10.9.9"]
@@ -80,13 +77,16 @@ internal_pyspark_devtool = [
     "pystack>=1.6.0; sys_platform=='linux'",
 ]
 
+# Optional: pyspark pickles with cloudpickle-rust when it is installed.
+internal_cloudpickle_rust = ["cloudpickle-rust==0.3.0"]
+
 connect = [
     {include-group = "internal_py4j"},
     {include-group = "internal_pandas"},
     {include-group = "internal_protobuf"},
     {include-group = "internal_pyarrow"},
-    "grpcio>=1.76.0",
-    "grpcio-status>=1.76.0",
+    "grpcio>=1.84.1",
+    "grpcio-status>=1.84.1",
     "googleapis-common-protos>=1.71.0",
     "zstandard>=0.25.0",
     "graphviz>=0.20",
@@ -202,6 +202,7 @@ internal_devtools = [
 
 dev = [
     {include-group = "internal_pyspark_devtool"},
+    {include-group = "internal_cloudpickle_rust"},
     {include-group = "internal_lint"},
     {include-group = "internal_test"},
     {include-group = "internal_docs"},
@@ -218,8 +219,8 @@ dev = [
 
 internal_ci_connect = [
     {include-group = "connect"},
-    "grpcio==1.76.0",
-    "grpcio-status==1.76.0",
+    "grpcio==1.84.1",
+    "grpcio-status==1.84.1",
     "googleapis-common-protos==1.71.0",
     "zstandard==0.25.0",
     "protobuf==6.33.5",
@@ -237,6 +238,7 @@ ci_connect_minimum = [
 
 ci_classic_standard = [
     {include-group = "internal_pyspark_devtool"},
+    {include-group = "internal_cloudpickle_rust"},
     {include-group = "sql"},
     {include-group = "pandas_on_spark"},
     {include-group = "pandas_on_spark_extra"},
@@ -262,10 +264,20 @@ ci_classic_minimum = [
     "psutil",
 ]
 
+# pandas 2 does not have Python 3.15 wheels, so install only compatible dependencies.
+ci_python_315 = [
+    {include-group = "internal_py4j"},
+    {include-group = "internal_pyarrow"},
+    "psutil",
+    "six",
+    "unittest-xml-reporting",
+]
+
 ci_classic_pandas_3 = [
     {include-group = "internal_numpy"},
     {include-group = "internal_py4j"},
     {include-group = "internal_pyspark_devtool"},
+    {include-group = "internal_cloudpickle_rust"},
     {include-group = "pandas_on_spark_extra"},
     # torch should be installed with ml_torch group
     {include-group = "ml_extra_base"},
@@ -276,8 +288,8 @@ ci_classic_pandas_3 = [
 ]
 
 ci_connect_pandas_3 = [
-    "grpcio==1.76.0",
-    "grpcio-status==1.76.0",
+    "grpcio==1.84.1",
+    "grpcio-status==1.84.1",
     "googleapis-common-protos==1.71.0",
     "zstandard==0.25.0",
     "protobuf==6.33.5",

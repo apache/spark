@@ -106,6 +106,11 @@ grpc_status_requirement_message = "" if have_grpc_status else "No module named '
 have_zstandard = have_package("zstandard")
 zstandard_requirement_message = "" if have_zstandard else "No module named 'zstandard'"
 
+have_cloudpickle_rust = have_package("cloudpickle_rust")
+cloudpickle_rust_requirement_message = (
+    "" if have_cloudpickle_rust else "No module named 'cloudpickle_rust'"
+)
+
 have_kafka = have_package("kafka")
 kafka_requirement_message = "" if have_kafka else "No module named 'kafka'"
 
@@ -157,6 +162,14 @@ connect_requirement_message = (
 )
 
 should_test_connect = not connect_requirement_message
+
+try:
+    from py4j.protocol import Py4JJavaError
+except ImportError:
+    # Without Py4J, as with pyspark-client, only the tests of Spark Connect run, which do not
+    # raise it.
+    class Py4JJavaError(Exception):  # type: ignore[no-redef]
+        pass
 
 
 is_ansi_mode_test = True
@@ -284,14 +297,18 @@ def eventually(
 
 class QuietTest:
     def __init__(self, sc):
-        self.log4j = sc._jvm.org.apache.log4j
+        # The SparkContext of Spark Connect has no JVM: the Spark Connect server logs.
+        jvm = getattr(sc, "_jvm", None)
+        self.log4j = None if jvm is None else jvm.org.apache.log4j
 
     def __enter__(self):
-        self.old_level = self.log4j.LogManager.getRootLogger().getLevel()
-        self.log4j.LogManager.getRootLogger().setLevel(self.log4j.Level.FATAL)
+        if self.log4j is not None:
+            self.old_level = self.log4j.LogManager.getRootLogger().getLevel()
+            self.log4j.LogManager.getRootLogger().setLevel(self.log4j.Level.FATAL)
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.log4j.LogManager.getRootLogger().setLevel(self.old_level)
+        if self.log4j is not None:
+            self.log4j.LogManager.getRootLogger().setLevel(self.old_level)
 
 
 class PySparkBaseTestCase(unittest.TestCase):

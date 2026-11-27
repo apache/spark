@@ -64,10 +64,10 @@ object BuildCommons {
 
   val allProjects@Seq(
     core, graphx, mllib, mllibLocal, repl, networkCommon, networkShuffle, launcher, unsafe, tags, sketch, kvstore,
-    commonUtils, commonUtilsJava, variant, pipelines, sparkConfig, _*
+    commonUtils, commonUtilsJava, variant, pipelines, sparkConfig, graph, _*
   ) = Seq(
     "core", "graphx", "mllib", "mllib-local", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
-    "tags", "sketch", "kvstore", "common-utils", "common-utils-java", "variant", "pipelines", "config"
+    "tags", "sketch", "kvstore", "common-utils", "common-utils-java", "variant", "pipelines", "config", "graph"
   ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ connectProjects ++
     udfWorkerProjects
 
@@ -254,7 +254,7 @@ object SparkBuild extends PomBuild {
   // `(Compile / compile)` -- a violation in one module would otherwise abort
   // compile for that module and every transitive dependent, cascading style
   // failures into every job that recompiles those sources (Build modules,
-  // Documentation generation, Java 17/25 Maven build, sparkr, ...). Each
+  // Documentation generation, Java 21/25 Maven build, sparkr, ...). Each
   // cascaded job then surfaces only a generic "exit code 1" with no file/line.
   // After decoupling, the dedicated lint job is the single place style
   // violations surface, with file/line annotations from `dev/scalastyle`.
@@ -419,7 +419,7 @@ object SparkBuild extends PomBuild {
       spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
       unsafe, tags, tokenProviderKafka010, sqlKafka010, pipelines, connectCommon, connect,
       connectJdbc, connectClient, variant, connectShims, profiler, credentialAws,
-      commonUtilsJava, sparkConfig,
+      commonUtilsJava, sparkConfig, graph,
       udfWorkerProto, udfWorkerCore, udfWorkerGrpc
     ).contains(x)
   }
@@ -1603,9 +1603,8 @@ object PySparkAssembly {
   import java.util.zip.{ZipOutputStream, ZipEntry}
 
   lazy val settings = Seq(
-    // Use a resource generator to copy all .py files from python/pyspark into a managed directory
-    // to be included in the assembly. We can't just add "python/" to the assembly's resource dir
-    // list since that will copy unneeded / unwanted files.
+    // Use a resource generator to zip python/pyspark into python/lib/pyspark.zip. It returns no
+    // files, so nothing from python/ is added to the assembly jar.
     (Compile / resourceGenerators) += Def.macroValueI((Compile / resourceManaged) map { outDir: File =>
       val src = new File(BuildCommons.sparkHome, "python/pyspark")
       val zipFile = new File(BuildCommons.sparkHome , "python/lib/pyspark.zip")

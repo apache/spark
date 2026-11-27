@@ -256,4 +256,19 @@ object InvalidInputErrors {
     InvalidPlanInput(
       "CONNECT_INVALID_PLAN.CANNOT_FIND_CACHED_LOCAL_RELATION",
       Map("hash" -> hash))
+
+  def rddMapPartitionsInvalidOutputType(dataType: DataType): InvalidPlanInput =
+    InvalidPlanInput(
+      "CONNECT_INVALID_PLAN.RDD_MAP_PARTITIONS_INVALID_OUTPUT_TYPE",
+      Map("dataType" -> toSQLType(dataType)))
+
+  def rddParallelizeInvalidData(schema: DataType): InvalidPlanInput =
+    InvalidPlanInput(
+      "CONNECT_INVALID_PLAN.RDD_PARALLELIZE_INVALID_DATA",
+      Map("schema" -> toSQLType(schema)))
+
+  def rddZipInvalidInputs(numInputs: Int): InvalidPlanInput =
+    InvalidPlanInput(
+      "CONNECT_INVALID_PLAN.RDD_ZIP_INVALID_INPUTS",
+      Map("numInputs" -> numInputs.toString))
 }

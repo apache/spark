@@ -2,6 +2,11 @@
 
 --SET spark.sql.join.asofJoin.enabled=true
 
+-- Run with codegen on and off.
+--CONFIG_DIM1 spark.sql.codegen.wholeStage=true
+--CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=CODEGEN_ONLY
+--CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=NO_CODEGEN
+
 CREATE OR REPLACE TEMP VIEW deploys(deploy_ts, seq, service, version) AS
   VALUES (TIMESTAMP '2026-06-29 10:00:00', 1, 'api', 'v1.0'),
          (TIMESTAMP '2026-06-29 10:00:00', 2, 'api', 'v1.1'),

@@ -114,6 +114,7 @@ class Relation(google.protobuf.message.Message):
     NEAREST_BY_JOIN_FIELD_NUMBER: builtins.int
     ZIP_FIELD_NUMBER: builtins.int
     BIN_BY_FIELD_NUMBER: builtins.int
+    RDD_RELATION_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -232,6 +233,9 @@ class Relation(google.protobuf.message.Message):
     @property
     def bin_by(self) -> global___BinBy: ...
     @property
+    def rdd_relation(self) -> global___RDDRelation:
+        """Internal: a relation of the RDD API of the Python client (see [[RDDRelation]])."""
+    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
@@ -322,6 +326,7 @@ class Relation(google.protobuf.message.Message):
         nearest_by_join: global___NearestByJoin | None = ...,
         zip: global___Zip | None = ...,
         bin_by: global___BinBy | None = ...,
+        rdd_relation: global___RDDRelation | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -419,6 +424,8 @@ class Relation(google.protobuf.message.Message):
             b"project",
             "range",
             b"range",
+            "rdd_relation",
+            b"rdd_relation",
             "read",
             b"read",
             "rel_type",
@@ -554,6 +561,8 @@ class Relation(google.protobuf.message.Message):
             b"project",
             "range",
             b"range",
+            "rdd_relation",
+            b"rdd_relation",
             "read",
             b"read",
             "rel_type",
@@ -660,6 +669,7 @@ class Relation(google.protobuf.message.Message):
             "nearest_by_join",
             "zip",
             "bin_by",
+            "rdd_relation",
             "fill_na",
             "drop_na",
             "replace",
@@ -1153,6 +1163,7 @@ class Read(google.protobuf.message.Message):
 
         UNPARSED_IDENTIFIER_FIELD_NUMBER: builtins.int
         OPTIONS_FIELD_NUMBER: builtins.int
+        SOURCE_NAME_FIELD_NUMBER: builtins.int
         unparsed_identifier: builtins.str
         """(Required) Unparsed identifier for the table."""
         @property
@@ -1160,18 +1171,36 @@ class Read(google.protobuf.message.Message):
             self,
         ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
             """Options for the named table. The map key is case insensitive."""
+        source_name: builtins.str
         def __init__(
             self,
             *,
             unparsed_identifier: builtins.str = ...,
             options: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
+            source_name: builtins.str | None = ...,
         ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_source_name", b"_source_name", "source_name", b"source_name"
+            ],
+        ) -> builtins.bool: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "options", b"options", "unparsed_identifier", b"unparsed_identifier"
+                "_source_name",
+                b"_source_name",
+                "options",
+                b"options",
+                "source_name",
+                b"source_name",
+                "unparsed_identifier",
+                b"unparsed_identifier",
             ],
         ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_source_name", b"_source_name"]
+        ) -> typing_extensions.Literal["source_name"] | None: ...
 
     class DataSource(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -3865,6 +3894,21 @@ class RepartitionByExpression(google.protobuf.message.Message):
 global___RepartitionByExpression = RepartitionByExpression
 
 class MapPartitions(google.protobuf.message.Message):
+    """A Python function of the partitions of `input`, of the eval type of its `PythonUDF`:
+
+    - SQL_MAP_PANDAS_ITER_UDF and SQL_MAP_ARROW_ITER_UDF: mapInPandas and mapInArrow, whose output
+      type is the struct of the columns of the output.
+    - NON_UDF: a function of the RDD API of the Python client (see `RDDRelation`), which the
+      Python worker runs as the PythonRDD of Spark Classic runs it. The command is the tuple of the
+      function, the profiler, the deserializer and the serializer that Spark Classic pickles with
+      cloudpickle for its PythonRDD. The worker reads each row of `input`, of one or two binary or
+      string columns, as an element (or as a pair of elements for two columns) of byte arrays, and
+      writes byte arrays. The output type is `struct<value: binary>`, of one column of what the
+      function writes, or `struct<key: int not null, value: binary>`, of the pairs that the
+      function writes in turn, as `RDD.partitionBy` writes the partition index (a long of 8 bytes
+      in big-endian order) and the batch of each pair.
+    """
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
@@ -3873,7 +3917,9 @@ class MapPartitions(google.protobuf.message.Message):
     PROFILE_ID_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
-        """(Required) Input relation for a mapPartitions-equivalent API: mapInPandas, mapInArrow."""
+        """(Required) Input relation for a mapPartitions-equivalent API: mapInPandas, mapInArrow and the
+        functions of the RDD API.
+        """
     @property
     def func(self) -> pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction:
         """(Required) Input user-defined function."""
@@ -4924,3 +4970,420 @@ class Zip(google.protobuf.message.Message):
     ) -> None: ...
 
 global___Zip = Zip
+
+class RDDRelation(google.protobuf.message.Message):
+    """A relation of the RDD API of the Python client (`pyspark.core.connect.rdd`). It is internal:
+    only that API builds it, and it is not a part of the DataFrame API.
+
+    An RDD is a relation whose rows hold its elements in the columns that the Python RDD API
+    declares, for instance one binary column of pickled batches of elements. Its partitions are the
+    partitions of the RDD, so these relations keep the partitioning of Spark Classic's RDDs: the
+    partitions of their inputs, the empty partitions included, in the order of the elements. The
+    functions of RDDs are `MapPartitions` relations of Python functions of eval type NON_UDF, and
+    their shuffles `RepartitionByExpression`s of `DirectShufflePartitionID`.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class Values(google.protobuf.message.Message):
+        """The `value` column of the rows of `input`, whose columns are `key` and `value`: for instance,
+        the pairs that the function of a `MapPartitions` of the output type
+        `struct<key: int not null, value: binary>` writes, moved to the partitions of their keys by a
+        `RepartitionByExpression` of `DirectShufflePartitionID(key)`, as `RDD.partitionBy` shuffles the
+        batches of its pairs.
+        """
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        INPUT_FIELD_NUMBER: builtins.int
+        @property
+        def input(self) -> global___Relation:
+            """(Required) The input RDD."""
+        def __init__(
+            self,
+            *,
+            input: global___Relation | None = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["input", b"input"]
+        ) -> builtins.bool: ...
+        def ClearField(self, field_name: typing_extensions.Literal["input", b"input"]) -> None: ...
+
+    class Union(google.protobuf.message.Message):
+        """The partitions of the inputs one after the other, as the union of RDDs that do not have the
+        same partitioner.
+        """
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        INPUTS_FIELD_NUMBER: builtins.int
+        @property
+        def inputs(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Relation]:
+            """(Required) The input RDDs, with the same columns."""
+        def __init__(
+            self,
+            *,
+            inputs: collections.abc.Iterable[global___Relation] | None = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["inputs", b"inputs"]
+        ) -> None: ...
+
+    class ZipPartitions(google.protobuf.message.Message):
+        """The partitions at the same index of the inputs, which have the same number of partitions:
+        either their rows at the same position joined, as `RDD.zip` pairs the elements of two RDDs,
+        or, with `concatenate`, their rows one after the other, as the union of RDDs that have the
+        same partitioner.
+        """
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        INPUTS_FIELD_NUMBER: builtins.int
+        CONCATENATE_FIELD_NUMBER: builtins.int
+        @property
+        def inputs(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Relation]:
+            """(Required) The input RDDs: two to zip, or the RDDs with the same columns to concatenate."""
+        concatenate: builtins.bool
+        """(Optional) Whether to concatenate the partitions rather than to zip their rows."""
+        def __init__(
+            self,
+            *,
+            inputs: collections.abc.Iterable[global___Relation] | None = ...,
+            concatenate: builtins.bool = ...,
+        ) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "concatenate", b"concatenate", "inputs", b"inputs"
+            ],
+        ) -> None: ...
+
+    class Cartesian(google.protobuf.message.Message):
+        """The Cartesian product of two RDDs, as `RDD.cartesian` computes it: the rows of `left` and
+        `right` joined, in a partition for each pair of partitions of `left` and `right`.
+        """
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        LEFT_FIELD_NUMBER: builtins.int
+        RIGHT_FIELD_NUMBER: builtins.int
+        @property
+        def left(self) -> global___Relation:
+            """(Required) The left RDD."""
+        @property
+        def right(self) -> global___Relation:
+            """(Required) The right RDD."""
+        def __init__(
+            self,
+            *,
+            left: global___Relation | None = ...,
+            right: global___Relation | None = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["left", b"left", "right", b"right"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["left", b"left", "right", b"right"]
+        ) -> None: ...
+
+    class Coalesce(google.protobuf.message.Message):
+        """The partitions of `input` in `num_partitions` partitions, as `RDD.coalesce` without a shuffle
+        groups them.
+        """
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        INPUT_FIELD_NUMBER: builtins.int
+        NUM_PARTITIONS_FIELD_NUMBER: builtins.int
+        @property
+        def input(self) -> global___Relation:
+            """(Required) The input RDD."""
+        num_partitions: builtins.int
+        """(Required) The number of partitions."""
+        def __init__(
+            self,
+            *,
+            input: global___Relation | None = ...,
+            num_partitions: builtins.int = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["input", b"input"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "input", b"input", "num_partitions", b"num_partitions"
+            ],
+        ) -> None: ...
+
+    class Parallelize(google.protobuf.message.Message):
+        """The rows of local data in `num_slices` partitions, sliced as `SparkContext.parallelize` slices
+        a sequence: for instance, the pickled batches of a local collection.
+        """
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        DATA_FIELD_NUMBER: builtins.int
+        NUM_SLICES_FIELD_NUMBER: builtins.int
+        @property
+        def data(self) -> global___Relation:
+            """(Required) The local data: a `LocalRelation`, `CachedLocalRelation` or
+            `ChunkedCachedLocalRelation`.
+            """
+        num_slices: builtins.int
+        """(Required) The number of partitions."""
+        def __init__(
+            self,
+            *,
+            data: global___Relation | None = ...,
+            num_slices: builtins.int = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["data", b"data"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal["data", b"data", "num_slices", b"num_slices"],
+        ) -> None: ...
+
+    class FromDataFrame(google.protobuf.message.Message):
+        """The rows of a DataFrame pickled in batches, as `DataFrame.rdd` of Spark Classic pickles them:
+        the output has one binary column, `value`.
+        """
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        INPUT_FIELD_NUMBER: builtins.int
+        @property
+        def input(self) -> global___Relation:
+            """(Required) The DataFrame."""
+        def __init__(
+            self,
+            *,
+            input: global___Relation | None = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["input", b"input"]
+        ) -> builtins.bool: ...
+        def ClearField(self, field_name: typing_extensions.Literal["input", b"input"]) -> None: ...
+
+    class ToDataFrame(google.protobuf.message.Message):
+        """A DataFrame of an RDD whose elements are the internal values of rows of `schema` (lists or
+        tuples, as `StructType.toInternal` returns them), as `SparkSession.createDataFrame` of Spark
+        Classic creates it from an RDD.
+        """
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        INPUT_FIELD_NUMBER: builtins.int
+        SCHEMA_FIELD_NUMBER: builtins.int
+        @property
+        def input(self) -> global___Relation:
+            """(Required) The RDD, with one binary column of pickled batches of elements."""
+        @property
+        def schema(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
+            """(Required) The schema, a struct type."""
+        def __init__(
+            self,
+            *,
+            input: global___Relation | None = ...,
+            schema: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["input", b"input", "schema", b"schema"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["input", b"input", "schema", b"schema"]
+        ) -> None: ...
+
+    class Elements(google.protobuf.message.Message):
+        """The elements of an RDD, in rows of two columns: `partition` (int), the index of a partition,
+        and `data` (binary), elements of that partition. `data` holds each row of the RDD as the
+        PythonRDD of Spark Classic writes an element to Python (see `PythonRDD.writeIteratorToStream`),
+        so that the deserializer of the RDD reads them. The rows of a partition hold its elements in
+        order, and the partitions are in the order of their indices.
+        """
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        INPUT_FIELD_NUMBER: builtins.int
+        PARTITIONS_FIELD_NUMBER: builtins.int
+        @property
+        def input(self) -> global___Relation:
+            """(Required) The RDD, with one or two binary or string columns."""
+        @property
+        def partitions(self) -> pyspark.sql.connect.proto.common_pb2.Ints:
+            """(Optional) The indices of the partitions to compute, as `SparkContext.runJob` takes them.
+            All the partitions when it is not set.
+            """
+        def __init__(
+            self,
+            *,
+            input: global___Relation | None = ...,
+            partitions: pyspark.sql.connect.proto.common_pb2.Ints | None = ...,
+        ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_partitions", b"_partitions", "input", b"input", "partitions", b"partitions"
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_partitions", b"_partitions", "input", b"input", "partitions", b"partitions"
+            ],
+        ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_partitions", b"_partitions"]
+        ) -> typing_extensions.Literal["partitions"] | None: ...
+
+    class WithResources(google.protobuf.message.Message):
+        """The rows of `input`, in a stage that runs with a resource profile, as the stage of an RDD
+        with the resource profile that `RDD.withResources` sets in Spark Classic.
+        """
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        INPUT_FIELD_NUMBER: builtins.int
+        PROFILE_ID_FIELD_NUMBER: builtins.int
+        @property
+        def input(self) -> global___Relation:
+            """(Required) The input RDD."""
+        profile_id: builtins.int
+        """(Required) The ID of the resource profile (see `CreateResourceProfileCommand`)."""
+        def __init__(
+            self,
+            *,
+            input: global___Relation | None = ...,
+            profile_id: builtins.int = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["input", b"input"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal["input", b"input", "profile_id", b"profile_id"],
+        ) -> None: ...
+
+    VALUES_FIELD_NUMBER: builtins.int
+    UNION_FIELD_NUMBER: builtins.int
+    ZIP_PARTITIONS_FIELD_NUMBER: builtins.int
+    CARTESIAN_FIELD_NUMBER: builtins.int
+    COALESCE_FIELD_NUMBER: builtins.int
+    PARALLELIZE_FIELD_NUMBER: builtins.int
+    FROM_DATA_FRAME_FIELD_NUMBER: builtins.int
+    TO_DATA_FRAME_FIELD_NUMBER: builtins.int
+    ELEMENTS_FIELD_NUMBER: builtins.int
+    WITH_RESOURCES_FIELD_NUMBER: builtins.int
+    @property
+    def values(self) -> global___RDDRelation.Values: ...
+    @property
+    def union(self) -> global___RDDRelation.Union: ...
+    @property
+    def zip_partitions(self) -> global___RDDRelation.ZipPartitions: ...
+    @property
+    def cartesian(self) -> global___RDDRelation.Cartesian: ...
+    @property
+    def coalesce(self) -> global___RDDRelation.Coalesce: ...
+    @property
+    def parallelize(self) -> global___RDDRelation.Parallelize: ...
+    @property
+    def from_data_frame(self) -> global___RDDRelation.FromDataFrame: ...
+    @property
+    def to_data_frame(self) -> global___RDDRelation.ToDataFrame: ...
+    @property
+    def elements(self) -> global___RDDRelation.Elements: ...
+    @property
+    def with_resources(self) -> global___RDDRelation.WithResources: ...
+    def __init__(
+        self,
+        *,
+        values: global___RDDRelation.Values | None = ...,
+        union: global___RDDRelation.Union | None = ...,
+        zip_partitions: global___RDDRelation.ZipPartitions | None = ...,
+        cartesian: global___RDDRelation.Cartesian | None = ...,
+        coalesce: global___RDDRelation.Coalesce | None = ...,
+        parallelize: global___RDDRelation.Parallelize | None = ...,
+        from_data_frame: global___RDDRelation.FromDataFrame | None = ...,
+        to_data_frame: global___RDDRelation.ToDataFrame | None = ...,
+        elements: global___RDDRelation.Elements | None = ...,
+        with_resources: global___RDDRelation.WithResources | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "cartesian",
+            b"cartesian",
+            "coalesce",
+            b"coalesce",
+            "elements",
+            b"elements",
+            "from_data_frame",
+            b"from_data_frame",
+            "parallelize",
+            b"parallelize",
+            "relation_type",
+            b"relation_type",
+            "to_data_frame",
+            b"to_data_frame",
+            "union",
+            b"union",
+            "values",
+            b"values",
+            "with_resources",
+            b"with_resources",
+            "zip_partitions",
+            b"zip_partitions",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "cartesian",
+            b"cartesian",
+            "coalesce",
+            b"coalesce",
+            "elements",
+            b"elements",
+            "from_data_frame",
+            b"from_data_frame",
+            "parallelize",
+            b"parallelize",
+            "relation_type",
+            b"relation_type",
+            "to_data_frame",
+            b"to_data_frame",
+            "union",
+            b"union",
+            "values",
+            b"values",
+            "with_resources",
+            b"with_resources",
+            "zip_partitions",
+            b"zip_partitions",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["relation_type", b"relation_type"]
+    ) -> (
+        typing_extensions.Literal[
+            "values",
+            "union",
+            "zip_partitions",
+            "cartesian",
+            "coalesce",
+            "parallelize",
+            "from_data_frame",
+            "to_data_frame",
+            "elements",
+            "with_resources",
+        ]
+        | None
+    ): ...
+
+global___RDDRelation = RDDRelation

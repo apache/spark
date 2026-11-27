@@ -22,6 +22,10 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class UDFParityTests(BaseUDFTestsMixin, ReusedConnectTestCase):
+    @property
+    def sc(self):
+        return self.spark.sparkContext
+
     @classmethod
     def setUpClass(cls):
         # test_udf uses UserDefinedFunction so we need to monkeypatch it
@@ -31,10 +35,6 @@ class UDFParityTests(BaseUDFTestsMixin, ReusedConnectTestCase):
         pyspark.sql.tests.test_udf.UserDefinedFunction = UserDefinedFunction
 
         super().setUpClass()
-
-    @unittest.skip("Spark Connect does not support mapPartitions() but the test depends on it.")
-    def test_worker_original_stdin_closed(self):
-        super().test_worker_original_stdin_closed()
 
     @unittest.skip(
         "Spark Connect does not support reading from Hadoop RDD but the test depends on it."

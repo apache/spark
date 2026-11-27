@@ -12,6 +12,7 @@ scikit-learn
 matplotlib
 memory-profiler>=0.61.0
 pyyaml>=3.11
+cloudpickle-rust==0.3.0
 
 # PySpark test dependencies
 unittest-xml-reporting
@@ -59,8 +60,8 @@ jira>=3.5.2
 PyGithub
 
 # Spark Connect (required)
-grpcio>=1.76.0
-grpcio-status>=1.76.0
+grpcio>=1.84.1
+grpcio-status>=1.84.1
 googleapis-common-protos>=1.71.0
 protobuf==6.33.5
 zstandard>=0.25.0

@@ -22,8 +22,13 @@ import java.time.temporal.ChronoUnit
 
 import scala.language.implicitConversions
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkArithmeticException, SparkConf, SparkFunSuite}
+import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
+import org.apache.spark.sql.catalyst.optimizer.SimplifyCasts
+import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
+import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{safeStringToInterval, stringToInterval}
@@ -472,6 +477,119 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         checkConsistencyBetweenInterpretedAndCodegenAllowingException(
           (interval: Expression, num: Expression) => DivideDTInterval(interval, num),
           it, numType)
+      }
+    }
+  }
+
+  // The error of an interval division that overflows. It carries an empty query context, which
+  // `checkErrorInExpression` cannot match, so the whole message is checked, with the suggested
+  // function.
+  private val intervalDivideOverflowErrMsg =
+    "[INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION] Integer overflow while operating with " +
+      "intervals. Use `try_divide` to tolerate overflow and return NULL instead."
+
+  test("SPARK-60746: an interval division whose quotient does not fit raises the overflow error") {
+    // A quotient that is out of the range of the interval type once rounded, or infinite, from
+    // a decimal or a fractional divisor, in every mode. A NaN quotient is not an overflow, see
+    // the SPARK-34868 and SPARK-34875 tests.
+    Seq(
+      DivideYMInterval(Literal(Period.ofMonths(Int.MaxValue)), Literal(Decimal(0.5))),
+      DivideYMInterval(Literal(Period.ofMonths(Int.MaxValue)), Literal(1e-300d)),
+      DivideDTInterval(Literal(Duration.ofDays(1)), Literal(1e-290d)),
+      DivideDTInterval(Literal(Duration.ofDays(1)), Literal(1e-300d))
+    ).foreach { expr =>
+      withClue(s"$expr: ") {
+        checkExceptionInExpression[SparkArithmeticException](expr, intervalDivideOverflowErrMsg)
+      }
+    }
+  }
+
+  test("SPARK-60746: the min interval divided by -1 raises the same error in every mode") {
+    // An integral divisor is checked before the division, a decimal or a fractional one when the
+    // rounded quotient does not fit the interval type.
+    Seq(-1.toByte, -1.toShort, -1, -1L, Decimal(-1), -1.0f, -1.0d).foreach { num =>
+      withClue(s"divisor $num: ") {
+        checkExceptionInExpression[SparkArithmeticException](
+          DivideYMInterval(Literal(Period.ofMonths(Int.MinValue)), Literal(num)),
+          intervalDivideOverflowErrMsg)
+        checkExceptionInExpression[SparkArithmeticException](
+          DivideDTInterval(Literal(Duration.of(Long.MinValue, ChronoUnit.MICROS)), Literal(num)),
+          intervalDivideOverflowErrMsg)
+      }
+    }
+  }
+
+  test("SPARK-61352: an interval error keeps its query context") {
+    // The helpers evaluate a serialized copy of the expression, as an executor does. `TreeNode`
+    // does not serialize `origin`, so the copy must carry the context itself. Each expression is
+    // built inside `withOrigin` and evaluated outside it: evaluated inside, the copy would read
+    // the origin back from `CurrentOrigin` and the test could not fail.
+    def withQuery(query: String)(expr: => Expression): (() => Expression, String) = {
+      val o = Origin(
+        line = Some(1),
+        startPosition = Some(7),
+        startIndex = Some(7),
+        stopIndex = Some(7 + query.length - 1),
+        sqlText = Some(s"select $query"))
+      (() => withOrigin(o)(expr), s"== SQL (line 1, position 8) ==\nselect $query")
+    }
+    // A cast to the type of the expression, with a context of its own (ANSI, TRY) or none (LEGACY).
+    val castContext = "== SQL (line 1, position 1) ==\ncast"
+    def sameTypeCast(expr: Expression, evalMode: EvalMode.Value): Expression = {
+      val o = Origin(
+        line = Some(1),
+        startPosition = Some(0),
+        startIndex = Some(0),
+        stopIndex = Some(3),
+        sqlText = Some("cast"))
+      withOrigin(o)(Cast(expr, expr.dataType, None, evalMode))
+    }
+    val ser = new JavaSerializer(new SparkConf()).newInstance()
+
+    val ymMin = Literal(Period.ofMonths(Int.MinValue))
+    val dtMin = Literal(Duration.of(Long.MinValue, ChronoUnit.MICROS))
+    Seq(
+      withQuery("ym / -1")(DivideYMInterval(ymMin, Literal(-1))),
+      withQuery("ym / -1.0D")(DivideYMInterval(ymMin, Literal(-1.0d))),
+      withQuery("ym / -1BD")(DivideYMInterval(ymMin, Literal(Decimal(-1)))),
+      withQuery("ym / 0")(DivideYMInterval(ymMin, Literal(0))),
+      withQuery("dt / -1L")(DivideDTInterval(dtMin, Literal(-1L))),
+      withQuery("dt / -1BD")(DivideDTInterval(dtMin, Literal(Decimal(-1)))),
+      withQuery("dt / -1.0D")(DivideDTInterval(dtMin, Literal(-1.0d))),
+      withQuery("dt / 0")(DivideDTInterval(dtMin, Literal(0))),
+      withQuery("make_ym_interval(2147483647, 0)")(
+        MakeYMInterval(Literal(Int.MaxValue), Literal(0))),
+      withQuery("make_dt_interval(2147483647)")(
+        MakeDTInterval(Literal(Int.MaxValue), Literal(0), Literal(0),
+          Literal(Decimal(0, Decimal.MAX_LONG_DIGITS, 6))))
+    ).foreach { case (newExpr, context) =>
+      // Each form gets an instance of its own, since `copyTagsFrom` changes the instance that a
+      // rule returns, so that a failure tells which form lost the context.
+      // A rule that replaces a node calls `copyTagsFrom` on the replacement, as `SimplifyCasts`
+      // does when it replaces a cast to the same type with its child: the expression takes the
+      // context of an ANSI or a TRY cast, and keeps its own under a LEGACY cast, which has none,
+      // and under an ANSI cast built outside `withOrigin`, whose context has no origin.
+      val replacingCasts = Seq(
+        sameTypeCast(newExpr(), EvalMode.ANSI) -> castContext,
+        sameTypeCast(newExpr(), EvalMode.TRY) -> castContext,
+        sameTypeCast(newExpr(), EvalMode.LEGACY) -> context,
+        { val e = newExpr(); Cast(e, e.dataType, None, EvalMode.ANSI) } -> context
+      ).map { case (cast, expected) =>
+        val plan = Project(Seq(Alias(cast, "c")()), OneRowRelation())
+        val replaced = SimplifyCasts(plan).expressions.head.children.head
+        assert(!replaced.isInstanceOf[Cast], s"SimplifyCasts kept $cast")
+        replaced -> expected
+      }
+      // A transform of a deserialized copy, as `BindReferences` runs on an executor, rebuilds the
+      // node with an empty `origin`, and the rebuilt node takes the context of the copy.
+      val deserialized = ser.deserialize[Expression](ser.serialize(newExpr()))
+      val rebuilt = deserialized.makeCopy(deserialized.productIterator.map(_.asInstanceOf[AnyRef])
+        .toArray)
+      ((newExpr() -> context) +: (rebuilt -> context) +: replacingCasts).foreach {
+        case (e, expected) =>
+          withClue(s"$e: ") {
+            checkExceptionInExpression[SparkArithmeticException](e, expected)
+          }
       }
     }
   }

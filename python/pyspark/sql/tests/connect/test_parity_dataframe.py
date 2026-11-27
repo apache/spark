@@ -24,6 +24,10 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
+    @property
+    def sc(self):
+        return self.spark.sparkContext
+
     def test_bin_by_with_non_strict_column_resolution(self):
         with self.sql_conf(
             {
@@ -59,14 +63,6 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_help_command(self):
         df = self.spark.createDataFrame(data=[{"foo": "bar"}, {"foo": "baz"}])
         super().check_help_command(df)
-
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_toDF_with_schema_string(self):
-        super().test_toDF_with_schema_string()
-
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_rdd_conversion_propagates_sql_conf(self):
-        super().test_rdd_conversion_propagates_sql_conf()
 
     @unittest.skip("This test is dedicated for classic mode.")
     def test_query_execution_unsupported_in_classic(self):

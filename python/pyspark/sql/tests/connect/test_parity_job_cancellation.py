@@ -18,9 +18,11 @@
 import threading
 from unittest import mock
 
+# pyspark.SparkContext, as it is with Spark Classic and with pyspark-client, which does not have the
+# SparkContext of Spark Classic.
+from pyspark import SparkContext as SparkContextFacade
 from pyspark import inheritable_thread_target
 from pyspark.core.connect.context import SparkContext as ConnectSparkContext
-from pyspark.core.context import SparkContext as SparkContextFacade
 from pyspark.errors import PySparkNotImplementedError, PySparkTypeError
 from pyspark.sql.tests.test_job_cancellation import JobCancellationTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
@@ -28,7 +30,7 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 class JobCancellationParityTests(JobCancellationTestsMixin, ReusedConnectTestCase):
     def _verify_connect_spark_context_facades(self) -> None:
-        """Connect SparkContext facade ctor rules (``SparkContext`` from ``pyspark.core``)."""
+        """Connect SparkContext facade ctor rules (``pyspark.SparkContext``)."""
 
         self.assertIs(SparkContextFacade.getOrCreate(), self.spark.sparkContext)
         self.assertIs(SparkContextFacade.getOrCreate(), SparkContextFacade.getOrCreate())

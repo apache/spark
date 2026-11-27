@@ -43,14 +43,14 @@ import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
-import org.apache.spark.tags.ExtendedSQLTest
+import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
  * A test suite that tests Apache ORC filter API based filter pushdown optimization.
  */
-@ExtendedSQLTest
+@DataSourceV2Test
 class OrcFilterSuite extends OrcTest with SharedSparkSession {
   import testImplicits.{toRichColumn, ColumnConstructorExt}
 

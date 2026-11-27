@@ -26,3 +26,4 @@ from pyspark.sql.connect.proto.common_pb2 import *
 from pyspark.sql.connect.proto.ml_pb2 import *
 from pyspark.sql.connect.proto.ml_common_pb2 import *
 from pyspark.sql.connect.proto.pipelines_pb2 import *
+from pyspark.sql.connect.proto.rdd_pb2 import *

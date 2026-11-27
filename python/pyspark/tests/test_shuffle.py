@@ -20,8 +20,6 @@ import unittest
 from tempfile import TemporaryDirectory
 from unittest import mock
 
-from py4j.protocol import Py4JJavaError
-
 from pyspark import CPickleSerializer, SparkConf, shuffle
 from pyspark.shuffle import (
     Aggregator,
@@ -31,7 +29,7 @@ from pyspark.shuffle import (
     Merger,
     SimpleAggregator,
 )
-from pyspark.testing.utils import ReusedPySparkTestCase
+from pyspark.testing.utils import Py4JJavaError, ReusedPySparkTestCase
 
 
 class ShuffleRDDSortTestsMixin:

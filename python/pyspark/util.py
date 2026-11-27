@@ -120,6 +120,11 @@ JVM_LONG_MAX: int = (1 << 63) - 1
 FuncT = TypeVar("FuncT", bound=Callable[..., Any])
 
 
+# Whether PYTHONHASHSEED was found set, which it stays: the hash of strings is fixed when the
+# interpreter starts. Checking os.environ for every key costs more than hashing most keys.
+_python_hash_seed_set = False
+
+
 def portable_hash(x: Hashable) -> int:
     """
     Consistent hash for builtin Spark partition keys (notably ``None`` and tuples containing
@@ -134,12 +139,15 @@ def portable_hash(x: Hashable) -> int:
     >>> portable_hash((None, 1)) & 0xffffffff
     219750521
     """
+    global _python_hash_seed_set
 
-    if "PYTHONHASHSEED" not in os.environ:
-        raise PySparkRuntimeError(
-            errorClass="PYTHON_HASH_SEED_NOT_SET",
-            messageParameters={},
-        )
+    if not _python_hash_seed_set:
+        if "PYTHONHASHSEED" not in os.environ:
+            raise PySparkRuntimeError(
+                errorClass="PYTHON_HASH_SEED_NOT_SET",
+                messageParameters={},
+            )
+        _python_hash_seed_set = True
 
     if x is None:
         return 0
@@ -376,7 +384,7 @@ ________________________________________________________________________________
 def _parse_memory(s: str) -> int:
     """
     Parse a memory string in the format supported by Java (e.g. 1g, 200m) and
-    return the value in MiB
+    return the value in MiB. Raise ValueError for empty or invalid memory strings.
 
     Examples
     --------
@@ -386,7 +394,7 @@ def _parse_memory(s: str) -> int:
     2048
     """
     units = {"g": 1024, "m": 1, "t": 1 << 20, "k": 1.0 / 1024}
-    if s[-1].lower() not in units:
+    if not s or s[-1].lower() not in units:
         raise ValueError("invalid format: " + s)
     return int(float(s[:-1]) * units[s[-1].lower()])
 
@@ -603,7 +611,7 @@ def handle_worker_exception(
     try:
         exc_info = format_worker_exception(e, hide_traceback)
         write_int(SpecialLengths.PYTHON_EXCEPTION_THROWN, outfile)
-        write_with_length(exc_info.encode("utf-8"), outfile)
+        write_with_length(exc_info.encode("utf-8", "backslashreplace"), outfile)
     except IOError:
         # JVM close the socket
         pass
@@ -763,12 +771,12 @@ class PythonEvalType:
     SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF: "ArrowGroupedAggIncrementalPartialUDFType" = 255
     SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF: "ArrowGroupedAggIncrementalFinalUDFType" = 256
 
-    # Window aggregation with an incremental ``Aggregator``. A window has no shuffle, so each
-    # frame's rows are folded with ``reduce`` (from ``zero``) and finished with ``finish``.
+    # Window aggregation with an incremental ``Aggregator``. A window partition is evaluated
+    # within one task, so there is no PARTIAL/FINAL split and no ``merge``: each frame's rows are
+    # folded with ``reduce`` and ``finish`` produces its value. An unbounded frame (the whole
+    # partition) is folded once; a bounded frame is folded per row, extending the previous row's
+    # buffer while the lower bound stays fixed.
     SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF: "ArrowWindowAggIncrementalUDFType" = 257
-
-    # Scalar Arrow UDF evaluated by embedded CPython in the executor JVM.
-    SQL_SCALAR_ARROW_INPROCESS_UDF: int = 258
 
     SQL_TABLE_UDF: "SQLTableUDFType" = 300
     SQL_ARROW_TABLE_UDF: "SQLArrowTableUDFType" = 301
@@ -1007,7 +1015,8 @@ def is_remote_only() -> bool:
     if _is_remote_only is not None:
         return _is_remote_only
     try:
-        from pyspark import core  # noqa: F401
+        # The implementations of Spark Classic, which pyspark-client does not have.
+        from pyspark.core import classic  # noqa: F401
 
         _is_remote_only = False
         return _is_remote_only

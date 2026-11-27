@@ -215,6 +215,7 @@ Additional libraries that enhance functionality but are not included in the inst
 
 - **memory-profiler**: Used for PySpark UDF memory profiling, ``spark.profile.show(...)`` and ``spark.sql.pyspark.udf.profiler``.
 - **plotly**: Used for PySpark plotting, ``DataFrame.plot``.
+- **cloudpickle-rust** (0.3.0 or later): A faster implementation of ``cloudpickle``. When it is installed, PySpark pickles Python functions and data with it, for example UDFs and RDD functions; set the ``PYSPARK_CLOUDPICKLE_RUST`` environment variable to ``0`` to use the ``cloudpickle`` bundled in PySpark instead. Processes of PySpark that load the pickled objects, such as Python workers, do not need it. A Spark Connect client uses it only when ``PYSPARK_CLOUDPICKLE_RUST`` is ``1``: the Python workers of its server load its pickled objects, which needs a server of this version or later, or cloudpickle-rust installed for them.
 
 Note that PySpark requires Java 21 or later with ``JAVA_HOME`` properly set and refer to |downloading|_.
 
@@ -239,8 +240,8 @@ Package                    Supported version Note
 ========================== ================= ==========================
 `pandas`                   >=2.2.0,<3.0.0    Required for Spark Connect
 `pyarrow`                  >=18.0.0          Required for Spark Connect
-`grpcio`                   >=1.76.0          Required for Spark Connect
-`grpcio-status`            >=1.76.0          Required for Spark Connect
+`grpcio`                   >=1.84.1          Required for Spark Connect
+`grpcio-status`            >=1.84.1          Required for Spark Connect
 `googleapis-common-protos` >=1.71.0          Required for Spark Connect
 `zstandard`                >=0.25.0          Required for Spark Connect
 `graphviz`                 >=0.20            Optional for Spark Connect
@@ -324,8 +325,8 @@ Package                    Supported version Note
 ========================== ================= ===================================================
 `pandas`                   >=2.2.0,<3.0.0    Required for Spark Connect and Spark SQL
 `pyarrow`                  >=18.0.0          Required for Spark Connect and Spark SQL
-`grpcio`                   >=1.76.0          Required for Spark Connect
-`grpcio-status`            >=1.76.0          Required for Spark Connect
+`grpcio`                   >=1.84.1          Required for Spark Connect
+`grpcio-status`            >=1.84.1          Required for Spark Connect
 `googleapis-common-protos` >=1.71.0          Required for Spark Connect
 `zstandard`                >=0.25.0          Required for Spark Connect
 `pyyaml`                   >=3.11            Required for spark-pipelines command line interface

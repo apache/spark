@@ -23,7 +23,10 @@ By default, PySpark uses :class:`CPickleSerializer` to serialize objects. This i
 that resolves to :class:`CloudPickleSerializer` (which uses the ``cloudpickle`` library and
 can serialize nearly any Python object); setting the ``PYSPARK_ENABLE_NAMEDTUPLE_PATCH=1``
 environment variable makes it resolve to :class:`PickleSerializer` (which uses the standard
-library ``pickle`` module) instead.
+library ``pickle`` module) instead. :class:`CloudPickleSerializer` uses ``cloudpickle-rust``, a
+faster implementation of ``cloudpickle``, when it is installed, unless the
+``PYSPARK_CLOUDPICKLE_RUST=0`` environment variable is set; a Spark Connect client uses it only
+with ``PYSPARK_CLOUDPICKLE_RUST=1``, as the Python workers of its server must load its payloads.
 Other serializers, like :class:`MarshalSerializer`, support fewer datatypes but can be
 faster.
 
@@ -161,7 +164,7 @@ class FramedSerializer(Serializer):
         serialized = self.dumps(obj)
         if serialized is None:
             raise ValueError("serialized value should not be None")
-        if len(serialized) > (1 << 31):
+        if len(serialized) >= (1 << 31):
             raise ValueError("can not serialize object larger than 2G")
         write_int(len(serialized), stream)
         stream.write(serialized)
@@ -366,7 +369,6 @@ if os.environ.get("PYSPARK_ENABLE_NAMEDTUPLE_PATCH") == "1":
             return (_restore, (name, fields, tuple(self)))
 
         cls.__reduce__ = __reduce__
-        cls._is_namedtuple_ = True
         return cls
 
     def _hijack_namedtuple():
@@ -427,6 +429,147 @@ class _RestrictedUnpickler(pickle.Unpickler):
         return super().find_class(module, name)
 
 
+# cloudpickle-rust (the cloudpickle_rust package) is a Rust implementation of cloudpickle. Its
+# payloads are the ones of the vendored cloudpickle, except that they reference its reconstructors
+# as cloudpickle_rust.cloudpickle.<name>. PySpark loads them also where cloudpickle_rust cannot be
+# imported (see _cloudpickle_loads), but only from this version on. So a Spark Connect client,
+# whose payloads the Python workers of its server load, of another environment and possibly of an
+# earlier version, pickles with it only when the environment variable PYSPARK_CLOUDPICKLE_RUST is
+# 1. A Spark Classic driver and a Python worker, whose payloads this version loads, pickle with it
+# when it can be imported, unless PYSPARK_CLOUDPICKLE_RUST is 0.
+_cloudpickle_module = None
+_classic_cloudpickle_module = None
+_cloudpickle_rust_module = None
+# The module that every Spark Connect client imports before it sends a request.
+_CONNECT_CLIENT_MODULE = "pyspark.sql.connect.client.core"
+
+
+def _cloudpickle():
+    """
+    Return the cloudpickle module that PySpark pickles with: ``cloudpickle_rust`` or the vendored
+    ``pyspark.cloudpickle`` (see above).
+    """
+    module = _cloudpickle_module
+    if module is not None:
+        return module
+    module = _classic_cloudpickle_module
+    if module is not None and _CONNECT_CLIENT_MODULE not in sys.modules:
+        return module
+    return _choose_cloudpickle()
+
+
+def _choose_cloudpickle():
+    """
+    Choose the module of :func:`_cloudpickle`, for the rest of the process: of
+    ``PYSPARK_CLOUDPICKLE_RUST`` (read at the first choice), of a Python worker, of a Spark
+    Connect client, which stays one, or of cloudpickle_rust not usable. A Spark Classic driver can
+    still become a Spark Connect client (of ``SparkSession.builder.remote``), which imports the
+    Spark Connect client first: its choice is made again then.
+    """
+    global _cloudpickle_module, _classic_cloudpickle_module
+    setting = os.environ.get("PYSPARK_CLOUDPICKLE_RUST")
+    rust = None if setting == "0" else _usable_cloudpickle_rust()
+    if rust is None:
+        _cloudpickle_module = cloudpickle
+        return cloudpickle
+    if setting == "1" or os.environ.get("SPARK_PYTHON_RUNTIME") == "PYTHON_WORKER":
+        # A worker of a server in local mode, which is a child of its client, inherits its
+        # SPARK_CONNECT_MODE_ENABLED: it is not a Spark Connect client.
+        _cloudpickle_module = rust
+        return rust
+    from pyspark.util import is_remote_only
+
+    if (
+        "SPARK_CONNECT_MODE_ENABLED" in os.environ
+        or is_remote_only()
+        or _CONNECT_CLIENT_MODULE in sys.modules
+    ):
+        _cloudpickle_module = cloudpickle
+        return cloudpickle
+    _classic_cloudpickle_module = rust
+    return rust
+
+
+def _usable_cloudpickle_rust():
+    """``cloudpickle_rust``, configured as the vendored cloudpickle, or None if it cannot be
+    used: imported once."""
+    global _cloudpickle_rust_module
+    rust = _cloudpickle_rust_module
+    if rust is None:
+        rust = _cloudpickle_rust_module = _configured_cloudpickle_rust() or False
+    return rust or None
+
+
+def _configured_cloudpickle_rust():
+    try:
+        import cloudpickle_rust
+
+        rust = cloudpickle_rust.cloudpickle
+        registry = rust._PICKLE_BY_VALUE_MODULES
+    except Exception:
+        # Not installed, or it fails to import (e.g. cloudpickle-rust 0.3.0 with python -OO).
+        return None
+    if not hasattr(rust, "DYNAMIC_CODE_FILENAME"):
+        # Before 0.3.0, it cannot keep the original filenames of the code pickled by value.
+        return None
+    # Keep the original filenames of the code pickled by value, as the vendored cloudpickle 3.1
+    # does, for the tracebacks and the profilers of the processes that load it.
+    rust.DYNAMIC_CODE_FILENAME = None
+    # Share one registry of the modules pickled by value, so that
+    # pyspark.cloudpickle.register_pickle_by_value() also applies to cloudpickle_rust. The set of
+    # cloudpickle_rust is updated in place: rebinding its global would make it run upstream's
+    # Python code, which is slower.
+    registry.update(cloudpickle.cloudpickle._PICKLE_BY_VALUE_MODULES)
+    cloudpickle.cloudpickle._PICKLE_BY_VALUE_MODULES = registry
+    return cloudpickle_rust
+
+
+def _cloudpickle_dumps(obj, protocol=pickle_protocol):
+    """Pickle `obj` with :func:`_cloudpickle`."""
+    return _cloudpickle().dumps(obj, protocol)
+
+
+def _cloudpickle_dump(obj, file, protocol=pickle_protocol):
+    """Pickle `obj` into the binary `file` with :func:`_cloudpickle`."""
+    _cloudpickle().dump(obj, file, protocol)
+
+
+class _CloudPickleRustCompatUnpickler(pickle.Unpickler):
+    """
+    Unpickler that loads the payloads of cloudpickle_rust with the vendored cloudpickle, whose
+    reconstructors have the same names and signatures.
+    """
+
+    _MODULES = {
+        "cloudpickle_rust": "pyspark.cloudpickle",
+        "cloudpickle_rust.cloudpickle": "pyspark.cloudpickle.cloudpickle",
+        "cloudpickle_rust.cloudpickle_fast": "pyspark.cloudpickle.cloudpickle_fast",
+    }
+
+    def find_class(self, module, name):
+        return super().find_class(self._MODULES.get(module, module), name)
+
+
+def _cloudpickle_loads(data, encoding="ASCII"):
+    """
+    Like :func:`pickle.loads`, but also loads the payloads of cloudpickle_rust where it cannot be
+    imported. They are first loaded by :func:`pickle.loads`, so that loading only pays for the
+    compatibility unpickler when cloudpickle_rust is missing.
+    """
+    try:
+        return pickle.loads(data, encoding=encoding)
+    except ImportError as e:
+        name = e.name or ""
+        if name != "cloudpickle_rust" and not name.startswith("cloudpickle_rust."):
+            raise
+    return _CloudPickleRustCompatUnpickler(io.BytesIO(data), encoding=encoding).load()
+
+
+def _cloudpickle_load(file, encoding="ASCII"):
+    """Like :func:`pickle.load`, but loads like :func:`_cloudpickle_loads`."""
+    return _cloudpickle_loads(file.read(), encoding=encoding)
+
+
 class PickleSerializer(FramedSerializer):
     """
     Serializes objects using Python's pickle serializer:
@@ -441,7 +584,9 @@ class PickleSerializer(FramedSerializer):
         return pickle.dumps(obj, pickle_protocol)
 
     def loads(self, obj, encoding="bytes"):
-        return pickle.loads(obj, encoding=encoding)
+        # It also loads the commands that CloudPickleSerializer pickles, which reference
+        # cloudpickle_rust if it pickled them.
+        return _cloudpickle_loads(obj, encoding=encoding)
 
 
 class CloudPickleSerializer(FramedSerializer):
@@ -461,7 +606,7 @@ class CloudPickleSerializer(FramedSerializer):
         from pyspark.util import print_exec
 
         try:
-            return cloudpickle.dumps(obj, pickle_protocol)
+            return _cloudpickle_dumps(obj, pickle_protocol)
         except pickle.PickleError:
             raise
         except Exception as e:
@@ -477,7 +622,7 @@ class CloudPickleSerializer(FramedSerializer):
         if self.allowed_names is not None:
             unpickler = _RestrictedUnpickler(io.BytesIO(obj), self.allowed_names, encoding=encoding)
             return unpickler.load()
-        return cloudpickle.loads(obj, encoding=encoding)
+        return _cloudpickle_loads(obj, encoding=encoding)
 
 
 if os.environ.get("PYSPARK_ENABLE_NAMEDTUPLE_PATCH") == "1":

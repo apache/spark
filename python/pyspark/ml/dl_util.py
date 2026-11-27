@@ -19,7 +19,7 @@ import tempfile
 import textwrap
 from typing import Any, Callable
 
-from pyspark import cloudpickle
+from pyspark.serializers import _cloudpickle_dump, _cloudpickle_load
 
 
 class FunctionPickler:
@@ -61,14 +61,14 @@ class FunctionPickler:
         """
         if file_path != "":
             with open(file_path, "wb") as f:
-                cloudpickle.dump((fn, args, kwargs), f)
+                _cloudpickle_dump((fn, args, kwargs), f)
                 return f.name
 
         if save_dir == "":
             save_dir = os.getcwd()
 
         with tempfile.NamedTemporaryFile(dir=save_dir, delete=False) as f:
-            cloudpickle.dump((fn, args, kwargs), f)
+            _cloudpickle_dump((fn, args, kwargs), f)
             return f.name
 
     @staticmethod
@@ -109,15 +109,15 @@ class FunctionPickler:
         """
 
         code_snippet = textwrap.dedent(f"""
-                    from pyspark import cloudpickle
+                    from pyspark.serializers import _cloudpickle_dump, _cloudpickle_load
                     import os
 
                     if __name__ == "__main__":
                         with open("{pickled_fn_path}", "rb") as f:
-                            fn, args, kwargs = cloudpickle.load(f)
+                            fn, args, kwargs = _cloudpickle_load(f)
                         output = fn(*args, **kwargs)
                         with open("{fn_output_path}", "wb") as f:
-                            cloudpickle.dump(output, f)
+                            _cloudpickle_dump(output, f)
                     """)
         with open(script_path, "w", encoding="utf-8") as f:
             if prefix_code != "":
@@ -145,4 +145,4 @@ class FunctionPickler:
             The unpickled output stored in func_output_path
         """
         with open(fn_output_path, "rb") as f:
-            return cloudpickle.load(f)
+            return _cloudpickle_load(f)

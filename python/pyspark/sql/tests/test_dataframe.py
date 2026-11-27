@@ -22,6 +22,7 @@ import pydoc
 import shutil
 import tempfile
 import unittest
+import uuid
 import warnings
 from contextlib import redirect_stdout
 
@@ -687,6 +688,9 @@ class DataFrameTestsMixin:
         # Type check
         self.assertRaises(TypeError, self.df.withColumns, ["key"])
         self.assertRaises(Exception, self.df.withColumns)
+
+        # SPARK-60761: an empty dict returns the DataFrame unchanged
+        assertDataFrameEqual(self.df.withColumns({}), self.df)
 
     def test_with_columns_with_dependencies(self):
         df = self.spark.range(3).withColumns(
@@ -1520,6 +1524,31 @@ class DataFrameTestsMixin:
                     sorted((row[0], row[1]) for row in rows),
                     [(1, 1.0), (2, 2.0), (3, 3.0)],
                 )
+
+    def test_rdd_with_shuffle_computes_it_once(self):
+        # The RDD of a DataFrame is planned once, so that the number of its partitions and its
+        # jobs share the shuffles of the DataFrame. Shuffle-file cleanup (off by default outside of
+        # tests) would make the jobs compute them again in Spark Classic.
+        with self.sql_conf({"spark.sql.classic.shuffleDependency.fileCleanup.enabled": False}):
+            with tempfile.TemporaryDirectory(prefix="test_rdd_with_shuffle") as d:
+
+                @functions.udf("long")
+                def record(x):
+                    with open(os.path.join(d, "%d-%s" % (x, uuid.uuid4().hex)), "w"):
+                        pass
+                    return x
+
+                df = (
+                    self.spark.range(8, numPartitions=2)
+                    .select(record("id").alias("id"))
+                    .groupBy((functions.col("id") % 2).alias("k"))
+                    .count()
+                )
+                rdd = df.rdd
+                self.assertGreater(rdd.getNumPartitions(), 0)
+                counts = rdd.map(lambda r: (r.k, r["count"])).collect()
+                self.assertEqual(sorted(counts), [(0, 4), (1, 4)])
+                self.assertEqual(len(os.listdir(d)), 8)
 
     def test_zip_with_index(self):
         df = self.spark.createDataFrame([("a", 1), ("b", 2), ("c", 3)], ["letter", "number"])

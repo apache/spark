@@ -44,7 +44,7 @@ import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
 import org.apache.spark.sql.{AnalysisException, Column, Encoders, ForeachWriter, Row}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, InternalRow, QueryPlanningTracker}
-import org.apache.spark.sql.catalyst.analysis.{ChangelogContextUtils, FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, RelationChanges, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeduplicate, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedOrdinal, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedStarWithColumns, UnresolvedStarWithColumnsRenames, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
+import org.apache.spark.sql.catalyst.analysis.{ChangelogContextUtils, FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, NamedStreamingRelation, RelationChanges, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeduplicate, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedOrdinal, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedStarWithColumns, UnresolvedStarWithColumnsRenames, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.catalyst.expressions._
@@ -65,6 +65,7 @@ import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_
 import org.apache.spark.sql.connect.ml.MLHandler
 import org.apache.spark.sql.connect.pipelines.PipelinesHandler
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
+import org.apache.spark.sql.connect.rdd.{RDDCommandHandler, RDDPlanner}
 import org.apache.spark.sql.connect.service.{ExecuteHolder, SessionHolder, SparkConnectService}
 import org.apache.spark.sql.connect.utils.{MetricGenerator, PipelineAnalysisContextUtils}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -116,8 +117,11 @@ class SparkConnectPlanner(
     throw SparkException.internalError("executeHolder is not set")
   }
 
-  private lazy val pythonExec =
+  private[connect] lazy val pythonExec =
     sys.env.getOrElse("PYSPARK_PYTHON", sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python3"))
+
+  // The RDD API of the Python client (see RDDRelation in relations.proto).
+  private lazy val rddPlanner = new RDDPlanner(this)
 
   /**
    * The root of the query plan is a relation and we apply the transformations to it. The resolved
@@ -235,6 +239,10 @@ class SparkConnectPlanner(
         // ML Relation
         case proto.Relation.RelTypeCase.ML_RELATION =>
           MLHandler.transformMLRelation(rel.getMlRelation, sessionHolder).logicalPlan
+
+        // RDD API of the Python client (internal)
+        case proto.Relation.RelTypeCase.RDD_RELATION =>
+          rddPlanner.transformRDDRelation(rel.getRddRelation)
 
         // Handle plugins for Spark Connect Relation types.
         case proto.Relation.RelTypeCase.EXTENSION =>
@@ -684,7 +692,6 @@ class SparkConnectPlanner(
         val analyzed = session.sessionState.executePlan(baseRel).analyzed
         transformTypedMapPartitions(commonUdf, analyzed)
       case proto.CommonInlineUserDefinedFunction.FunctionCase.PYTHON_UDF =>
-        val pythonUdf = transformPythonUDF(commonUdf)
         val isBarrier = if (rel.hasIsBarrier) rel.getIsBarrier else false
         val profile = if (rel.hasProfileId) {
           val profileId = rel.getProfileId
@@ -692,23 +699,29 @@ class SparkConnectPlanner(
         } else {
           None
         }
-        pythonUdf.evalType match {
-          case PythonEvalType.SQL_MAP_PANDAS_ITER_UDF =>
-            logical.MapInPandas(
-              pythonUdf,
-              DataTypeUtils.toAttributes(pythonUdf.dataType.asInstanceOf[StructType]),
-              baseRel,
-              isBarrier,
-              profile)
-          case PythonEvalType.SQL_MAP_ARROW_ITER_UDF =>
-            logical.MapInArrow(
-              pythonUdf,
-              DataTypeUtils.toAttributes(pythonUdf.dataType.asInstanceOf[StructType]),
-              baseRel,
-              isBarrier,
-              profile)
-          case _ =>
-            throw InvalidInputErrors.functionEvalTypeNotSupported(pythonUdf.evalType)
+        if (commonUdf.getPythonUdf.getEvalType == PythonEvalType.NON_UDF) {
+          // A function of the RDD API of the Python client (see RDDRelation in relations.proto).
+          rddPlanner.transformMapPartitions(commonUdf.getPythonUdf, isBarrier, profile, baseRel)
+        } else {
+          val pythonUdf = transformPythonUDF(commonUdf)
+          pythonUdf.evalType match {
+            case PythonEvalType.SQL_MAP_PANDAS_ITER_UDF =>
+              logical.MapInPandas(
+                pythonUdf,
+                DataTypeUtils.toAttributes(pythonUdf.dataType.asInstanceOf[StructType]),
+                baseRel,
+                isBarrier,
+                profile)
+            case PythonEvalType.SQL_MAP_ARROW_ITER_UDF =>
+              logical.MapInArrow(
+                pythonUdf,
+                DataTypeUtils.toAttributes(pythonUdf.dataType.asInstanceOf[StructType]),
+                baseRel,
+                isBarrier,
+                profile)
+            case _ =>
+              throw InvalidInputErrors.functionEvalTypeNotSupported(pythonUdf.evalType)
+          }
         }
       case other =>
         throw InvalidInputErrors.invalidOneOfField(other, commonUdf.getDescriptorForType)
@@ -1551,7 +1564,7 @@ class SparkConnectPlanner(
       child = transformRelation(rel.getInput))
   }
 
-  private def transformDataType(t: proto.DataType): DataType = {
+  private[connect] def transformDataType(t: proto.DataType): DataType = {
     t.getKindCase match {
       case proto.DataType.KindCase.UNPARSED =>
         parseDatatypeString(t.getUnparsed.getDataTypeString)
@@ -1801,7 +1814,18 @@ class SparkConnectPlanner(
           temporalIdent.nameParts,
           new CaseInsensitiveStringMap(rel.getNamedTable.getOptionsMap),
           isStreaming = rel.getIsStreaming)
-        temporalIdent.wrapTimeTravel(relation)
+        if (rel.getIsStreaming) {
+          val sourceName = if (rel.getNamedTable.hasSourceName) {
+            val name = rel.getNamedTable.getSourceName
+            session.readStream.validateSourceName(name)
+            Some(name)
+          } else {
+            None
+          }
+          NamedStreamingRelation.withUserProvidedName(relation, sourceName)
+        } else {
+          temporalIdent.wrapTimeTravel(relation)
+        }
 
       case proto.Read.ReadTypeCase.DATA_SOURCE if !rel.getIsStreaming =>
         val reader = session.read
@@ -2385,10 +2409,6 @@ class SparkConnectPlanner(
   }
 
   private def transformPythonFunction(fun: proto.PythonUDF): SimplePythonFunction = {
-    // Connect Python commands require worker execution and session isolation.
-    if (fun.getEvalType == PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF) {
-      throw InvalidInputErrors.functionEvalTypeNotSupported(fun.getEvalType)
-    }
     SimplePythonFunction(
       command = fun.getCommand.toByteArray.toImmutableArraySeq,
       // Empty environment variables
@@ -3101,6 +3121,8 @@ class SparkConnectPlanner(
         handleRemoveCachedRemoteRelationCommand(command.getRemoveCachedRemoteRelationCommand)
       case proto.Command.CommandTypeCase.ML_COMMAND =>
         handleMlCommand(command.getMlCommand, responseObserver)
+      case proto.Command.CommandTypeCase.RDD_COMMAND =>
+        handleRDDCommand(command.getRddCommand, responseObserver)
       case proto.Command.CommandTypeCase.PIPELINE_COMMAND =>
         handlePipelineCommand(command.getPipelineCommand, responseObserver)
       case proto.Command.CommandTypeCase.EXECUTE_EXTERNAL_COMMAND =>
@@ -3122,6 +3144,20 @@ class SparkConnectPlanner(
         .setSessionId(sessionId)
         .setServerSideSessionId(sessionHolder.serverSessionId)
         .setMlCommandResult(result)
+        .build())
+  }
+
+  private def handleRDDCommand(
+      command: proto.RDDCommand,
+      responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
+    val result = new RDDCommandHandler(this).handle(command)
+    executeHolder.eventsManager.postFinished()
+    responseObserver.onNext(
+      proto.ExecutePlanResponse
+        .newBuilder()
+        .setSessionId(sessionId)
+        .setServerSideSessionId(sessionHolder.serverSessionId)
+        .setRddCommandResult(result)
         .build())
   }
 

@@ -16,18 +16,19 @@
 #
 
 import os
+import subprocess
+import sys
 import tempfile
 import unittest
 import uuid
-
-from py4j.protocol import Py4JJavaError
+from unittest import mock
 
 from pyspark.errors import PySparkNotImplementedError
 from pyspark.errors.exceptions.connect import PythonException
 from pyspark.sql import Row
 from pyspark.storagelevel import StorageLevel
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.utils import QuietTest, have_numpy, have_pandas
+from pyspark.testing.utils import Py4JJavaError, QuietTest, have_numpy, have_pandas
 from pyspark.tests.test_rdd import RDDTestsMixin
 
 _CONNECT_STOPITER_EXCEPTIONS = (Py4JJavaError, RuntimeError, PythonException)
@@ -174,6 +175,12 @@ class RDDParityTests(RDDTestsMixin, ReusedConnectTestCase):
         self.assertRaises(Exception, rdd.pipe("grep 4", checkCode=True).collect)
         self.assertEqual([], rdd.pipe("grep 4").collect())
 
+    def test_take_on_jrdd(self):
+        # Spark Classic takes from the JVM RDD, `_jrdd`, which a Spark Connect RDD does not have:
+        # take from the RDD itself (SPARK-6294).
+        rdd = self.sc.parallelize(range(1 << 20)).map(lambda x: str(x))
+        self.assertEqual(rdd.first(), "0")
+
     def test_null_in_rdd(self):
         self.assertEqual(["a", None, "b"], self.sc.parallelize(["a", None, "b"]).collect())
         self.assertEqual([b"a", None, b"b"], self.sc.parallelize([b"a", None, b"b"]).collect())
@@ -226,6 +233,133 @@ class RDDParityTests(RDDTestsMixin, ReusedConnectTestCase):
                 self.assertTrue(len(os.listdir(d)) > 0)
         finally:
             self.spark.profile.clear()
+
+    def test_spark_context_serializer(self):
+        # A SparkContext created on Spark Connect pickles the elements with its serializer, in
+        # batches of its size, as in Spark Classic.
+        from pyspark.core.connect.context import SparkContext as ConnectSparkContext
+        from pyspark.serializers import BatchedSerializer, MarshalSerializer
+        from pyspark.sql.connect.session import SparkSession as ConnectSparkSession
+
+        # The constructor creates a new session on the server of the tests, which becomes the
+        # active one.
+        sc = ConnectSparkContext(
+            "sc://" + self.spark.client._builder.endpoint,
+            appName="serializer",
+            serializer=MarshalSerializer(),
+            batchSize=2,
+        )
+        try:
+            self.assertIsInstance(sc.serializer, BatchedSerializer)
+            self.assertIsInstance(sc.serializer.serializer, MarshalSerializer)
+            self.assertEqual(sc.serializer.batchSize, 2)
+            rdd = sc.parallelize(range(10), 3)
+            self.assertIs(rdd._jrdd_deserializer.serializer, sc._unbatched_serializer)
+            self.assertEqual(rdd.map(lambda x: x * 2).collect(), [x * 2 for x in range(10)])
+            pairs = rdd.map(lambda x: (x % 3, x)).reduceByKey(lambda a, b: a + b)
+            self.assertEqual(sorted(pairs.collect()), [(0, 18), (1, 12), (2, 15)])
+        finally:
+            # Release the session without stop(), which also stops the local server of the tests.
+            sc._session.client.release_session()
+            sc._session.client.close()
+            ConnectSparkSession._set_default_and_active_session(self.spark)
+        self.assertEqual(self.sc.parallelize(range(3)).collect(), [0, 1, 2])
+
+    def test_commands_do_not_import_the_client(self):
+        # The Python workers of the server load the commands of the RDD API, which must not import
+        # the Spark Connect client: every worker would then import grpc, protobuf and pyarrow.
+        from pyspark.core.connect import rdd as connect_rdd
+
+        commands = []
+
+        class RecordingSerializer(connect_rdd.CloudPickleSerializer):
+            # The serializer of the commands, which records them.
+            def dumps(self, obj):
+                command = super().dumps(obj)
+                commands.append(command)
+                return command
+
+        with mock.patch.object(connect_rdd, "CloudPickleSerializer", RecordingSerializer):
+            rdds = [
+                self.sc.parallelize(range(10), 2).map(lambda x: (x % 3, x)).reduceByKey(max),
+                self.sc.range(10).map(lambda x: (x, -x)).sortByKey(numPartitions=2),
+                self.sc.range(10).zipWithIndex().groupByKey(),
+                self.spark.range(3).rdd.map(lambda r: r.id),
+            ]
+            for rdd in rdds:
+                # Building the plan of each RDD pickles its commands.
+                self.assertIsNotNone(rdd._df)
+        self.assertGreater(len(commands), 4)
+        code = """
+import sys
+from pyspark.serializers import CloudPickleSerializer
+before = set(sys.modules)
+for path in sys.argv[1:]:
+    with open(path, "rb") as f:
+        CloudPickleSerializer().loads(f.read())
+client = ("pyspark.core.connect.rdd", "pyspark.core.connect.context", "pyspark.sql.connect", "grpc")
+print(sorted(m for m in set(sys.modules) - before if m.startswith(client)))
+"""
+        with tempfile.TemporaryDirectory() as d:
+            paths = []
+            for i, command in enumerate(commands):
+                paths.append(os.path.join(d, "command-%d" % i))
+                with open(paths[-1], "wb") as f:
+                    f.write(command)
+            env = dict(os.environ, PYTHONPATH=os.pathsep.join(sys.path))
+            result = subprocess.run(
+                [sys.executable, "-c", code, *paths], env=env, capture_output=True, text=True
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "[]")
+
+    def test_pinned_rdd_runs_its_functions_with_those_of_the_jobs(self):
+        # An action of several jobs pins the RDD of the first function of a PipelinedRDD, on which
+        # its functions then run, so that each job composes its function with them in one Python
+        # worker, as in Spark Classic: a take after a reduceByKey runs with the merge of its values,
+        # which reads the whole input of the worker, so that the worker is reused.
+        from pyspark.sql.connect.plan import CachedRemoteRelation
+
+        expected = [(0, 9), (1, 7), (2, 8)]
+        rdd = self.sc.parallelize(range(10), 2).map(lambda x: (x % 3, x)).reduceByKey(max, 3)
+        self.assertEqual(sorted(rdd.collect()), expected)
+        self.assertIs(rdd._pinned(), rdd)
+        self.assertIsInstance(rdd._prev_rdd._df._plan, CachedRemoteRelation)
+        # The plan of the RDD, built before, is built again on the pinned input.
+        self.assertIsNotNone(rdd._elements_df)
+        self.assertIs(rdd._df_cache_input, rdd._prev_rdd._df)
+        self.assertEqual(sorted(rdd.take(3)), expected)
+        self.assertEqual(sorted(rdd.collect()), expected)
+        # A persisted RDD keeps the plan that it persisted, which it unpersists.
+        df = rdd._elements_df
+        rdd.persist()
+        try:
+            self.assertIs(rdd._elements_df, df)
+            self.assertEqual(sorted(rdd.collect()), expected)
+        finally:
+            rdd.unpersist()
+        self.assertEqual(df.storageLevel, StorageLevel.NONE)
+
+        # Also when getNumPartitions pinned the RDD of the first function.
+        mapped = self.spark.range(10).repartition(2).rdd.map(lambda r: r.id)
+        self.assertEqual(sorted(mapped.collect()), list(range(10)))
+        mapped.getNumPartitions()
+        self.assertIsInstance(mapped._prev_rdd._df._plan, CachedRemoteRelation)
+        self.assertEqual(sorted(mapped.take(10)), list(range(10)))
+        # The plan of the RDD is built again on the pinned input when it is used.
+        self.assertIsNotNone(mapped._elements_df)
+        self.assertIs(mapped._df_cache_input, mapped._prev_rdd._df)
+        self.assertEqual(sorted(mapped.collect()), list(range(10)))
+
+        # A persisted RDD is not pinned: its jobs share its cache.
+        cached = self.sc.parallelize(range(10), 2).map(lambda x: (x % 3, x)).reduceByKey(max, 3)
+        cached.cache()
+        try:
+            self.assertIs(cached._pinned(), cached)
+            self.assertNotIsInstance(cached._prev_rdd._df._plan, CachedRemoteRelation)
+            self.assertEqual(sorted(cached.take(3)), expected)
+        finally:
+            cached.unpersist()
 
     def test_set_checkpoint_dir_not_supported(self):
         with self.assertRaises(PySparkNotImplementedError):

@@ -28,6 +28,7 @@ import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.tags.DataSourceV2Test
 
 /**
  * Test suite base for testing the redaction of DataSourceScanExec/BatchScanExec.
@@ -164,6 +165,7 @@ class DataSourceScanExecRedactionSuite extends DataSourceScanRedactionTest {
 /**
  * Suite that tests the redaction of BatchScanExec.
  */
+@DataSourceV2Test
 class DataSourceV2ScanExecRedactionSuite extends DataSourceScanRedactionTest {
 
   override protected def sparkConf: SparkConf = super.sparkConf

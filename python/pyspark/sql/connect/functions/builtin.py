@@ -955,6 +955,13 @@ def sqrt(col: "ColumnOrName") -> Column:
 sqrt.__doc__ = pysparkfuncs.sqrt.__doc__
 
 
+def try_abs(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("try_abs", col)
+
+
+try_abs.__doc__ = pysparkfuncs.try_abs.__doc__
+
+
 def try_add(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("try_add", left, right)
 
@@ -988,6 +995,13 @@ def try_multiply(left: "ColumnOrName", right: "ColumnOrName") -> Column:
 
 
 try_multiply.__doc__ = pysparkfuncs.try_multiply.__doc__
+
+
+def try_negative(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("try_negative", col)
+
+
+try_negative.__doc__ = pysparkfuncs.try_negative.__doc__
 
 
 def try_subtract(left: "ColumnOrName", right: "ColumnOrName") -> Column:
@@ -4816,6 +4830,13 @@ def xxh3_128(col: "ColumnOrName") -> Column:
 
 
 xxh3_128.__doc__ = pysparkfuncs.xxh3_128.__doc__
+
+
+def farm_fingerprint(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("farm_fingerprint", col)
+
+
+farm_fingerprint.__doc__ = pysparkfuncs.farm_fingerprint.__doc__
 
 
 def sha1(col: "ColumnOrName") -> Column:

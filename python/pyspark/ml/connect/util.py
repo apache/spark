@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Any, Callable, Iterator, List, Tuple, TypeVar,
 
 import pandas as pd
 
-from pyspark import cloudpickle
+from pyspark.serializers import _cloudpickle_dumps, _cloudpickle_loads
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import col, pandas_udf
 
@@ -87,7 +87,7 @@ def aggregate_dataframe(
         if state is None:
             pickled_state = None
         else:
-            pickled_state = cloudpickle.dumps(state)
+            pickled_state = _cloudpickle_dumps(state)
         yield pd.DataFrame({"state": [pickled_state]})
 
     result_pdf = dataframe.mapInPandas(compute_state, schema="state binary").toPandas()
@@ -96,7 +96,7 @@ def aggregate_dataframe(
     for state in result_pdf.state:
         if state is None:
             continue
-        state = cloudpickle.loads(state)
+        state = _cloudpickle_loads(state)
         if merged_state is None:
             merged_state = state
         else:

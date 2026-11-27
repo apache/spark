@@ -24,21 +24,12 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
 class SparkFrameMethodsParityTests(
     SparkFrameMethodsTestsMixin, TestUtils, PandasOnSparkTestUtils, ReusedConnectTestCase
 ):
-    @unittest.skip("Test depends on SparkContext which is not supported from Spark Connect.")
+    @unittest.skip(
+        "Spark Connect does not support SparkContext.setCheckpointDir: spark.checkpoint.dir is a "
+        "configuration of the server."
+    )
     def test_checkpoint(self):
         super().test_checkpoint()
-
-    @unittest.skip(
-        "Test depends on RDD, and cannot use SQL expression due to Catalyst optimization"
-    )
-    def test_coalesce(self):
-        super().test_coalesce()
-
-    @unittest.skip(
-        "Test depends on RDD, and cannot use SQL expression due to Catalyst optimization"
-    )
-    def test_repartition(self):
-        super().test_repartition()
 
 
 if __name__ == "__main__":

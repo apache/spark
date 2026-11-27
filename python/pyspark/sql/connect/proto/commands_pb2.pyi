@@ -45,6 +45,7 @@ import pyspark.sql.connect.proto.common_pb2
 import pyspark.sql.connect.proto.expressions_pb2
 import pyspark.sql.connect.proto.ml_pb2
 import pyspark.sql.connect.proto.pipelines_pb2
+import pyspark.sql.connect.proto.rdd_pb2
 import pyspark.sql.connect.proto.relations_pb2
 import sys
 import typing
@@ -110,6 +111,7 @@ class Command(google.protobuf.message.Message):
     ML_COMMAND_FIELD_NUMBER: builtins.int
     EXECUTE_EXTERNAL_COMMAND_FIELD_NUMBER: builtins.int
     PIPELINE_COMMAND_FIELD_NUMBER: builtins.int
+    RDD_COMMAND_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     @property
     def register_function(
@@ -158,6 +160,9 @@ class Command(google.protobuf.message.Message):
     @property
     def pipeline_command(self) -> pyspark.sql.connect.proto.pipelines_pb2.PipelineCommand: ...
     @property
+    def rdd_command(self) -> pyspark.sql.connect.proto.rdd_pb2.RDDCommand:
+        """Internal: a command of the RDD API of the Python client (see [[RDDCommand]])."""
+    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """This field is used to mark extensions to the protocol. When plugins generate arbitrary
         Commands they can add them here. During the planning the correct resolution is done.
@@ -189,6 +194,7 @@ class Command(google.protobuf.message.Message):
         ml_command: pyspark.sql.connect.proto.ml_pb2.MlCommand | None = ...,
         execute_external_command: global___ExecuteExternalCommand | None = ...,
         pipeline_command: pyspark.sql.connect.proto.pipelines_pb2.PipelineCommand | None = ...,
+        rdd_command: pyspark.sql.connect.proto.rdd_pb2.RDDCommand | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
     def HasField(
@@ -214,6 +220,8 @@ class Command(google.protobuf.message.Message):
             b"ml_command",
             "pipeline_command",
             b"pipeline_command",
+            "rdd_command",
+            b"rdd_command",
             "register_data_source",
             b"register_data_source",
             "register_function",
@@ -261,6 +269,8 @@ class Command(google.protobuf.message.Message):
             b"ml_command",
             "pipeline_command",
             b"pipeline_command",
+            "rdd_command",
+            b"rdd_command",
             "register_data_source",
             b"register_data_source",
             "register_function",
@@ -308,6 +318,7 @@ class Command(google.protobuf.message.Message):
             "ml_command",
             "execute_external_command",
             "pipeline_command",
+            "rdd_command",
             "extension",
         ]
         | None

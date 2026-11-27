@@ -224,9 +224,19 @@ abstract class RowLevelOperationCatalystRuntimeFilterSuiteBase
         fail(s"expected the group filter pushed as an InSubqueryExec, got $other")
     }
 
-    val scannedGroups = scan.data.map(_.asInstanceOf[BufferedRows].keyString()).distinct
+    // What the scan returned, which is what the group-based write replaces
+    val scannedGroups =
+      scan.readPartitions.map(_.asInstanceOf[BufferedRows].keyString()).distinct
     assert(scannedGroups.sorted === expectedFilter.groups.sorted,
       s"scan must read only the filtered groups, got ${scannedGroups.mkString(", ")}")
+
+    // and what each scan node read
+    batchScans.foreach { batchScan =>
+      val readGroups = batchScan.filteredPartitions.flatten
+        .map(_.asInstanceOf[BufferedRows].keyString()).distinct
+      assert(readGroups.sorted === expectedFilter.groups.sorted,
+        s"scan node must read only the filtered groups, got ${readGroups.mkString(", ")}")
+    }
   }
 
   /**

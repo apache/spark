@@ -949,12 +949,32 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-60970: try-cast nullability follows up-cast admissibility from decimal to integral") {
+    def tryCast(from: DataType, to: DataType): Cast =
+      Cast(AttributeReference("c", from, nullable = false)(), to, evalMode = EvalMode.TRY)
+    // Every DECIMAL(18, 0) value fits in a long, so a non-null child stays non-null.
+    assert(!tryCast(DecimalType(18, 0), LongType).nullable)
+    // A DECIMAL(19, 0) value can overflow a long, so the try-cast is nullable.
+    assert(tryCast(DecimalType(19, 0), LongType).nullable)
+  }
+
   test("SPARK-40389: canUpCast: return false if casting decimal to integral types can cause" +
     " overflow") {
     Seq(ByteType, ShortType, IntegerType, LongType).foreach { integralType =>
       val decimalType = DecimalType.forType(integralType)
       assert(!Cast.canUpCast(decimalType, integralType))
       assert(Cast.canUpCast(integralType, decimalType))
+    }
+  }
+
+  test("SPARK-60943: canUpCast from DECIMAL(p, 0) to an integral type iff every value fits") {
+    Seq(ByteType -> BigDecimal(Byte.MaxValue), ShortType -> BigDecimal(Short.MaxValue),
+      IntegerType -> BigDecimal(Int.MaxValue), LongType -> BigDecimal(Long.MaxValue)).foreach {
+      case (t, max) =>
+        (1 to DecimalType.MAX_PRECISION).foreach { p =>
+          val fits = BigDecimal(10).pow(p) - 1 <= max
+          assert(Cast.canUpCast(DecimalType(p, 0), t) == fits, s"DECIMAL($p, 0) to $t")
+        }
     }
   }
 
@@ -2560,6 +2580,32 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-60451: a cast of a special datetime value is not context independent foldable") {
+    // `SpecialDatetimeValues` replaces these casts, and evaluating them does not give the value.
+    Seq(
+      cast(Literal("today"), DateType),
+      cast(Literal(" Epoch "), DateType),
+      cast(Concat(Seq(Literal("tomor"), Literal("row"))), DateType),
+      cast(Literal("now"), TimestampNTZType),
+      cast(Literal("yesterday"), TimestampNTZType),
+      cast(Literal("today"), TimestampNTZNanosType(9)),
+      cast(Literal("epoch"), TimestampNTZNanosType(7))
+    ).foreach { expr =>
+      assert(expr.foldable, s"Expression $expr should be foldable")
+      assert(!expr.contextIndependentFoldable,
+        s"Expression $expr should not be context independent foldable")
+    }
+    // Other strings are cast as they are evaluated.
+    Seq(
+      cast(Literal("abc"), DateType),
+      cast(Literal("2023-01-01 00:00:00"), TimestampNTZType),
+      cast(Literal("2023-01-01 00:00:00"), TimestampNTZNanosType(9))
+    ).foreach { expr =>
+      assert(expr.contextIndependentFoldable,
+        s"Expression $expr should be context independent foldable")
+    }
+  }
+
   test("SPARK-51562: cast alias - time function") {
     import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
     import org.apache.spark.sql.catalyst.FunctionIdentifier
@@ -2699,7 +2745,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-60179: needsTimeZone covers complex types collapsing to a string") {
-    // An LTZ leaf is rendered in the session time zone at any nesting depth.
+    // An LTZ or VARIANT leaf is rendered in the session time zone at any nesting depth.
     Seq(
       ArrayType(TimestampType),
       MapType(IntegerType, TimestampType),
@@ -2708,29 +2754,29 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       new StructType().add("i", IntegerType).add("t", TimestampLTZNanosType(9)),
       ArrayType(ArrayType(TimestampType)),
       ArrayType(new StructType().add("t", TimestampType)),
-      new PythonUserDefinedType(ArrayType(TimestampType), "pyClass", "serializedClass"))
+      new PythonUserDefinedType(ArrayType(TimestampType), "pyClass", "serializedClass"),
+      ArrayType(VariantType),
+      MapType(IntegerType, VariantType),
+      new StructType().add("v", VariantType))
       .foreach { from =>
       assert(Cast.needsTimeZone(from, StringType), s"$from -> STRING")
       // One level further out, the ARRAY/ARRAY case recurses into the pair above.
       assert(Cast.needsTimeZone(ArrayType(from), ArrayType(StringType)),
         s"ARRAY<$from> -> ARRAY<STRING>")
     }
-    // TIMESTAMP_NTZ, DATE and TIME render on a fixed grid, and a nested VARIANT renders at UTC.
+    // TIMESTAMP_NTZ, DATE and TIME render on a fixed grid.
     Seq(
       ArrayType(TimestampNTZType),
       MapType(IntegerType, DateType),
       new StructType().add("t", TimestampNTZNanosType(9)).add("d", DateType),
       ArrayType(ArrayType(TimeType(TimeType.MAX_PRECISION))),
-      ArrayType(VariantType),
-      MapType(IntegerType, VariantType),
-      new StructType().add("v", VariantType),
       new PythonUserDefinedType(ArrayType(TimestampNTZType), "pyClass", "serializedClass"))
       .foreach { from =>
       assert(!Cast.needsTimeZone(from, StringType), s"$from -> STRING")
       assert(!Cast.needsTimeZone(ArrayType(from), ArrayType(StringType)),
         s"ARRAY<$from> -> ARRAY<STRING>")
     }
-    // A top-level VARIANT still reads the zone, element-wise casts included.
+    // A top-level VARIANT reads the zone, element-wise casts included.
     assert(Cast.needsTimeZone(VariantType, StringType))
     assert(Cast.needsTimeZone(ArrayType(VariantType), ArrayType(StringType)))
   }
@@ -2746,6 +2792,16 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Cast(arrayOfTimestamp, StringType, UTC_OPT), "[1970-01-01 00:00:00]")
     checkEvaluation(
       Cast(arrayOfTimestamp, StringType, Option(LA.getId)), "[1969-12-31 16:00:00]")
+    // A nested VARIANT renders its TIMESTAMP values in the zone too.
+    val arrayOfVariant = CreateArray(Seq(Cast(Literal.create(0L, TimestampType), VariantType)))
+    assert(!Cast(arrayOfVariant, StringType).resolved)
+    assert(Cast(arrayOfVariant, StringType, UTC_OPT).resolved)
+    assert(!Cast(arrayOfVariant, StringType, UTC_OPT)
+      .semanticEquals(Cast(arrayOfVariant, StringType, Option(LA.getId))))
+    checkEvaluation(
+      Cast(arrayOfVariant, StringType, UTC_OPT), "[\"1970-01-01 00:00:00+00:00\"]")
+    checkEvaluation(
+      Cast(arrayOfVariant, StringType, Option(LA.getId)), "[\"1969-12-31 16:00:00-08:00\"]")
     // The NTZ control renders on a fixed grid and stays resolvable without a zone.
     val arrayOfTimestampNTZ = Literal.create(Seq(0L), ArrayType(TimestampNTZType))
     assert(Cast(arrayOfTimestampNTZ, StringType).resolved)

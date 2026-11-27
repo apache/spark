@@ -1190,7 +1190,7 @@ class ArrowEncoderSuite extends ConnectFunSuite {
     .test(PrimitiveLongEncoder, _.toLong)
     .test(scalaDecimalEncoder(13, 4), identity)
     .test(StringEncoder, _.toString())
-  UpCastTestCase(scalaDecimalEncoder(19), BigDecimal(_))
+  UpCastTestCase(scalaDecimalEncoder(18), BigDecimal(_))
     .test(PrimitiveLongEncoder, _.toLong)
     .test(scalaDecimalEncoder(23, 1), identity)
     .test(StringEncoder, _.toString())

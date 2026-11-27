@@ -21,10 +21,9 @@ import sys
 import tempfile
 import time
 import unittest
+import uuid
 from datetime import datetime, timedelta
 from glob import glob
-
-from py4j.protocol import Py4JJavaError
 
 from pyspark import RDD, shuffle
 from pyspark.resource import ExecutorResourceRequests, ResourceProfileBuilder, TaskResourceRequests
@@ -39,7 +38,13 @@ from pyspark.serializers import (
 from pyspark.sql import SparkSession
 from pyspark.storagelevel import StorageLevel
 from pyspark.testing.sqlutils import SPARK_HOME
-from pyspark.testing.utils import QuietTest, ReusedPySparkTestCase, have_numpy, have_pandas
+from pyspark.testing.utils import (
+    Py4JJavaError,
+    QuietTest,
+    ReusedPySparkTestCase,
+    have_numpy,
+    have_pandas,
+)
 
 global_func = lambda: "Hi"  # noqa: E731
 
@@ -95,6 +100,79 @@ class RDDTestsMixin:
         times_prefetch_next = next(times_iter_prefetch)
         self.assertTrue(times_next - times_head >= timedelta(seconds=2))
         self.assertTrue(times_prefetch_next - times_prefetch_head < timedelta(seconds=1))
+
+    def test_actions_of_several_jobs_compute_shuffles_once(self):
+        # The jobs of an action run on one RDD, so they share the outputs of its shuffles, and so
+        # do the later actions on that RDD.
+        with tempfile.TemporaryDirectory() as d:
+
+            def computed():
+                return len(os.listdir(d))
+
+            def record(x):
+                with open(os.path.join(d, "%d-%s" % (x, uuid.uuid4().hex)), "w"):
+                    pass
+                return x, x
+
+            rdd = self.sc.parallelize(range(8), 2).map(record).partitionBy(4)
+            self.assertEqual(sorted(rdd.toLocalIterator()), [(i, i) for i in range(8)])
+            self.assertEqual(computed(), 8)
+
+            rdd = self.sc.parallelize(range(8), 2).map(record).partitionBy(8, lambda k: k // 4)
+            self.assertEqual(sorted(rdd.take(5)), [(i, i) for i in range(5)])
+            self.assertEqual(computed(), 16)
+
+            rdd = self.sc.parallelize(range(8), 2).map(record).partitionBy(4)
+            self.assertEqual(rdd.sortByKey(numPartitions=2).keys().collect(), list(range(8)))
+            self.assertEqual(computed(), 24)
+
+            rdd = self.sc.parallelize(range(8), 2).map(record).partitionBy(4)
+            self.assertEqual(sorted(rdd.keys().zipWithIndex().values().collect()), list(range(8)))
+            self.assertEqual(computed(), 32)
+
+            rdd = self.sc.parallelize(range(8), 2).map(record).partitionBy(4)
+            self.assertEqual(sorted(rdd.take(8)), [(i, i) for i in range(8)])
+            self.assertEqual(sorted(rdd.collect()), [(i, i) for i in range(8)])
+            self.assertEqual(rdd.mapValues(lambda v: v + 1).values().sum(), 36)
+            self.assertEqual(computed(), 40)
+
+    def test_run_job_on_a_partition_that_does_not_exist(self):
+        rdd = self.sc.parallelize([1, 2, 3], 2)
+        for partition in [2, -1]:
+            with self.assertRaisesRegex(Exception, "non-existent partition: %d" % partition):
+                self.sc.runJob(rdd, lambda it: list(it), [partition])
+
+    def test_coalesce_of_rdd_without_partitions(self):
+        rdd = self.sc.emptyRDD().coalesce(1)
+        self.assertEqual(rdd.getNumPartitions(), 0)
+        self.assertEqual(rdd.glom().collect(), [])
+
+    def test_shuffle_to_no_partitions(self):
+        # An RDD without partitions shuffles to as many partitions as it has by default.
+        rdd = self.sc.emptyRDD().reduceByKey(lambda a, b: a + b)
+        self.assertEqual(rdd.getNumPartitions(), 0)
+        self.assertEqual(rdd.collect(), [])
+        # No job computes the input of a shuffle without partitions.
+        rdd = self.sc.parallelize([(1, 1)], 2).partitionBy(0)
+        self.assertEqual(rdd.getNumPartitions(), 0)
+        self.assertEqual(rdd.glom().collect(), [])
+
+    def test_persist_with_another_storage_level(self):
+        rdd = self.sc.parallelize(range(4), 2).map(lambda x: x)
+        rdd.persist(StorageLevel.MEMORY_ONLY)
+        try:
+            rdd.persist(StorageLevel.MEMORY_ONLY)
+            with self.assertRaisesRegex(Exception, "Cannot change storage level"):
+                rdd.persist(StorageLevel.DISK_ONLY)
+            self.assertEqual(rdd.getStorageLevel(), StorageLevel.MEMORY_ONLY)
+        finally:
+            rdd.unpersist()
+        rdd.persist(StorageLevel.DISK_ONLY)
+        try:
+            self.assertEqual(rdd.getStorageLevel(), StorageLevel.DISK_ONLY)
+            self.assertEqual(rdd.collect(), [0, 1, 2, 3])
+        finally:
+            rdd.unpersist()
 
     def test_save_as_textfile_with_unicode(self):
         # Regression test for SPARK-970
