@@ -984,6 +984,7 @@ class SparkConnectClientTestCase(unittest.TestCase):
         """Enable the Spark Connect logger at INFO and capture its AnalyzePlan records."""
         records = []
         with (
+            # The Spark Connect logger is disabled unless SPARK_CONNECT_LOG_LEVEL is set.
             mock.patch.object(connect_logger, "disabled", False),
             self.assertLogs(connect_logger, level="INFO") as logs,
         ):
@@ -1002,6 +1003,7 @@ class SparkConnectClientTestCase(unittest.TestCase):
         def advance(seconds):
             clock["now"] += seconds
 
+        # Only `monotonic` is faked; any other use of `time` in core.py goes to the real module.
         fake_time = mock.Mock(wraps=time, monotonic=lambda: clock["now"])
         with mock.patch.object(core, "time", fake_time):
             yield advance
@@ -1029,6 +1031,7 @@ class SparkConnectClientTestCase(unittest.TestCase):
     def test_analyze_logs_duration_and_call_site(self):
         test = self
 
+        # Stub server whose AnalyzePlan takes exactly 0.25 s on the fake clock.
         class StepMock(MockService):
             def AnalyzePlan(self, req, metadata, timeout=None):
                 test.advance(0.25)
@@ -1041,6 +1044,7 @@ class SparkConnectClientTestCase(unittest.TestCase):
         ]
         with (
             self._fake_clock() as self.advance,
+            # A fixed stack, so the expected call site does not depend on how the test runs.
             mock.patch.object(
                 SparkConnectClient, "_retrieve_stack_frames", return_value=call_sites
             ),
@@ -1055,6 +1059,8 @@ class SparkConnectClientTestCase(unittest.TestCase):
     def test_analyze_logs_retried_call_once_with_total_duration(self):
         test = self
 
+        # Stub server whose first AnalyzePlan attempt fails with a retryable error. Each
+        # attempt takes 0.25 s on the fake clock.
         class FlakyMock(MockService):
             attempts = 0
 
@@ -1071,6 +1077,7 @@ class SparkConnectClientTestCase(unittest.TestCase):
         )
         with (
             self._fake_clock() as self.advance,
+            # No user frames, so the expected message does not depend on how the test runs.
             mock.patch.object(SparkConnectClient, "_retrieve_stack_frames", return_value=[]),
             self._info_logging() as records,
         ):
@@ -1084,6 +1091,7 @@ class SparkConnectClientTestCase(unittest.TestCase):
     def test_analyze_logs_unknown_call_site(self):
         client = self._analyze_client()
         with (
+            # Simulate a stack with no user frames.
             mock.patch.object(SparkConnectClient, "_retrieve_stack_frames", return_value=[]),
             self._info_logging() as records,
         ):
@@ -1092,12 +1100,14 @@ class SparkConnectClientTestCase(unittest.TestCase):
         self.assertIn("triggered by unknown call site", records[0].getMessage())
 
     def test_analyze_logs_failed_call(self):
+        # Stub server whose AnalyzePlan fails with a non-retryable error.
         class FailingMock(MockService):
             def AnalyzePlan(self, req, metadata, timeout=None):
                 raise TestException("boom", grpc.StatusCode.INVALID_ARGUMENT)
 
         client = self._analyze_client(FailingMock)
         with (
+            # No user frames; this test is only about logging the failed call.
             mock.patch.object(SparkConnectClient, "_retrieve_stack_frames", return_value=[]),
             self._info_logging() as records,
         ):
@@ -1215,6 +1225,7 @@ class SparkConnectClientTestCase(unittest.TestCase):
             # The debug call stack extension calls `_retrieve_stack_frames` on its own.
             mock.patch.dict(os.environ, {"SPARK_CONNECT_DEBUG_CLIENT_CALL_STACK": "false"}),
             mock.patch.object(connect_logger, "disabled", True),
+            # Spy on the stack helper to check that it is never called.
             mock.patch.object(SparkConnectClient, "_retrieve_stack_frames") as retrieve,
             self.assertNoLogs(connect_logger, level="INFO"),
         ):
@@ -1225,8 +1236,10 @@ class SparkConnectClientTestCase(unittest.TestCase):
         # SPARK_CONNECT_LOG_LEVEL=WARN enables the logger, but not at INFO.
         client = self._analyze_client()
         with (
+            # The debug call stack extension calls `_retrieve_stack_frames` on its own.
             mock.patch.dict(os.environ, {"SPARK_CONNECT_DEBUG_CLIENT_CALL_STACK": "false"}),
             mock.patch.object(connect_logger, "disabled", False),
+            # Spy on the stack helper and the log call to check that neither is called.
             mock.patch.object(SparkConnectClient, "_retrieve_stack_frames") as retrieve,
             mock.patch.object(SparkConnectClient, "_log_analyze_call") as log_call,
             self.assertNoLogs(connect_logger, level="WARNING"),
