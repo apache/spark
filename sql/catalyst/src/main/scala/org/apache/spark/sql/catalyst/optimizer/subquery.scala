@@ -1137,11 +1137,13 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
    * row for an outer row only if the correlated input is empty for it. That holds if the correlated
    * input has no correlated Aggregate without grouping expressions, whose row decorrelation loses,
    * and if the domain joins that decorrelation adds there anyway, e.g. for a non-equality
-   * correlation, have every outer row (they compute the outer input again), and no correlation
-   * that decorrelation pulls up reads an expression over an inner column whose values grouping
-   * can merge, e.g. a cast of a DOUBLE to a string (PullupCorrelatedPredicates uses the result in
-   * both cases only where it is the result of every outer row, see rewriteSubQueries). So for such an outer row the correlated
-   * input is taken as empty, and the chain is evaluated over it as before decorrelation: an
+   * correlation, have every outer row (they compute the outer input again), and if no
+   * correlation that decorrelation pulls up reads an expression other than the column itself or
+   * a FLOAT widened to a DOUBLE over an inner column whose values grouping can merge, e.g. a cast
+   * of a DOUBLE to a string (PullupCorrelatedPredicates uses the result in both cases only where
+   * it is the result of every outer row, see rewriteSubQueries). So for such an outer row the
+   * correlated input is taken as empty, and the chain is evaluated over it as before
+   * decorrelation: an
    * Aggregate without grouping expressions returns one row on empty input, of the results of its
    * aggregate functions over no rows (see evalAggregateFunctionOnEmptyInput), and an Aggregate
    * over that one row returns one row of its functions over it (see evalAggregateOnOneRow); a

@@ -428,8 +428,7 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
         SQLConf.DECORRELATE_INNER_QUERY_ENABLED.key -> "false").foreach { kv =>
       withSQLConf(kv) {
         assert(countBugResult(correlated(max($"d"))).isEmpty, kv)
-        assert(countBugHandling(correlated(max($"d"))) ==
-          asBefore(countBugHandling(correlated(max($"d")))), kv)
+        assert(countBugHandling(correlated(max($"d"))) == inConstructLeftJoins, kv)
       }
     }
   }

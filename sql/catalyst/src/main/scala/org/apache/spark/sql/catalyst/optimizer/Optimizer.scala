@@ -474,9 +474,10 @@ abstract class Optimizer(catalogManager: CatalogManager)
         // top of such a subquery, with or without grouping expressions. Other count-bug
         // subqueries keep their plans.
         val simplifiedAgg = if (s.countBugResult.isDefined) {
-          val excluded = conf.optimizerExcludedRules.toSeq.flatMap(Utils.stringToSeq).toSet
+          // Only those that this optimizer runs, e.g. not those excluded by the conf.
+          val active = Optimizer.this.batches.iterator.flatMap(_.rules).map(_.ruleName).toSet
           Seq(EliminateDistinct, RemoveLiteralFromGroupExpressions,
-            RemoveRepetitionFromGroupExpressions).filterNot(r => excluded.contains(r.ruleName))
+            RemoveRepetitionFromGroupExpressions).filter(r => active.contains(r.ruleName))
             .foldLeft(optimizedAgg: LogicalPlan)((p, rule) => rule(p))
         } else {
           optimizedAgg
