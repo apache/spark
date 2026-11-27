@@ -201,7 +201,9 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           // to
           //   (a1=b1 OR isnull(a1=b1)) AND (a2=b2 OR isnull(a2=b2)) AND ...
           val baseJoinConds = splitConjunctivePredicates(joinCond.get)
-          val nullAwareJoinConds = baseJoinConds.map(c => Or(c, IsNull(c)))
+          val nullAwareJoinConds = baseJoinConds.map { c =>
+            if (c.nullable) Or(c, IsNull(c)) else c
+          }
           // After that, add back the correlated join predicate(s) in the subquery
           // Example:
           // SELECT ... FROM A WHERE A.A1 NOT IN (SELECT B.B1 FROM B WHERE B.B2 = A.A2 AND B.B3 > 1)
@@ -440,7 +442,9 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           //   +- Join ExistenceJoin(exists#83), ((id#78 = id#80) OR isnull((id#78 = id#80)))
           //     :- Relation[id#78,v#79] parquet
           //     +- Relation[id#80] parquet
-          val nullAwareJoinConds = inConditions.map(c => Or(c, IsNull(c)))
+          val nullAwareJoinConds = inConditions.map { c =>
+            if (c.nullable) Or(c, IsNull(c)) else c
+          }
           val finalJoinCond = (nullAwareJoinConds ++ conditions).reduceLeft(And)
           val joinHint = JoinHint(None, subHint)
           newPlan = Join(newPlan,
