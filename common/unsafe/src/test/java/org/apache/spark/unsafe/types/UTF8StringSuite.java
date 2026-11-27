@@ -1610,6 +1610,53 @@ public class UTF8StringSuite {
       UTF8String.toBinaryString(Long.MAX_VALUE));
   }
 
+  @Test
+  public void fromLong() {
+    // Integer.MIN_VALUE and Long.MIN_VALUE are the critical cases: they cannot be negated, which
+    // is why fromLong extracts digits in negative space. Check their exact expected text.
+    assertEquals(fromString("-2147483648"), UTF8String.fromLong(Integer.MIN_VALUE));
+    assertEquals(fromString("-9223372036854775808"), UTF8String.fromLong(Long.MIN_VALUE));
+    assertEquals(fromString("2147483647"), UTF8String.fromLong(Integer.MAX_VALUE));
+    assertEquals(fromString("9223372036854775807"), UTF8String.fromLong(Long.MAX_VALUE));
+
+    // Spot-check the boundaries the digit loops care about: zero, sign, the switch from long to
+    // int arithmetic around Integer.MIN_VALUE, and the values that cannot be negated.
+    long[] boundaries = {
+      0L, 1L, -1L, 9L, -9L, 10L, -10L, 99L, -99L, 100L, -100L, 999L, -999L,
+      Integer.MAX_VALUE, Integer.MIN_VALUE, Integer.MAX_VALUE + 1L, Integer.MIN_VALUE - 1L,
+      10000000000L, -10000000000L, Long.MAX_VALUE, Long.MIN_VALUE, Long.MIN_VALUE + 1
+    };
+    for (long value : boundaries) {
+      assertEquals(fromString(String.valueOf(value)), UTF8String.fromLong(value));
+    }
+    // Every digit-count change: 10^k - 1 and 10^k, with both signs.
+    long p = 1;
+    for (int k = 1; k <= 18; k++) {
+      p *= 10;
+      for (long value : new long[] {p - 1, p, -(p - 1), -p}) {
+        assertEquals(fromString(String.valueOf(value)), UTF8String.fromLong(value));
+      }
+    }
+    // Sweep a contiguous range around zero to exercise every small magnitude and both signs.
+    for (long value = -100000L; value <= 100000L; value++) {
+      assertEquals(fromString(String.valueOf(value)), UTF8String.fromLong(value));
+    }
+    // Random values across the whole long range.
+    Random random = new Random(42);
+    for (int i = 0; i < 100000; i++) {
+      long value = random.nextLong();
+      assertEquals(fromString(String.valueOf(value)), UTF8String.fromLong(value));
+    }
+  }
+
+  @Test
+  public void fromBoolean() {
+    assertEquals(fromString("true"), UTF8String.fromBoolean(true));
+    assertEquals(fromString("false"), UTF8String.fromBoolean(false));
+    assertEquals(fromString(String.valueOf(true)), UTF8String.fromBoolean(true));
+    assertEquals(fromString(String.valueOf(false)), UTF8String.fromBoolean(false));
+  }
+
   /**
    * This tests whether appending a codepoint to a 'UTF8StringBuilder' correctly appends every
    * single codepoint. We test it against an already existing 'StringBuilder.appendCodePoint' and
