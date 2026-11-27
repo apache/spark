@@ -960,8 +960,9 @@ object QueryExecution {
       plan: LogicalPlan,
       context: AdaptiveExecutionContext): SparkPlan = {
     val sparkPlan = createSparkPlan(context.session.sessionState.planner, plan.clone())
+    val adaptiveExecutionRule = InsertAdaptiveSparkPlan(context, isSubquery = true)
     val preparationRules =
-      preparations(context.session, Option(InsertAdaptiveSparkPlan(context)), true)
+      preparations(context.session, Option(adaptiveExecutionRule), true)
     prepareForExecution(preparationRules, sparkPlan.clone())
   }
 
