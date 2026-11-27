@@ -589,7 +589,8 @@ case class SortMergeAsOfJoinExec(
  *  - Nearest: the closest eligible rows before and after the left key are compared.
  *
  * With `useCursorScan`, the scan does not buffer the group. It walks the right input once and
- * keeps only the best row so far (see [[findWithCursor]]).
+ * keeps one right row: the best row so far, or for a nearest join the best row below the left
+ * key (see [[findWithCursor]]).
  */
 private[joins] class SortMergeAsOfJoinScanner(
     leftIter: Iterator[InternalRow],
@@ -699,11 +700,13 @@ private[joins] class SortMergeAsOfJoinScanner(
 
   // Cursor scan state: the left equi-key of the current group, whether the group has any right
   // row, and its best right row so far. `cursorBest` is null or `cursorBestBuffer`, which holds
-  // a copy of the best row and is reused for every new best row.
+  // a copy of the best row and is reused for every new best row. The nearest cursor also keeps
+  // the as-of key of its best row in `cursorBestKey`.
   private var cursorGroupKey: UnsafeRow = _
   private var cursorGroupHasRight: Boolean = false
   private var cursorBest: UnsafeRow = _
   private var cursorBestBuffer: UnsafeRow = _
+  private var cursorBestKey: Any = _
 
   // Projection to convert right rows to UnsafeRow for the buffer
   private val rightToUnsafe = UnsafeProjection.create(rightOutput, rightOutput)
@@ -713,9 +716,12 @@ private[joins] class SortMergeAsOfJoinScanner(
   }
 
   if (useCursorScan) {
-    // Only an ordered scan has a cursor. Checked here, so that it fails whatever the input is.
-    if (orderedScanStrategy.isEmpty) {
-      throw SparkException.internalError(s"The $direction AS-OF join has no cursor scan")
+    // The nearest cursor checks no condition, so other conditions would give wrong rows. Checked
+    // here, so that it fails whatever the input is.
+    if (orderedScanStrategy.isEmpty &&
+        !SortMergeAsOfJoinScanner.isNearestCursorCondition(asOfCondition, residualCondition)) {
+      throw SparkException.internalError(
+        "The nearest AS-OF join cursor scan needs the TRUE as-of condition and no residual one")
     }
     numAsOfCursorTasks += 1
   }
@@ -925,13 +931,20 @@ private[joins] class SortMergeAsOfJoinScanner(
     }
   }
 
+  /** Finds the best right row for `leftRow` with the cursor scan, or null if none passes. */
+  private def findWithCursor(leftRow: InternalRow, leftKey: UnsafeRow): InternalRow =
+    orderedScanStrategy match {
+      case Some(_) => findInOrderWithCursor(leftRow, leftKey)
+      case None => findNearestWithCursor(leftRow, leftKey)
+    }
+
   /**
-   * Finds the best right row for `leftRow` with the cursor scan, or null. The tolerance limit
-   * has one value per left row, so the bound passes the right rows at one end of the group. The
-   * other rows that pass the comparison of the as-of keys are at least as far from that end as
-   * the closest one, so they fail the bound whenever it does.
+   * Finds the best right row of a backward or forward join with the cursor scan, or null. The
+   * tolerance limit has one value per left row, so the bound passes the right rows at one end of
+   * the group. The other rows that pass the comparison of the as-of keys are at least as far from
+   * that end as the closest one, so they fail the bound whenever it does.
    */
-  private def findWithCursor(leftRow: InternalRow, leftKey: UnsafeRow): InternalRow = {
+  private def findInOrderWithCursor(leftRow: InternalRow, leftKey: UnsafeRow): InternalRow = {
     val closest = moveCursor(leftRow, leftKey)
     if (closest == null) return null
     boundToleranceCond match {
@@ -953,10 +966,7 @@ private[joins] class SortMergeAsOfJoinScanner(
    * The [[AsOfScanStrategy]] of the direction makes these choices, as in the generated scan.
    */
   private def moveCursor(leftRow: InternalRow, leftKey: UnsafeRow): UnsafeRow = {
-    // Without equi-keys, all rows form one group, so only the first left row starts it.
-    if (cursorGroupKey == null || equiKeyOrdering.exists(_.compare(leftKey, cursorGroupKey) != 0)) {
-      startCursorGroup(leftKey)
-    }
+    moveToCursorGroup(leftKey)
     // Like the buffered scan, a group with no right rows never evaluates the left as-of key,
     // which can fail at runtime, for example on an invalid cast under ANSI.
     if (!cursorGroupHasRight) return null
@@ -1005,6 +1015,64 @@ private[joins] class SortMergeAsOfJoinScanner(
   }
 
   /**
+   * Finds the nearest right row for `leftRow` with the cursor scan, or null. An exact match
+   * wins. Else the smaller gap wins, and an equal gap keeps the row below the left key. Of equal
+   * right keys, the first row counts.
+   *
+   * The cursor reads in the rows below the left key and keeps a copy of the first row of the
+   * largest key. It stops at the first row at or above the left key without reading it in,
+   * since a later left row can still need it. Left rows of a group come in ascending as-of key
+   * order, so every row read in is below the later left keys too. Example: right keys 3, 7, 7,
+   * 12 and left keys 5, 7, 9 match 3 (a tie with 7), the first 7, and the first 7 again (2
+   * below 9, against 3 above).
+   *
+   * The join has the TRUE as-of condition and no residual one, so the cursor checks no
+   * condition. It reads the left key of every left row, also when the group has no right rows,
+   * and then the right keys up to the first one at or above it. So a key that fails at runtime
+   * fails the query on the same row with either scan.
+   */
+  private def findNearestWithCursor(leftRow: InternalRow, leftKey: UnsafeRow): InternalRow = {
+    moveToCursorGroup(leftKey)
+    val (leftKeyExpr, rightKeyExpr, keyOrdering) = nearestKeys
+    // Read the left key also in a group with no right rows, so a bad left key fails either scan.
+    val leftValue = leftKeyExpr.eval(leftRow)
+    if (leftValue == null) return null
+
+    // The group's right rows end at the first row of a later group.
+    while (rightPeek != null && compareToRightPeek(leftKey) == 0) {
+      val rightValue = rightKeyExpr.eval(rightPeek)
+      if (rightValue == null) {
+        // A NULL right as-of key: no left row can match it.
+        advanceRightPeek()
+      } else if (keyOrdering.lt(rightValue, leftValue)) {
+        // Of equal keys, keep the first row.
+        if (cursorBest == null || keyOrdering.lt(cursorBestKey, rightValue)) {
+          // The next right row overwrites `rightPeek`, so keep a copy.
+          cursorBest = copyToCursorBestBuffer(rightPeek)
+          cursorBestKey = InternalRow.copyValue(rightValue)
+        }
+        advanceRightPeek()
+      } else if (keyOrdering.equiv(rightValue, leftValue) || cursorBest == null ||
+          isAfterCloser(cursorBestKey, leftValue, rightValue, leftKeyExpr.dataType)) {
+        // An exact match wins first, even for an infinite key (Inf - Inf is NaN). The cursor
+        // stays on `rightPeek`, so the row holds until the next left row.
+        return rightPeek
+      } else {
+        return cursorBest
+      }
+    }
+    cursorBest
+  }
+
+  /** Starts the cursor group of `leftKey`, unless the cursor is in it already. */
+  private def moveToCursorGroup(leftKey: UnsafeRow): Unit = {
+    // Without equi-keys, all rows form one group, so only the first left row starts it.
+    if (cursorGroupKey == null || equiKeyOrdering.exists(_.compare(leftKey, cursorGroupKey) != 0)) {
+      startCursorGroup(leftKey)
+    }
+  }
+
+  /**
    * Starts the cursor group of `leftKey`. It skips the right rows of earlier groups without
    * evaluating either as-of key, then records whether the group has a right row. A right row
    * with a NULL as-of key counts, since the buffered scan evaluates the as-of condition on it.
@@ -1012,6 +1080,7 @@ private[joins] class SortMergeAsOfJoinScanner(
   private def startCursorGroup(leftKey: UnsafeRow): Unit = {
     cursorGroupKey = leftKey
     cursorBest = null
+    cursorBestKey = null
     while (rightPeek != null && compareToRightPeek(leftKey) > 0) {
       advanceRightPeek()
     }
@@ -1142,6 +1211,12 @@ private[execution] object SortMergeAsOfJoinScanner {
    * row, for its NULL check, before any right key. With the right key first, the buffered scan
    * stops at a NULL right key without reading the left key, which can fail under ANSI. Only a
    * DataFrame join with reversed keys builds such a condition.
+   *
+   * A nearest join takes the cursor scan when it allows exact matches and has no tolerance, so
+   * its as-of condition is TRUE, and it has no residual condition (see
+   * [[isNearestCursorCondition]]). Its two keys have one integral, floating-point, decimal,
+   * DATE, TIMESTAMP, TIMESTAMP_NTZ or interval type. Two decimal keys can also differ in
+   * precision and scale, since the cursor compares their values exactly.
    */
   def supportsCursorScan(
       direction: AsOfJoinDirection,
@@ -1149,7 +1224,6 @@ private[execution] object SortMergeAsOfJoinScanner {
       residualCondition: Option[Expression],
       leftSortExprs: Seq[Expression],
       rightSortExprs: Seq[Expression]): Boolean = {
-    // A direction without an ordered scan has no cursor scan.
     (AsOfScanStrategy.of(direction), leftSortExprs, rightSortExprs) match {
       case (Some(strategy), Seq(leftKey), Seq(rightKey)) =>
         val (comparison, bound) = strategy.cursorConditions(asOfCondition, residualCondition)
@@ -1160,9 +1234,24 @@ private[execution] object SortMergeAsOfJoinScanner {
           bound.forall(isToleranceBound(strategy, _, leftKey, rightKey)) &&
           leftKey.dataType == rightKey.dataType &&
           supportsCursorKey(leftKey.dataType)
+      // A nearest join, the only direction without an ordered scan.
+      case (None, Seq(leftKey), Seq(rightKey)) =>
+        isNearestCursorCondition(asOfCondition, residualCondition) &&
+          AsOfJoin.supportsNearestKeys(leftKey.dataType, rightKey.dataType) &&
+          supportsCursorKey(leftKey.dataType) && supportsCursorKey(rightKey.dataType)
       case _ => false
     }
   }
+
+  /**
+   * Whether a nearest join's conditions are ones its cursor scan can skip: the TRUE as-of
+   * condition, which a join that allows exact matches and has no tolerance gets, and no
+   * residual condition.
+   */
+  def isNearestCursorCondition(
+      asOfCondition: Expression,
+      residualCondition: Option[Expression]): Boolean =
+    asOfCondition == Literal.TrueLiteral && residualCondition.isEmpty
 
   /**
    * The comparison of the as-of keys of a cursor scan, rebound onto the two key values: input 0

@@ -269,7 +269,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
       StructType(StructField("ts", DoubleType) :: StructField("value", StringType) :: Nil))
 
     withClue(s"left key $leftKey: ") {
-      checkAnswer(
+      checkBothScans(
         left.joinAsOf(
           right, left.col("ts"), right.col("ts"), usingColumns = Seq.empty,
           joinType = "inner", tolerance = null,
@@ -375,7 +375,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
 
   test("nearest join") {
     val (df1, df2) = prepareForAsOfJoin()
-    checkAnswer(
+    checkBothScans(
       df1.joinAsOf(
         df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
         joinType = "inner", tolerance = null,
@@ -433,7 +433,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
       List(Row(6, "first"), Row(6, "second"), Row(9, "closest"), Row(11, "later")).asJava,
       rightSchema)
 
-    checkAnswer(
+    checkBothScans(
       left.joinAsOf(
         right, left.col("ts"), right.col("ts"), usingColumns = Seq.empty,
         joinType = "inner", tolerance = null,
@@ -453,7 +453,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
           List(Row(-1000000001, "near"), Row(1500000000, "far")).asJava,
           rightSchema)
 
-        checkAnswer(
+        checkBothScans(
           left.joinAsOf(
             right, left.col("ts"), right.col("ts"), usingColumns = Seq.empty,
             joinType = "inner", tolerance = null,
@@ -475,7 +475,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
           List(Row(-2L, "near"), Row(Long.MaxValue, "far")).asJava,
           rightSchema)
 
-        checkAnswer(
+        checkBothScans(
           left.joinAsOf(
             right, left.col("ts"), right.col("ts"), usingColumns = Seq.empty,
             joinType = "inner", tolerance = null,
@@ -494,7 +494,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
         List(Row(1500000000)).asJava,
         StructType(StructField("ts", IntegerType) :: Nil))
 
-      checkAnswer(
+      checkBothScans(
         left.joinAsOf(
           right, left.col("ts"), right.col("ts"), usingColumns = Seq.empty,
           joinType = "inner", tolerance = null,
@@ -519,7 +519,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
         List(Row(beforeTime, "near"), Row(afterTime, "far")).asJava,
         rightSchema)
 
-      checkAnswer(
+      checkBothScans(
         left.joinAsOf(
           right, left.col("ts"), right.col("ts"), usingColumns = Seq.empty,
           joinType = "inner", tolerance = null,
@@ -1029,7 +1029,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
           "UNION ALL SELECT TIMESTAMP '2024-01-04 00:00:00' AS k, 'far' AS tag")
 
       Seq(oneRight, twoRight).foreach { right =>
-        checkAnswer(
+        checkBothScans(
           left.joinAsOf(
             right, left.col("k"), right.col("k"), usingColumns = Seq.empty,
             joinType = "inner", tolerance = null,
@@ -1048,7 +1048,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
           "UNION ALL SELECT DATE '2024-01-04' AS k, 'far' AS tag")
 
       Seq(oneRight, twoRight).foreach { right =>
-        checkAnswer(
+        checkBothScans(
           left.joinAsOf(
             right, left.col("k"), right.col("k"), usingColumns = Seq.empty,
             joinType = "inner", tolerance = null,
@@ -1074,7 +1074,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
             s"SELECT CAST($nearValue AS $dataType) AS k, 'near' AS tag " +
               s"UNION ALL SELECT CAST($farValue AS $dataType) AS k, 'far' AS tag")
 
-          checkAnswer(
+          checkBothScans(
             left.joinAsOf(
               right, left.col("k"), right.col("k"), usingColumns = Seq.empty,
               joinType = "inner", tolerance = null,
@@ -1679,7 +1679,8 @@ class SortMergeAsOfJoinSuite extends QueryTest
       "once per row it compares") {
     // One group with left keys 10, 11 and 25. Backward, the right keys are 9 and 24, and each
     // left row compares the right row that the cursor waits at. Forward, they are 12 and 30, and
-    // left rows 11 and 25 check the kept right row 12 again. The test compares the two scans on
+    // left rows 11 and 25 check the kept right row 12 again. Nearest, they are 9, 12 and 24, and
+    // each left row reads the right row that the cursor waits at. The test compares the scans on
     // the same plan, so evaluations outside the join, such as in the sort below it, cancel out.
     val countLeft = functions.udf { (ts: Int) => AsOfKeyEvaluations.left.incrementAndGet(); ts }
     val countRight = functions.udf { (ts: Int) => AsOfKeyEvaluations.right.incrementAndGet(); ts }
@@ -1698,7 +1699,11 @@ class SortMergeAsOfJoinSuite extends QueryTest
       // compares, and 1, 1 and 2 limits, so 10. Cursor: one key and one limit per left row, so 6.
       ("backward", Seq(9, 24), Some(3), Seq(9, 9, 24), (4, 0)),
       // Buffered: 1, 1 and 2 compares, and 1, 1 and 1 limits, so 7. Cursor: 6. 25 is 5 before 30.
-      ("forward", Seq(12, 30), Some(3), Seq(12, 12, -1), (1, 0))
+      ("forward", Seq(12, 30), Some(3), Seq(12, 12, -1), (1, 0)),
+      // Nearest reads one left key per left row in both scans. Buffered: 10 and 11 read 9 and
+      // 12, and 25 reads 9, 12 and 24, so (3, 7). Cursor: 9 and 12; 12 again; 12 again and 24,
+      // so (3, 5). 11 is nearer to 12 than to 9.
+      ("nearest", Seq(9, 12, 24), None, Seq(9, 12, 24), (0, 2))
     ).foreach { case (direction, rightKeys, tolerance, tags, fewerEvaluations) =>
       val right = spark.sql(
         s"SELECT ts, ts AS tag FROM VALUES ${rightKeys.map(k => s"($k)").mkString(", ")} AS t(ts)")
@@ -1847,17 +1852,226 @@ class SortMergeAsOfJoinSuite extends QueryTest
     }
   }
 
-  test("nearest joins with a tolerance keep the buffered scan") {
-    val left = spark.sql("SELECT * FROM VALUES (10), (20) AS t(ts)")
-    val right = spark.sql("SELECT * FROM VALUES (8, 'r8'), (11, 'r11'), (25, 'r25') AS t(ts, tag)")
-    val df = left.joinAsOf(
-      right, left.col("ts"), right.col("ts"), usingColumns = Seq.empty,
-      joinType = "leftouter", tolerance = functions.lit(3),
-      allowExactMatches = true, direction = "nearest"
-    ).select(left.col("ts"), right.col("tag"))
-    checkAnswer(df, Seq(Row(10, "r11"), Row(20, null)))
-    val op = assertAsOfJoinCodegen(df, codegen = false)
-    assert(op.metrics("numAsOfCursorTasks").value == 0, "Expected the buffered scan")
+  test("nearest joins with a tolerance, exact matches off or an extra ON condition keep the " +
+      "buffered scan") {
+    // The nearest cursor checks no condition, so each of these joins must keep the buffered
+    // scan. Each gives a row that a nearest join with exact matches and no condition does not:
+    // that join matches r11 for 10, r20 for 20, and r20 for 30 (10 below, against 15 above).
+    val left = spark.sql("SELECT * FROM VALUES (10, 1), (20, 1), (30, 3) AS t(ts, minScore)")
+    val right = spark.sql(
+      "SELECT * FROM VALUES (8, 1, 'r8'), (11, 0, 'r11'), (20, 2, 'r20'), (45, 3, 'r45') " +
+        "AS t(ts, score, tag)")
+    Seq(
+      ("a tolerance", null, functions.lit(3), true,
+        Seq(Row(10, "r11"), Row(20, "r20"), Row(30, null))),
+      ("exact matches off", null, null, false,
+        Seq(Row(10, "r11"), Row(20, "r11"), Row(30, "r20"))),
+      ("an extra ON condition", left.col("minScore") <= right.col("score"), null, true,
+        Seq(Row(10, "r8"), Row(20, "r20"), Row(30, "r45")))
+    ).foreach { case (shape, joinExprs, tolerance, allowExactMatches, expected) =>
+      // With the cursor scan on, so the buffered scan runs only because the join needs it.
+      withClue(s"$shape: ") {
+        withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> "true") {
+          val df = left.joinAsOf(
+            right, left.col("ts"), right.col("ts"), joinExprs = joinExprs,
+            joinType = "leftouter", tolerance = tolerance,
+            allowExactMatches = allowExactMatches, direction = "nearest"
+          ).select(left.col("ts"), right.col("tag"))
+          checkAnswer(df, expected)
+          val op = assertAsOfJoinCodegen(df, codegen = false)
+          assert(op.metrics("numAsOfCursorTasks").value == 0, "Expected the buffered scan")
+        }
+      }
+    }
+  }
+
+  test("nearest joins use the cursor scan and match the buffered scan") {
+    // Key 'a' has right rows at NULL, 10, 20 (twice), 30 and 40. Its left rows fall before, on,
+    // between and past the right rows, some at an equal gap from two of them. Key 'b' has no
+    // right rows, 'c' has no left rows, and 'd' has only a NULL right as-of key.
+    val left = spark.sql(
+      """SELECT * FROM VALUES
+        |(1, 'a', 5), (2, 'a', 10), (3, 'a', 15), (4, 'a', 15), (5, 'a', 18), (6, 'a', 20),
+        |(7, 'a', 22), (8, 'a', 25), (9, 'a', 27), (10, 'a', 45), (11, 'a', NULL), (12, 'b', 5),
+        |(13, 'd', 5), (14, NULL, 10)
+        |AS t(id, k, ts)""".stripMargin)
+    // One partition fixes the order of the two rows at 20.
+    val right = spark.sql(
+      """SELECT * FROM VALUES
+        |('a', NULL, 'a_null'), ('a', 10, 'r10'), ('a', 20, 'r20'), ('a', 20, 'r20 again'),
+        |('a', 30, 'r30'), ('a', 40, 'r40'), ('c', 1, 'c1'), ('d', NULL, 'd_null'),
+        |(NULL, 10, 'null key')
+        |AS t(k, ts, tag)""".stripMargin).coalesce(1)
+    // The matches of left rows 1 to 10, by id. 5 has only a row after it, and 45 only a row
+    // before it. 15 and 25 are as far from the row before as from the row after, so the row
+    // before wins. Of the two rows at 20, the first wins on both sides.
+    val matches = Map(1 -> "r10", 2 -> "r10", 3 -> "r10", 4 -> "r10", 5 -> "r20", 6 -> "r20",
+      7 -> "r20", 8 -> "r20", 9 -> "r30", 10 -> "r40")
+    for {
+      joinType <- Seq("inner", "leftouter")
+      ansi <- Seq(true, false)
+    } {
+      val expected = (1 to 14).flatMap { id =>
+        matches.get(id) match {
+          case Some(tag) => Some(Row(id, tag))
+          case None if joinType == "leftouter" => Some(Row(id, null))
+          case None => None
+        }
+      }
+      withClue(s"$joinType, ANSI $ansi: ") {
+        // Without InferFiltersFromConstraints, the rows with a NULL key reach the join.
+        withSQLConf(
+            SQLConf.ANSI_ENABLED.key -> ansi.toString,
+            SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> InferFiltersFromConstraints.ruleName) {
+          checkBothScans(
+            left.joinAsOf(
+              right, left.col("ts"), right.col("ts"), usingColumns = Seq("k"),
+              joinType = joinType, tolerance = null,
+              allowExactMatches = true, direction = "nearest"
+            ).select(left.col("id"), right.col("tag")),
+            expected)
+        }
+      }
+    }
+  }
+
+  test("a nearest join fails on the same as-of keys with either scan") {
+    // Under ANSI, a key 'bad' fails the cast with CAST_INVALID_INPUT, and a key '30' fails the
+    // product with ARITHMETIC_OVERFLOW. The buffered scan reads the left key of each left row
+    // with a non-NULL ON key, also when no right row has that ON key. Unless the left key is
+    // NULL, it then reads the right keys of the group up to the first one at or above it. Each
+    // ON key has at most one row per side, so the sorts compare no as-of keys.
+    Seq(
+      // The left key of ON key 'b' fails, although 'b' has no right rows.
+      ("('a', '1'), ('b', 'bad')", "('a', '0', 'a0')", Left("CAST_INVALID_INPUT")),
+      ("('a', '1'), ('b', '30')", "('a', '0', 'a0')", Left("ARITHMETIC_OVERFLOW")),
+      // Both keys fail. The left key comes first.
+      ("('a', 'bad')", "('a', '30', 'r30')", Left("CAST_INVALID_INPUT")),
+      ("('a', '30')", "('a', 'bad', 'bad')", Left("ARITHMETIC_OVERFLOW")),
+      ("('a', 'bad')", "('a', CAST(NULL AS STRING), 'null')", Left("CAST_INVALID_INPUT")),
+      // The right key fails, and a left row with its ON key reads it.
+      ("('a', '1')", "('a', 'bad', 'bad')", Left("CAST_INVALID_INPUT")),
+      // No left row has the ON key of the failing right key.
+      ("('b', '1')", "('a', 'bad', 'bad'), ('b', '0', 'b0')", Right(Seq(Row("b", "b0")))),
+      // A NULL left key reads no right key.
+      ("('a', CAST(NULL AS STRING))", "('a', 'bad', 'bad')", Right(Seq(Row("a", null))))
+    ).foreach { case (leftRows, rightRows, expected) =>
+      for (cursorScan <- Seq(false, true)) {
+        withClue(s"left $leftRows, right $rightRows, cursor scan $cursorScan: ") {
+          withSQLConf(
+              SQLConf.ANSI_ENABLED.key -> "true",
+              SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> cursorScan.toString,
+              SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> InferFiltersFromConstraints.ruleName) {
+            val left = spark.sql(s"SELECT * FROM VALUES $leftRows AS t(k, v)")
+            val right = spark.sql(s"SELECT * FROM VALUES $rightRows AS t(k, v, tag)")
+            def key(df: DataFrame): Column = df.col("v").cast("int") * 100000000
+            val df = left.joinAsOf(
+              right, key(left), key(right), usingColumns = Seq("k"), joinType = "leftouter",
+              tolerance = null, allowExactMatches = true, direction = "nearest"
+            ).select(left.col("k"), right.col("tag"))
+            expected match {
+              case Left(errorCondition) =>
+                val e = intercept[RuntimeException](df.collect())
+                assert(e.asInstanceOf[SparkThrowable].getCondition == errorCondition, e)
+              case Right(rows) =>
+                checkAnswer(df, rows)
+                // A failed task reports no metrics, so only a query that passes shows the scan.
+                // Every case has the same join, so the failing ones take the same scan.
+                val op = assertAsOfJoinCodegen(df, codegen = false)
+                assert((op.metrics("numAsOfCursorTasks").value > 0) == cursorScan)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("nearest joins match a plain join on random rows with the cursor scan off and on") {
+    // Right as-of keys are unique within each ON key. A plain join finds the nearest row: the
+    // smallest gap wins, and on an equal gap a row below the left key, the largest one below.
+    val leftSchema = new StructType().add("id", IntegerType).add("k", IntegerType)
+      .add("n", IntegerType)
+    val rightSchema = new StructType().add("k", IntegerType).add("n", IntegerType)
+      .add("tag", StringType)
+    // Each key type builds the as-of keys from n. DOUBLE and DECIMAL keys step by a quarter, and
+    // the two DECIMAL keys have different scales. DOUBLE keys also take NaN, which equals NaN
+    // and is the largest key, and -0.0 and 0.0, which are equal. Each right ON key has at most
+    // one NaN and one zero, so its keys stay unique. (key type, left key, right key, tolerance)
+    def doubleKey(nanFrom: Int, zeroTo: Int, signColumn: String): String =
+      s"CASE WHEN n >= $nanFrom THEN CAST('NaN' AS DOUBLE) " +
+        s"WHEN n <= $zeroTo THEN ($signColumn % 2 - 0.5D) * 0.0D ELSE n * 0.25D END"
+    val keyTypes = Seq(
+      ("INT", "n", "n", "5"),
+      // Left keys get NaN for n 96 to 99 and a zero for n 0 to 2; right keys for 99 and 0.
+      ("DOUBLE", doubleKey(96, 2, "id"), doubleKey(99, 0, "k"), "1.25D"),
+      ("DECIMAL", "CAST(n * 0.25 AS DECIMAL(10, 2))", "CAST(n * 0.25 AS DECIMAL(12, 3))",
+        "CAST(1.25 AS DECIMAL(3, 2))"))
+    (1 to 2).foreach { seed =>
+      val random = new Random(seed)
+      def orNull(value: Int): Any = if (random.nextInt(10) == 0) null else value
+      // Left ON keys are 0 to 7 and right ON keys 2 to 9, so keys 0, 1, 8 and 9 have one side.
+      // Left as-of keys repeat, and many fall halfway between two right keys.
+      val leftRows = (0 until 200).map { id =>
+        Row(id, orNull(random.nextInt(8)), orNull(random.nextInt(100)))
+      }
+      val rightRows = (2 until 10).flatMap { k =>
+        random.shuffle((0 until 100).toList).take(30).map(n => Row(k, n, s"q$k-$n"))
+      } ++ Seq(Row(null, 5, "NULL ON key"), Row(3, null, "NULL as-of key"))
+      for ((keyType, leftKey, rightKey, toleranceValue) <- keyTypes) {
+        val left = spark.createDataFrame(spark.sparkContext.parallelize(leftRows), leftSchema)
+          .selectExpr("id", "k", s"$leftKey AS ts")
+        val right = spark.createDataFrame(spark.sparkContext.parallelize(rightRows), rightSchema)
+          .selectExpr("k", s"$rightKey AS ts", "tag")
+        withTempView("t", "q") {
+          left.createOrReplaceTempView("t")
+          right.createOrReplaceTempView("q")
+          for {
+            allowExactMatches <- Seq(true, false)
+            tolerance <- Seq(None, Some(toleranceValue))
+          } {
+            val exact = if (allowExactMatches) "TRUE" else "q.ts <> t.ts"
+            // The window that a nearest tolerance builds. It keeps a NaN right key only for a NaN
+            // left key.
+            val window = tolerance.map(tol => s"q.ts >= t.ts - $tol AND q.ts <= t.ts + $tol")
+              .getOrElse("TRUE")
+            // Equal keys have gap 0, also NaN and NaN. A NaN left key has a NaN gap to every
+            // finite right key, so the largest key below it wins.
+            val gap = "CASE WHEN q.ts = t.ts THEN 0 ELSE abs(q.ts - t.ts) END"
+            val below = "q.ts < t.ts"
+            // A NULL as-of key on either side matches nothing.
+            val expected = sql(
+              s"""
+                 |SELECT t.id, MIN(named_struct('gap', $gap, 'above', NOT ($below),
+                 |  'order', IF($below, -q.ts, q.ts), 'tag', q.tag)).tag
+                 |FROM t LEFT JOIN q ON t.k = q.k AND t.ts IS NOT NULL AND q.ts IS NOT NULL
+                 |  AND $exact AND $window
+                 |GROUP BY t.id
+                 |""".stripMargin).collect().toSeq
+            val takesCursor = allowExactMatches && tolerance.isEmpty
+            for (cursorScan <- Seq(false, true)) {
+              withClue(s"seed $seed, $keyType keys, allowExactMatches $allowExactMatches, " +
+                  s"tolerance $tolerance, cursor scan $cursorScan: ") {
+                withSQLConf(
+                    SQLConf.SHUFFLE_PARTITIONS.key -> "1",
+                    SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> cursorScan.toString,
+                    SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> InferFiltersFromConstraints.ruleName) {
+                  val df = left.joinAsOf(
+                    right, left.col("ts"), right.col("ts"), usingColumns = Seq("k"),
+                    joinType = "leftouter", tolerance = tolerance.map(functions.expr).orNull,
+                    allowExactMatches = allowExactMatches, direction = "nearest"
+                  ).select(left.col("id"), right.col("tag"))
+                  checkAnswer(df, expected)
+                  val op = assertAsOfJoinCodegen(df, codegen = false)
+                  val cursorTasks = op.metrics("numAsOfCursorTasks").value
+                  assert((cursorTasks > 0) == (cursorScan && takesCursor),
+                    "Unexpected scan: the cursor scan runs exactly when it is on and can be used")
+                }
+              }
+            }
+          }
+        }
+      }
+    }
   }
 
   test("a tolerance join with a tolerance bound in ON too keeps the buffered scan") {
@@ -1871,12 +2085,16 @@ class SortMergeAsOfJoinSuite extends QueryTest
       joinType = "leftouter", tolerance = functions.lit(5),
       allowExactMatches = true, direction = "backward"
     ).select(left.col("ts"), right.col("tag"))
-    withAsOfJoinCodegenOffAndOn { codegen =>
-      val query = df
-      checkAnswer(query, Seq(Row(10, null), Row(20, "r19")))
-      val op = assertAsOfJoinCodegen(query, codegen)
-      assert(op.condition.isDefined, s"Expected the ON bound as the residual condition in:\n$op")
-      assert(op.metrics("numAsOfCursorTasks").value == 0, "Expected the buffered scan")
+    // With the cursor scan on, so the buffered scan runs only because the join needs it.
+    withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> "true") {
+      withAsOfJoinCodegenOffAndOn { codegen =>
+        val query = df
+        checkAnswer(query, Seq(Row(10, null), Row(20, "r19")))
+        val op = assertAsOfJoinCodegen(query, codegen)
+        assert(op.condition.isDefined,
+          s"Expected the ON bound as the residual condition in:\n$op")
+        assert(op.metrics("numAsOfCursorTasks").value == 0, "Expected the buffered scan")
+      }
     }
   }
 
@@ -2751,7 +2969,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
     val right = spark.sql("SELECT 7 AS rk, 'far' AS tag UNION ALL SELECT 12 AS rk, 'near' AS tag")
 
     // The left as-of key comes from the right side, and the right one from the left side.
-    checkAnswer(
+    checkBothScans(
       left.joinAsOf(
         right, right.col("rk"), left.col("lk"), usingColumns = Seq.empty,
         joinType = "inner", tolerance = null,
@@ -2827,7 +3045,8 @@ class SortMergeAsOfJoinSuite extends QueryTest
       "SELECT CAST(0.5 AS DECIMAL(20, 4)) AS k, 'far' AS tag " +
         "UNION ALL SELECT CAST(1.25 AS DECIMAL(20, 4)) AS k, 'near' AS tag")
 
-    checkAnswer(
+    // The cursor scan takes two decimal types, since it compares their values exactly.
+    checkBothScans(
       left.joinAsOf(
         right, left.col("k"), right.col("k"), usingColumns = Seq.empty,
         joinType = "inner", tolerance = null,
@@ -2843,7 +3062,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
         "SELECT CAST(-0.0000000003 AS DECIMAL(38, 10)) AS k, 'far' AS tag " +
           "UNION ALL SELECT CAST(0.0000000002 AS DECIMAL(38, 10)) AS k, 'near' AS tag")
 
-      checkAnswer(
+      checkBothScans(
         left.joinAsOf(
           right, left.col("k"), right.col("k"), usingColumns = Seq.empty,
           joinType = "inner", tolerance = null,
@@ -2863,7 +3082,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
       ).asJava,
       rightSchema)
 
-    checkAnswer(
+    checkBothScans(
       left.joinAsOf(
         right, left.col("ts"), right.col("ts"), usingColumns = Seq.empty,
         joinType = "inner", tolerance = null,
@@ -2945,7 +3164,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
     val right = spark.createDataFrame(
       List(Row(null, "null"), Row(7, "earlier"), Row(12, "later")).asJava, schema)
 
-    checkAnswer(
+    checkBothScans(
       left.joinAsOf(
         right, left.col("ts"), right.col("ts"), usingColumns = Seq.empty,
         joinType = "leftouter", tolerance = null,
@@ -3008,16 +3227,25 @@ class SortMergeAsOfJoinSuite extends QueryTest
         StructField("k", IntegerType) ::
           StructField("ts", IntegerType) ::
           StructField("tag", StringType) :: Nil))
-    // One partition: with several, the NULL right row could land apart from the left rows and
-    // never be compared.
-    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
-      checkAnswerWithNullOnKeys(
-        left.joinAsOf(
-          right, left.col("ts"), right.col("ts"), usingColumns = Seq("k"),
-          joinType = "leftouter", tolerance = null,
-          allowExactMatches = true, direction = "nearest")
-          .select(left.col("k"), right.col("tag")),
-        Row(-1, "minus one") :: Row(0, null) :: Nil)
+    def joined: DataFrame = left.joinAsOf(
+      right, left.col("ts"), right.col("ts"), usingColumns = Seq("k"),
+      joinType = "leftouter", tolerance = null,
+      allowExactMatches = true, direction = "nearest"
+    ).select(left.col("k"), right.col("tag"))
+    for (cursorScan <- Seq(false, true)) {
+      withClue(s"cursor scan $cursorScan: ") {
+        // One partition: with several, the NULL right row could land apart from the left rows
+        // and never be compared.
+        withSQLConf(
+            SQLConf.SHUFFLE_PARTITIONS.key -> "1",
+            SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> cursorScan.toString) {
+          checkAnswerWithNullOnKeys(joined, Row(-1, "minus one") :: Row(0, null) :: Nil)
+          val query = joined
+          query.collect()
+          val op = assertAsOfJoinCodegen(query, codegen = false)
+          assert((op.metrics("numAsOfCursorTasks").value > 0) == cursorScan)
+        }
+      }
     }
   }
 
@@ -3249,7 +3477,9 @@ class SortMergeAsOfJoinSuite extends QueryTest
   test("nearest join - spill to disk") {
     withSQLConf(
       SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
-      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
+      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1",
+      // The cursor scan never buffers, so turn it off to test the spill.
+      SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> "false") {
       val (df1, df2) = prepareForAsOfJoin()
       // No equi-key (bufferAllRight path)
       checkAnswerAndSpill(
