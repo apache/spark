@@ -1403,7 +1403,7 @@ class JDBCSuite extends SharedSparkSession {
       dialect.compileExpression(new V2Cast(FieldReference("c"), from, to))
     val stringTargets = Seq(StringType, CharType(5), VarcharType(5))
     val refusedSources = Seq(FloatType, DoubleType, BooleanType, TimestampType, TimestampNTZType,
-      BinaryType, DecimalType(20, 10))
+      BinaryType, DecimalType(20, 10), DecimalType(10, 7))
     refusedSources.foreach { from =>
       stringTargets.foreach { to =>
         assert(compileCast(msSqlServer, from, to).isEmpty, s"$from -> $to")
@@ -1427,7 +1427,9 @@ class JDBCSuite extends SharedSparkSession {
     }
     assert(JdbcDialects.get("jdbc:").compileExpression(
       new V2Cast(decimalSum, DecimalType(38, 6), StringType)).isDefined)
-    // Only casts to STRING are refused.
+    // Only casts to STRING are refused, also for a computed decimal.
+    assert(msSqlServer.compileExpression(
+      new V2Cast(decimalSum, DecimalType(38, 6), IntegerType)).isDefined)
     Seq(FloatType, DoubleType, BooleanType).foreach { from =>
       Seq(IntegerType, DecimalType(10, 2)).foreach { to =>
         assert(compileCast(msSqlServer, from, to).isDefined, s"$from -> $to")

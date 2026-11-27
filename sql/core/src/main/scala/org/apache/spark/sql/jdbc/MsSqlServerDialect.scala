@@ -120,8 +120,9 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
       case _ => false
     }
 
-    // With ANSI mode off, Spark prints decimals with a scale above 6 in exponent notation
-    // ('0E-10'), and the V2 Cast does not say which mode Spark uses, so they are not pushed.
+    // With ANSI mode off, Spark can print decimals with a scale above 6 in exponent notation,
+    // such as a DECIMAL(20,10) zero as '0E-10', and the V2 Cast does not say which mode Spark
+    // uses, so they are not pushed.
     // TODO: carry the cast's eval mode into the V2 Cast, so that ANSI-mode casts from these
     // decimals can be pushed again.
     private def rendersDecimalAsSpark(d: DecimalType): Boolean = d.scale >= 0 && d.scale <= 6

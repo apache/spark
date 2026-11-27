@@ -386,7 +386,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
           checkAnswer(df, expected)
         }
         // A computed decimal is typed by SQL Server's own rules (it prints 3 + 0.5 as '4'), and
-        // with ANSI mode off Spark prints decimals with a scale above 6 in exponent notation.
+        // with ANSI mode off Spark can print decimals with a scale above 6 in exponent notation.
         Seq(
           (s"SELECT id FROM $table WHERE CAST(c + d AS STRING) = '3.500000'", "true", Row(1)),
           (s"SELECT id FROM $table WHERE CAST(z AS STRING) = '0E-10'", "false", Row(1))
