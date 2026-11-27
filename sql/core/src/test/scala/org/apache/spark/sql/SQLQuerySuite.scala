@@ -37,7 +37,8 @@ import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, EliminateOffsets, NestedColumnAliasingSuite, RewriteWithExpression}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{
+  LocalLimit, Project, RepartitionByExpression, Sample, Sort}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.{CommandResultExec, OneRowRelationExec, UnionExec}
@@ -4453,6 +4454,35 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
       val df3 = sql("SELECT * FROM test TABLESAMPLE (BUCKET 4 OUT OF 10) REPEATABLE (6789)")
       val df4 = sql("SELECT * FROM test TABLESAMPLE (BUCKET 4 OUT OF 10) REPEATABLE (6789)")
       checkAnswer(df3, df4)
+    }
+  }
+
+  test("SPARK-60934: seedless TABLESAMPLE CTE is one sample") {
+    // A missing seed stays one draw. The CTE is not inlined, and each reference
+    // keeps a copy of that sample under the CTE repartition. EXCEPT against
+    // itself is empty because the two shuffles reuse one exchange. With AQE off
+    // that reuse is ReuseExchangeAndSubquery.
+    Seq(true, false).foreach { aqe =>
+      withClue(s"aqe=$aqe") {
+        withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
+          val df = sql(
+            "WITH src AS (SELECT id FROM range(10000)), " +
+            "s AS (SELECT id FROM src TABLESAMPLE (50 PERCENT)) " +
+            "SELECT * FROM s EXCEPT SELECT * FROM s")
+          val samples = df.queryExecution.optimizedPlan.collect {
+            case RepartitionByExpression(Nil, sample: Sample, None, _) => sample
+          }
+          assert(samples.length === 2)
+          assert(samples.forall(_.seed.isEmpty))
+          checkAnswer(df, Seq.empty)
+          if (!aqe) {
+            val reused = collect(df.queryExecution.executedPlan) {
+              case r: ReusedExchangeExec => r
+            }
+            assert(reused.length === 1)
+          }
+        }
+      }
     }
   }
 
