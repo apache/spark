@@ -21,7 +21,10 @@ import java.io.Closeable
 import java.util.Properties
 
 import org.apache.spark.annotation.{DeveloperApi, Evolving, Since}
-import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.executor.{Executor, TaskMetrics}
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.{PARTITION_ID, STAGE_ATTEMPT_ID, STAGE_ID, TASK_ATTEMPT_ID}
+import org.apache.spark.internal.config.KILL_ON_FATAL_ERROR_DEPTH
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.resource.ResourceInformation
@@ -233,7 +236,16 @@ abstract class TaskContext extends Serializable {
   private[spark] def invokePostStatusUpdateListeners(): Unit
 
   /** Runs a task with this context, ensuring failure and completion listeners get triggered. */
-  private[spark] def runTaskWithListeners[T](task: Task[T]): T = {
+  private[spark] def runTaskWithListeners[T](task: Task[T]): T =
+    runTaskWithListeners(task, SparkEnv.get)
+
+  /**
+   * Runs a task with this context, ensuring failure and completion listeners get triggered.
+   *
+   * @param env the `SparkEnv` the task started with, which a restarted local SparkContext does
+   *            not replace for this task.
+   */
+  private[spark] def runTaskWithListeners[T](task: Task[T], env: SparkEnv): T = {
     try {
       // SPARK-44818 - Its possible that taskThread has not been initialized when kill is initially
       // called with interruptThread=true. We do set the reason and eventually will set it on the
@@ -244,6 +256,14 @@ abstract class TaskContext extends Serializable {
     } catch {
       case e: Throwable =>
         // Catch all errors; run task failure and completion callbacks, and rethrow the exception.
+        // Log the error first. The executor logs it only once the listeners have run, which a
+        // listener that crashes or hangs the executor prevents.
+        try {
+          TaskFailureLogger.logBeforeListeners(this, e, env)
+        } catch {
+          case t: Throwable =>
+            e.addSuppressed(t)
+        }
         try {
           markTaskFailed(e)
         } catch {
@@ -411,4 +431,37 @@ abstract class TaskContext extends Serializable {
    * }}}
    */
   private[spark] def createResourceUninterruptibly[T <: Closeable](resourceBuilder: => T): T
+}
+
+/**
+ * Logs a task body failure before the task listeners run. The executor logs the failure only once
+ * the listeners have run, so a listener that crashes or hangs the executor, e.g. while releasing
+ * native resources, would otherwise leave no record of what failed the task.
+ *
+ * A separate object, as `TaskContext` is public API and must not pick up `Logging`'s members.
+ */
+private[spark] object TaskFailureLogger extends Logging {
+
+  /**
+   * Logs `error` at error level with its stack trace, the level the executor reports it at,
+   * unless the executor is not going to report it as an error either, see
+   * `Executor.isReportedAsError`, or is stopping, in which case it logs the error without the
+   * stack trace (SPARK-19147).
+   *
+   * @param env the `SparkEnv` the task started with. Like the executor, this decides from it
+   *            whether the executor is stopping, rather than from the current one, which a
+   *            restarted local SparkContext replaces. A null one, from a caller that runs the
+   *            task without a SparkEnv, counts as stopping.
+   */
+  def logBeforeListeners(context: TaskContext, error: Throwable, env: SparkEnv): Unit = {
+    val reportedAsError = env != null && !env.isStopped &&
+      Executor.isReportedAsError(error, context, env.conf.get(KILL_ON_FATAL_ERROR_DEPTH))
+    if (reportedAsError) {
+      val stage = log"${MDC(STAGE_ID, context.stageId())}." +
+        log"${MDC(STAGE_ATTEMPT_ID, context.stageAttemptNumber())}"
+      logError(log"Task ${MDC(TASK_ATTEMPT_ID, context.taskAttemptId())} in stage " + stage +
+        log" (partition ${MDC(PARTITION_ID, context.partitionId())}) failed. Its task " +
+        log"listeners run next; the executor reports the failure once they have run.", error)
+    }
+  }
 }
