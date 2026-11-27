@@ -94,8 +94,9 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
   /**
    * Closes `root` and `allocator` if `writer` has been created, which creates them, and they are
    * not closed yet. Besides `close()` at the end of the input, a task completion listener calls
-   * this, since the task can complete before the input is exhausted, e.g. when it fails, is
-   * killed, or stops reading the output early.
+   * this when no input write is in progress. Otherwise, `writeNextInputToStream` calls it in its
+   * `finally` block as the active write exits. Both cover a task that completes before the input
+   * is exhausted, e.g. when it fails, is killed, or stops reading the output early.
    */
   private def closeRootAndAllocator(): Unit = arrowInputLock.synchronized {
     if (writer != null && !rootAndAllocatorClosed) {
