@@ -63,6 +63,7 @@ from pyspark.sql.dataframe import (
 from pyspark.sql.dataframe import (
     _validate_approx_quantile_probabilities,
     _validate_approx_quantile_relative_error,
+    _validate_random_split_weights,
 )
 from pyspark.sql.functions import builtin as F
 from pyspark.sql.merge import MergeIntoWriter
@@ -747,16 +748,11 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def randomSplit(
         self, weights: List[float], seed: Optional[int] = None
     ) -> List[ParentDataFrame]:
-        for w in weights:
-            if w < 0.0:
-                raise PySparkValueError(
-                    errorClass="VALUE_NOT_POSITIVE",
-                    messageParameters={"arg_name": "weights", "arg_value": str(w)},
-                )
+        weights = _validate_random_split_weights(weights)
         seed = seed if seed is not None else random.randint(0, sys.maxsize)
-        df_array = self._jdf.randomSplit(
-            _to_list(self.sparkSession._sc, cast(List["ColumnOrName"], weights)), int(seed)
-        )
+        sc = self.sparkSession._sc
+        assert sc._jvm is not None
+        df_array = self._jdf.randomSplit(sc._jvm.PythonUtils.toList(weights), int(seed))
         return [DataFrame(df, self.sparkSession) for df in df_array]
 
     @property

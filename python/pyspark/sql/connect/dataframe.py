@@ -89,6 +89,7 @@ from pyspark.sql.dataframe import (
 from pyspark.sql.dataframe import (
     _validate_approx_quantile_probabilities,
     _validate_approx_quantile_relative_error,
+    _validate_random_split_weights,
 )
 from pyspark.sql.pandas.functions import _validate_vectorized_udf  # type: ignore[attr-defined]
 from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
@@ -1187,19 +1188,9 @@ class DataFrame(ParentDataFrame):
         weights: List[float],
         seed: Optional[int] = None,
     ) -> List[ParentDataFrame]:
-        for w in weights:
-            if w < 0.0:
-                raise PySparkValueError(
-                    errorClass="VALUE_NOT_POSITIVE",
-                    messageParameters={"arg_name": "weights", "arg_value": str(w)},
-                )
+        weights = _validate_random_split_weights(weights)
         seed = seed if seed is not None else random.randint(0, sys.maxsize)
         total = sum(weights)
-        if total <= 0:
-            raise PySparkValueError(
-                errorClass="VALUE_NOT_POSITIVE",
-                messageParameters={"arg_name": "sum(weights)", "arg_value": str(total)},
-            )
         proportions = list(map(lambda x: x / total, weights))
         normalizedCumWeights = [0.0]
         for v in proportions:
