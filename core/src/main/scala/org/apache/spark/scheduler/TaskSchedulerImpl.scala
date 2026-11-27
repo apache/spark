@@ -93,9 +93,10 @@ private[spark] class TaskSchedulerImpl(
     this(sc, sc.conf.get(config.TASK_MAX_FAILURES))
   }
 
-  // Lazily initializing healthTrackerOpt to avoid getting empty ExecutorAllocationClient,
-  // because ExecutorAllocationClient is created after this TaskSchedulerImpl.
-  private[scheduler] lazy val healthTrackerOpt = maybeCreateHealthTracker(sc)
+  // Created in initialize(), from the backend that may also be the ExecutorAllocationClient used
+  // to kill excluded executors. SparkContext.schedulerBackend can't be used here because the
+  // backend starts making offers before SparkContext assigns it.
+  @volatile private[scheduler] var healthTrackerOpt: Option[HealthTracker] = None
 
   val conf = sc.conf
 
@@ -265,6 +266,7 @@ private[spark] class TaskSchedulerImpl(
 
   def initialize(backend: SchedulerBackend): Unit = {
     this.backend = backend
+    healthTrackerOpt = maybeCreateHealthTracker(sc, backend)
     schedulableBuilder = {
       schedulingMode match {
         case SchedulingMode.FIFO =>
@@ -1398,9 +1400,11 @@ private[spark] object TaskSchedulerImpl {
     retval.toList
   }
 
-  private def maybeCreateHealthTracker(sc: SparkContext): Option[HealthTracker] = {
+  private def maybeCreateHealthTracker(
+      sc: SparkContext,
+      backend: SchedulerBackend): Option[HealthTracker] = {
     if (HealthTracker.isExcludeOnFailureEnabled(sc.conf)) {
-      val executorAllocClient: Option[ExecutorAllocationClient] = sc.schedulerBackend match {
+      val executorAllocClient: Option[ExecutorAllocationClient] = backend match {
         case b: ExecutorAllocationClient => Some(b)
         case _ => None
       }

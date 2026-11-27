@@ -39,6 +39,7 @@ import org.apache.spark.resource.{CpuAmount, ExecutorResourceRequests, ResourceA
 import org.apache.spark.resource.ResourceAmountUtils.ONE_ENTIRE_RESOURCE
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
+import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.status.api.v1.ThreadStackTrace
 import org.apache.spark.util.{Clock, ManualClock, ThreadUtils}
 
@@ -122,10 +123,10 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
           stageToMockTaskSetExcludelist(taskSet.stageId) = taskSetExcludelist
           tsmSpy
         }
-
-        override private[scheduler] lazy val healthTrackerOpt = Some(healthTracker)
       }
     setupHelper()
+    taskScheduler.healthTrackerOpt = Some(healthTracker)
+    taskScheduler
   }
 
   def setupHelper(): TaskSchedulerImpl = {
@@ -1426,6 +1427,23 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     )).flatten
 
     verify(healthTracker).applyExcludeOnFailureTimeout()
+  }
+
+  test("SPARK-48870: HealthTracker uses the backend passed to initialize() as its " +
+      "allocation client") {
+    val conf = new SparkConf().setMaster("local").setAppName("TaskSchedulerImplSuite")
+      .set(config.EXCLUDE_ON_FAILURE_ENABLED, true)
+    sc = new SparkContext(conf)
+    taskScheduler = new TaskSchedulerImpl(sc)
+    // CoarseGrainedSchedulerBackend can make offers before initialize() is called. Such an offer
+    // must not leave the tracker without an allocation client.
+    taskScheduler.resourceOffers(IndexedSeq.empty)
+    val backend = mock[CoarseGrainedSchedulerBackend]
+    taskScheduler.initialize(backend)
+
+    taskScheduler.healthTrackerOpt.get.killExcludedIdleExecutor("executor0")
+    verify(backend).killExecutors(Seq("executor0"), adjustTargetNumExecutors = false,
+      countFailures = false, force = true)
   }
 
   test("if an executor is lost then the state for its running tasks is cleaned up (SPARK-18553)") {
