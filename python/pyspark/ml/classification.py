@@ -39,6 +39,7 @@ from typing import (
 )
 
 from pyspark import inheritable_thread_target, keyword_only, since
+from pyspark.errors import PySparkValueError
 from pyspark.ml import functions as MF
 from pyspark.ml.base import Estimator, Model, PredictionModel, Predictor, _PredictorParams
 from pyspark.ml.common import inherit_doc
@@ -97,7 +98,7 @@ from pyspark.ml.wrapper import JavaParams, JavaPredictionModel, JavaPredictor, J
 from pyspark.sql import DataFrame, Row, SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.internal import InternalFunction as SF
-from pyspark.sql.utils import is_remote, to_storage_level
+from pyspark.sql.utils import is_remote
 from pyspark.storagelevel import StorageLevel
 
 if TYPE_CHECKING:
@@ -3645,6 +3646,16 @@ class OneVsRest(
         return self._set(intermediateStorageLevel=value)
 
     def _fit(self, dataset: DataFrame) -> "OneVsRestModel":
+        storageLevel = StorageLevel.fromString(self.getIntermediateStorageLevel())
+        if storageLevel == StorageLevel.NONE:
+            raise PySparkValueError(
+                errorClass="VALUE_ALLOWED",
+                messageParameters={
+                    "arg_name": "intermediateStorageLevel",
+                    "disallowed_value": "'NONE'",
+                },
+            )
+
         labelCol = self.getLabelCol()
         featuresCol = self.getFeaturesCol()
         predictionCol = self.getPredictionCol()
@@ -3673,7 +3684,7 @@ class OneVsRest(
 
         with _cache_spark_dataset(
             multiclassLabeled,
-            storageLevel=to_storage_level(self.getIntermediateStorageLevel()),
+            storageLevel=storageLevel,
             enable=handlePersistence,
         ) as multiclassLabeled:
 
@@ -3933,6 +3944,16 @@ class OneVsRestModel(
         )
 
     def _transform(self, dataset: DataFrame) -> DataFrame:
+        storageLevel = StorageLevel.fromString(self.getIntermediateStorageLevel())
+        if storageLevel == StorageLevel.NONE:
+            raise PySparkValueError(
+                errorClass="VALUE_ALLOWED",
+                messageParameters={
+                    "arg_name": "intermediateStorageLevel",
+                    "disallowed_value": "'NONE'",
+                },
+            )
+
         # determine the input columns: these need to be passed through
         origCols = dataset.columns
 
@@ -3944,7 +3965,7 @@ class OneVsRestModel(
         handlePersistence = dataset.storageLevel == StorageLevel(False, False, False, False)
         with _cache_spark_dataset(
             newDataset,
-            storageLevel=to_storage_level(self.getIntermediateStorageLevel()),
+            storageLevel=storageLevel,
             enable=handlePersistence,
         ) as newDataset:
             # update the accumulator column with the result of prediction of models

@@ -40,7 +40,6 @@ from pyspark.errors import (  # noqa: F401
     PySparkImportError,
     PySparkNotImplementedError,
     PySparkRuntimeError,
-    PySparkValueError,
     PythonException,
     QueryExecutionException,
     SparkUpgradeException,
@@ -49,7 +48,6 @@ from pyspark.errors import (  # noqa: F401
 )
 from pyspark.errors.exceptions.captured import CapturedException  # noqa: F401
 from pyspark.find_spark_home import _find_spark_home
-from pyspark.storagelevel import StorageLevel
 from pyspark.util import JVM_INT_MAX, is_remote_only
 
 if TYPE_CHECKING:
@@ -95,30 +93,6 @@ def to_scala_map(jvm: "JVMView", dic: Dict) -> "JavaObject":
     """
     assert jvm is not None
     return jvm.PythonUtils.toScalaMap(dic)
-
-
-def to_storage_level(name: str) -> StorageLevel:
-    """Convert a non-NONE Scala storage-level name to a Python storage level."""
-    levels = {
-        "DISK_ONLY": StorageLevel.DISK_ONLY,
-        "DISK_ONLY_2": StorageLevel.DISK_ONLY_2,
-        "DISK_ONLY_3": StorageLevel.DISK_ONLY_3,
-        "MEMORY_ONLY": StorageLevel(False, True, False, True),
-        "MEMORY_ONLY_2": StorageLevel(False, True, False, True, 2),
-        "MEMORY_ONLY_SER": StorageLevel.MEMORY_ONLY,
-        "MEMORY_ONLY_SER_2": StorageLevel.MEMORY_ONLY_2,
-        "MEMORY_AND_DISK": StorageLevel.MEMORY_AND_DISK_DESER,
-        "MEMORY_AND_DISK_2": StorageLevel(True, True, False, True, 2),
-        "MEMORY_AND_DISK_SER": StorageLevel.MEMORY_AND_DISK,
-        "MEMORY_AND_DISK_SER_2": StorageLevel.MEMORY_AND_DISK_2,
-        "OFF_HEAP": StorageLevel.OFF_HEAP,
-    }
-    if name not in levels:
-        raise PySparkValueError(
-            errorClass="VALUE_NOT_ALLOWED",
-            messageParameters={"arg_name": "name", "allowed_values": str(list(levels))},
-        )
-    return levels[name]
 
 
 def require_test_compiled() -> None:
