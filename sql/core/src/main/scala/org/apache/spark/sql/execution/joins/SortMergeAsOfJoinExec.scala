@@ -708,7 +708,8 @@ private[joins] class SortMergeAsOfJoinScanner(
   private var cursorBest: UnsafeRow = _
   private var cursorBestBuffer: UnsafeRow = _
   private var cursorBestKey: Any = _
-  // Whether `rightPeek` is in the cursor group. Only the nearest cursor reads and updates it.
+  // Whether `rightPeek` is in the cursor group. Every group start sets it, but only the nearest
+  // cursor reads it and keeps it current as it moves.
   private var cursorPeekInGroup: Boolean = false
 
   // Projection to convert right rows to UnsafeRow for the buffer
