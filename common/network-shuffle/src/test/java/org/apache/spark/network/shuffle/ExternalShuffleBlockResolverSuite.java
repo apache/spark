@@ -345,7 +345,8 @@ public class ExternalShuffleBlockResolverSuite {
 
   /**
    * removeBlocks checks the resolved path of a block like a block fetch does, so a block whose
-   * hashed sub-directory was replaced by a link to another directory is not removed there.
+   * hashed sub-directory was replaced by a link to another directory is not removed there. The
+   * rest of the batch is still removed.
    */
   @Test
   public void removeBlocksSkipsBlockResolvingOutsideLocalDirs() throws Exception {
@@ -356,6 +357,15 @@ public class ExternalShuffleBlockResolverSuite {
       String blockId = "rdd_7_0";
       File subDir = new File(ExecutorDiskUtils.getFilePath(
         context.localDirs, context.subDirsPerLocalDir, blockId)).getParentFile();
+      File realFile = null;
+      for (int split = 1; realFile == null; split++) {
+        File candidate = new File(ExecutorDiskUtils.getFilePath(
+          context.localDirs, context.subDirsPerLocalDir, "rdd_7_" + split));
+        if (!candidate.getParentFile().equals(subDir)) {
+          realFile = candidate;
+        }
+      }
+      Files.writeString(realFile.toPath(), "block", StandardCharsets.UTF_8);
       File outsideFile = new File(outsideDir, blockId);
       Files.writeString(outsideFile.toPath(), "should not be deleted", StandardCharsets.UTF_8);
       JavaUtils.deleteRecursively(subDir);
@@ -364,8 +374,10 @@ public class ExternalShuffleBlockResolverSuite {
       ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(conf, null);
       resolver.registerExecutor("app0", "0", context.createExecutorInfo(SORT_MANAGER));
 
-      assertEquals(0, resolver.removeBlocks("app0", "0", new String[] { blockId }));
+      assertEquals(1,
+        resolver.removeBlocks("app0", "0", new String[] { blockId, realFile.getName() }));
       assertTrue(outsideFile.exists(), "A file outside the local directory must not be removed");
+      assertFalse(realFile.exists(), "The block after the skipped one should be removed");
     } finally {
       context.cleanup();
       JavaUtils.deleteRecursively(outsideDir);
@@ -400,6 +412,46 @@ public class ExternalShuffleBlockResolverSuite {
         new ExternalShuffleBlockResolver(conf, dbFile, Runnable::run, validator);
       try {
         AppExecId kept = new AppExecId("app0", "exec0");
+        assertEquals(Set.of(kept), reader.executors.keySet());
+        assertEquals(Set.of(kept),
+          ExternalShuffleBlockResolver.reloadRegisteredExecutors(reader.db).keySet());
+      } finally {
+        reader.close();
+      }
+    } finally {
+      JavaUtils.deleteRecursively(root);
+      JavaUtils.deleteRecursively(dbDir);
+    }
+  }
+
+  /**
+   * With app scoping, the reload checks each executor against its own application, so an executor
+   * whose local dir is in another application's directory is dropped, also from the state store.
+   */
+  @Test
+  public void reloadDropsExecutorsWithLocalDirsOfAnotherApplication() throws Exception {
+    File root = Files.createTempDirectory("ess-nm-local").toFile();
+    File dbDir = Files.createTempDirectory("ess-db").toFile();
+    try {
+      File dbFile = new File(dbDir, "registeredExecutors.rdb");
+      File ownDir = new File(root, "usercache/u/appcache/app1/blockmgr-a");
+      File otherAppDir = new File(root, "usercache/u/appcache/app2/blockmgr-b");
+
+      ExternalShuffleBlockResolver writer = new ExternalShuffleBlockResolver(conf, dbFile);
+      try {
+        writer.registerExecutor("app1", "exec1",
+          new ExecutorShuffleInfo(new String[] { ownDir.getPath() }, 64, SORT_MANAGER));
+        writer.registerExecutor("app1", "exec2",
+          new ExecutorShuffleInfo(new String[] { otherAppDir.getPath() }, 64, SORT_MANAGER));
+      } finally {
+        writer.close();
+      }
+
+      LocalDirValidator validator = new LocalDirValidator(new String[] { root.getPath() }, true);
+      ExternalShuffleBlockResolver reader =
+        new ExternalShuffleBlockResolver(conf, dbFile, Runnable::run, validator);
+      try {
+        AppExecId kept = new AppExecId("app1", "exec1");
         assertEquals(Set.of(kept), reader.executors.keySet());
         assertEquals(Set.of(kept),
           ExternalShuffleBlockResolver.reloadRegisteredExecutors(reader.db).keySet());
@@ -499,6 +551,31 @@ public class ExternalShuffleBlockResolverSuite {
       JavaUtils.deleteRecursively(root);
       JavaUtils.deleteRecursively(outsideDir);
       JavaUtils.deleteRecursively(dbDir);
+    }
+  }
+
+  /**
+   * Only registration and reload pin a local dir. A block removed after its executor's pins were
+   * evicted resolves the dir for that check only, and does not pin it again.
+   */
+  @Test
+  public void removeBlocksDoesNotPinEvictedLocalDirs() throws Exception {
+    TestShuffleDataContext context = new TestShuffleDataContext(1, 5);
+    context.create();
+    try {
+      String blockId = "rdd_7_0";
+      File blockFile = new File(ExecutorDiskUtils.getFilePath(
+        context.localDirs, context.subDirsPerLocalDir, blockId));
+      Files.writeString(blockFile.toPath(), "block", StandardCharsets.UTF_8);
+      ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(conf, null);
+      resolver.registerExecutor("app0", "0", context.createExecutorInfo(SORT_MANAGER));
+      // As when applicationRemoved evicts them while a removal for the executor is still running.
+      resolver.canonicalLocalDirs.clear();
+
+      assertEquals(1, resolver.removeBlocks("app0", "0", new String[] { blockId }));
+      assertTrue(resolver.canonicalLocalDirs.isEmpty(), "A block removal must not pin a local dir");
+    } finally {
+      context.cleanup();
     }
   }
 

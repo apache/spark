@@ -99,8 +99,9 @@ public class ExternalShuffleBlockResolver {
 
   // Canonical forms of registered executor local dirs, cached because they are checked on
   // every block open and before every block removal. Keyed by the raw registered path string.
-  // Entries are evicted when the last registered executor referencing the dir is removed in
-  // applicationRemoved().
+  // Only registration and reload add entries, so a block check never pins a dir again after
+  // applicationRemoved() evicted it. Entries are evicted when the last registered executor
+  // referencing the dir is removed in applicationRemoved().
   @VisibleForTesting
   final ConcurrentMap<String, Path> canonicalLocalDirs = new ConcurrentHashMap<>();
 
@@ -243,7 +244,7 @@ public class ExternalShuffleBlockResolver {
       try {
         canonicalLocalDirs.put(localDir, new File(localDir).getCanonicalFile().toPath());
       } catch (IOException e) {
-        logger.warn("Failed to resolve local dir {}; will retry on first use", e,
+        logger.warn("Failed to resolve local dir {}; will resolve it at each use", e,
           MDC.of(LogKeys.PATH, localDir));
       }
     }
@@ -446,18 +447,15 @@ public class ExternalShuffleBlockResolver {
     try {
       Path canonicalFile = file.getCanonicalFile().toPath();
       for (String localDir : executor.localDirs) {
-        Path canonicalDir = canonicalLocalDirs.computeIfAbsent(localDir, dir -> {
-          try {
-            return new File(dir).getCanonicalFile().toPath();
-          } catch (IOException e) {
-            throw new UncheckedIOException(e);
-          }
-        });
+        Path canonicalDir = canonicalLocalDirs.get(localDir);
+        if (canonicalDir == null) {
+          canonicalDir = new File(localDir).getCanonicalFile().toPath();
+        }
         if (canonicalFile.startsWith(canonicalDir)) {
           return file;
         }
       }
-    } catch (IOException | UncheckedIOException e) {
+    } catch (IOException e) {
       throw new RuntimeException("Failed to resolve block file: " + path, e);
     }
     throw new RuntimeException("Block file " + path
