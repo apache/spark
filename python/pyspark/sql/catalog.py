@@ -23,6 +23,7 @@ from pyspark.errors import PySparkTypeError
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.session import SparkSession
 from pyspark.sql.types import StructType
+from pyspark.sql.utils import to_str
 from pyspark.storagelevel import StorageLevel
 
 if TYPE_CHECKING:
@@ -237,7 +238,8 @@ class Catalog:
         ifNotExists : bool, optional
             If ``True``, do not fail when the namespace already exists.
         properties : dict, optional
-            Map of namespace property keys to string values.
+            Map of namespace property keys to values. Non-string values are converted to
+            strings, matching ``CREATE NAMESPACE ... WITH PROPERTIES``.
 
         Examples
         --------
@@ -256,7 +258,7 @@ class Catalog:
         m = ju.HashMap()
         if properties:
             for k, v in properties.items():
-                m.put(k, v)
+                m.put(k, to_str(v))
         self._jcatalog.createDatabase(dbName, ifNotExists, m)
 
     def dropDatabase(self, dbName: str, ifExists: bool = False, cascade: bool = False) -> None:
