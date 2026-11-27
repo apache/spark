@@ -8875,6 +8875,24 @@
     ],
     "sqlState" : "XXKST"
   },
+  "STREAM_STREAM_JOIN_WATERMARK_DOES_NOT_BOUND_STATE" : {
+    "message" : [
+      "Stream-stream <joinType> join between two streaming DataFrame/Datasets is not supported without a watermark on the <otherSide> input that bounds the state of the <stateSide> input."
+    ],
+    "subClass" : {
+      "EQUALITY_KEY" : {
+        "message" : [
+          "The join evicts the state by the equality <equality>, whose <otherSide> side must be the <otherSide> input's event-time column or the end of its window, optionally shifted forward by a constant, unless a range condition bounds the <stateSide> input by the <otherSide> input's watermark. Otherwise, a later row of the <otherSide> input can match a <stateSide> row that the join already evicted. To skip this check, set <config> to false."
+        ]
+      },
+      "NO_EVICTION" : {
+        "message" : [
+          "Add an equality on the <otherSide> input's event-time column, or a range condition that bounds the <stateSide> input by the <otherSide> input's watermark. Otherwise, the join never evicts the <stateSide> input's state, so its unmatched rows are never output. To skip this check, set <config> to false."
+        ]
+      }
+    },
+    "sqlState" : "0A000"
+  },
   "STRUCT_ARRAY_LENGTH_MISMATCH" : {
     "message" : [
       "Input row doesn't have expected number of values required by the schema. <expected> fields are required while <actual> values are provided."

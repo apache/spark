@@ -70,6 +70,9 @@ class StreamingJoinWatermarkDirectionSuite extends StreamTest {
       }
       assert(e.getMessage.contains("without a watermark on the right input that bounds the " +
         "state of the left input"), key)
+      // The message names the equality that eviction uses, not `lb = rt`.
+      assert(e.getMessage.contains("by the equality \"(") && e.getMessage.contains("= ra)\""),
+        e.getMessage)
     }
   }
 
@@ -85,6 +88,18 @@ class StreamingJoinWatermarkDirectionSuite extends StreamTest {
     }
   }
 
+  test("a key that the right input computes before the join as a forward shift bounds the left " +
+      "state") {
+    val (leftInput, rightInput, left, right) = watermarkedInputs()
+    val shifted = right.withColumn("rs", $"rt" + expr("INTERVAL 10 SECONDS"))
+    val joined = left.join(shifted, expr("lk = rk AND lt = rs"), "left_outer")
+      .select($"lk", $"lt".cast("long"), $"rt".cast("long"))
+    testStream(joined)(
+      AddData(leftInput, (1, 15, 0)),
+      AddData(rightInput, (1, 5, 0)),
+      CheckNewAnswer((1, 15L, 5L)))
+  }
+
   test("a key shifted backward from the right event time does not bound the left state") {
     val (leftInput, _, left, right) = watermarkedInputs()
     val joined = left.join(right, expr("lk = rk AND lt = rt - INTERVAL 10 SECONDS"), "left_outer")
@@ -95,6 +110,7 @@ class StreamingJoinWatermarkDirectionSuite extends StreamTest {
     }
     assert(e.getMessage.contains("without a watermark on the right input that bounds the " +
       "state of the left input"))
+    assert(e.getMessage.contains("optionally shifted forward by a constant"))
   }
 
   // A DataFrame column reference keeps the metadata of the plan it was taken from, but late-row

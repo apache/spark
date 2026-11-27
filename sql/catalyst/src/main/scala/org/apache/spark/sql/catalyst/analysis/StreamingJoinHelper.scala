@@ -25,7 +25,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
-import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, Filter, LogicalPlan, Project, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -186,12 +186,24 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
    * backward shift, or a key in another form, they can still match state keys at or below the
    * watermark, which eviction removes.
    *
-   * The watermarked column is the first one in `inputOutput`, which late-row filtering compares,
-   * not the key's reference: a reference keeps the metadata of the plan it was taken from.
+   * The watermarked column is the first one in the input's output, which late-row filtering
+   * compares, not the key's reference: a reference keeps the metadata of the plan it was taken
+   * from. A key, or the start of a shift, can also be a column that the input computes before the
+   * join, in a Project reached only through nodes that keep the values of their child's columns.
    */
-  def isKeyBoundedByWatermark(key: Expression, inputOutput: Seq[Attribute]): Boolean = {
-    val watermarked = inputOutput.find(_.metadata.contains(delayKey))
+  def isKeyBoundedByWatermark(key: Expression, input: LogicalPlan): Boolean = {
+    val watermarked = input.output.find(_.metadata.contains(delayKey))
     def isWatermarked(a: AttributeReference): Boolean = watermarked.exists(_.exprId == a.exprId)
+    // The expression that defines `a` in a Project of `plan`, and the plan it reads.
+    def definition(a: Attribute, plan: LogicalPlan): Option[(Expression, LogicalPlan)] =
+      plan match {
+        case Project(projectList, child) => projectList.collectFirst {
+          case alias: Alias if alias.exprId == a.exprId => (alias.child, child)
+        }.orElse(definition(a, child))
+        case _: Filter | _: EventTimeWatermark | _: SubqueryAlias | _: View =>
+          definition(a, plan.children.head)
+        case _ => None
+      }
     // A fresh copy: queries that start at the same time can check the same analyzed plan.
     def isNotBackward(shift: Expression): Boolean = shift.foldable &&
       (shift.freshCopyIfContainsStatefulExpression().eval() match {
@@ -199,21 +211,22 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
         case n: java.lang.Number => n.longValue >= 0
         case _ => false
       })
-    key match {
-      case a: AttributeReference => isWatermarked(a)
+    def isBounded(key: Expression, plan: LogicalPlan): Boolean = key match {
+      case a: AttributeReference => isWatermarked(a) ||
+        definition(a, plan).exists { case (expr, below) => isBounded(expr, below) }
       // NOTE: We assume this is window struct, as same as WatermarkSupport.watermarkExpression
       case GetStructField(a: AttributeReference, 1, _) => isWatermarked(a)
-      case Cast(child, TimestampType, _, _) if child.dataType == TimestampType =>
-        isKeyBoundedByWatermark(child, inputOutput)
-      case DatetimeSub(_, _, replacement) => isKeyBoundedByWatermark(replacement, inputOutput)
+      case Cast(child, dataType, _, _) if child.dataType == dataType => isBounded(child, plan)
+      case DatetimeSub(_, _, replacement) => isBounded(replacement, plan)
       case TimestampAddInterval(start, interval, _) =>
-        isNotBackward(interval) && isKeyBoundedByWatermark(start, inputOutput)
+        isNotBackward(interval) && isBounded(start, plan)
       case TimestampAddYMInterval(start, interval, _) =>
-        isNotBackward(interval) && isKeyBoundedByWatermark(start, inputOutput)
+        isNotBackward(interval) && isBounded(start, plan)
       case TimestampAdd(_, quantity, start, _) =>
-        isNotBackward(quantity) && isKeyBoundedByWatermark(start, inputOutput)
+        isNotBackward(quantity) && isBounded(start, plan)
       case _ => false
     }
+    isBounded(key, input)
   }
 
   /**
