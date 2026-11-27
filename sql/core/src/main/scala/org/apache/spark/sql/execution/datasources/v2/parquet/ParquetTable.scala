@@ -50,7 +50,12 @@ case class ParquetTable(
     }
   }
 
-  override def supportsDataType(dataType: DataType): Boolean = dataType match {
+  override def supportsDataType(dataType: DataType): Boolean =
+    // Types Framework: framework FIRST, original match as fallback.
+    ParquetUtils.supportFrameworkDataType(dataType)
+      .getOrElse(supportsDataTypeDefault(dataType))
+
+  private def supportsDataTypeDefault(dataType: DataType): Boolean = dataType match {
     // GeoSpatial data types in Parquet are limited only to types with supported SRIDs.
     case g: GeometryType => GeometryType.isSridSupported(g.srid)
     case g: GeographyType => GeographyType.isSridSupported(g.srid)

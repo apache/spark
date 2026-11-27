@@ -1582,6 +1582,7 @@ object HiveExternalCatalog {
     case _: TimeType => false
     case _: VariantType => false
     case _: GeometryType | _: GeographyType => false
+    case _: FileType => false
     case s: StructType =>
       s.forall { f =>
         // Because HMS thrift API passes StructType's catalog string in a whole, we can not
@@ -1614,13 +1615,16 @@ object HiveExternalCatalog {
   }
 
   /**
-   * Hive has no TIMESTAMP_NTZ type. So, this throws an error if the given Hive serde table has a
-   * TIMESTAMP_NTZ data column, including the nested types.
+   * Hive has no TIMESTAMP_NTZ or FILE type. So, this throws an error if the given Hive serde table
+   * has a TIMESTAMP_NTZ or FILE data column, including the nested types.
    */
   private[hive] def verifyHiveSerdeDataColumnTypes(table: CatalogTable): Unit = {
     table.schema
       .filterNot(f => table.partitionColumnNames.contains(f.name))
-      .find(_.dataType.existsRecursively(_.isInstanceOf[TimestampNTZType]))
+      .find(_.dataType.existsRecursively {
+        case _: TimestampNTZType | _: FileType => true
+        case _ => false
+      })
       .foreach { f =>
         throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError("Hive", f)
       }

@@ -43,6 +43,9 @@ import org.apache.spark.annotation.Unstable
  *
  * Its external value is [[FileRef]], which has no getter for the inline bytes.
  *
+ * Parquet stores a FILE as a group of these fields, which a reader that does not know FILE reads
+ * as a struct. The other file formats cannot store a FILE.
+ *
  * FileType may be EXTERNAL (simple references, lifecycle independent of the table) or UNKNOWN
  * (mode not yet determined, such as the result of a cast or of a UDF). Mode is part of type
  * identity - files with different modes are distinct under `equals`.

@@ -2085,6 +2085,39 @@ abstract class AvroSuite
     }
   }
 
+  test("FILE is not supported in Avro") {
+    val file = new FileRef("s3://bucket/a.pdf", null, 10L, "application/pdf", null)
+    Seq[(DataType, Any)](
+      FileType.external -> file,
+      new StructType().add("f", FileType.external) -> Row(file),
+      ArrayType(FileType.external) -> Seq(file)).foreach { case (dataType, value) =>
+      val schema = new StructType().add("c", dataType)
+      withTempDir { dir =>
+        val tempDir = new File(dir, "files").getCanonicalPath
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.createDataFrame(spark.sparkContext.parallelize(Seq(Row(value)), 1), schema)
+              .write.format("avro").save(tempDir)
+          },
+          condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+          parameters = Map(
+            "columnName" -> "`c`",
+            "columnType" -> s""""${dataType.sql}"""",
+            "format" -> "Avro"))
+        spark.range(1).selectExpr("CAST(id AS STRING) AS c").write.format("avro").save(tempDir)
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.read.schema(schema).format("avro").load(tempDir).collect()
+          },
+          condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+          parameters = Map(
+            "columnName" -> "`c`",
+            "columnType" -> s""""${dataType.sql}"""",
+            "format" -> "Avro"))
+      }
+    }
+  }
+
   test("support Null data types") {
     withTempDir { dir =>
       val tempDir = new File(dir, "files").getCanonicalPath

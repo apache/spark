@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Set;
 
 import org.apache.spark.network.util.JavaUtils;
+import org.apache.spark.sql.catalyst.types.ops.TypeOps$;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 import org.apache.spark.sql.types.ArrayType;
 import org.apache.spark.sql.types.DataType;
@@ -170,6 +171,15 @@ final class ParquetColumnVector {
   }
 
   /**
+   * Whether a column of `type` is assembled as a struct: a struct, a variant, or a framework type
+   * whose row representation is a struct, such as FILE.
+   */
+  private static boolean isStructBacked(DataType type) {
+    return type instanceof VariantType ||
+      TypeOps$.MODULE$.rowRepresentationOrSelf(type) instanceof StructType;
+  }
+
+  /**
    * Assembles this column and calculate collection offsets recursively.
    * This is a no-op for primitive columns.
    */
@@ -195,7 +205,7 @@ final class ParquetColumnVector {
         child.assemble();
       }
       assembleCollection();
-    } else if (type instanceof StructType || type instanceof VariantType) {
+    } else if (isStructBacked(type)) {
       for (ParquetColumnVector child : children) {
         child.assemble();
       }

@@ -70,6 +70,14 @@ private[parquet] trait ParentContainerUpdater {
   def setDouble(value: Double): Unit = set(value)
 }
 
+/**
+ * Marks an updater whose parent container is a struct, so that its converter runs exactly once
+ * per Parquet record, as opposed to a map or array element updater, whose converter can run many
+ * times per record. A nested struct converter uses this to decide whether the SPARK-30338 deep
+ * copy is needed, see [[ParquetRowConverter.newStructConverter]].
+ */
+private[parquet] trait StructFieldUpdater extends ParentContainerUpdater
+
 /** A no-op updater used for root converter (who doesn't have a parent). */
 private[parquet] object NoopUpdater extends ParentContainerUpdater
 
@@ -177,7 +185,7 @@ private[parquet] class ParquetRowConverter(
    * Updater used together with field converters within a [[ParquetRowConverter]].  It propagates
    * converted filed values to the `ordinal`-th cell in `currentRow`.
    */
-  private class RowUpdater(row: InternalRow, ordinal: Int) extends ParentContainerUpdater {
+  private class RowUpdater(row: InternalRow, ordinal: Int) extends StructFieldUpdater {
     override def set(value: Any): Unit = row(ordinal) = value
     override def setBoolean(value: Boolean): Unit = row.setBoolean(ordinal, value)
     override def setByte(value: Byte): Unit = row.setByte(ordinal, value)
@@ -538,40 +546,14 @@ private[parquet] class ParquetRowConverter(
         new ParquetVariantConverter(t, parquetType.asGroupType(), updater)
 
       case t: StructType =>
-        val wrappedUpdater = {
-          // SPARK-30338: avoid unnecessary InternalRow copying for nested structs:
-          // There are two cases to handle here:
-          //
-          //  1. Parent container is a map or array: we must make a deep copy of the mutable row
-          //     because this converter may be invoked multiple times per Parquet input record
-          //     (if the map or array contains multiple elements).
-          //
-          //  2. Parent container is a struct: we don't need to copy the row here because either:
-          //
-          //     (a) all ancestors are structs and therefore no copying is required because this
-          //         converter will only be invoked once per Parquet input record, or
-          //     (b) some ancestor is struct that is nested in a map or array and that ancestor's
-          //         converter will perform deep-copying (which will recursively copy this row).
-          if (updater.isInstanceOf[RowUpdater]) {
-            // `updater` is a RowUpdater, implying that the parent container is a struct.
-            updater
-          } else {
-            // `updater` is NOT a RowUpdater, implying that the parent container a map or array.
-            new ParentContainerUpdater {
-              override def set(value: Any): Unit = {
-                updater.set(value.asInstanceOf[SpecificInternalRow].copy())  // deep copy
-              }
-            }
-          }
-        }
-        new ParquetRowConverter(
+        ParquetRowConverter.newStructConverter(
           schemaConverter,
           parquetType.asGroupType(),
           t,
           convertTz,
           datetimeRebaseSpec,
           int96RebaseSpec,
-          wrappedUpdater)
+          updater)
 
       case t: VariantType =>
         if (SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_READING_SHREDDED)) {
@@ -1144,5 +1126,54 @@ private[parquet] object ParquetRowConverter {
     val timeOfDayNanos = buffer.getLong
     val julianDay = buffer.getInt
     DateTimeUtils.fromJulianDay(julianDay, timeOfDayNanos)
+  }
+
+  /**
+   * Builds a [[ParquetRowConverter]] for a struct-shaped value. It is shared by the `StructType`
+   * case of the row converter and by struct-backed framework types (see
+   * `StructBackedParquetTypeOps`), so that both handle nesting in arrays and maps the same way.
+   *
+   * SPARK-30338: avoid unnecessary InternalRow copying for nested structs. There are two cases:
+   *
+   *  1. Parent container is a map or array: we must make a deep copy of the mutable row because
+   *     this converter may be invoked multiple times per Parquet input record (if the map or
+   *     array contains multiple elements).
+   *
+   *  2. Parent container is a struct (the updater is a [[StructFieldUpdater]]): we don't need to
+   *     copy the row here because either:
+   *
+   *     (a) all ancestors are structs and therefore no copying is required because this
+   *         converter will only be invoked once per Parquet input record, or
+   *     (b) some ancestor is struct that is nested in a map or array and that ancestor's
+   *         converter will perform deep-copying (which will recursively copy this row).
+   */
+  private[parquet] def newStructConverter(
+      schemaConverter: ParquetToSparkSchemaConverter,
+      parquetType: GroupType,
+      catalystType: StructType,
+      convertTz: Option[ZoneId],
+      datetimeRebaseSpec: RebaseSpec,
+      int96RebaseSpec: RebaseSpec,
+      updater: ParentContainerUpdater): ParquetRowConverter = {
+    val wrappedUpdater =
+      if (updater.isInstanceOf[StructFieldUpdater]) {
+        // The parent container is a struct.
+        updater
+      } else {
+        // The parent container is a map or array.
+        new ParentContainerUpdater {
+          override def set(value: Any): Unit = {
+            updater.set(value.asInstanceOf[SpecificInternalRow].copy())  // deep copy
+          }
+        }
+      }
+    new ParquetRowConverter(
+      schemaConverter,
+      parquetType,
+      catalystType,
+      convertTz,
+      datetimeRebaseSpec,
+      int96RebaseSpec,
+      wrappedUpdater)
   }
 }
