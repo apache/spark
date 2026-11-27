@@ -109,6 +109,8 @@ object SchemaPruning extends SQLConfHelper {
           }
         }
         StructType(sortedLeftFields)
+      // A FILE is not pruned: keep the FileType of the relation, with its mode.
+      case (_, rightFileType: FileType) => rightFileType
       case _ => left
     }
 

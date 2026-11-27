@@ -54,11 +54,14 @@ import org.apache.spark.annotation.Unstable
  * `xxhash64`, the key of a map built in a query or of a map in the return type of a function, and
  * a partition, bucket, clustering or write-ordering column of a table. Aggregates that
  * deduplicate or hash their input, such as `count(DISTINCT f)`, `collect_set`,
- * `approx_count_distinct` and `mode`, are not rejected yet. Accessing the fields of a FILE in
- * SQL, such as `uri`, is planned. A FILE casts only to a FILE of unknown mode: a cast to STRING
- * or BINARY, which reads the referenced bytes, is planned as well. A FILE of any mode can be
- * written to a FILE EXTERNAL column of a table, as the file is external to the table that stores
- * it.
+ * `approx_count_distinct` and `mode`, are not rejected yet.
+ *
+ * The fields other than `inline` can be accessed by name, as in `f.uri`, and an absent field is
+ * NULL. A FILE casts only to a FILE of unknown mode: a cast to STRING or BINARY, which reads the
+ * referenced bytes, is planned. A struct of the fields other than `inline`, in their order, and
+ * a variant object cast to a FILE of unknown mode, and the value must have a uri. A FILE of any
+ * mode can be written to a FILE EXTERNAL column of a table, as the file is external to the table
+ * that stores it.
  *
  * @param mode
  *   the mode for this FileType column

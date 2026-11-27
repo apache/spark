@@ -578,7 +578,7 @@ case class VariantGet(
     val check = super.checkInputDataTypes()
     if (check.isFailure) {
       check
-    } else if (!VariantGet.checkDataType(targetType)) {
+    } else if (!VariantGet.checkDataType(targetType, allowFileType = true)) {
       DataTypeMismatch(
         errorSubClass = "CAST_WITHOUT_SUGGESTION",
         messageParameters =
@@ -683,19 +683,27 @@ case object VariantGet {
   /**
    * Returns whether a data type can be cast into/from variant. For scalar types, we allow a subset
    * of them. For nested types, we reject map types with a non-string key type.
+   *
+   * With `allowFileType`, for a cast from a variant, a FILE of unknown mode is accepted as well,
+   * also nested. A FILE cannot be cast to a variant yet.
    */
-  def checkDataType(dataType: DataType, allowStructsAndMaps: Boolean = true): Boolean =
+  def checkDataType(
+      dataType: DataType,
+      allowStructsAndMaps: Boolean = true,
+      allowFileType: Boolean = false): Boolean =
     dataType match {
     case _: CharType | _: VarcharType => false
     case _: NumericType | BooleanType | _: StringType | BinaryType | _: DatetimeType |
         VariantType =>
       true
-    case ArrayType(elementType, _) => checkDataType(elementType, allowStructsAndMaps)
+    case ArrayType(elementType, _) =>
+      checkDataType(elementType, allowStructsAndMaps, allowFileType)
     case MapType(_: CharType | _: VarcharType, _, _) => false
     case MapType(_: StringType, valueType, _) if allowStructsAndMaps =>
-        checkDataType(valueType, allowStructsAndMaps)
+        checkDataType(valueType, allowStructsAndMaps, allowFileType)
     case StructType(fields) if allowStructsAndMaps =>
-        fields.forall(f => checkDataType(f.dataType, allowStructsAndMaps))
+        fields.forall(f => checkDataType(f.dataType, allowStructsAndMaps, allowFileType))
+    case FileType(FileTypeMode.UNKNOWN) => allowFileType && allowStructsAndMaps
     case _ => false
   }
 
@@ -871,6 +879,40 @@ case object VariantGet {
             }
           }
           row
+        } else {
+          invalidCast()
+        }
+      // An object casts to a FILE by the names of its public fields, matched case-insensitively.
+      // A missing field is NULL, and other keys, including `inline`, are ignored: a string in a
+      // variant does not hold the bytes of `inline`, and the internal field cannot be set this
+      // way. A field given twice is an error, and so is a value that is not a valid FILE; both
+      // are NULL when `failOnError` is false, like any other failed cast.
+      case _: FileType =>
+        if (variantType == Type.OBJECT) {
+          val row = new GenericInternalRow(FileType.FIELDS.length)
+          val seen = new Array[Boolean](FileType.PUBLIC_FIELDS.length)
+          var i = 0
+          while (i < v.objectSize()) {
+            val field = v.getFieldAtIndex(i)
+            val idx = FileType.PUBLIC_FIELDS.indexWhere(_.name.equalsIgnoreCase(field.key))
+            if (idx >= 0) {
+              if (seen(idx)) {
+                if (!castArgs.failOnError) return null
+                throw QueryExecutionErrors.castToFileTypeDuplicateFieldError(
+                  VariantType, field.key)
+              }
+              seen(idx) = true
+              row.update(idx, cast(field.value, FileType.PUBLIC_FIELDS(idx).dataType, castArgs))
+            }
+            i += 1
+          }
+          if (castArgs.failOnError) {
+            FileTypeCastUtils.validateFileTypeRow(row, VariantType)
+          } else if (FileTypeCastUtils.isValidFileTypeRow(row)) {
+            row
+          } else {
+            null
+          }
         } else {
           invalidCast()
         }

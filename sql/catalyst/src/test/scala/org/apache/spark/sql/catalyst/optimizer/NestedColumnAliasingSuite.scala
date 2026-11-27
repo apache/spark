@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.Cross
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.types.{ArrayType, IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, FileType, IntegerType, StringType, StructField, StructType}
 
 class NestedColumnAliasingSuite extends SchemaPruningTest {
 
@@ -63,6 +63,43 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     testSingleFieldPushDown((input: LogicalPlan) => input.limit(5))
     testSingleFieldPushDown((input: LogicalPlan) => input.repartition(1))
     testSingleFieldPushDown((input: LogicalPlan) => Sample(0.0, 0.6, false, 11L, input))
+  }
+
+  test("Pushing a single FileType field projection") {
+    // A FILE counts its fields in totalFieldNum, so accessing one of them is pushed down like a
+    // nested field of a struct.
+    val fileRelation = LocalRelation(
+      AttributeReference("id", IntegerType)(),
+      AttributeReference("file_data", FileType.external)())
+
+    def testFileTypeFieldPushDown(op: LogicalPlan => LogicalPlan): Unit = {
+      val uri = GetStructField(fileRelation.output(1), FileType.URI_INDEX, Some("uri"))
+      val query = op(fileRelation).select(uri).analyze
+      val optimized = Optimize.execute(query)
+      val expected = op(fileRelation.select(uri)).analyze
+      comparePlans(optimized, expected)
+    }
+
+    testFileTypeFieldPushDown((input: LogicalPlan) => input.limit(5))
+    testFileTypeFieldPushDown((input: LogicalPlan) => input.repartition(1))
+  }
+
+  test("A FileType field of a generator output is not pushed into the generator") {
+    val files = AttributeReference("files", ArrayType(FileType.external))()
+    val relation = LocalRelation(AttributeReference("id", IntegerType)(), files)
+    val query = relation
+      .generate(Explode(files), outputNames = Seq("f"))
+      .select($"f".getField("uri"))
+      .analyze
+    val optimized = Optimize.execute(query)
+    assert(optimized.resolved)
+    assert(!optimized.expressions.exists(_.exists(_.isInstanceOf[GetArrayStructFields])))
+    val expected = relation
+      .select(files)
+      .generate(Explode(files), unrequiredChildIndex = Seq(0), outputNames = Seq("f"))
+      .select($"f".getField("uri"))
+      .analyze
+    comparePlans(optimized, expected)
   }
 
   test("Pushing multiple nested field projection") {

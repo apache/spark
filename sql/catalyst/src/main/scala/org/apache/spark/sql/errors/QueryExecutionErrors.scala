@@ -168,6 +168,22 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = null)
   }
 
+  def castToFileTypeNullUriError(sourceType: DataType): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "CAST_TO_FILE_TYPE.NULL_URI",
+      messageParameters = Map("sourceType" -> toSQLType(sourceType)))
+  }
+
+  def castToFileTypeDuplicateFieldError(
+      sourceType: DataType,
+      fieldName: String): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "CAST_TO_FILE_TYPE.DUPLICATE_FIELD",
+      messageParameters = Map(
+        "sourceType" -> toSQLType(sourceType),
+        "fieldName" -> toSQLId(fieldName)))
+  }
+
   def cannotParseDecimalError(): Throwable = {
     new SparkRuntimeException(
       errorClass = "CANNOT_PARSE_DECIMAL",

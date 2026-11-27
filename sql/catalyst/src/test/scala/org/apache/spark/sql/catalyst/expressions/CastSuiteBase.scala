@@ -22,12 +22,13 @@ import java.time.{Duration, LocalDate, LocalDateTime, LocalTime, Period}
 import java.time.temporal.ChronoUnit
 import java.util.{Calendar, Locale, TimeZone}
 
-import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException}
+import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -3105,5 +3106,185 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     val maxNanos = Literal.create(LocalTime.of(23, 59, 59, 999999999), TimeType(9))
     checkEvaluation(cast(maxNanos, IntegerType), 86399)
     checkEvaluation(cast(maxNanos, LongType), 86399L)
+  }
+
+  // ----------------------------- Cast to FileType -----------------------------
+
+  private val fileUri = "s3://bucket/dir/file.bin"
+
+  private def fileRow(
+      uri: String = fileUri,
+      offset: java.lang.Long = null,
+      size: java.lang.Long = 5L,
+      contentType: String = "text/plain",
+      checksum: String = "v1"): InternalRow = {
+    new GenericInternalRow(Array[Any](
+      UTF8String.fromString(uri),
+      offset,
+      size,
+      UTF8String.fromString(contentType),
+      UTF8String.fromString(checksum),
+      null))
+  }
+
+  private def publicFileLiteral(
+      uri: String = fileUri,
+      offset: java.lang.Long = null,
+      size: java.lang.Long = 5L,
+      contentType: String = "text/plain",
+      checksum: String = "v1"): Literal = {
+    Literal.create(
+      InternalRow(UTF8String.fromString(uri), offset, size,
+        UTF8String.fromString(contentType), UTF8String.fromString(checksum)),
+      StructType(FileType.PUBLIC_FIELDS))
+  }
+
+  private def parseVariant(json: String): Literal =
+    Literal(variant.VariantExpressionEvalUtils.parseJson(UTF8String.fromString(json)))
+
+  test("cast to FILE: rejects sources other than a struct, a variant or a FILE") {
+    Seq(Literal("foo"), Literal(42), Literal(Array[Byte](1, 2))).foreach { source =>
+      assert(cast(source, FileType()).checkInputDataTypes().isFailure)
+    }
+  }
+
+  test("cast struct and variant to FILE: allowed to FILE but not to FILE EXTERNAL") {
+    Seq(publicFileLiteral(), parseVariant(s"""{"uri":"$fileUri"}""")).foreach { source =>
+      assert(cast(source, FileType()).checkInputDataTypes().isSuccess)
+      assert(cast(source, FileType.external).checkInputDataTypes().isFailure)
+    }
+  }
+
+  test("cast struct to FILE: rejects a struct with wrong field order, extra or missing fields") {
+    val wrongOrder = StructType(Seq(
+      StructField("size", LongType),
+      StructField("offset", LongType),
+      StructField("uri", StringType),
+      StructField("content_type", StringType),
+      StructField("checksum", StringType)))
+    val withInline = FileType.asStruct
+    val tooMany = StructType(FileType.PUBLIC_FIELDS :+ StructField("extra", StringType))
+    val tooFew = StructType(FileType.PUBLIC_FIELDS.dropRight(1))
+    val noUri = StructType(StructField("path", StringType) +: FileType.PUBLIC_FIELDS.drop(1))
+    val wrongFieldType = StructType(
+      FileType.PUBLIC_FIELDS.updated(FileType.SIZE_INDEX, StructField("size", BinaryType)))
+    Seq(wrongOrder, withInline, tooMany, tooFew, noUri, wrongFieldType).foreach { t =>
+      assert(cast(Literal.default(t), FileType()).checkInputDataTypes().isFailure, t)
+    }
+  }
+
+  test("cast struct to FILE: returns the FILE value with a null inline field") {
+    checkEvaluation(cast(publicFileLiteral(), FileType()), fileRow())
+  }
+
+  test("cast struct to FILE: case-insensitive field names") {
+    val srcType = StructType(Seq(
+      StructField("URI", StringType),
+      StructField("Offset", LongType),
+      StructField("Size", LongType),
+      StructField("CONTENT_TYPE", StringType),
+      StructField("Checksum", StringType)))
+    val src = publicFileLiteral().copy(dataType = srcType)
+    checkEvaluation(cast(src, FileType()), fileRow())
+  }
+
+  test("cast struct to FILE: field values are cast to the types of the FILE fields") {
+    val srcType = StructType(Seq(
+      StructField("uri", StringType),
+      StructField("offset", IntegerType),
+      StructField("size", IntegerType),
+      StructField("content_type", StringType),
+      StructField("checksum", StringType)))
+    val src = Literal.create(InternalRow(UTF8String.fromString(fileUri), 2, 5,
+      UTF8String.fromString("text/plain"), UTF8String.fromString("v1")), srcType)
+    checkEvaluation(cast(src, FileType()), fileRow(offset = 2L))
+  }
+
+  test("cast struct to FILE: null optional fields stay null") {
+    val src = publicFileLiteral(offset = null, size = null, contentType = null, checksum = null)
+    checkEvaluation(
+      cast(src, FileType()), fileRow(size = null, contentType = null, checksum = null))
+  }
+
+  test("cast struct to FILE: a null struct is a null FILE") {
+    checkEvaluation(cast(Literal.create(null, StructType(FileType.PUBLIC_FIELDS)), FileType()),
+      null)
+  }
+
+  test("cast struct to FILE: an empty uri is kept") {
+    checkEvaluation(cast(publicFileLiteral(uri = ""), FileType()), fileRow(uri = ""))
+  }
+
+  test("cast struct to FILE: null uri fails with CAST_TO_FILE_TYPE.NULL_URI") {
+    checkErrorInExpression[SparkRuntimeException](
+      cast(publicFileLiteral(uri = null), FileType()),
+      "CAST_TO_FILE_TYPE.NULL_URI",
+      Map("sourceType" -> toSQLType(StructType(FileType.PUBLIC_FIELDS))))
+  }
+
+  test("cast nested structs to FILE") {
+    val struct = StructType(FileType.PUBLIC_FIELDS)
+    val array = Literal.create(
+      new GenericArrayData(Array[Any](publicFileLiteral().value, null)), ArrayType(struct))
+    checkEvaluation(cast(array, ArrayType(FileType())), Seq(fileRow(), null))
+    val map = Literal.create(
+      ArrayBasedMapData(Array[Any](UTF8String.fromString("k")),
+        Array[Any](publicFileLiteral().value)),
+      MapType(StringType, struct))
+    checkEvaluation(cast(map, MapType(StringType, FileType())), Map("k" -> fileRow()))
+    val outer = Literal.create(
+      InternalRow(publicFileLiteral().value, 1),
+      new StructType().add("f", struct).add("i", IntegerType))
+    checkEvaluation(cast(outer, new StructType().add("f", FileType()).add("i", IntegerType)),
+      InternalRow(fileRow(), 1))
+  }
+
+  test("cast variant to FILE: returns the FILE value") {
+    val variant = parseVariant(
+      s"""{"uri":"$fileUri","offset":null,"size":5,""" +
+        """"content_type":"text/plain","checksum":"v1"}""")
+    checkEvaluation(cast(variant, FileType()), fileRow())
+  }
+
+  test("cast variant to FILE: case-insensitive field names") {
+    val variant = parseVariant(
+      s"""{"URI":"$fileUri","Size":5,"Content_Type":"text/plain","CHECKSUM":"v1"}""")
+    checkEvaluation(cast(variant, FileType()), fileRow())
+  }
+
+  test("cast variant to FILE: other keys and inline are ignored") {
+    val variant = parseVariant(
+      s"""{"uri":"$fileUri","size":5,"content_type":"text/plain","checksum":"v1",""" +
+        """"inline":"SU5MSU5F","extra":"z"}""")
+    checkEvaluation(cast(variant, FileType()), fileRow())
+  }
+
+  test("cast variant to FILE: missing optional fields stay null") {
+    checkEvaluation(cast(parseVariant(s"""{"uri":"$fileUri"}"""), FileType()),
+      fileRow(size = null, contentType = null, checksum = null))
+  }
+
+  test("cast variant to FILE: null or missing uri fails with CAST_TO_FILE_TYPE.NULL_URI") {
+    Seq("""{"uri":null,"size":5}""", """{"size":5,"content_type":"text/plain"}""").foreach {
+      json =>
+        checkErrorInExpression[SparkRuntimeException](
+          cast(parseVariant(json), FileType()),
+          "CAST_TO_FILE_TYPE.NULL_URI",
+          Map("sourceType" -> toSQLType(VariantType)))
+    }
+  }
+
+  test("cast variant to FILE: a field given twice fails with CAST_TO_FILE_TYPE.DUPLICATE_FIELD") {
+    checkErrorInExpression[SparkRuntimeException](
+      cast(parseVariant("""{"uri":"a","URI":"b","size":5}"""), FileType()),
+      "CAST_TO_FILE_TYPE.DUPLICATE_FIELD",
+      Map("sourceType" -> toSQLType(VariantType), "fieldName" -> "`uri`"))
+  }
+
+  test("cast variant to nested FILE") {
+    val array = parseVariant(s"""[{"uri":"$fileUri","size":5,"content_type":"text/plain",""" +
+      """"checksum":"v1"},null]""")
+    checkEvaluation(cast(array, ArrayType(FileType())), Seq(fileRow(), null))
+    assert(cast(array, ArrayType(FileType.external)).checkInputDataTypes().isFailure)
   }
 }

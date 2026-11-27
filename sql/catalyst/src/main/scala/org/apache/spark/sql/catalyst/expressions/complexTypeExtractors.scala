@@ -77,22 +77,35 @@ object ExtractValue {
    *
    *   `child`      |    `extraction`    |    concrete `ExtractValue`
    * ----------------------------------------------------------------
-   *    Struct      |   Literal String   |        GetStructField
+   *  Struct/File   |   Literal String   |        GetStructField
    * Array[Struct]  |   Literal String   |     GetArrayStructFields
    *    Array       |   Integral type    |         GetArrayItem
    *     Map        |   map key type     |         GetMapValue
+   *
+   * A FILE shares the GetStructField row because it is physically a struct of
+   * `FileType.FIELDS`: `GetStructField.childSchema` unwraps it, so the rules that handle
+   * GetStructField, such as schema pruning and nested column aliasing, apply to it as well.
    */
   def extractValue(
       child: Expression,
       extraction: Expression,
       resolver: Resolver): Either[Expression, Throwable] = {
+    def extractStructField(
+        fields: Array[StructField],
+        fieldName: String): Either[Expression, Throwable] = {
+      findField(fields, fieldName, resolver) match {
+        case Left(ordinal) => Left(GetStructField(child, ordinal, Some(fieldName)))
+        case Right(throwable) => Right(throwable)
+      }
+    }
+
     (child.dataType, extraction) match {
       case (StructType(fields), NonNullLiteral(v, _: StringType)) =>
-        val fieldName = v.toString
-        findField(fields, fieldName, resolver) match {
-          case Left(ordinal) => Left(GetStructField(child, ordinal, Some(fieldName)))
-          case Right(throwable) => Right(throwable)
-        }
+        extractStructField(fields, v.toString)
+
+      // The inline field is internal, so it cannot be accessed by name.
+      case (_: FileType, NonNullLiteral(v, _: StringType)) =>
+        extractStructField(FileType.PUBLIC_FIELDS, v.toString)
 
       case (ArrayType(StructType(fields), containsNull), NonNullLiteral(v, _: StringType)) =>
         val fieldName = v.toString
@@ -209,14 +222,17 @@ trait ExtractValue extends Expression with QueryErrorsBase {
 case class GetStructField(child: Expression, ordinal: Int, name: Option[String] = None)
   extends UnaryExpression with ExtractValue with ExpectsInputTypes with NoThrow {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StructType, IntegralType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(StructType, FileType()), IntegralType)
 
   lazy val childSchema = child.dataType match {
     case st: StructType => st
+    // A FILE is physically a struct of FileType.FIELDS.
+    case _: FileType => FileType.asStruct
     case other =>
       throw SparkException.internalError(
-        s"GetStructField requires a StructType child, but got ${other.catalogString}. " +
-        s"The child type may have been changed by a plan transformation.")
+        s"GetStructField requires a StructType or FileType child, but got " +
+        s"${other.catalogString}. The child type may have been changed by a plan transformation.")
   }
 
   override lazy val canonicalized: Expression = {

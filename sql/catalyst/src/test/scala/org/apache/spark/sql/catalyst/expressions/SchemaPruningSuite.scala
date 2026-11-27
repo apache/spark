@@ -460,4 +460,23 @@ class SchemaPruningSuite extends SparkFunSuite with SQLHelper {
     assert(prunedEventType("rules").dataType ===
       ArrayType(StructType.fromDDL("a int"), containsNull = true))
   }
+
+  test("pruneSchema keeps the FileType of the relation when a struct of its fields is requested") {
+    // A second column is pruned, so that pruneSchema runs sortLeftFieldsByRight on the FILE.
+    val schema = StructType(Seq(
+      StructField("file_data", FileType.external, nullable = true),
+      StructField("other",
+        StructType(Seq(StructField("a", IntegerType), StructField("b", IntegerType))),
+        nullable = true)))
+    Seq(StructType(FileType.FIELDS), FileType()).foreach { requestedFileType =>
+      val requestedFields = Seq(
+        StructField("file_data", requestedFileType, nullable = true),
+        StructField("other", StructType(Seq(StructField("a", IntegerType))), nullable = true))
+      val prunedSchema = SchemaPruning.pruneSchema(schema, requestedFields.map { f =>
+        SchemaPruning.RootField(field = f, derivedFromAtt = false)
+      })
+      assert(prunedSchema("file_data").dataType === FileType.external)
+      assert(prunedSchema("other").dataType === StructType(Seq(StructField("a", IntegerType))))
+    }
+  }
 }
