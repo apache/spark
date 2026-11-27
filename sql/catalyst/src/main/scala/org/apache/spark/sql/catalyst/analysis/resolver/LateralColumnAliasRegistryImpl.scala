@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import java.util.{ArrayDeque, ArrayList, HashSet}
+import java.util.{ArrayList, HashSet}
 
 import scala.jdk.CollectionConverters._
 
@@ -29,9 +29,9 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 /**
  * [[LateralColumnAliasRegistryImpl]] is a utility class that contains structures required for
  * lateral column alias resolution. Here we store:
- *  - [[currentAttributeDependencyLevelStack]] - Current attribute dependency level in the scope.
- *  Dependency level is defined as a maximum dependency in that attribute's expression tree. For
- *  example, in a query like:
+ *  - [[currentDependencyLevel]] - Current attribute dependency level while resolving a top-level
+ *  alias. Dependency level is defined as the maximum dependency in that attribute's expression
+ *  tree. For example, in a query like:
  *
  *  {{{ SELECT a, b, a + b AS c, a + c AS d}}}
  *
@@ -40,14 +40,10 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  * level 1: c
  * level 2: d
  *
- *  We add a new entry to the stack for each new [[Alias]] resolution. This is needed because we
- *  can have nesting Aliases in the plan, that do not belong to the same LCA scope. For example,
- *  in the following query:
- *
- *  {{{ SELECT STRUCT('alpha' AS A, 'beta' AS B) ST }}}
- *
- *  ST, A and B would be aliases in the same expression tree, but they do not belong in the same
- *  LCA scope.
+ *  Set to [[Some]] only while resolving a top-level alias (direct child of the project/aggregate
+ *  list). Nested aliases (e.g., struct field aliases inside [[CreateNamedStruct]] or inner aliases
+ *  from variant path extraction) share the outer value so that [[getAttribute]] correctly
+ *  accumulates the maximum dependency level across the entire expression tree.
  *
  *  - [[availableAttributes]] - All attributes that can be laterally referenced. This map is
  *  indexed by name, but contains a list of attributes with the same name. This is because it is
@@ -76,7 +72,7 @@ class LateralColumnAliasRegistryImpl extends LateralColumnAliasRegistry with SQL
       aliasKind: AliasKind
   )
 
-  private val currentAttributeDependencyLevelStack: ArrayDeque[Int] = new ArrayDeque[Int]
+  private var currentDependencyLevel: Option[Int] = None
 
   private val availableAttributes = new IdentifierMap[ArrayList[AliasReference]]
 
@@ -84,13 +80,19 @@ class LateralColumnAliasRegistryImpl extends LateralColumnAliasRegistry with SQL
   private val aliasDependencyLevels = new ArrayList[ArrayList[Alias]]
 
   /**
-   * Creates a new LCA resolution scope for each [[Alias]] resolution. Executes the lambda and
-   * registers top-level resolved aliases for later LCA resolution.
+   * Creates an LCA resolution scope for [[Alias]] resolution. Only top-level aliases (those where
+   * [[currentDependencyLevel]] is [[None]] on entry) initialize the dependency level; nested
+   * aliases share the outer value so that [[getAttribute]] accumulates the correct maximum
+   * dependency level. On exit, only top-level aliases reset and register the resolved alias for
+   * later LCA resolution.
    */
   def withNewLcaScope[T <: NamedExpression](
       aliasKind: AliasKind = AliasKind.Explicit)(body: => T): T = {
-    val isTopLevelAlias = currentAttributeDependencyLevelStack.isEmpty
-    currentAttributeDependencyLevelStack.push(0)
+    val isTopLevelAlias = currentDependencyLevel.isEmpty
+
+    if (isTopLevelAlias) {
+      currentDependencyLevel = Some(0)
+    }
 
     try {
       val resolvedExpression = body
@@ -101,7 +103,9 @@ class LateralColumnAliasRegistryImpl extends LateralColumnAliasRegistry with SQL
       }
       resolvedExpression
     } finally {
-      currentAttributeDependencyLevelStack.pop()
+      if (isTopLevelAlias) {
+        currentDependencyLevel = None
+      }
     }
   }
 
@@ -116,14 +120,8 @@ class LateralColumnAliasRegistryImpl extends LateralColumnAliasRegistry with SQL
       case None => None
       case Some(aliasReferenceList: ArrayList[AliasReference]) =>
         val aliasReference = pickAliasReference(aliasReferenceList, attributeName)
-        if (!currentAttributeDependencyLevelStack.isEmpty) {
-          // compute new dependency as a maximum of current dependency and dependency of the
-          // referenced attribute incremented by 1.
-          val maxDependencyLevel = Math.max(
-            currentAttributeDependencyLevelStack.pop(),
-            aliasReference.dependencyLevel + 1
-          )
-          currentAttributeDependencyLevelStack.push(maxDependencyLevel)
+        currentDependencyLevel = currentDependencyLevel.map { current =>
+          Math.max(current, aliasReference.dependencyLevel + 1)
         }
 
         Some(aliasReference.attribute)
@@ -157,11 +155,11 @@ class LateralColumnAliasRegistryImpl extends LateralColumnAliasRegistry with SQL
    * Registers an alias for LCA resolution by adding it to correct dependency level. Additionally,
    * register a reference to the alias for further LCA chaining.
    */
-  private def registerAlias(alias: Alias, aliasKind: AliasKind = AliasKind.Explicit): Unit = {
+  private def registerAlias(alias: Alias, aliasKind: AliasKind): Unit = {
     addAliasDependency(alias)
     registerAttribute(
       attribute = alias.toAttribute,
-      dependencyLevel = currentAttributeDependencyLevelStack.peek(),
+      dependencyLevel = currentDependencyLevel.get,
       aliasKind = aliasKind
     )
   }
@@ -185,8 +183,8 @@ class LateralColumnAliasRegistryImpl extends LateralColumnAliasRegistry with SQL
 
   private def registerAttribute(
       attribute: Attribute,
-      dependencyLevel: Int = 0,
-      aliasKind: AliasKind = AliasKind.Explicit
+      dependencyLevel: Int,
+      aliasKind: AliasKind
   ): Unit = {
     availableAttributes
       .computeIfAbsent(attribute.name, _ => new ArrayList[AliasReference])
@@ -200,13 +198,10 @@ class LateralColumnAliasRegistryImpl extends LateralColumnAliasRegistry with SQL
   }
 
   private def addAliasDependency(alias: Alias): Unit = {
-    val dependencyLevel = currentAttributeDependencyLevelStack.peek()
-    // If targeted dependency level does not exist yet, create it now.
+    val dependencyLevel = currentDependencyLevel.get
     if (aliasDependencyLevels.size() <= dependencyLevel) {
       aliasDependencyLevels.add(new ArrayList[Alias])
     }
-    val dependencyLevelList = aliasDependencyLevels.get(dependencyLevel)
-    dependencyLevelList.add(alias)
-    aliasDependencyLevels.set(dependencyLevel, dependencyLevelList)
+    aliasDependencyLevels.get(dependencyLevel).add(alias)
   }
 }

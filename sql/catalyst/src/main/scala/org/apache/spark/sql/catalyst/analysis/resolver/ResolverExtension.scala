@@ -37,5 +37,5 @@ trait ResolverExtension {
    */
   def resolveOperator(
       operator: LogicalPlan,
-      resolver: TreeNodeResolver[LogicalPlan, LogicalPlan]): Option[LogicalPlan]
+      resolver: LogicalPlanResolver): Option[LogicalPlan]
 }

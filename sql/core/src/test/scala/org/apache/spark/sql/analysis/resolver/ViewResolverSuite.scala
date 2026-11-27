@@ -21,6 +21,7 @@ import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.analysis.resolver.{
+  ExplicitlyUnsupportedResolverFeature,
   MetadataResolver,
   Resolver,
   ResolverRunner
@@ -29,6 +30,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -172,6 +174,27 @@ class ViewResolverSuite extends SharedSparkSession {
           ),
         expectedOptions = new CaseInsensitiveStringMap(options)
       )
+    }
+  }
+
+  test("View IDENTIFIER materializes an unsupported table-valued function") {
+    withSQLConf(SQLConf.PYTHON_WORKER_LOGGING_ENABLED.key -> "true") {
+      withView("v_identifier") {
+        spark.sql(
+          "CREATE VIEW v_identifier AS " +
+            "SELECT * FROM IDENTIFIER(concat('python_worker', '_logs'))()"
+        )
+
+        val exception = intercept[ExplicitlyUnsupportedResolverFeature] {
+          checkViewResolution("SELECT * FROM v_identifier")
+        }
+        assert(
+          exception.getMessage ==
+            "The single-pass analyzer cannot process this query or command because it does not " +
+            "yet support View body is not supported: unsupported table valued function " +
+            "python_worker_logs."
+        )
+      }
     }
   }
 

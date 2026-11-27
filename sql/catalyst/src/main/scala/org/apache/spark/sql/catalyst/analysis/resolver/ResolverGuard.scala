@@ -20,29 +20,42 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 import java.util.Locale
 
 import org.apache.spark.sql.catalyst.{
+  FunctionIdentifier,
   QueryPlanningTracker,
   SQLConfHelper
 }
 import org.apache.spark.sql.catalyst.analysis.{
+  ExpressionWithUnresolvedIdentifier,
+  FakeLocalCatalog,
+  FakeSystemCatalog,
   FunctionRegistry,
   FunctionResolution,
   GetViewColumnByNameAndOrdinal,
   MultiAlias,
   NamedParameter,
+  NameParameterizedQuery,
   OptionalReferences,
+  PlanWithUnresolvedIdentifier,
+  PosParameterizedQuery,
   ResolvedInlineTable,
   Star,
+  TableFunctionRegistry,
   UnresolvedAlias,
   UnresolvedAttribute,
+  UnresolvedDataFrameStar,
   UnresolvedExtractValue,
   UnresolvedFunction,
   UnresolvedHaving,
   UnresolvedInlineTable,
   UnresolvedOrdinal,
+  UnresolvedPipeAggregateOrdinal,
   UnresolvedRelation,
   UnresolvedStarBase,
   UnresolvedStarExceptOrReplace,
-  UnresolvedSubqueryColumnAliases
+  UnresolvedSubqueryColumnAliases,
+  UnresolvedTableValuedFunction,
+  UnresolvedTVFAliases,
+  VariableResolution
 }
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.NamePlaceholder
@@ -53,6 +66,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{
   Last
 }
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, UNRESOLVED_WITH}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
@@ -63,13 +77,28 @@ import org.apache.spark.sql.internal.SQLConf.HiveCaseSensitiveInferenceMode
  * only consists of operators and expressions that are currently supported by the
  * single-pass analyzer.
  *
+ * Queries containing a hint operator whose name is not one of the known built-in hint names
+ * (see [[ResolverGuard.BUILTIN_HINT_NAMES]]) are rejected so they fall back to the fixed-point
+ * analyzer. Unknown hint names may be handled by custom hint resolution rules registered via
+ * [[SparkSessionExtensions.injectHintResolutionRule]], which are placed in the fixed-point
+ * resolution batch and applied iteratively over multiple passes - a pattern that does not fit
+ * the single-pass analyzer's bottom-up resolution model.
+ *
+ * Operators that are not known to the guard are offered to the registered
+ * [[ResolverGuardExtension]]s before they are rejected.
+ *
  * This is a one-shot object and should not be reused after [[apply]] call.
  */
 class ResolverGuard(
     catalogManager: CatalogManager,
+    guardExtensions: Seq[ResolverGuardExtension] = Seq.empty,
     tracker: Option[QueryPlanningTracker] = None
 ) extends SQLConfHelper {
   private val v1SessionCatalog = catalogManager.v1SessionCatalog
+  private lazy val variableResolution = new VariableResolution(
+    tempVariableManager = catalogManager.tempVariableManager,
+    catalogManager = catalogManager
+  )
 
   /**
    * Check the top level operator of the parsed operator.
@@ -79,10 +108,6 @@ class ResolverGuard(
 
     val unsupportedReason = if (unsupportedConf.isDefined) {
       Some(s"configuration: ${unsupportedConf.get}")
-    } else if (!checkTempVariables()) {
-      Some("temp variables")
-    } else if (!checkScriptingVariables()) {
-      Some("scripting variables")
     } else {
       checkOperator(operator)
     }
@@ -123,6 +148,8 @@ class ResolverGuard(
         checkGlobalLimit(globalLimit)
       case localLimit: LocalLimit =>
         checkLocalLimit(localLimit)
+      case limitAll: LimitAll =>
+        checkLimitAll(limitAll)
       case offset: Offset =>
         checkOffset(offset)
       case tail: Tail =>
@@ -133,6 +160,8 @@ class ResolverGuard(
         checkView(view)
       case unresolvedRelation: UnresolvedRelation =>
         checkUnresolvedRelation(unresolvedRelation)
+      case unresolvedCteRelationRef: UnresolvedCteRelationRef =>
+        checkUnresolvedCteRelationRef(unresolvedCteRelationRef)
       case unresolvedInlineTable: UnresolvedInlineTable =>
         checkUnresolvedInlineTable(unresolvedInlineTable)
       case resolvedInlineTable: ResolvedInlineTable =>
@@ -155,15 +184,52 @@ class ResolverGuard(
         checkSort(sort)
       case supervisingCommand: SupervisingCommand =>
         None
+      case setVariable: SetVariable =>
+        checkSetVariable(setVariable)
       case repartition: Repartition =>
         checkRepartition(repartition)
+      case unresolvedHint: UnresolvedHint =>
+        checkUnresolvedHint(unresolvedHint)
+      case resolvedHint: ResolvedHint =>
+        checkResolvedHint(resolvedHint)
       case having: UnresolvedHaving =>
         checkHaving(having)
       case sample: Sample =>
         checkSample(sample)
+      case unresolvedTVF: UnresolvedTableValuedFunction =>
+        checkUnresolvedTableValuedFunction(unresolvedTVF)
+      case unresolvedTVFAliases: UnresolvedTVFAliases =>
+        checkUnresolvedTVFAliases(unresolvedTVFAliases)
+      case nameParameterizedQuery: NameParameterizedQuery =>
+        checkNameParameterizedQuery(nameParameterizedQuery)
+      case posParameterizedQuery: PosParameterizedQuery =>
+        checkPosParameterizedQuery(posParameterizedQuery)
+      case repartitionByExpression: RepartitionByExpression =>
+        checkRepartitionByExpression(repartitionByExpression)
+      case pipeOperator: PipeOperator =>
+        checkPipeOperator(pipeOperator)
+      case pivot: Pivot =>
+        checkPivot(pivot)
+      case unpivot: Unpivot =>
+        checkUnpivot(unpivot)
+      case planWithUnresolvedIdentifier: PlanWithUnresolvedIdentifier =>
+        checkPlanWithUnresolvedIdentifier(planWithUnresolvedIdentifier)
+      case lateralJoin: LateralJoin =>
+        checkLateralJoin(lateralJoin)
+      case unresolvedBinBy: UnresolvedBinBy =>
+        checkBinBy(unresolvedBinBy)
       case _ =>
-        Some(s"${operator.getClass} operator resolution")
+        tryDelegateToGuardExtension(operator)
     }
+  }
+
+  /** Try to delegate the guard check to one of the registered [[ResolverGuardExtension]]s. */
+  private def tryDelegateToGuardExtension(operator: LogicalPlan): Option[String] = {
+    guardExtensions.iterator.map(_.checkOperator(operator, tracker)).collectFirst {
+      case GuardExtensionResult.Supported => None
+      case GuardExtensionResult.NotSupported =>
+        Some(s"${operator.getClass} operator resolution")
+    }.getOrElse(Some(s"${operator.getClass} operator resolution"))
   }
 
   private object CheckOperator {
@@ -194,6 +260,8 @@ class ResolverGuard(
         checkLiteral(literal)
       case unresolvedOrdinal: UnresolvedOrdinal =>
         checkUnresolvedOrdinal(unresolvedOrdinal)
+      case _: UnresolvedPipeAggregateOrdinal =>
+        None
       case unresolvedPredicate: Predicate =>
         checkUnresolvedPredicate(unresolvedPredicate)
       case scalarSubquery: ScalarSubquery =>
@@ -219,12 +287,32 @@ class ResolverGuard(
         checkUnresolvedExtractValue(unresolvedExtractValue)
       case star: Star =>
         checkStar(star)
+      case _: UnresolvedDataFrameStar =>
+        checkPlanIdTaggedReference()
+      case namedArgumentExpression: NamedArgumentExpression =>
+        checkNamedArgumentExpression(namedArgumentExpression)
       case namedParameter: NamedParameter =>
         checkNamedParameter(namedParameter)
       case getStructField: GetStructField =>
         checkGetStructField(getStructField)
+      case getMapValue: GetMapValue =>
+        checkGetMapValue(getMapValue)
+      case _: JsonTable =>
+        Some("JSON_TABLE")
+      case lambdaFunction: LambdaFunction =>
+        checkLambdaFunction(lambdaFunction)
+      case unresolvedNamedLambdaVariable: UnresolvedNamedLambdaVariable =>
+        checkUnresolvedNamedLambdaVariable(unresolvedNamedLambdaVariable)
+      case namedLambdaVariable: NamedLambdaVariable =>
+        checkNamedLambdaVariable(namedLambdaVariable)
       case NamePlaceholder =>
         checkNamePlaceholder()
+      case baseGroupingSets: BaseGroupingSets =>
+        checkBaseGroupingSets(baseGroupingSets)
+      case pipeExpression: PipeExpression =>
+        checkPipeExpression(pipeExpression)
+      case expressionWithUnresolvedIdentifier: ExpressionWithUnresolvedIdentifier =>
+        checkExpressionWithUnresolvedIdentifier(expressionWithUnresolvedIdentifier)
       case expression if isGenerallySupportedExpression(expression) =>
         expression.children.collectFirst { case CheckExpression(reason) => reason }
       case _ =>
@@ -243,14 +331,10 @@ class ResolverGuard(
   }
 
   private def checkUnresolvedWith(unresolvedWith: UnresolvedWith) = {
-    if (unresolvedWith.allowRecursion) {
-      Some("Recursive CTE")
-    } else {
-      unresolvedWith.cteRelations
-        .map(_.plan)
-        .collectFirst { case CheckOperator(reason) => reason }
-        .orElse(checkOperator(unresolvedWith.child))
-    }
+    unresolvedWith.cteRelations
+      .map(_.plan)
+      .collectFirst { case CheckOperator(reason) => reason }
+      .orElse(checkOperator(unresolvedWith.child))
   }
 
   private def checkWithCte(withCte: WithCTE) = {
@@ -282,6 +366,19 @@ class ResolverGuard(
       }
       .orElse {
         join.condition match {
+          case Some(condition) => checkExpression(condition)
+          case None => None
+        }
+      }
+  }
+
+  private def checkLateralJoin(lateralJoin: LateralJoin) = {
+    checkOperator(lateralJoin.left)
+      .orElse {
+        checkOperator(lateralJoin.right.plan)
+      }
+      .orElse {
+        lateralJoin.condition match {
           case Some(condition) => checkExpression(condition)
           case None => None
         }
@@ -350,6 +447,9 @@ class ResolverGuard(
   private def checkLocalLimit(localLimit: LocalLimit) =
     checkOperator(localLimit.child).orElse(checkExpression(localLimit.limitExpr))
 
+  private def checkLimitAll(limitAll: LimitAll) =
+    checkOperator(limitAll.child)
+
   private def checkOffset(offset: Offset) =
     checkOperator(offset.child).orElse(checkExpression(offset.offsetExpr))
 
@@ -373,6 +473,10 @@ class ResolverGuard(
     }
   }
 
+  /** Accepts a resolver-owned CTE reference introduced by [[PlanPreprocessor]]. */
+  private def checkUnresolvedCteRelationRef(
+      unresolvedCteRelationRef: UnresolvedCteRelationRef) = None
+
   private def checkResolvedInlineTable(resolvedInlineTable: ResolvedInlineTable) = {
     resolvedInlineTable.rows.collectFirst { case CheckExpressionSeq(reason) => reason }
   }
@@ -384,11 +488,21 @@ class ResolverGuard(
 
   private def checkRange(range: Range) = None
 
+  /**
+   * [[SetOperationLikeResolver]] always deduplicates [[Union]] child outputs after type coercion,
+   * which matches the fixed-point [[Analyzer]] only when the legacy flags
+   * [[SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED]] and
+   * [[SQLConf.ENFORCE_TYPE_COERCION_BEFORE_UNION_DEDUPLICATION]] are enabled. Otherwise the
+   * fixed-point [[Analyzer]] can keep duplicate expression IDs in the [[Union]] output.
+   */
   private def checkUnion(union: Union) = {
     if (union.byName) {
       Some("union by name")
     } else if (union.allowMissingCol) {
       Some("union allow missing col")
+    } else if (!conf.unionIsResolvedWhenDuplicatesPerChildResolved ||
+      !conf.getConf(SQLConf.ENFORCE_TYPE_COERCION_BEFORE_UNION_DEDUPLICATION)) {
+      Some("legacy union deduplication")
     } else {
       union.children.collectFirst { case CheckOperator(reason) => reason }
     }
@@ -464,9 +578,13 @@ class ResolverGuard(
     case _ => None
   }
 
+  private def checkNamedArgumentExpression(
+      namedArgumentExpression: NamedArgumentExpression) =
+    checkExpression(namedArgumentExpression.value)
+
   /**
-   * Named parameters are not resolved by the single-pass analyzer, so an optional named parameter
-   * marker (`:name?`), which resolves to NULL when it is not bound, is unsupported.
+   * The single-pass analyzer resolves named parameter markers, but not the optional ones
+   * (`:name?`), which resolve to NULL when they are not bound, so those are unsupported.
    */
   private def checkNamedParameter(namedParameter: NamedParameter) = {
     if (OptionalReferences.isOptional(namedParameter)) {
@@ -480,7 +598,32 @@ class ResolverGuard(
     checkExpression(getStructField.child)
   }
 
+  private def checkGetMapValue(getMapValue: GetMapValue) = {
+    getMapValue.children.collectFirst { case CheckExpression(reason) => reason }
+  }
+
+  /**
+   * Optional references in a lambda function body (e.g. `x -> x.b?` or `x -> x + missing?`) are
+   * unsupported: the single-pass analyzer does not resolve them to NULL in lambda functions yet.
+   */
+  private def checkLambdaFunction(lambdaFunction: LambdaFunction) = {
+    if (OptionalReferences.unresolvedOptionalReference(lambdaFunction.function).isDefined) {
+      Some("optional reference in a lambda function")
+    } else {
+      lambdaFunction.children.collectFirst { case CheckExpression(reason) => reason }
+    }
+  }
+
+  private def checkUnresolvedNamedLambdaVariable(
+      unresolvedNamedLambdaVariable: UnresolvedNamedLambdaVariable) = None
+
+  private def checkNamedLambdaVariable(namedLambdaVariable: NamedLambdaVariable) = None
+
   private def checkNamePlaceholder() = None
+
+  private def checkBaseGroupingSets(baseGroupingSets: BaseGroupingSets) = {
+    baseGroupingSets.children.collectFirst { case CheckExpression(reason) => reason }
+  }
 
   private def checkUnresolvedAlias(unresolvedAlias: UnresolvedAlias) =
     checkExpression(unresolvedAlias.child)
@@ -488,7 +631,7 @@ class ResolverGuard(
   /**
    * Checks whether the provided attribute is supported. It's unsupported if:
    *  - Any of its name parts is in the [[ResolverGuard.UNSUPPORTED_ATTRIBUTE_NAMES]] list.
-   *  - It has the `PLAN_ID_TAG` tag.
+   *  - It has the `PLAN_ID_TAG` tag and is not supported by [[checkPlanIdTaggedReference]].
    *  - It has an optional name part while optional reference resolution is disabled.
    */
   private def checkUnresolvedAttribute(unresolvedAttribute: UnresolvedAttribute) = {
@@ -504,7 +647,7 @@ class ResolverGuard(
           s"'${unsupportedName.toLowerCase(Locale.ROOT)}'"
         )
       case None if unresolvedAttribute.containsTag(LogicalPlan.PLAN_ID_TAG) =>
-        Some("PLAN_ID_TAG")
+        checkPlanIdTaggedReference().orElse(checkOptionalReference(unresolvedAttribute))
       case None =>
         checkOptionalReference(unresolvedAttribute)
     }
@@ -520,6 +663,20 @@ class ResolverGuard(
           SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_OPTIONAL_REFERENCE_RESOLUTION
         )) {
       Some("optional reference")
+    } else {
+      None
+    }
+  }
+
+  /**
+   * DataFrame column references carrying `PLAN_ID_TAG` (including `df("*")`) are resolved against
+   * the plan-id targets visible from the current scope, falling back to name resolution when the
+   * target does not produce the column. This matches the fixed-point analyzer only when
+   * [[SQLConf.STRICT_DATAFRAME_COLUMN_RESOLUTION]] is disabled.
+   */
+  private def checkPlanIdTaggedReference(): Option[String] = {
+    if (conf.getConf(SQLConf.STRICT_DATAFRAME_COLUMN_RESOLUTION)) {
+      Some("PLAN_ID_TAG with strict DataFrame column resolution")
     } else {
       None
     }
@@ -607,11 +764,216 @@ class ResolverGuard(
     checkOperator(repartition.child)
   }
 
+  /**
+   * Rejects [[UnresolvedHint]] operators whose name is not one of the known built-in hint names
+   * (see [[ResolverGuard.BUILTIN_HINT_NAMES]]). An unknown hint name may be handled by a custom
+   * hint resolution rule registered via [[SparkSessionExtensions.injectHintResolutionRule]]. Such
+   * rules rely on being placed in the fixed-point resolution batch where they can be applied
+   * repeatedly across multiple resolution passes, which is incompatible with single-pass
+   * bottom-up resolution. When the hint name is unrecognized, the query falls back to the
+   * fixed-point analyzer where any such custom rules can run as designed. The reason is a constant
+   * because the hint name is user text.
+   */
+  private def checkUnresolvedHint(unresolvedHint: UnresolvedHint) = {
+    if (!ResolverGuard.BUILTIN_HINT_NAMES.contains(
+        unresolvedHint.name.toUpperCase(Locale.ROOT))) {
+      Some("user defined hint")
+    } else {
+      checkOperator(unresolvedHint.child)
+        .orElse {
+          unresolvedHint.parameters.collectFirst { case CheckExpression(reason) => reason }
+        }
+    }
+  }
+
+  /**
+   * Checks the child of a [[ResolvedHint]] operator. A [[ResolvedHint]] has already been resolved
+   * (e.g. by a DataFrame program), so there is no hint name left to resolve and no custom hint
+   * resolution rule needs to run; we simply recurse into the child.
+   */
+  private def checkResolvedHint(resolvedHint: ResolvedHint) = {
+    checkOperator(resolvedHint.child)
+  }
+
   private def checkHaving(having: UnresolvedHaving) =
     checkExpression(having.havingCondition).orElse(checkOperator(having.child))
 
   private def checkSample(sample: Sample) = {
     checkOperator(sample.child)
+  }
+
+  private def checkUnresolvedTableValuedFunction(unresolvedTVF: UnresolvedTableValuedFunction) = {
+    if (unresolvedTVF.isStreaming) {
+      Some("streaming table valued function")
+    } else if (unresolvedTVF.name.size != 1) {
+      Some("multi-part table valued function name")
+    } else if (ResolverGuard.UNSUPPORTED_TABLE_VALUED_FUNCTIONS.contains(unresolvedTVF.name.head)) {
+      Some(s"unsupported table valued function ${unresolvedTVF.name.head.toLowerCase(Locale.ROOT)}")
+    } else if (ResolverGuard.GENERATOR_FUNCTION_NAMES.contains(unresolvedTVF.name.head)) {
+      // Generator table-valued functions resolve to a [[Generate]] operator, which is not
+      // supported yet.
+      Some(s"generator table valued function ${unresolvedTVF.name.head.toLowerCase(Locale.ROOT)}")
+    } else if (!isBuiltinTableFunction(unresolvedTVF.name.head)) {
+      Some("UDTF")
+    } else {
+      unresolvedTVF.functionArgs.collectFirst { case CheckExpression(reason) => reason }
+    }
+  }
+
+  private def checkUnresolvedTVFAliases(unresolvedTVFAliases: UnresolvedTVFAliases) = {
+    checkOperator(unresolvedTVFAliases.child)
+  }
+
+  /**
+   * Checks the [[SetVariable]] target variables and source query. Only session and scripting
+   * (local) variables are supported as targets. A source query with CTEs is not supported.
+   */
+  private def checkSetVariable(setVariable: SetVariable): Option[String] = {
+    setVariable.targetVariables.iterator
+      .map(checkSetVariableTarget)
+      .collectFirst { case Some(reason) => reason }
+      .orElse {
+        if (setVariable.sourceQuery.containsAnyPattern(UNRESOLVED_WITH, CTE)) {
+          Some("SET VARIABLE with a CTE source")
+        } else {
+          checkOperator(setVariable.sourceQuery)
+        }
+      }
+  }
+
+  private def checkSetVariableTarget(target: Expression): Option[String] = target match {
+    case unresolvedAttribute: UnresolvedAttribute =>
+      variableResolution
+        .lookupVariable(nameParts = unresolvedAttribute.nameParts)
+        .flatMap { variableReference =>
+          variableReference.catalog match {
+            case FakeLocalCatalog | FakeSystemCatalog =>
+              None
+            case _ =>
+              Some("SET VARIABLE with an unsupported target catalog")
+          }
+        }
+    case _ =>
+      None
+  }
+
+  /**
+   * [[PosParameterizedQuery]] may wrap an unresolved plan with already-bound parameters that
+   * need to be removed during analysis. If the child plan contains [[PosParameter]] nodes
+   * (i.e., unbound positional parameters), the guard will reject the expression and we fall
+   * back to the fixed-point analyzer. Note that when
+   * [[SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY]] is true, positional parameters
+   * are not bound before analysis, so the child plan will contain [[PosParameter]] nodes and
+   * the guard will reject on the expression-level check instead.
+   *
+   * A [[PosParameterizedQuery]] of a statement with optional references is unsupported, because
+   * it must fail with `UNUSED_SQL_PARAMETER_VALUES` when it is given more values than it has
+   * markers, which only the fixed-point [[BindParameters]] rule checks.
+   */
+  private def checkPosParameterizedQuery(posParameterizedQuery: PosParameterizedQuery) = {
+    if (posParameterizedQuery.hasOptionalReferences) {
+      Some("positional parameters with optional references")
+    } else {
+      checkOperator(posParameterizedQuery.child)
+        .orElse {
+          posParameterizedQuery.args.collectFirst { case CheckExpression(reason) => reason }
+        }
+    }
+  }
+
+  private def checkBinBy(unresolvedBinBy: UnresolvedBinBy): Option[String] = {
+    checkOperator(unresolvedBinBy.child)
+      .orElse(checkExpression(unresolvedBinBy.binWidthExpr))
+      .orElse(checkExpression(unresolvedBinBy.rangeStartCol))
+      .orElse(checkExpression(unresolvedBinBy.rangeEndCol))
+      .orElse(unresolvedBinBy.originExpr.flatMap(checkExpression))
+      .orElse(unresolvedBinBy.distributeColumns match {
+        case CheckExpressionSeq(reason) => Some(reason)
+        case _ => None
+      })
+  }
+
+  private def checkNameParameterizedQuery(nameParameterizedQuery: NameParameterizedQuery) = {
+    checkOperator(nameParameterizedQuery.child)
+      .orElse {
+        nameParameterizedQuery.argValues.collectFirst { case CheckExpression(reason) => reason }
+      }
+  }
+
+  private def checkRepartitionByExpression(repartitionByExpression: RepartitionByExpression) = {
+    checkOperator(repartitionByExpression.child)
+      .orElse {
+        repartitionByExpression.partitionExpressions.collectFirst {
+          case CheckExpression(reason) => reason
+        }
+      }
+  }
+
+  private def checkPipeOperator(pipeOperator: PipeOperator) = {
+    checkOperator(pipeOperator.child)
+  }
+
+  private def checkPipeExpression(pipeExpression: PipeExpression) = {
+    checkExpression(pipeExpression.child)
+  }
+
+  private def checkPivot(pivot: Pivot) = {
+    checkOperator(pivot.child)
+      .orElse {
+        checkExpression(pivot.pivotColumn)
+      }
+      .orElse {
+        pivot.pivotValues.collectFirst { case CheckExpression(reason) => reason }
+      }
+      .orElse {
+        pivot.aggregates.collectFirst { case CheckExpression(reason) => reason }
+      }
+      .orElse {
+        pivot.groupByExprsOpt.flatMap { groupByExprs =>
+          groupByExprs.collectFirst { case CheckExpression(reason) => reason }
+        }
+      }
+  }
+
+  private def checkUnpivot(unpivot: Unpivot) = {
+    checkOperator(unpivot.child)
+      .orElse {
+        unpivot.ids.flatMap { ids =>
+          ids.collectFirst { case CheckExpression(reason) => reason }
+        }
+      }
+      .orElse {
+        unpivot.values.flatMap { values =>
+          values.collectFirst { case CheckExpressionSeq(reason) => reason }
+        }
+      }
+  }
+
+  private def checkPlanWithUnresolvedIdentifier(
+      planWithUnresolvedIdentifier: PlanWithUnresolvedIdentifier): Option[String] = {
+    checkExpression(planWithUnresolvedIdentifier.identifierExpr).orElse {
+      planWithUnresolvedIdentifier.children.collectFirst {
+        case CheckOperator(reason) => reason
+      }
+    }
+  }
+
+  /**
+   * An optional reference through a non-literal IDENTIFIER clause (`IDENTIFIER(expr)?`) is
+   * unsupported: the single-pass analyzer does not keep the name of such a reference that
+   * resolves to NULL yet.
+   */
+  private def checkExpressionWithUnresolvedIdentifier(
+      expressionWithUnresolvedIdentifier: ExpressionWithUnresolvedIdentifier): Option[String] = {
+    if (OptionalReferences.isOptional(expressionWithUnresolvedIdentifier)) {
+      Some("optional reference through an IDENTIFIER clause")
+    } else {
+      checkExpression(expressionWithUnresolvedIdentifier.identifierExpr).orElse {
+        expressionWithUnresolvedIdentifier.otherExprs.collectFirst {
+          case CheckExpression(reason) => reason
+        }
+      }
+    }
   }
 
   /**
@@ -681,6 +1043,9 @@ class ResolverGuard(
       // XML
       case _: XmlToStructs | _: SchemaOfXml | _: StructsToXml =>
         true
+      // Complex type creation
+      case _: CreateArray =>
+        true
       // Misc
       case _: SortOrder | _: TaggingExpression =>
         true
@@ -709,18 +1074,9 @@ class ResolverGuard(
     }
   }
 
-  private def checkTempVariables() = {
-    catalogManager.tempVariableManager.isEmpty
-  }
-
-  private def checkScriptingVariables() = {
-    true
-  }
-
   private def isUnsupportedFunction(name: String): Boolean = {
     ResolverGuard.UNSUPPORTED_FUNCTION_NAMES.contains(name) ||
-    ResolverGuard.GENERATOR_FUNCTION_NAMES.contains(name) ||
-    ResolverGuard.HIGHER_ORDER_FUNCTIONS.contains(name)
+    ResolverGuard.GENERATOR_FUNCTION_NAMES.contains(name)
   }
 
   private def isBuiltinFunction(singlePartName: String) = {
@@ -728,6 +1084,14 @@ class ResolverGuard(
       FunctionRegistry.builtinFunctionIdentifier(singlePartName)) && v1SessionCatalog
       .lookupBuiltinOrTempFunction(singlePartName)
       .exists(info => info.getSource == "built-in")
+  }
+
+  private def isBuiltinTableFunction(singlePartName: String): Boolean = {
+    val name = singlePartName.toLowerCase(Locale.ROOT)
+    val onePart = FunctionIdentifier(name)
+    val threePart = FunctionRegistry.builtinFunctionIdentifier(name)
+    TableFunctionRegistry.functionSet.contains(onePart) ||
+      TableFunctionRegistry.functionSet.contains(threePart)
   }
 
   private def tryThrowUnsupportedSinglePassAnalyzerFeature(reason: Option[String]): Unit = {
@@ -753,7 +1117,39 @@ class ResolverGuard(
   }
 }
 
+/**
+ * Creates [[ResolverGuard]]s that share the same configuration. A [[ResolverGuard]] is a one-shot
+ * object, so a fresh instance is created for every check.
+ */
+class ResolverGuardFactory(
+    catalogManager: CatalogManager,
+    resolverExtensions: Seq[ResolverExtension],
+    tracker: Option[QueryPlanningTracker] = None) {
+
+  def create(): ResolverGuard = {
+    ResolverGuard(
+      catalogManager = catalogManager,
+      resolverExtensions = resolverExtensions,
+      tracker = tracker
+    )
+  }
+}
+
 object ResolverGuard {
+
+  /** Creates a guard configured from resolver extensions. */
+  def apply(
+      catalogManager: CatalogManager,
+      resolverExtensions: Seq[ResolverExtension],
+      tracker: Option[QueryPlanningTracker] = None): ResolverGuard = {
+    new ResolverGuard(
+      catalogManager = catalogManager,
+      guardExtensions = resolverExtensions.collect {
+        case extension: ResolverGuardExtension => extension
+      },
+      tracker = tracker
+    )
+  }
 
   private val UNSUPPORTED_ATTRIBUTE_NAMES = {
     val map = new IdentifierMap[Unit]()
@@ -762,11 +1158,6 @@ object ResolverGuard {
     map += ("current_user", ())
     map += ("user", ())
     map += ("session_user", ())
-
-    /**
-     * Metadata column resolution is not supported for now
-     */
-    map += ("_metadata", ())
 
     map
   }
@@ -806,22 +1197,32 @@ object ResolverGuard {
   }
 
   /**
-   * Higher order functions that are not yet supported by the single-pass resolver.
+   * The names of all built-in (non user-defined) SQL query hints that the single-pass analyzer
+   * knows how to resolve, dispatched on by [[HintResolver]]. Names are upper-cased so lookups
+   * must upper-case the candidate name with [[java.util.Locale.ROOT]] before checking membership.
+   * A hint whose name is absent from this set is rejected by [[checkUnresolvedHint]] so the query
+   * falls back to the fixed-point analyzer (where custom hint resolution rules can run). Kept in
+   * alphabetical order.
    */
-  private val HIGHER_ORDER_FUNCTIONS = {
+  val BUILTIN_HINT_NAMES: Set[String] = Set(
+    "BROADCAST",
+    "BROADCASTJOIN",
+    "COALESCE",
+    "MAPJOIN",
+    "MERGE",
+    "MERGEJOIN",
+    "REBALANCE",
+    "REBALANCE_BY_SIZE",
+    "REPARTITION",
+    "REPARTITION_BY_RANGE",
+    "SHUFFLE_HASH",
+    "SHUFFLE_MERGE",
+    "SHUFFLE_REPLICATE_NL"
+  )
+
+  private val UNSUPPORTED_TABLE_VALUED_FUNCTIONS = {
     val map = new IdentifierMap[Unit]()
-    map += ("aggregate", ())
-    map += ("array_sort", ())
-    map += ("exists", ())
-    map += ("filter", ())
-    map += ("forall", ())
-    map += ("map_filter", ())
-    map += ("map_zip_with", ())
-    map += ("reduce", ())
-    map += ("transform", ())
-    map += ("transform_keys", ())
-    map += ("transform_values", ())
-    map += ("zip_with", ())
+    map += ("python_worker_logs", ())
     map
   }
 }

@@ -17,18 +17,34 @@
 
 package org.apache.spark.sql.analysis.resolver
 
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.analysis.{
+  ExpressionWithUnresolvedIdentifier,
+  PlanWithUnresolvedIdentifier,
+  UnresolvedAlias,
+  UnresolvedAttribute,
+  UnresolvedFunction,
+  UnresolvedRelation,
+  UnresolvedStarExceptOrReplace
+}
 import org.apache.spark.sql.catalyst.analysis.resolver.{
-  IdentifierAndCteSubstitutor,
+  PlanPreprocessor,
+  Resolver,
   UnresolvedCteRelationRef
 }
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.test.SharedSparkSession
 
-class IdentifierAndCteSubstitutorSuite extends SharedSparkSession {
+class PlanPreprocessorSuite extends SharedSparkSession {
+  private def createPlanPreprocessor(): PlanPreprocessor = {
+    new PlanPreprocessor(
+      new Resolver(spark.sessionState.catalogManager),
+      resolveExpressionIdentifiersInRootScope = false
+    )
+  }
+
   test("Plan is unchanged") {
-    val substitutor = new IdentifierAndCteSubstitutor
+    val substitutor = createPlanPreprocessor()
 
     withTable("t1") {
       spark.sql("CREATE TABLE t1 (col1 INT) USING PARQUET")
@@ -45,7 +61,7 @@ class IdentifierAndCteSubstitutorSuite extends SharedSparkSession {
   }
 
   test("Plan with CTEs") {
-    val substitutor = new IdentifierAndCteSubstitutor
+    val substitutor = createPlanPreprocessor()
 
     withTable("t2") {
       spark.sql("CREATE TABLE t2 (col1 INT) USING PARQUET")
@@ -81,7 +97,7 @@ class IdentifierAndCteSubstitutorSuite extends SharedSparkSession {
   }
 
   test("Plan with CTEs not on top level") {
-    val substitutor = new IdentifierAndCteSubstitutor
+    val substitutor = createPlanPreprocessor()
 
     withTable("t2") {
       spark.sql("CREATE TABLE t2 (col1 INT) USING PARQUET")
@@ -123,7 +139,7 @@ class IdentifierAndCteSubstitutorSuite extends SharedSparkSession {
   }
 
   test("Plan with CTEs only in CTE definitions") {
-    val substitutor = new IdentifierAndCteSubstitutor
+    val substitutor = createPlanPreprocessor()
 
     withTable("t2") {
       spark.sql("CREATE TABLE t2 (col1 INT) USING PARQUET")
@@ -167,7 +183,7 @@ class IdentifierAndCteSubstitutorSuite extends SharedSparkSession {
   }
 
   test("Plan with CTEs in scalar subquery") {
-    val substitutor = new IdentifierAndCteSubstitutor
+    val substitutor = createPlanPreprocessor()
 
     withTable("t1") {
       spark.sql("CREATE TABLE t1 (col1 INT) USING PARQUET")
@@ -220,7 +236,7 @@ class IdentifierAndCteSubstitutorSuite extends SharedSparkSession {
   }
 
   test("Plan with CTEs in EXISTS subquery") {
-    val substitutor = new IdentifierAndCteSubstitutor
+    val substitutor = createPlanPreprocessor()
 
     withTable("t1") {
       spark.sql("CREATE TABLE t1 (col1 INT) USING PARQUET")
@@ -259,7 +275,7 @@ class IdentifierAndCteSubstitutorSuite extends SharedSparkSession {
   }
 
   test("Plan with CTEs in IN subquery") {
-    val substitutor = new IdentifierAndCteSubstitutor
+    val substitutor = createPlanPreprocessor()
 
     withTable("t1") {
       spark.sql("CREATE TABLE t1 (col1 INT) USING PARQUET")
@@ -298,8 +314,137 @@ class IdentifierAndCteSubstitutorSuite extends SharedSparkSession {
     }
   }
 
+  test("Plan with IDENTIFIER column reference") {
+    val substitutor = createPlanPreprocessor()
+
+    val unresolvedPlan = spark.sessionState.sqlParser.parsePlan(
+      "SELECT IDENTIFIER('c1') FROM VALUES(1) AS T(c1)"
+    )
+
+    val planAfterSubstitution = substitutor.substitutePlan(unresolvedPlan)
+    val projectExpressions = planAfterSubstitution.asInstanceOf[Project].projectList
+    val unresolvedAlias = projectExpressions.head.asInstanceOf[UnresolvedAlias]
+    val unresolvedAttribute = unresolvedAlias.child.asInstanceOf[UnresolvedAttribute]
+
+    assert(unresolvedAttribute.nameParts == Seq("c1"))
+  }
+
+  test("Plan with IDENTIFIER qualified column reference") {
+    val substitutor = createPlanPreprocessor()
+
+    val unresolvedPlan = spark.sessionState.sqlParser.parsePlan(
+      "SELECT IDENTIFIER('t.c1') FROM VALUES(1) AS T(c1)"
+    )
+
+    val planAfterSubstitution = substitutor.substitutePlan(unresolvedPlan)
+    val projectExpressions = planAfterSubstitution.asInstanceOf[Project].projectList
+    val unresolvedAlias = projectExpressions.head.asInstanceOf[UnresolvedAlias]
+    val unresolvedAttribute = unresolvedAlias.child.asInstanceOf[UnresolvedAttribute]
+
+    assert(unresolvedAttribute.nameParts == Seq("t", "c1"))
+  }
+
+  test("Plan with IDENTIFIER table reference") {
+    val substitutor = createPlanPreprocessor()
+
+    val unresolvedPlan = spark.sessionState.sqlParser.parsePlan(
+      "SELECT * FROM IDENTIFIER('t1')"
+    )
+
+    val planAfterSubstitution = substitutor.substitutePlan(unresolvedPlan)
+
+    assert(
+      planAfterSubstitution
+        .children(0)
+        .isInstanceOf[UnresolvedRelation]
+    )
+    assert(
+      planAfterSubstitution
+        .children(0)
+        .asInstanceOf[UnresolvedRelation]
+        .multipartIdentifier == Seq("t1")
+    )
+  }
+
+  test("Plan with IDENTIFIER table reference computed by a builtin function") {
+    val substitutor = createPlanPreprocessor()
+
+    val unresolvedPlan = spark.sessionState.sqlParser.parsePlan(
+      "SELECT * FROM IDENTIFIER(concat('t', '1'))"
+    )
+
+    val planAfterSubstitution = substitutor.substitutePlan(unresolvedPlan)
+    val unresolvedRelation = planAfterSubstitution.children.head.asInstanceOf[UnresolvedRelation]
+
+    assert(unresolvedRelation.multipartIdentifier == Seq("t1"))
+  }
+
+  test("Plan with IDENTIFIER concatenated string") {
+    val substitutor = createPlanPreprocessor()
+
+    val unresolvedPlan = spark.sessionState.sqlParser.parsePlan(
+      "SELECT IDENTIFIER('c' || '1') FROM VALUES(1) AS T(c1)"
+    )
+
+    val planAfterSubstitution = substitutor.substitutePlan(unresolvedPlan)
+    val projectExpressions = planAfterSubstitution.asInstanceOf[Project].projectList
+    val unresolvedAlias = projectExpressions.head.asInstanceOf[UnresolvedAlias]
+    val unresolvedAttribute = unresolvedAlias.child.asInstanceOf[UnresolvedAttribute]
+
+    assert(unresolvedAttribute.nameParts == Seq("c1"))
+  }
+
+  test("Plan with IDENTIFIER function name from a SQL variable") {
+    withSessionVariable("function_name") {
+      spark.sql("DECLARE function_name STRING DEFAULT 'upper'")
+      val unresolvedPlan = spark.sessionState.sqlParser.parsePlan(
+        "SELECT IDENTIFIER(function_name)(c1) FROM VALUES('a') AS T(c1)"
+      )
+
+      val defaultPlan = createPlanPreprocessor().substitutePlan(unresolvedPlan)
+      val defaultAlias =
+        defaultPlan.asInstanceOf[Project].projectList.head.asInstanceOf[UnresolvedAlias]
+
+      assert(defaultAlias.child.isInstanceOf[ExpressionWithUnresolvedIdentifier])
+
+      val rootScopePlan = new PlanPreprocessor(
+        new Resolver(spark.sessionState.catalogManager),
+        resolveExpressionIdentifiersInRootScope = true
+      ).substitutePlan(unresolvedPlan)
+      val rootScopeAlias =
+        rootScopePlan.asInstanceOf[Project].projectList.head.asInstanceOf[UnresolvedAlias]
+      val unresolvedFunction = rootScopeAlias.child.asInstanceOf[UnresolvedFunction]
+
+      assert(unresolvedFunction.nameParts == Seq("upper"))
+      assert(unresolvedFunction.arguments == Seq(UnresolvedAttribute("c1")))
+    }
+  }
+
+  test("Plan with IDENTIFIER and CTEs") {
+    val substitutor = createPlanPreprocessor()
+
+    val unresolvedPlan = spark.sessionState.sqlParser.parsePlan(
+      """
+        |WITH cte1 AS (
+        |  SELECT 1 AS c1
+        |)
+        |SELECT IDENTIFIER('c1') FROM cte1
+        |""".stripMargin
+    )
+
+    val planAfterSubstitution = substitutor.substitutePlan(unresolvedPlan)
+    val unresolvedWith = planAfterSubstitution.asInstanceOf[UnresolvedWith]
+    val project = unresolvedWith.child.asInstanceOf[Project]
+    val projectExpressions = project.projectList
+    val unresolvedAlias = projectExpressions.head.asInstanceOf[UnresolvedAlias]
+    val unresolvedAttribute = unresolvedAlias.child.asInstanceOf[UnresolvedAttribute]
+
+    assert(unresolvedAttribute.nameParts == Seq("c1"))
+    assert(project.children(0).isInstanceOf[UnresolvedCteRelationRef])
+  }
+
   test("Plan with CTEs in LATERAL subquery") {
-    val substitutor = new IdentifierAndCteSubstitutor
+    val substitutor = createPlanPreprocessor()
 
     withTable("t1") {
       spark.sql("CREATE TABLE t1 (col1 INT) USING PARQUET")
@@ -336,5 +481,56 @@ class IdentifierAndCteSubstitutorSuite extends SharedSparkSession {
           .isInstanceOf[UnresolvedRelation]
       )
     }
+  }
+
+  test("IDENTIFIER inside a pipe SET replacement subquery is substituted") {
+    val substitutor = createPlanPreprocessor()
+
+    val unresolvedPlan = spark.sessionState.sqlParser.parsePlan(
+      "TABLE src |> SET value = (SELECT value FROM IDENTIFIER('oth' || 'er') LIMIT 1)"
+    )
+
+    val subqueryPlan = starReplacementSubqueryPlan(substitutor.substitutePlan(unresolvedPlan))
+
+    assert(subqueryPlan.collectFirst { case plan: PlanWithUnresolvedIdentifier => plan }.isEmpty)
+    val relation = subqueryPlan.collectFirst { case relation: UnresolvedRelation => relation }.get
+    assert(relation.multipartIdentifier == Seq("other"))
+  }
+
+  test("CTE name inside a pipe SET replacement subquery is substituted with a CTE reference") {
+    val substitutor = createPlanPreprocessor()
+
+    val unresolvedPlan = spark.sessionState.sqlParser.parsePlan(
+      "WITH other AS (SELECT 'abc' AS value) " +
+        "TABLE src |> SET value = (SELECT value FROM other LIMIT 1)"
+    )
+
+    val subqueryPlan = starReplacementSubqueryPlan(substitutor.substitutePlan(unresolvedPlan))
+
+    assert(subqueryPlan.collectFirst { case relation: UnresolvedRelation => relation }.isEmpty)
+    val cteReference =
+      subqueryPlan.collectFirst { case reference: UnresolvedCteRelationRef => reference }.get
+    assert(cteReference.name == "other")
+  }
+
+  /**
+   * Returns the plan of the (single) subquery nested in the replacement expressions of the
+   * [[UnresolvedStarExceptOrReplace]] carried by `plan` (e.g. the pipe `|> SET` target subquery).
+   */
+  private def starReplacementSubqueryPlan(plan: LogicalPlan): LogicalPlan = {
+    val star = plan
+      .collectFirst {
+        case operator
+            if operator.expressions.exists(
+              _.exists(_.isInstanceOf[UnresolvedStarExceptOrReplace])) =>
+          operator.expressions
+            .flatMap(_.collect { case star: UnresolvedStarExceptOrReplace => star })
+            .head
+      }
+      .get
+    star.replacements.get.head
+      .collectFirst { case subquery: SubqueryExpression => subquery }
+      .get
+      .plan
   }
 }

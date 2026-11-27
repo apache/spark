@@ -41,8 +41,7 @@ class LateralColumnAliasProhibitedRegistry extends LateralColumnAliasRegistry {
   def markAttributeLaterallyReferenced(attribute: Attribute): Unit =
     throwLcaResolutionNotEnabled()
 
-  def isAttributeLaterallyReferenced(attribute: Attribute): Boolean =
-    throwLcaResolutionNotEnabled()
+  def isAttributeLaterallyReferenced(attribute: Attribute): Boolean = false
 
   def getAllLaterallyReferencedAttributes: Seq[Attribute] =
     throwLcaResolutionNotEnabled()

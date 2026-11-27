@@ -43,7 +43,15 @@ class ResolutionValidatorSuite extends SparkFunSuite with SQLConfHelper {
     // See [[Resolver.resolveInlineTable]] scaladoc for more info.
     "resolveResolvedInlineTable",
     // [[UnresolvedSubqueryColumnAliases]] turns into a [[Project]]
-    "resolveSubqueryColumnAliases"
+    "resolveSubqueryColumnAliases",
+    // [[UnresolvedTVFAliases]] turns into a [[Project]]
+    "resolveUnresolvedTVFAliases",
+    // [[LimitAll]] is removed from the plan
+    "resolveLimitAll",
+    // These resolve expressions for extensions and [[PlanPreprocessor]] and do not produce an
+    // operator
+    "resolveExpressionTreeInOperator",
+    "resolveIdentifierExpressionRoot"
   )
 
   private val colInteger = AttributeReference(name = "colInteger", dataType = IntegerType)()

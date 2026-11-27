@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.catalyst.analysis.resolver.UnresolvedCteRelationRef
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, BaseEvalPython, CTERelationRef, Filter, Join, LimitAll, LogicalPlan, Offset, Project, SubqueryAlias, Union, Window}
 import org.apache.spark.sql.catalyst.rules.Rule
 
@@ -35,15 +36,25 @@ object ApplyLimitAll extends Rule[LogicalPlan] {
         applyLimitAllToPlan(la.child, isInLimitAll = true)
       case cteRef: CTERelationRef if isInLimitAll =>
         cteRef.copy(isUnlimitedRecursion = true)
-      // Allow-list for pushing down Limit All.
-      case _: Project | _: Filter | _: Join | _: Union | _: Offset |
-           _: BaseEvalPython | _: Aggregate | _: Window | _: SubqueryAlias =>
+      case _ if propagatesLimitAll(plan) =>
         plan.withNewChildren(plan.children
           .map(child => applyLimitAllToPlan(child, isInLimitAll)))
       case other =>
         other.withNewChildren(plan.children
           .map(child => applyLimitAllToPlan(child, isInLimitAll = false)))
     }
+  }
+
+  /**
+   * Allow-list of operators that push Limit All down to their children. Shared with the
+   * single-pass resolver, which also sees [[UnresolvedCteRelationRef]]s.
+   */
+  def propagatesLimitAll(plan: LogicalPlan): Boolean = plan match {
+    case _: Project | _: Filter | _: Join | _: Union | _: Offset | _: BaseEvalPython |
+        _: Aggregate | _: Window | _: SubqueryAlias | _: UnresolvedCteRelationRef =>
+      true
+    case _ =>
+      false
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = {

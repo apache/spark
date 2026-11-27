@@ -22,7 +22,7 @@ import java.util.{HashMap, HashSet}
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, ExprId, NamedExpression}
-import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Join, LateralJoin, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.util._
 
 trait RetainsOriginalJoinOutput {
@@ -110,11 +110,17 @@ trait RetainsOriginalJoinOutput {
    * column and will therefore place k#27 in the [[Project]] node below outer [[Join]]. This is
    * important, because by [[AddMetadataColumns]] logic, we don't check whether the output of the
    * outer [[Join]] has changed, and we only check the output change for top-most [[Project]].
-   * Because we need to stay fully compatible with fixed-point, in this case w don't place a
+   * Because we need to stay fully compatible with fixed-point, in this case we don't place a
    * [[Project]] on top of the outer [[Join]] even though its output has changed.
    *
    * The above example also holds true for cases when there is a [[Project]], [[Aggregate]] or
    * [[Filter]] node on top of a [[Join]].
+   *
+   * The same handling applies to [[LateralJoin]]: a metadata column added below it can change its
+   * output, so when a parent [[Project]]/[[Aggregate]]/[[Filter]] resolver invokes this method on a
+   * [[LateralJoin]] child, we place a [[Project]] with the original output on top for the same
+   * fixed-point compatibility reason. This is driven by the parent resolver (as for [[Join]]), not
+   * by [[LateralJoinResolver]] itself.
    */
   def retainOriginalJoinOutput(
       plan: LogicalPlan,
@@ -128,9 +134,27 @@ trait RetainsOriginalJoinOutput {
             outputExpressions = outputExpressions,
             referencedAttributes = childReferencedAttributes
           ) =>
-        Project(scopes.current.output, join)
+        projectOriginalJoinOutput(join = join, scopes = scopes)
+      case lateralJoin: LateralJoin
+          if childHasMissingAttributesNotInOutput(
+            scopes = scopes,
+            outputExpressions = outputExpressions,
+            referencedAttributes = childReferencedAttributes
+          ) =>
+        projectOriginalJoinOutput(join = lateralJoin, scopes = scopes)
       case other => other
     }
+  }
+
+  /**
+   * Places a [[Project]] with [[NameScope.output]] on top of `join`. The [[Project]] doesn't output
+   * any qualified access only attributes from hidden output, so this clears
+   * [[NameScope.qualifiedAccessOnlyOutputIds]].
+   */
+  private def projectOriginalJoinOutput(join: LogicalPlan, scopes: NameScopeStack): Project = {
+    val project = Project(scopes.current.output, join)
+    scopes.overwriteCurrent(qualifiedAccessOnlyOutputIds = Some(new HashSet[ExprId]))
+    project
   }
 
   /**

@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.{
   ResolvedStar,
   RoutedSqlJsonStarOwner,
   Star,
+  UnresolvedDataFrameStar,
   UnresolvedFunction,
   UnresolvedStar
 }
@@ -57,10 +58,8 @@ trait FunctionResolverUtils {
    */
   protected def handleStarInArguments(
       unresolvedFunction: UnresolvedFunction): UnresolvedFunction = {
-    val functionContainsDirectStarInArguments = unresolvedFunction.arguments.exists {
-      case _: Star => true
-      case _ => false
-    }
+    val functionContainsDirectStarInArguments =
+      unresolvedFunction.arguments.exists(ExpressionResolver.isStarLike)
 
     // Distinct-agnostic probe for the builtin `count`. Lazy so only the count(*)/count(tbl.*) paths
     // pay for the (possibly external) lookup; reused by the rewrite and the single-table guard.
@@ -98,7 +97,8 @@ trait FunctionResolverUtils {
    * Check if the given unresolved function has one `*` as argument. Usually used to detect cases
    * where `count(*)` should be replaced with `count(1)`.
    *
-   * Returns True for [[ResolvedStar]] and [[UnresolvedStar]] without specified target.
+   * Returns True for [[ResolvedStar]], [[UnresolvedStar]] without specified target, and
+   * [[UnresolvedDataFrameStar]] (`df("*")`).
    *
    * Note that it's False even for other implementation of [[Star]] trait, for example
    * [[UnresolvedStarExceptOrReplace]] (`* except ...`) or [[UnresolvedStar]] with specified
@@ -108,11 +108,12 @@ trait FunctionResolverUtils {
     unresolvedFunction.arguments match {
       case Seq(UnresolvedStar(None)) => true
       case Seq(_: ResolvedStar) => true
+      case Seq(_: UnresolvedDataFrameStar) => true
       case _ => false
     }
 
   private def extractStar(expressions: Seq[Expression]): Seq[Star] =
-    expressions.collect { case s: Star => s }
+    expressions.filter(ExpressionResolver.isStarLike).map(ExpressionResolver.asStarForError)
 
   /**
    * Method used to replace the `count(*)` function with `count(1)` function. Resolution of the

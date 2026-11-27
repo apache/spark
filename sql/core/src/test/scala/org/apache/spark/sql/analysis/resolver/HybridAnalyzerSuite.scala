@@ -17,19 +17,22 @@
 
 package org.apache.spark.sql.analysis.resolver
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.{
   AnalysisContext,
   Analyzer,
+  PlanWithUnresolvedIdentifier,
   UnresolvedAttribute,
   UnresolvedStar
 }
 import org.apache.spark.sql.catalyst.analysis.resolver._
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Literal}
 import org.apache.spark.sql.catalyst.plans.NormalizePlan
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -42,7 +45,7 @@ import org.apache.spark.sql.types.{IntegerType, MetadataBuilder}
 /**
  * Base trait for HybridAnalyzer test suites containing common test utilities and helper classes.
  */
-trait HybridAnalyzerSuiteBase extends SharedSparkSession {
+trait HybridAnalyzerSuiteBase extends QueryTest with SharedSparkSession {
   protected val col1Integer = AttributeReference("col1", IntegerType)()
   protected val col2Integer = AttributeReference("col2", IntegerType)()
   protected val col2IntegerWithMetadata = AttributeReference(
@@ -89,19 +92,29 @@ trait HybridAnalyzerSuiteBase extends SharedSparkSession {
     }
   }
 
-  protected class BrokenResolverGuard(catalogManager: CatalogManager)
-      extends ResolverGuard(catalogManager) {
-    override def apply(plan: LogicalPlan): ResolverGuardResult = {
-      throw new Exception("Broken resolver guard")
+  protected class BrokenResolverGuardFactory(catalogManager: CatalogManager)
+      extends ResolverGuardFactory(
+        catalogManager = catalogManager,
+        resolverExtensions = Seq.empty
+      ) {
+    override def create(): ResolverGuard = new ResolverGuard(catalogManager) {
+      override def apply(plan: LogicalPlan): ResolverGuardResult = {
+        throw new Exception("Broken resolver guard")
+      }
     }
   }
 
-  protected class RestrictiveResolverGuard(
+  protected class RestrictiveResolverGuardFactory(
       catalogManager: CatalogManager,
       reason: String = "test restriction")
-      extends ResolverGuard(catalogManager) {
-    override def apply(plan: LogicalPlan): ResolverGuardResult = {
-      ResolverGuardResult(Some(reason))
+      extends ResolverGuardFactory(
+        catalogManager = catalogManager,
+        resolverExtensions = Seq.empty
+      ) {
+    override def create(): ResolverGuard = new ResolverGuard(catalogManager) {
+      override def apply(plan: LogicalPlan): ResolverGuardResult = {
+        ResolverGuardResult(Some(reason))
+      }
     }
   }
 
@@ -152,12 +165,12 @@ trait HybridAnalyzerSuiteBase extends SharedSparkSession {
 
   protected class HybridAnalyzerWithBrokenPlanNormalization(
       legacyAnalyzer: Analyzer,
-      resolverGuard: ResolverGuard,
+      resolverGuard: ResolverGuardFactory,
       resolver: Resolver,
       tracker: QueryPlanningTracker)
       extends HybridAnalyzer(
         legacyAnalyzer = legacyAnalyzer,
-        resolverGuard = resolverGuard,
+        resolverGuardFactory = resolverGuard,
         resolver = resolver,
         tracker = tracker
       ) {
@@ -199,7 +212,7 @@ class HybridAnalyzerSuite extends HybridAnalyzerSuiteBase {
     assertPlansEqual(
       new HybridAnalyzer(
         new ValidatingAnalyzer(bridgeRelations = true),
-        new ResolverGuard(spark.sessionState.catalogManager),
+        new ResolverGuardFactory(spark.sessionState.catalogManager, Seq.empty),
         new ValidatingResolver(bridgeRelations = true),
         tracker
       ).apply(unresolvedPlan),
@@ -212,7 +225,7 @@ class HybridAnalyzerSuite extends HybridAnalyzerSuiteBase {
     val error = intercept[ExtendedAnalysisException](
       new HybridAnalyzer(
         new ValidatingAnalyzer(bridgeRelations = true),
-        new ResolverGuard(spark.sessionState.catalogManager),
+        new ResolverGuardFactory(spark.sessionState.catalogManager, Seq.empty),
         new BrokenResolver(
           QueryCompilationErrors.unsupportedSinglePassAnalyzerFeature("test"),
           bridgeRelations = true
@@ -239,7 +252,7 @@ class HybridAnalyzerSuite extends HybridAnalyzerSuiteBase {
     val error = intercept[ExtendedAnalysisException](
       new HybridAnalyzer(
         new ValidatingAnalyzer(bridgeRelations = true),
-        new ResolverGuard(spark.sessionState.catalogManager),
+        new ResolverGuardFactory(spark.sessionState.catalogManager, Seq.empty),
         new BrokenResolver(
           new StackOverflowError("Stack Overflow"),
           bridgeRelations = true
@@ -263,7 +276,7 @@ class HybridAnalyzerSuite extends HybridAnalyzerSuiteBase {
       exception = intercept[AnalysisException](
         new HybridAnalyzer(
           new ValidatingAnalyzer(bridgeRelations = true),
-          new ResolverGuard(spark.sessionState.catalogManager),
+          new ResolverGuardFactory(spark.sessionState.catalogManager, Seq.empty),
             new HardCodedResolver(resolvedPlan, bridgeRelations = true),
           tracker
         ).apply(malformedUnresolvedPlan)
@@ -279,7 +292,7 @@ class HybridAnalyzerSuite extends HybridAnalyzerSuiteBase {
       exception = intercept[ExtendedAnalysisException](
         new HybridAnalyzer(
           new ValidatingAnalyzer(bridgeRelations = true),
-          new ResolverGuard(spark.sessionState.catalogManager),
+          new ResolverGuardFactory(spark.sessionState.catalogManager, Seq.empty),
             new ValidatingResolver(bridgeRelations = true),
           tracker
         ).apply(malformedUnresolvedPlan)
@@ -308,7 +321,7 @@ class HybridAnalyzerSuite extends HybridAnalyzerSuiteBase {
       exception = intercept[AnalysisException](
         new HybridAnalyzer(
           new ValidatingAnalyzer(bridgeRelations = true),
-          new ResolverGuard(spark.sessionState.catalogManager),
+          new ResolverGuardFactory(spark.sessionState.catalogManager, Seq.empty),
             new HardCodedResolver(resolvedPlan, bridgeRelations = true),
           tracker
         ).apply(plan)
@@ -326,7 +339,7 @@ class HybridAnalyzerSuite extends HybridAnalyzerSuiteBase {
     intercept[Exception] {
       new HybridAnalyzerWithBrokenPlanNormalization(
         new ValidatingAnalyzer(bridgeRelations = true),
-        new ResolverGuard(spark.sessionState.catalogManager),
+        new ResolverGuardFactory(spark.sessionState.catalogManager, Seq.empty),
         new HardCodedResolver(resolvedPlan, bridgeRelations = true),
         tracker
       ).apply(unresolvedPlan)
@@ -338,7 +351,7 @@ class HybridAnalyzerSuite extends HybridAnalyzerSuiteBase {
     intercept[Exception] {
       new HybridAnalyzer(
         new ValidatingAnalyzer(bridgeRelations = true),
-        new BrokenResolverGuard(spark.sessionState.catalogManager),
+        new BrokenResolverGuardFactory(spark.sessionState.catalogManager),
         new HardCodedResolver(resolvedPlan, bridgeRelations = true),
         tracker
       ).apply(unresolvedPlan)
@@ -353,7 +366,7 @@ class HybridAnalyzerSuite extends HybridAnalyzerSuiteBase {
       assertPlansEqual(
         new HybridAnalyzer(
           new ValidatingAnalyzer(bridgeRelations = false),
-          new BrokenResolverGuard(spark.sessionState.catalogManager),
+          new BrokenResolverGuardFactory(spark.sessionState.catalogManager),
             new HardCodedResolver(resolvedPlan, bridgeRelations = false),
           tracker
         ).apply(unresolvedPlan),
@@ -367,15 +380,105 @@ class HybridAnalyzerSuite extends HybridAnalyzerSuiteBase {
     assertPlansEqual(
       new HybridAnalyzer(
         new ValidatingAnalyzer(bridgeRelations = true),
-        new ResolverGuard(spark.sessionState.catalogManager),
+        new ResolverGuardFactory(spark.sessionState.catalogManager, Seq.empty),
         new BrokenResolver(
-          new ExplicitlyUnsupportedResolverFeature("FAILURE"),
+          new ExplicitlyUnsupportedResolverFeature(ResolutionGap.ViewBody),
           bridgeRelations = true
         ),
         tracker
       ).apply(unresolvedPlan),
       resolvedPlan
     )
+  }
+
+  testDualRun("IDENTIFIER plans are guarded before and after preprocessing") {
+    val guardedPlans = new ArrayBuffer[LogicalPlan]
+    var planBuilderApplications = 0
+    val resolverGuardFactory =
+      new ResolverGuardFactory(spark.sessionState.catalogManager, Seq.empty) {
+        override def create(): ResolverGuard =
+          new ResolverGuard(spark.sessionState.catalogManager) {
+            override def apply(plan: LogicalPlan): ResolverGuardResult = {
+              guardedPlans += plan
+              super.apply(plan)
+            }
+          }
+      }
+    val identifierPlan = new PlanWithUnresolvedIdentifier(
+      Literal("ignored"),
+      _ => {
+        planBuilderApplications += 1
+        Project(
+          Seq(UnresolvedStar(None)),
+          LocalRelation(col1Integer)
+        )
+      }
+    )
+    assertPlansEqual(
+      new HybridAnalyzer(
+        new ValidatingAnalyzer(bridgeRelations = true),
+        resolverGuardFactory,
+        new ValidatingResolver(bridgeRelations = true),
+        new QueryPlanningTracker
+      ).apply(identifierPlan),
+      resolvedPlan
+    )
+
+    assert(guardedPlans.size == 2)
+    assert(guardedPlans.head.exists(_.isInstanceOf[PlanWithUnresolvedIdentifier]))
+    assert(!guardedPlans.last.exists(_.isInstanceOf[PlanWithUnresolvedIdentifier]))
+    // Once for the post-preprocessing guard check, once for each analyzer.
+    assert(planBuilderApplications == 3)
+  }
+
+  testDualRun("IDENTIFIER preprocessing failures fall back") {
+    val queryExecution = spark.sessionState.executePlan(
+      spark.sessionState.sqlParser.parsePlan("SELECT * FROM IDENTIFIER((SELECT 't'))")
+    )
+    checkError(
+      exception = intercept[ExtendedAnalysisException] {
+        queryExecution.analyzed
+      },
+      condition = "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+      parameters = Map("name" -> "IDENTIFIER", "expr" -> "scalarsubquery()"),
+      queryContext = Array(
+        ExpectedContext(
+          objectType = "",
+          objectName = "",
+          startIndex = 25,
+          stopIndex = 36,
+          fragment = "(SELECT 't')"
+        )
+      )
+    )
+  }
+
+  testDualRun("Nested view post-preprocessing rejection returns the fixed-point result") {
+    withSQLConf(SQLConf.PYTHON_WORKER_LOGGING_ENABLED.key -> "true") {
+      withView("v_identifier_guard") {
+        withSQLConf(
+          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false"
+        ) {
+          spark.sql(
+            "CREATE VIEW v_identifier_guard AS " +
+              "SELECT * FROM IDENTIFIER(concat('python_worker', '_logs'))()"
+          )
+        }
+
+        // Dual run returns the single-pass result when both analyzers agree, so the marker is
+        // only missing if single-pass rejected the view body.
+        withSQLConf(SQLConf.ANALYZER_DUAL_RUN_RETURN_SINGLE_PASS_RESULT.key -> "true") {
+          val query = spark.sql("SELECT * FROM v_identifier_guard")
+          checkAnswer(query, Seq.empty)
+          assert(
+            query.queryExecution.analyzed
+              .getTagValue(ResolverRunner.SINGLE_PASS_ANALYSIS_MARKER)
+              .isEmpty
+          )
+        }
+      }
+    }
   }
 
   test("Fixed-point only run") {
@@ -395,7 +498,7 @@ class HybridAnalyzerSuite extends HybridAnalyzerSuiteBase {
       ) {
         new HybridAnalyzer(
           new ValidatingAnalyzer(bridgeRelations = false),
-          new ResolverGuard(spark.sessionState.catalogManager),
+          new ResolverGuardFactory(spark.sessionState.catalogManager, Seq.empty),
             new BrokenResolver(
             new Exception("Single-pass resolver should not be invoked"),
             bridgeRelations = false
@@ -428,7 +531,7 @@ class HybridAnalyzerSuite extends HybridAnalyzerSuiteBase {
             new Exception("Fixed-point analyzer should not be invoked"),
             bridgeRelations = false
           ),
-          new ResolverGuard(spark.sessionState.catalogManager),
+          new ResolverGuardFactory(spark.sessionState.catalogManager, Seq.empty),
             new ValidatingResolver(bridgeRelations = false),
           tracker
         ).apply(plan)
@@ -460,7 +563,7 @@ class HybridAnalyzerSuite extends HybridAnalyzerSuiteBase {
               new Exception("Fixed-point analyzer should not be invoked"),
               bridgeRelations = false
             ),
-            new ResolverGuard(spark.sessionState.catalogManager),
+            new ResolverGuardFactory(spark.sessionState.catalogManager, Seq.empty),
                 new ValidatingResolver(bridgeRelations = false),
             nestedTracker
           ).apply(plan)
@@ -476,7 +579,7 @@ class HybridAnalyzerSuite extends HybridAnalyzerSuiteBase {
           customCode = () => { nestedAnalysis() },
           bridgeRelations = true
         ),
-        new ResolverGuard(spark.sessionState.catalogManager),
+        new ResolverGuardFactory(spark.sessionState.catalogManager, Seq.empty),
         new ValidatingResolver(bridgeRelations = true),
         tracker
       ).apply(plan),
@@ -501,7 +604,10 @@ class HybridAnalyzerSuite extends HybridAnalyzerSuiteBase {
     intercept[Exception] {
       new HybridAnalyzer(
         legacyAnalyzer = new ValidatingAnalyzer(bridgeRelations = true),
-        resolverGuard = new ResolverGuard(spark.sessionState.catalogManager),
+        resolverGuardFactory = new ResolverGuardFactory(
+          spark.sessionState.catalogManager,
+          Seq.empty
+        ),
         resolver = new ValidatingResolver(bridgeRelations = true),
         tracker = tracker1,
         extendedResolutionChecks = Seq(new BrokenCheckRule)
@@ -515,7 +621,10 @@ class HybridAnalyzerSuite extends HybridAnalyzerSuiteBase {
       assertPlansEqual(
         new HybridAnalyzer(
           legacyAnalyzer = new ValidatingAnalyzer(bridgeRelations = true),
-          resolverGuard = new ResolverGuard(spark.sessionState.catalogManager),
+          resolverGuardFactory = new ResolverGuardFactory(
+            spark.sessionState.catalogManager,
+            Seq.empty
+          ),
           resolver = new ValidatingResolver(bridgeRelations = true),
           tracker = tracker2,
           extendedResolutionChecks = Seq(new BrokenCheckRule)
@@ -538,7 +647,10 @@ class HybridAnalyzerSuite extends HybridAnalyzerSuiteBase {
     assertPlansEqual(
       new HybridAnalyzer(
         legacyAnalyzer = new ValidatingAnalyzer(bridgeRelations = true),
-        resolverGuard = new ResolverGuard(spark.sessionState.catalogManager),
+        resolverGuardFactory = new ResolverGuardFactory(
+          spark.sessionState.catalogManager,
+          Seq.empty
+        ),
         resolver = new ValidatingResolver(bridgeRelations = true),
         tracker = tracker,
         extendedResolutionChecks = Seq(singlePassCounterCheckRule)
@@ -573,7 +685,10 @@ class HybridAnalyzerSuite extends HybridAnalyzerSuiteBase {
             new Exception("Fixed-point analyzer should not be invoked"),
             bridgeRelations = false
           ),
-          resolverGuard = new ResolverGuard(spark.sessionState.catalogManager),
+          resolverGuardFactory = new ResolverGuardFactory(
+            spark.sessionState.catalogManager,
+            Seq.empty
+          ),
           resolver = new ValidatingResolver(bridgeRelations = false),
           tracker = tracker,
           extendedResolutionChecks = Seq(counterCheckRule)

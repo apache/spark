@@ -20,17 +20,21 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 import java.util.HashSet
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.analysis.{withPosition, AnalysisErrorAt}
+import org.apache.spark.sql.catalyst.analysis.AnalysisErrorAt
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, ExprId}
 import org.apache.spark.sql.catalyst.plans.{
+  Cross,
   ExistenceJoin,
   FullOuter,
+  Inner,
   JoinType,
   LeftAnti,
   LeftOuter,
   LeftSemi,
   LeftSingle,
-  RightOuter
+  NaturalJoin,
+  RightOuter,
+  UsingJoin
 }
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
@@ -72,6 +76,7 @@ trait JoinLikeResolver extends SQLConfHelper with QueryErrorsBase {
   protected val expressionResolver: ExpressionResolver
 
   protected def scopes: NameScopeStack = resolver.getNameScopes
+  protected def queryBlockScopes: QueryBlockScopeStack = resolver.getQueryBlockScopes
   protected def cteRegistry: CteRegistry = resolver.getCteRegistry
   protected def operatorResolutionContextStack: OperatorResolutionContextStack =
     resolver.getOperatorResolutionContextStack
@@ -79,15 +84,44 @@ trait JoinLikeResolver extends SQLConfHelper with QueryErrorsBase {
     expressionResolver.getExpressionIdAssigner
 
   /**
+   * Determines whether recursive CTE self-references are allowed on the left and right sides of a
+   * join. [[UsingJoin]] and [[NaturalJoin]] are classified by their base join type. Returns a
+   * tuple (allowLeft, allowRight).
+   *
+   * Rules:
+   *  - Inner/Cross: Both sides allow recursive references
+   *  - LeftOuter/LeftSemi/LeftAnti: Left allows, right disallows
+   *  - RightOuter: Left disallows, right allows
+   *  - FullOuter/other: Both sides disallow
+   */
+  protected def getRecursiveCteAllowance(joinType: JoinType): (Boolean, Boolean) = {
+    val baseJoinType = joinType match {
+      case UsingJoin(baseJoinType, _) => baseJoinType
+      case NaturalJoin(baseJoinType) => baseJoinType
+      case baseJoinType => baseJoinType
+    }
+
+    baseJoinType match {
+      case Inner | Cross => (true, true)
+      case LeftOuter | LeftSemi | LeftAnti => (true, false)
+      case RightOuter => (false, true)
+      case FullOuter | _ => (false, false)
+    }
+  }
+
+  /**
    * Resolves a single join child in the context of a) new [[NameScope]] b) new
    * [[ExpressionIdAssigner]] mapping c) new [[CteScope]] for the multi-child operator. Returns the
    * resolved child together with its [[NameScope]], which the caller uses to compute the join
-   * output.
+   * output. If `shouldDisallowRecursiveCtes` is set, self references in the child's CTE scope are
+   * rejected (see [[ResolveWithCTE.checkIfSelfReferenceIsPlacedCorrectly]]).
    */
   protected def resolveJoinChild(
       unresolvedOperator: LogicalPlan,
-      child: LogicalPlan): (LogicalPlan, NameScope) = {
+      child: LogicalPlan,
+      shouldDisallowRecursiveCtes: Boolean): (LogicalPlan, NameScope) = {
     expressionIdAssigner.pushMapping()
+    queryBlockScopes.push()
     scopes.pushScope()
     cteRegistry.pushScopeForMultiChildOperator(
       unresolvedOperator = unresolvedOperator,
@@ -96,10 +130,14 @@ trait JoinLikeResolver extends SQLConfHelper with QueryErrorsBase {
 
     try {
       val resolvedChild = resolver.resolve(child)
+      if (shouldDisallowRecursiveCtes) {
+        cteRegistry.currentScope.failIfScopeHasSelfReference()
+      }
       (resolvedChild, scopes.current)
     } finally {
       cteRegistry.popScope()
       scopes.popScope()
+      queryBlockScopes.pop()
       expressionIdAssigner.popMapping(collectChildMapping = true)
     }
   }
@@ -130,24 +168,30 @@ trait JoinLikeResolver extends SQLConfHelper with QueryErrorsBase {
    * original children outputs, whereas the join output will either not contain all attributes or
    * their nullabilities will be different.
    *
-   * `collectInvalidExpressions` controls whether unsupported expressions (aggregate / window /
-   * generator, etc.) found in the just-resolved condition are thrown immediately as
-   * `UNSUPPORTED_EXPR_FOR_OPERATOR`. [[JoinResolver]] leaves this off and relies on the generic
-   * post-resolution check in [[Resolver.validateResolvedOperatorGenerically]], which inspects
-   * [[ExpressionResolver.getLastInvalidExpressionsInTheContextOfOperator]] once, after the last
-   * expression tree of the operator is resolved. Callers that resolve further expression trees
-   * after the condition must turn this on, or those later trees overwrite the "last invalid
-   * expressions" snapshot before the generic check runs.
+   * The merged [[PlanIdTargetRegistry]] is built fresh from the two child registries rather than
+   * mutating either of them, so a caller that resolves more than one condition against the same
+   * child scopes (e.g. [[AsOfJoinResolver]], which resolves the ON condition and then a USING
+   * condition) does not merge the child targets twice, which would make a right-child plan-id
+   * reference spuriously ambiguous.
+   *
+   * Example: `df1.joinAsOf(df2, leftAsOf = df1("t"), rightAsOf = df2("t"),
+   * usingColumns = Seq("id"), ...)` resolves the ON condition and then the USING condition
+   * against the same `df1`/`df2` scopes. Building fresh merges each child once, so the right-child
+   * reference `df2("t")` stays unambiguous; mutating a child registry would merge `df2`'s targets
+   * in twice and raise a spurious `AMBIGUOUS_COLUMN_REFERENCE`.
    */
   protected def resolveJoinCondition(
       unresolvedJoin: LogicalPlan,
       unresolvedCondition: Option[Expression],
       leftNameScope: NameScope,
-      rightNameScope: NameScope,
-      collectInvalidExpressions: Boolean = false): Option[Expression] = {
+      rightNameScope: NameScope): Option[Expression] = {
+    val planIdTargetRegistry = new PlanIdTargetRegistry
+    planIdTargetRegistry.merge(leftNameScope.planIdTargetRegistry)
+    planIdTargetRegistry.merge(rightNameScope.planIdTargetRegistry)
     scopes.overwriteCurrent(
       output = Some(leftNameScope.output ++ rightNameScope.output),
-      hiddenOutput = Some(leftNameScope.hiddenOutput ++ rightNameScope.hiddenOutput)
+      hiddenOutput = Some(leftNameScope.hiddenOutput ++ rightNameScope.hiddenOutput),
+      planIdTargetRegistry = Some(planIdTargetRegistry)
     )
 
     val resolvedCondition = unresolvedCondition.map { condition =>
@@ -158,19 +202,6 @@ trait JoinLikeResolver extends SQLConfHelper with QueryErrorsBase {
     }
 
     validateJoinConditionDataType(resolvedCondition, unresolvedJoin)
-
-    if (collectInvalidExpressions) {
-      val invalidExpressions =
-        expressionResolver.getLastInvalidExpressionsInTheContextOfOperator
-      if (invalidExpressions.nonEmpty) {
-        withPosition(unresolvedJoin) {
-          resolver.throwUnsupportedExprForOperator(
-            operator = unresolvedJoin,
-            invalidExpressions = invalidExpressions
-          )
-        }
-      }
-    }
 
     resolvedCondition
   }
@@ -232,6 +263,99 @@ trait JoinLikeResolver extends SQLConfHelper with QueryErrorsBase {
     }
 
     mainOutput ++ filteredExtraHiddenOutput ++ filteredOldHiddenOutput
+  }
+
+  /**
+   * Returns the [[NameScope.qualifiedAccessOnlyOutputIds]] of the [[Project]] that a NATURAL or
+   * USING join places on top of itself: the ids of the attributes returned by
+   * [[computeQualifiedAccessOnlyColumnsForJoinProject]]. The set is empty for the top-level
+   * operator, whose [[Project]] doesn't append qualified access only attributes.
+   */
+  protected def computeQualifiedAccessOnlyOutputIdsForJoinProject(
+      unresolvedJoin: LogicalPlan,
+      hiddenOutput: Seq[Attribute],
+      joinType: JoinType,
+      leftNameScope: NameScope,
+      rightNameScope: NameScope): HashSet[ExprId] = {
+    val qualifiedAccessOnlyOutputIds = new HashSet[ExprId]
+    if (!unresolvedJoin.containsTag(ResolverTag.TOP_LEVEL_OPERATOR)) {
+      computeQualifiedAccessOnlyColumnsForJoinProject(
+        hiddenOutput = hiddenOutput,
+        joinType = joinType,
+        leftNameScope = leftNameScope,
+        rightNameScope = rightNameScope
+      ).foreach { attribute =>
+        qualifiedAccessOnlyOutputIds.add(attribute.exprId)
+      }
+    }
+    qualifiedAccessOnlyOutputIds
+  }
+
+  /**
+   * Returns the qualified access only attributes from `hiddenOutput` that the join outputs, i.e.
+   * that its left or right child outputs according to [[NameScope.isOperatorOutput]]. A left
+   * existence join outputs only its left child. For example, `key#2` is dropped because
+   * `|> SELECT key` keeps it only in its hidden output:
+   *
+   * {{{
+   * FROM t1 JOIN t2 USING (key) |> SELECT key |> JOIN t3 USING (key) |> WHERE key IS NOT NULL;
+   *
+   * Filter isnotnull(key#1)
+   * +- Project [key#1, key#3]
+   *    +- Join Inner, (key#1 = key#3)
+   *       :- Project [key#1]
+   *       :  +- Project [key#1, key#2]
+   *       :     +- Join Inner, (key#1 = key#2)
+   *       :        :- Relation t1[key#1]
+   *       :        +- Relation t2[key#2]
+   *       +- Relation t3[key#3]
+   * }}}
+   */
+  protected def computeQualifiedAccessOnlyColumnsForJoinProject(
+      hiddenOutput: Seq[Attribute],
+      joinType: JoinType,
+      leftNameScope: NameScope,
+      rightNameScope: NameScope): Seq[Attribute] = {
+    val joinOutputsRightChild = outputsRightChild(joinType)
+    hiddenOutput.filter { attribute =>
+      attribute.qualifiedAccessOnly && (
+        leftNameScope.isOperatorOutput(attribute.exprId) ||
+        (joinOutputsRightChild && rightNameScope.isOperatorOutput(attribute.exprId))
+      )
+    }
+  }
+
+  /**
+   * Returns the [[NameScope.qualifiedAccessOnlyOutputIds]] of a join that doesn't place a
+   * [[Project]] on top of itself: the ones of both children, or only the ones of the left child
+   * for a left existence join. The children sets are reused when possible, since they are never
+   * mutated.
+   */
+  protected def computeQualifiedAccessOnlyOutputIdsForJoin(
+      joinType: JoinType,
+      leftNameScope: NameScope,
+      rightNameScope: NameScope): HashSet[ExprId] = {
+    val leftIds = leftNameScope.qualifiedAccessOnlyOutputIds
+    val rightIds = rightNameScope.qualifiedAccessOnlyOutputIds
+    if (!outputsRightChild(joinType) || rightIds.isEmpty) {
+      leftIds
+    } else if (leftIds.isEmpty) {
+      rightIds
+    } else {
+      val qualifiedAccessOnlyOutputIds = new HashSet[ExprId](leftIds.size + rightIds.size)
+      qualifiedAccessOnlyOutputIds.addAll(leftIds)
+      qualifiedAccessOnlyOutputIds.addAll(rightIds)
+      qualifiedAccessOnlyOutputIds
+    }
+  }
+
+  /**
+   * Returns whether a join of `joinType` outputs the attributes of its right child, like
+   * [[org.apache.spark.sql.catalyst.plans.logical.Join.computeOutput]].
+   */
+  private def outputsRightChild(joinType: JoinType): Boolean = joinType match {
+    case _: ExistenceJoin | LeftSemi | LeftAnti => false
+    case _ => true
   }
 
   /**

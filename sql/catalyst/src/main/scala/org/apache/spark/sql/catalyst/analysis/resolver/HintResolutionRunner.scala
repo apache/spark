@@ -87,8 +87,8 @@ class HintResolutionRunner(hintResolutionRules: Seq[Rule[LogicalPlan]])
    * subquery plans that exist afterwards, including subqueries the rules just created. No rules
    * are injected by default, in which case the plan is returned as is and the [[RuleExecutor]] is
    * never constructed (`hintResolver` is lazy). That also skips the "Disable Hints" batch, which
-   * only matters for plans that still carry an [[UnresolvedHint]] - a shape the single-pass
-   * Resolver does not support in the first place.
+   * is fine because [[HintResolver]] applies `spark.sql.optimizer.disableHints` itself when it
+   * resolves the remaining [[UnresolvedHint]]s.
    *
    * The recursion needs [[AnalysisHelper.allowInvokingTransformsInAnalyzer]] to rewrite the inner
    * plans, so the rules are invoked within its scope, like the rewrite rules in [[PlanRewriter]].
