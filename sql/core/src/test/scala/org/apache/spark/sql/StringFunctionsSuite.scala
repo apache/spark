@@ -1112,6 +1112,21 @@ class StringFunctionsSuite extends SharedSparkSession {
     }
   }
 
+  test("to_char: cached results are not reused for a different formatZeroAsBlank value") {
+    val query = "SELECT to_char(id, '999') AS s FROM range(1)"
+    withSQLConf(SQLConf.LEGACY_TO_CHAR_FORMAT_ZERO_AS_BLANK.key -> "false") {
+      val cached = spark.sql(query).cache()
+      try {
+        checkAnswer(cached, Row("  0"))
+        withSQLConf(SQLConf.LEGACY_TO_CHAR_FORMAT_ZERO_AS_BLANK.key -> "true") {
+          checkAnswer(spark.sql(query), Row("   "))
+        }
+      } finally {
+        cached.unpersist(blocking = true)
+      }
+    }
+  }
+
   test("to_number") {
     val df = Seq("$78.12").toDF("a")
     checkAnswer(
@@ -1562,6 +1577,63 @@ class StringFunctionsSuite extends SharedSparkSession {
         sql("SELECT split(s, '-')[size(split(s, '-')) - 1] FROM t"),
         Seq(Row("b"), Row(null))
       )
+    }
+  }
+
+  test("SPARK-59043: SimplifyCaseConversionExpressions preserves Unicode semantics") {
+    val excludedConf = "org.apache.spark.sql.catalyst.optimizer.SimplifyCaseConversionExpressions"
+    Seq(true, false).foreach { optimizerEnabled =>
+      val confModifier = if (optimizerEnabled) {
+        Map.empty[String, String]
+      } else {
+        Map(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> excludedConf)
+      }
+
+      withSQLConf(confModifier.toSeq: _*) {
+        // scalastyle:off
+        // non ascii characters are not allowed in the code, so we disable the scalastyle here.
+        // 1. Turkish dotless i (U+0131 LATIN SMALL LETTER DOTLESS I)
+        checkAnswer(
+          sql("SELECT lower(upper('ı')) AS result"),
+          Row("i") :: Nil
+        )
+        checkAnswer(
+          sql("SELECT lower(upper(s)) FROM (VALUES ('ı')) AS t(s)"),
+          Row("i") :: Nil
+        )
+        checkAnswer(
+          sql(
+            """SELECT lower(upper(s2)) AS result
+              |FROM (VALUES ('ı')) AS t(s)
+              |LATERAL VIEW explode(array(s)) e AS s2""".stripMargin),
+          Row("i") :: Nil
+        )
+
+        // 2. Micro sign (U+00B5 MICRO SIGN)
+        checkAnswer(
+          sql("SELECT lower(upper('µ')) AS result"),
+          Row("μ") :: Nil
+        )
+
+        // 3. German Sharp S (U+00DF LATIN SMALL LETTER SHARP S)
+        checkAnswer(
+          sql("SELECT lower(upper('ß')) AS result"),
+          Row("ss") :: Nil
+        )
+
+        // 4. Kelvin Sign (U+212A KELVIN SIGN)
+        checkAnswer(
+          sql("SELECT upper(lower('K')) AS result"),
+          Row("K") :: Nil
+        )
+        // scalastyle:on
+
+        // 5. Verify same-case idempotent operations still simplify
+        checkAnswer(
+          sql("SELECT upper(upper('abc')), lower(lower('XYZ'))"),
+          Row("ABC", "xyz") :: Nil
+        )
+      }
     }
   }
 }

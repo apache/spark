@@ -361,6 +361,8 @@ public class VectorFunctionImplUtils {
   /**
    * Computes the infinity norm (maximum absolute value) of a float vector, in double precision.
    * Returns NULL if the vector contains NULL elements.
+   * Returns NaN if the vector contains NaN elements, following the convention of max and
+   * array_max that NaN compares as larger than any other value.
    * Returns 0.0 for empty vectors.
    */
   public static Double vectorInfNorm(ArrayData vec) {
@@ -370,18 +372,18 @@ public class VectorFunctionImplUtils {
       return 0.0d;
     }
 
-    float maxAbs = 0.0f;
+    // Math.max is used rather than a comparison against the running maximum: every comparison
+    // involving NaN is false, so a hand-rolled maximum would skip NaN elements and report the
+    // largest of the remaining ones instead of propagating the NaN.
+    double maxAbs = 0.0d;
     for (int i = 0; i < len; i++) {
       if (vec.isNullAt(i)) {
         return null;
       }
-      float absVal = Math.abs(vec.getFloat(i));
-      if (absVal > maxAbs) {
-        maxAbs = absVal;
-      }
+      maxAbs = Math.max(maxAbs, Math.abs((double) vec.getFloat(i)));
     }
 
-    return (double) maxAbs;
+    return maxAbs;
   }
 
   /**

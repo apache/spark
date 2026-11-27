@@ -22,12 +22,12 @@ import org.mockito.Mockito.mock
 import org.apache.spark.sql.catalyst.analysis.ResolvedNamespace
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeMap, AttributeReference, Literal, SortOrder}
-import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeMap, AttributeReference, Cast, Literal, SortOrder}
+import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, Inner, LeftSingle, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BooleanType, ByteType, IntegerType, LongType}
+import org.apache.spark.sql.types.{BooleanType, ByteType, CharType, IntegerType, LongType, StringType, VarcharType}
 import org.apache.spark.util.ArrayImplicits._
 
 class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
@@ -218,6 +218,13 @@ test("range with invalid long value") {
     checkStats(offset, plan.stats.copy(attributeStats = AttributeMap(Nil)))
   }
 
+  test("SPARK-61558: offset estimation: child's rowCount is unknown") {
+    val childStats = Statistics(sizeInBytes = 120)
+    val offset = Offset(Literal(2), DummyLogicalPlan(childStats, childStats))
+    // The number of skipped rows is unknown, so the child's size is used as an upper bound.
+    checkStats(offset, childStats)
+  }
+
   test("limit estimation: limit < child's rowCount") {
     val localLimit = LocalLimit(Literal(2), plan)
     val globalLimit = GlobalLimit(Literal(2), plan)
@@ -376,6 +383,65 @@ test("range with invalid long value") {
       join,
       expectedStatsCboOn = Statistics(4871880, Some(tableRowCnt), join.stats.attributeStats),
       expectedStatsCboOff = Statistics(sizeInBytes = 4059900 * 2))
+  }
+
+  test("SPARK-60830: a side unique on a CHAR/VARCHAR key stays unique through a cast to STRING") {
+    // A comparison of a first-class CHAR or VARCHAR column with a STRING casts it to STRING. The
+    // size-only estimate of a join with a side unique on its keys is the sum of the sides.
+    val s = AttributeReference("s", StringType)()
+    val strings = StatsTestPlan(outputList = Seq(s), rowCount = 100, size = Some(1000),
+      attributeStats = AttributeMap(Nil))
+    def sizeOnly(join: Join): BigInt = withSQLConf(SQLConf.CBO_ENABLED.key -> "false") {
+      join.invalidateStatsCache()
+      join.stats.sizeInBytes
+    }
+    // The unique side on the right, then on the left.
+    def sizesOnly(key: Attribute, unique: LogicalPlan): Seq[BigInt] = Seq(
+      sizeOnly(Join(strings, unique, Inner, Some(s === Cast(key, StringType)), JoinHint.NONE)),
+      sizeOnly(Join(unique, strings, Inner, Some(Cast(key, StringType) === s), JoinHint.NONE)))
+    Seq(CharType(5), VarcharType(5)).foreach { dt =>
+      val k = AttributeReference("k", dt)()
+      val unique = StatsTestPlan(outputList = Seq(k), rowCount = 10, size = Some(100),
+        attributeStats = AttributeMap(Nil)).groupBy(k)(k)
+      assert(sizesOnly(k, unique) == Seq.fill(2)(1000 + unique.stats.sizeInBytes), dt)
+    }
+    // A cast of a column of another type is not stripped: the size is the product.
+    val i = attr("i")
+    val uniqueInts = StatsTestPlan(outputList = Seq(i), rowCount = 10, size = Some(100),
+      attributeStats = AttributeMap(Nil)).groupBy(i)(i)
+    assert(sizesOnly(i, uniqueInts) == Seq.fill(2)(1000 * uniqueInts.stats.sizeInBytes))
+  }
+
+  test("SPARK-61534: an existence join is estimated from its left side") {
+    // It outputs each of the 10 rows of `left` once, with a boolean column added. The size of
+    // `left` is twice its row count times its row width, so a size computed from the row count
+    // and the column stats, as `JoinEstimation` computes it for a left semi join, would be half.
+    val left = plan.copy(size = Some(2 * 10 * (8 + 4)))
+    val otherKey = attr("other")
+    val other = StatsTestPlan(outputList = Seq(otherKey), rowCount = 1000,
+      attributeStats = AttributeMap(Seq(otherKey -> colStat)), size = Some(1000 * (8 + 4)))
+    val exists = AttributeReference("exists", BooleanType, nullable = false)()
+    val join = Join(left, other, ExistenceJoin(exists), Some(attribute === otherKey),
+      JoinHint.NONE)
+    checkStats(join, Statistics(
+      sizeInBytes = 2 * 10 * (8 + 4 + 1),
+      rowCount = Some(10),
+      attributeStats = AttributeMap(Seq(attribute -> colStat))))
+  }
+
+  test("SPARK-61891: a left single join is estimated from its left side") {
+    // It outputs each of the 10 rows of `left` once, with the column of `other` added. The size
+    // of `left` is twice its row count times its row width, so a size computed from the row count
+    // and the column stats, as `JoinEstimation` computes it for a left semi join, would be half.
+    val left = plan.copy(size = Some(2 * 10 * (8 + 4)))
+    val otherKey = attr("other")
+    val other = StatsTestPlan(outputList = Seq(otherKey), rowCount = 1000,
+      attributeStats = AttributeMap(Seq(otherKey -> colStat)), size = Some(1000 * (8 + 4)))
+    val join = Join(left, other, LeftSingle, Some(attribute === otherKey), JoinHint.NONE)
+    checkStats(join, Statistics(
+      sizeInBytes = 2 * 10 * (8 + 4 + 4),
+      rowCount = Some(10),
+      attributeStats = AttributeMap(Seq(attribute -> colStat))))
   }
 
   test("row size and column stats estimation for sort") {

@@ -382,6 +382,16 @@ class PostgresIntegrationSuite extends SharedJDBCIntegrationSuite {
     assert(sql("select c1, c3 from queryOption").collect().toSet == expectedResult)
   }
 
+  test("SPARK-59336: do not classify missing table as a syntax error") {
+    val postgresError = intercept[SQLException] {
+      spark.read.format("jdbc")
+        .option("url", jdbcUrl)
+        .option("query", "SELECT * FROM table_that_does_not_exist")
+        .load()
+    }
+    assertResult("42P01")(postgresError.getSQLState)
+  }
+
   test("write byte as smallint") {
     spark.createDataFrame(Seq((1.toByte, 2.toShort)))
       .write.jdbc(jdbcUrl, "byte_to_smallint_test", new Properties)

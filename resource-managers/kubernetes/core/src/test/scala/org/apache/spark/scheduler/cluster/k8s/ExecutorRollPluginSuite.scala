@@ -240,6 +240,14 @@ class ExecutorRollPluginSuite extends SparkFunSuite with PrivateMethodTester {
       _choose(list, ExecutorRollPolicy.TOTAL_SHUFFLE_WRITE)).contains("14"))
   }
 
+  test("SPARK-59851: Policy: ACTIVE_TASKS") {
+    assert(plugin.invokePrivate(_choose(list, ExecutorRollPolicy.ACTIVE_TASKS)).contains("7"))
+    // All remaining executors have the same number of active tasks.
+    // The executor with the smallest add-time is chosen.
+    assert(plugin.invokePrivate(
+      _choose(list.filter(_.id != "7"), ExecutorRollPolicy.ACTIVE_TASKS)).contains("2"))
+  }
+
   test("Policy: OUTLIER - Work like TOTAL_DURATION if there is no outlier") {
     assert(
       plugin.invokePrivate(_choose(list, ExecutorRollPolicy.TOTAL_DURATION)) ==

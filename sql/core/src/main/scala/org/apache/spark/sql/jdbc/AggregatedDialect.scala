@@ -20,7 +20,7 @@ package org.apache.spark.sql.jdbc
 import java.sql.{Connection, SQLException}
 
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
-import org.apache.spark.sql.types.{DataType, MetadataBuilder}
+import org.apache.spark.sql.types.{DataType, MetadataBuilder, NumericType}
 
 /**
  * AggregatedDialect can unify multiple dialects into one virtual Dialect.
@@ -46,6 +46,18 @@ private class AggregatedDialect(dialects: List[JdbcDialect])
     dialects.flatMap(_.getJDBCType(dt)).headOption
   }
 
+  override def timestampNTZAsWallClock: Boolean = dialects.exists(_.timestampNTZAsWallClock)
+
+  // Truncating explicitly is harmless where the cast already truncates, so any dialect that
+  // truncates explicitly wins.
+  override def truncateFractionalValue(expr: String, from: NumericType): Option[String] = {
+    val values = dialects.flatMap(_.truncateFractionalValue(expr, from))
+    values.find(_ != expr).orElse(values.headOption)
+  }
+
+  override def castsDatetimeToNumericLikeSpark: Boolean =
+    dialects.exists(_.castsDatetimeToNumericLikeSpark)
+
   override def quoteIdentifier(colName: String): String = {
     dialects.head.quoteIdentifier(colName)
   }
@@ -60,6 +72,10 @@ private class AggregatedDialect(dialects: List[JdbcDialect])
 
   override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
     dialects.head.isSyntaxErrorBestEffort(exception)
+  }
+
+  override def isPermissionDeniedException(e: SQLException): Boolean = {
+    dialects.exists(_.isPermissionDeniedException(e))
   }
 
   override def isCascadingTruncateTable(): Option[Boolean] = {

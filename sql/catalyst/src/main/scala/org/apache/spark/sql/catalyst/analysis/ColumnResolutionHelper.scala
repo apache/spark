@@ -55,10 +55,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       (exprs, plan)
     } else {
       plan match {
-        // For `Distinct` and `SubqueryAlias` and `PipeOperator`, we can't recursively resolve and
-        // add attributes via its children.
-        case u: UnaryNode if !u.isInstanceOf[Distinct] && !u.isInstanceOf[SubqueryAlias]
-          && !u.isInstanceOf[PipeOperator] =>
+        case u: UnaryNode if ColumnResolutionHelper.canAddMissingAttrsThrough(u) =>
           val (newExprs, newChild) = {
             // Resolving expressions against current plan.
             val maybeResolvedExprs = exprs.map(resolveExpressionByPlanOutput(_, u))
@@ -111,7 +108,8 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
    */
   private def resolveExpression(
       expr: Expression,
-      resolveColumnByName: Seq[String] => Option[Expression],
+      // Resolves a multipart name, given the indices of its optional name parts.
+      resolveColumnByName: (Seq[String], Set[Int]) => Option[Expression],
       getAttrCandidates: () => Seq[Attribute],
       throws: Boolean,
       includeLastResort: Boolean): Expression = {
@@ -150,12 +148,18 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
           // When strict DataFrame column resolution is disabled, we also allow name-based
           // resolution as a fallback for tagged attributes.
           val result = withPosition(u) {
+            // A missing optional field is only NULL here if the error of the same name without
+            // `?` is final. Otherwise another resolution step can still resolve the name, e.g. as
+            // a column from below the SELECT list in ORDER BY, and `ResolveOptionalReferences`
+            // decides if none does.
+            val optionalNamePartIndices =
+              if (throws) OptionalReferences.optionalNamePartIndices(u) else Set.empty[Int]
             // A parameterless built-in function takes precedence over a SQL UDF parameter
             // that happens to share its name (per the documented SQL name resolution rules).
             // Real columns from relations -- which don't carry the
             // SQL_FUNCTION_PARAMETER_ALIAS_METADATA_KEY -- continue to win as before.
             // Gated by a legacy kill-switch conf so the pre-fix behavior can be restored.
-            val column = resolveColumnByName(nameParts)
+            val column = resolveColumnByName(nameParts, optionalNamePartIndices)
             val resolved = column match {
               case Some(c) if isSQLFunctionParameterAlias(c) && !conf.getConf(
                   SQLConf.LEGACY_ALLOW_UDF_PARAMETER_TO_SHADOW_PARAMETERLESS_FUNCTION) =>
@@ -181,35 +185,33 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
         // but failed. If we still can't resolve it, we should keep it as `TempResolvedColumn`,
         // so that it won't become a fresh `TempResolvedColumn` again.
         case t: TempResolvedColumn if t.hasTried => withPosition(t) {
-          innerResolve(UnresolvedAttribute(t.nameParts), isTopLevel) match {
+          val rebuilt =
+            OptionalReferences.withOptionalNamePartsOf(UnresolvedAttribute(t.nameParts), t)
+          innerResolve(rebuilt, isTopLevel) match {
             case _: UnresolvedAttribute => t
             case other => other
           }
         }
 
-        case u @ UnresolvedExtractValue(child, field) =>
-          val newChild = innerResolve(child, isTopLevel = false)
-          val resolvedField = if (conf.getConf(SQLConf.PREFER_COLUMN_OVER_LCA_IN_ARRAY_INDEX)) {
-            innerResolve(field, isTopLevel = false)
-          } else {
-            field
+        case u: UnresolvedExtractValue =>
+          resolveExtractValue(u, isLastResort = false, isTopLevel = isTopLevel)
+
+        // The missing optional field of a last-resort extraction is NULL in the first step that
+        // resolves its child, see `LastResortExtractValue`. Until then, it stays wrapped.
+        case LastResortExtractValue(u) =>
+          resolveExtractValue(u, isLastResort = true, isTopLevel = isTopLevel) match {
+            case unresolved: UnresolvedExtractValue => LastResortExtractValue(unresolved)
+            case other => other
           }
-          if (newChild.resolved) {
-            // applyOrNull propagates NULL when the base is NullType instead of throwing
-            // INVALID_EXTRACT_BASE_FIELD_TYPE, consistent with multipart field access (col.a).
-            val extracted = ExtractValue.applyOrNull(
-              child = newChild, extraction = resolvedField, resolver = resolver)
-            // A NullType base yields a bare NULL literal, which would otherwise produce an output
-            // column named `NULL`. Alias it with the extraction's text (e.g. `col[0]`) to keep a
-            // stable column name; CleanupAliases later trims this alias where it's not a top-level
-            // projection output.
-            if (newChild.dataType == NullType) {
-              Alias(extracted, toPrettySQL(u.copy(child = newChild, extraction = resolvedField)))()
-            } else {
-              extracted
-            }
-          } else {
-            u.copy(child = newChild, extraction = resolvedField)
+
+        // An unaliased SELECT item is named after its child, so an extraction that is the whole
+        // item is resolved as a top-level one, see `resolveExtractValue`.
+        case alias: UnresolvedAlias if isTopLevel =>
+          alias.mapChildren {
+            case extraction @ (_: UnresolvedExtractValue | _: LastResortExtractValue) =>
+              innerResolve(extraction, isTopLevel = true)
+            case child =>
+              innerResolve(child, isTopLevel = false)
           }
 
         // Default value expression can not reference real columns,
@@ -221,6 +223,64 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
         case _ => e.mapChildren(innerResolve(_, isTopLevel = false))
       }
       resolved.copyTagsFrom(e)
+      resolved
+    }
+
+    /**
+     * Resolves the extraction `u`. Like the NULL of a missing optional name, the NULL of a missing
+     * optional field keeps the name of the extraction only at the top level (`isTopLevel`), so
+     * that `coalesce(items[0].price?, 0)` is named `coalesce(NULL, 0)`, as `coalesce(s.price?, 0)`
+     * is.
+     */
+    def resolveExtractValue(
+        u: UnresolvedExtractValue,
+        isLastResort: Boolean,
+        isTopLevel: Boolean): Expression = {
+      val newChild = innerResolve(u.child, isTopLevel = false)
+      val resolvedField = if (conf.getConf(SQLConf.PREFER_COLUMN_OVER_LCA_IN_ARRAY_INDEX)) {
+        innerResolve(u.extraction, isTopLevel = false)
+      } else {
+        u.extraction
+      }
+      // Like a missing optional field of a name, see above.
+      val missingOptionalFieldAliasName = if (throws || isLastResort) {
+        OptionalReferences.missingOptionalFieldAliasName(
+          unresolvedExtractValue = u,
+          child = newChild,
+          extraction = resolvedField,
+          resolver = resolver)
+      } else {
+        None
+      }
+      val resolved = if (missingOptionalFieldAliasName.isDefined) {
+        val nullReference = OptionalReferences.nullReference()
+        if (isTopLevel) {
+          OptionalReferences.implicitAlias(nullReference, missingOptionalFieldAliasName.get)
+        } else {
+          nullReference
+        }
+      } else if (newChild.resolved) {
+        // applyOrNull propagates NULL when the base is NullType instead of throwing
+        // INVALID_EXTRACT_BASE_FIELD_TYPE, consistent with multipart field access (col.a).
+        val extracted = ExtractValue.applyOrNull(
+          child = newChild, extraction = resolvedField, resolver = resolver)
+        // A NullType base yields a bare NULL literal, which would otherwise produce an output
+        // column named `NULL`. Alias it with the extraction's text (e.g. `col[0]`) to keep a
+        // stable column name; CleanupAliases later trims this alias where it's not a top-level
+        // projection output.
+        if (newChild.dataType == NullType) {
+          Alias(
+            OptionalReferences.extractedFromNullReference(newChild, extracted),
+            toPrettySQL(u.copy(child = newChild, extraction = resolvedField)))()
+        } else {
+          extracted
+        }
+      } else {
+        u.copy(child = newChild, extraction = resolvedField)
+      }
+      // The wrapper of a last-resort extraction has no tags of its own, so the ones of the
+      // extraction are copied here rather than by `innerResolve`.
+      resolved.copyTagsFrom(u)
       resolved
     }
 
@@ -251,20 +311,18 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     if (outerPlan.isEmpty) return e
 
     def resolve(nameParts: Seq[String]): Option[Expression] = try {
+      val resolved = ColumnResolutionHelper.outerReferenceSources(outerPlan.get).iterator
+        .flatMap(_.resolveChildren(nameParts, conf.resolver))
+        .nextOption()
       outerPlan.get match {
-        // Subqueries in UnresolvedHaving can host grouping expressions and aggregate functions.
-        // We should resolve columns with `agg.output` and the rule `ResolveAggregateFunctions` will
-        // push them down to Aggregate later. This is similar to what we do in `resolveColumns`.
-        case u @ UnresolvedHaving(_, agg: Aggregate) =>
-          agg.resolveChildren(nameParts, conf.resolver)
-            .orElse(u.resolveChildren(nameParts, conf.resolver))
-            .map {
-              case alias: Alias =>
-                wrapOuterReference(alias.child)
-              case other => wrapOuterReference(other)
-            }
-        case other =>
-          other.resolveChildren(nameParts, conf.resolver).map(wrapOuterReference)
+        case UnresolvedHaving(_, _: Aggregate) =>
+          resolved.map {
+            case alias: Alias =>
+              wrapOuterReference(alias.child)
+            case other => wrapOuterReference(other)
+          }
+        case _ =>
+          resolved.map(wrapOuterReference)
       }
     } catch {
       case ae: AnalysisException =>
@@ -288,12 +346,15 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     val variableResolution =
       new VariableResolution(catalogManager.tempVariableManager, catalogManager)
 
-    def resolve(nameParts: Seq[String]): Option[Expression] = {
+    def resolve(
+        nameParts: Seq[String],
+        optionalNamePartIndices: Set[Int] = Set.empty): Option[Expression] = {
       variableResolution.resolveMultipartName(
         nameParts = nameParts,
         resolvingView = AnalysisContext.get.catalogAndNamespace.nonEmpty,
-        referredTempVariableNames = AnalysisContext.get.referredTempVariableNames
-      ).map(e => Alias(e, nameParts.last)())
+        referredTempVariableNames = AnalysisContext.get.referredTempVariableNames,
+        optionalNamePartIndices = optionalNamePartIndices
+      ).map(e => OptionalReferences.implicitAlias(e, nameParts.last))
     }
 
     def innerResolve(e: Expression, isTopLevel: Boolean): Expression = withOrigin(e.origin) {
@@ -301,7 +362,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       val resolved = e match {
         case u @ UnresolvedAttribute(nameParts) =>
           val result = withPosition(u) {
-            resolve(nameParts).getOrElse(u) match {
+            resolve(nameParts, OptionalReferences.optionalNamePartIndices(u)).getOrElse(u) match {
               // We trim unnecessary alias here. Note that, we cannot trim the alias at top-level,
               case Alias(child, _) if !isTopLevel => child
               case other => other
@@ -312,7 +373,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
         // Re-resolves `TempResolvedColumn` as variable references if it has tried to be
         // resolved with Aggregate but failed.
         case t: TempResolvedColumn if t.hasTried => withPosition(t) {
-          resolve(t.nameParts).getOrElse(t) match {
+          resolve(t.nameParts, OptionalReferences.optionalNamePartIndices(t)).getOrElse(t) match {
             case _: UnresolvedAttribute => t
             case other => other
           }
@@ -404,7 +465,8 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     }
 
     selectList.map {
-      case a: Alias =>
+      // The alias of an optional reference that is not found is not a lateral column alias.
+      case a: Alias if !OptionalReferences.isNullReferenceAlias(a) =>
         val result = resolve(a)
         val lowerCasedName = a.name.toLowerCase(Locale.ROOT)
         aliasMap.get(lowerCasedName) match {
@@ -439,8 +501,8 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       includeLastResort: Boolean = false): Expression = {
     resolveExpression(
       tryResolveDataFrameColumns(expr, Seq(plan)),
-      resolveColumnByName = nameParts => {
-        plan.resolve(nameParts, conf.resolver)
+      resolveColumnByName = (nameParts, optionalNamePartIndices) => {
+        plan.resolve(nameParts, conf.resolver, optionalNamePartIndices)
       },
       getAttrCandidates = () => plan.output,
       throws = throws,
@@ -462,8 +524,8 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       throws: Boolean = true): Expression = {
     resolveExpression(
       tryResolveDataFrameColumns(e, q.children),
-      resolveColumnByName = nameParts => {
-        q.resolveChildren(nameParts, conf.resolver)
+      resolveColumnByName = (nameParts, optionalNamePartIndices) => {
+        q.resolveChildren(nameParts, conf.resolver, optionalNamePartIndices)
       },
       getAttrCandidates = () => {
         assert(q.children.length == 1)
@@ -488,8 +550,8 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     resolveDataFrameColumn(u, q.children).map { r =>
       resolveExpression(
         r,
-        resolveColumnByName = nameParts => {
-          q.resolveChildren(nameParts, conf.resolver)
+        resolveColumnByName = (nameParts, optionalNamePartIndices) => {
+          q.resolveChildren(nameParts, conf.resolver, optionalNamePartIndices)
         },
         getAttrCandidates = () => {
           assert(q.children.length == 1)
@@ -604,9 +666,10 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
   // Candidate threaded through the plan walk:
   //   - expr:   the resolved expression
   //   - depth:  the depth at which it was matched
-  //   - hidden: whether the candidate's references live in `p.metadataOutput`
-  //             at some plan node along the way (e.g. a natural/USING join
-  //             wrapper that hides a join key via `Project.hiddenOutputTag`).
+  //   - hidden: whether the candidate's references are not all visible at some
+  //             plan node along the way, e.g. at a natural/USING join wrapper that
+  //             hides a join key via `Project.hiddenOutputTag` (see the filter in
+  //             `resolveDataFrameColumnRecursively`).
   private case class Candidate(expr: NamedExpression, depth: Int, hidden: Boolean)
 
   private def resolveDataFrameColumnByPlanId(
@@ -640,7 +703,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       // case, return an empty Seq to delay the failure, so it is possible to be
       // resolved in the next iteration.
       // Always initialize `hidden = false` here; the filter below will set it
-      // correctly based on whether the references live in `p.metadataOutput`.
+      // correctly based on whether the references are all visible at `p`.
       (resolved.map(Candidate(_, currentDepth, hidden = false)).toSeq, true)
     } else {
       val children = p match {
@@ -688,8 +751,23 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     // via `Project.hiddenOutputTag`). We accept that here but tag the candidate
     // as `hidden` so the top-level merge in `resolveDataFrameColumn` can prefer
     // a regular (p.output) match over hidden (p.metadataOutput) ones.
+    //
+    // A candidate becomes hidden at `p` when its references are not all visible at `p`,
+    // and once hidden it stays hidden further up (`c.hidden`). An attribute is visible
+    // at `p` if it is in `p.output` and `p` does not hide it itself, i.e. it is not in
+    // the part of `p.metadataOutput` that `p` introduces rather than inherits from its
+    // children. An attribute can be in both `p.output` and `p.metadataOutput`:
+    //   - A Project that re-selects a USING join's hidden right key inherits the key in
+    //     its `metadataOutput` (`Project.metadataOutput` falls back to the child's), and
+    //     so does a USING join wrapper above it. The key is visible at both.
+    //   - `AddMetadataColumns` adds a hidden key to the `output` of the USING join
+    //     wrapper that hides it, and a metadata column to the `output` of a relation.
+    //     That node introduces the attribute in its `metadataOutput`, so it stays hidden.
+    val introducedHidden = AttributeSet(p.metadataOutput) --
+      p.children.flatMap(_.metadataOutput)
+    val visible = p.outputSet -- introducedHidden
     val filtered = candidates.flatMap { c =>
-      val hidden = c.hidden || c.expr.references.subsetOf(AttributeSet(p.metadataOutput))
+      val hidden = c.hidden || !c.expr.references.subsetOf(visible)
       if (c.expr.references.subsetOf(AttributeSet(p.output ++ p.metadataOutput))) {
         Some(c.copy(hidden = hidden))
       } else {
@@ -752,5 +830,30 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     case n: NamedExpression =>
       n.metadata.contains(SessionCatalog.SQL_FUNCTION_PARAMETER_ALIAS_METADATA_KEY)
     case _ => false
+  }
+}
+
+object ColumnResolutionHelper {
+
+  /**
+   * Returns true if `resolveExprsAndAddMissingAttrs` can resolve a name below `plan` and add the
+   * attribute to the output of `plan`. It cannot for a `Distinct`, a `SubqueryAlias`, or a
+   * `PipeOperator`, nor for an operator with more than one child.
+   */
+  def canAddMissingAttrsThrough(plan: LogicalPlan): Boolean = plan match {
+    case _: Distinct | _: SubqueryAlias | _: PipeOperator => false
+    case _: UnaryNode => true
+    case _ => false
+  }
+
+  /**
+   * Returns the plans against whose children `resolveOuterRef` resolves a name of a subquery of
+   * `outerPlan`. A subquery in HAVING can reference grouping expressions and aggregate functions,
+   * so it resolves a name against the input of the aggregate first, and then against its output;
+   * `ResolveAggregateFunctions` pushes them down to the aggregate later, like `resolveColumns`.
+   */
+  def outerReferenceSources(outerPlan: LogicalPlan): Seq[LogicalPlan] = outerPlan match {
+    case having @ UnresolvedHaving(_, aggregate: Aggregate) => Seq(aggregate, having)
+    case other => Seq(other)
   }
 }

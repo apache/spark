@@ -258,6 +258,15 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("a not like all ('foo%', 'b%')", $"a" notLikeAll("foo%", "b%"))
     assertEqual("not (a like all ('foo%', 'b%'))", !($"a" likeAll("foo%", "b%")))
 
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      assertEqual(
+        "a like any (cast('foo%' as char(4)), cast('b%' as varchar(2)))",
+        $"a" likeAny("foo%", "b%"))
+      assertEqual(
+        "a like all (cast('foo%' as varchar(4)), cast('b%' as char(2)))",
+        $"a" likeAll("foo%", "b%"))
+    }
+
     Seq("any", "some", "all").foreach { quantifier =>
       checkError(
         exception = parseException(s"a like $quantifier()"),
@@ -309,11 +318,11 @@ class ExpressionParserSuite extends AnalysisTest {
 
   test("JSON_VALUE expressions") {
     import org.apache.spark.sql.catalyst.expressions.JsonValueBehavior
-    // Bare form: default STRING RETURNING, NULL ON EMPTY / NULL ON ERROR.
+    // Bare form (no clause) is an ordinary function call, routed through function resolution; the
+    // registered `json_value` built-in reconstructs the JsonValue when nothing shadows it.
     assertEqual(
       "json_value(a, '$.b')",
-      JsonValue($"a", "$.b", StringType, JsonValueBehavior.Null, JsonValueBehavior.Null,
-        None, None))
+      UnresolvedFunction("json_value", Seq($"a", Literal("$.b")), isDistinct = false))
     // RETURNING.
     assertEqual(
       "json_value(a, '$.b' RETURNING INT)",
@@ -333,8 +342,10 @@ class ExpressionParserSuite extends AnalysisTest {
 
   test("JSON_EXISTS expressions") {
     import org.apache.spark.sql.catalyst.expressions.JsonExistsBehavior
-    // Bare form defaults to FALSE ON ERROR.
-    assertEqual("json_exists(a, '$.b')", JsonExists($"a", "$.b", JsonExistsBehavior.False))
+    // Bare form (no clause) is an ordinary function call, routed through function resolution.
+    assertEqual(
+      "json_exists(a, '$.b')",
+      UnresolvedFunction("json_exists", Seq($"a", Literal("$.b")), isDistinct = false))
     assertEqual(
       "json_exists(a, '$.b' TRUE ON ERROR)", JsonExists($"a", "$.b", JsonExistsBehavior.True))
     assertEqual(
@@ -349,11 +360,10 @@ class ExpressionParserSuite extends AnalysisTest {
   test("JSON_QUERY expressions") {
     import org.apache.spark.sql.catalyst.expressions.{JsonQueryBehavior, JsonQueryQuotes,
       JsonQueryWrapper}
-    // Bare form: default STRING RETURNING, WITHOUT wrapper, KEEP quotes, NULL ON EMPTY / ON ERROR.
+    // Bare form (no clause) is an ordinary function call, routed through function resolution.
     assertEqual(
       "json_query(a, '$.b')",
-      JsonQuery($"a", "$.b", StringType, JsonQueryWrapper.Without, JsonQueryQuotes.Keep,
-        JsonQueryBehavior.Null, JsonQueryBehavior.Null))
+      UnresolvedFunction("json_query", Seq($"a", Literal("$.b")), isDistinct = false))
     // WITH ARRAY WRAPPER defaults to UNCONDITIONAL; the ARRAY word is optional.
     assertEqual(
       "json_query(a, '$.b' WITH ARRAY WRAPPER)",
@@ -642,6 +652,14 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("`c`.a[b]", UnresolvedAttribute("c.a").getItem($"b"))
   }
 
+  test("invalid semi-structured extract path") {
+    checkError(
+      exception = parseException("c:['']"),
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'['']'", "hint" -> ""),
+      queryContext = Array(ExpectedContext("c:['']", 0, 5)))
+  }
+
   test("parenthesis") {
     assertEqual("(a)", $"a")
     assertEqual("r * (a + b)", $"r" * ($"a" + $"b"))
@@ -765,8 +783,9 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("-interval '1 day 2 hour 3 minute 4.005006 second'", UnaryMinus(dtIntervalLiteral))
     checkError(
       exception = parseException("INTERVAL '1 year 2 second'"),
-      condition = "_LEGACY_ERROR_TEMP_0029",
-      parameters = Map("literal" -> "INTERVAL '1 year 2 second'"),
+      condition = "INVALID_INTERVAL_FORMAT.MIXED_YEAR_MONTH_AND_DAY_TIME_FIELDS",
+      sqlState = "22006",
+      parameters = Map("input" -> "1 year 2 second"),
       context = ExpectedContext(
         fragment = "INTERVAL '1 year 2 second'",
         start = 0,
@@ -1218,8 +1237,9 @@ class ExpressionParserSuite extends AnalysisTest {
         } else {
           checkError(
             exception = parseException(s"interval $intervalStr"),
-            condition = "_LEGACY_ERROR_TEMP_0029",
-            parameters = Map("literal" -> "interval 3 monThs 4 dayS 22 sEcond 1 millisecond"),
+            condition = "INVALID_INTERVAL_FORMAT.MIXED_YEAR_MONTH_AND_DAY_TIME_FIELDS",
+            sqlState = "22006",
+            parameters = Map("input" -> "3 monThs 4 dayS 22 sEcond 1 millisecond"),
             context = ExpectedContext(
               fragment = s"interval $intervalStr",
               start = 0,

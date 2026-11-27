@@ -27,18 +27,19 @@ import org.mockito.invocation.InvocationOnMock
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, AsOfVersion, EmptyFunctionRegistry, NoSuchTableException, RelationCache, RelationResolution, ResolvedFieldName, ResolvedFieldPosition, ResolvedIdentifier, ResolvedTable, ResolveSessionCatalog, TimeTravelSpec, UnresolvedAttribute, UnresolvedFieldPosition, UnresolvedInlineTable, UnresolvedPartitionSpec, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, AsOfVersion, CreateTableHelper, DescribeCommandHelper, EmptyFunctionRegistry, KeepLegacyOutputs, NoSuchTableException, RelationCache, RelationResolution, ResolvedFieldName, ResolvedFieldPosition, ResolvedIdentifier, ResolvedNamespace, ResolvedTable, ResolvedTempView, ResolveSessionCatalog, ShowCommandHelper, TimeTravelSpec, UnresolvedAttribute, UnresolvedFieldPosition, UnresolvedInlineTable, UnresolvedNamespace, UnresolvedPartitionSpec, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog, TempVariableManager}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{AlterColumns, AlterColumnSpec, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DefaultValueExpression, DeleteAction, DeleteFromTable, DescribeRelation, DescribeTablePartition, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, OverwriteByExpression, OverwritePartitionsDynamic, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterColumns, AlterColumnSpec, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DefaultValueExpression, DeleteAction, DeleteFromTable, DescribeNamespace, DescribeRelation, DescribeTablePartition, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, OverwriteByExpression, OverwritePartitionsDynamic, Project, ReplaceTable, ReplaceTableAsSelect, SetTableLocation, SetTableProperties, ShowColumns, ShowCreateTable, ShowFunctions, ShowPartitions, ShowTablePartition, ShowTableProperties, ShowTables, ShowTablesExtended, ShowViews, SubqueryAlias, TableSpec, UnsetTableProperties, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.FakeV2Provider
-import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, ColumnDefaultValue, Identifier, SupportsDelete, Table, TableCapability, TableCatalog, TableChange, TableContext, TableWritePrivilege, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, ColumnDefaultValue, Identifier, SupportsDelete, Table, TableCapability, TableCatalog, TableChange, TableContext, TableWritePrivilege, V1Table, WriteDistributionMode}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
-import org.apache.spark.sql.connector.expressions.{LiteralValue, Transform}
+import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue, NullOrdering, SortDirection, Transform}
+import org.apache.spark.sql.connector.expressions.LogicalExpressions.{bucket, sort}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -141,7 +142,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       .add("point", new StructType().add("x", "int").add("y", "int")))
     when(t.tableType).thenReturn(tableType)
     // Mockito returns false for unstubbed Boolean methods, so analyzer code paths that
-    // dispatch through `CatalogTable.isViewLike` (e.g. `Analyzer.lookupTableOrView`'s v1
+    // dispatch through `CatalogTable.isViewLike` (e.g. `RelationResolution.lookupTableOrView`'s v1
     // session-catalog branch) would misclassify a mocked VIEW fixture as a table. Stub
     // the method to compute from the just-stubbed `tableType` so any view-like type
     // (VIEW today, METRIC_VIEW or future kinds) resolves correctly.
@@ -332,6 +333,33 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     )
   }
 
+  test("create table preprocessing preserves table metadata while normalizing column names") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val partition = StructField("Part", IntegerType)
+      val value = StructField("Value", IntegerType)
+      val table = CatalogTable(
+        identifier = TableIdentifier("table", Some("default")),
+        tableType = CatalogTableType.EXTERNAL,
+        storage = CatalogStorageFormat.empty.copy(locationUri = Some(new URI("file:/table"))),
+        schema = StructType(Seq(partition, value)),
+        provider = Some("parquet"),
+        partitionColumnNames = Seq("part"),
+        bucketSpec = Some(BucketSpec(4, Seq("VALUE"), Seq("value"))),
+        properties = Map("createdBy" -> "user"),
+        comment = Some("table comment"),
+        createTime = 123L,
+        lastAccessTime = 456L)
+      val create = CreateTableV1(table, SaveMode.Ignore, None)
+
+      val normalized = CreateTableHelper.normalizeCreateTableWithoutQuery(create)
+
+      assert(normalized == create.copy(tableDesc = table.copy(
+        schema = StructType(Seq(value, partition)),
+        partitionColumnNames = Seq("Part"),
+        bucketSpec = Some(BucketSpec(4, Seq("Value"), Seq("Value"))))))
+    }
+  }
+
   test("create table - with partitioned by") {
     val query = "CREATE TABLE my_tab(a INT comment 'test', b STRING) " +
         "USING parquet PARTITIONED BY (a)"
@@ -479,7 +507,8 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       exception = intercept[ParseException] {
         parseAndResolve(v2)
       },
-      condition = "_LEGACY_ERROR_TEMP_0032",
+      condition = "DUPLICATE_TABLE_PATH",
+      sqlState = "42613",
       parameters = Map("pathOne" -> "/tmp/file", "pathTwo" -> "/tmp/file"),
       context = ExpectedContext(
         fragment = v2,
@@ -760,6 +789,381 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     }
   }
 
+  test("SHOW helpers preserve output attributes and legacy schema configuration") {
+    val namespace = ResolvedNamespace(v2SessionCatalog, Seq("db"))
+    val tables = ShowTables(namespace, Some("t*"))
+    val extended = ShowTablesExtended(namespace, "t*")
+    val views = ShowViews(namespace, Some("v*"))
+    val functions = ShowFunctions(namespace, userScope = true, systemScope = false,
+      pattern = Some("f*"))
+
+    for (useV1 <- Seq(false, true); legacy <- Seq(false, true)) {
+      withSQLConf(
+        SQLConf.LEGACY_USE_V1_COMMAND.key -> useV1.toString,
+        SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA.key -> legacy.toString) {
+        val renamedTables = KeepLegacyOutputs.keepLegacyShowTablesOutput(tables)
+        val resolvedTables = ShowCommandHelper.rewrite(renamedTables)
+        val expectedTables = if (useV1) {
+          ShowTablesCommand(Some("db"), Some("t*"), renamedTables.output)
+        } else {
+          renamedTables
+        }
+        comparePlans(resolvedTables, expectedTables)
+        assert(resolvedTables.output.map(_.exprId) == tables.output.map(_.exprId))
+        assert(resolvedTables.output.head.name == (if (legacy) "database" else "namespace"))
+
+        val resolvedExtended = ShowCommandHelper.rewrite(extended)
+        assert(resolvedExtended.output.map(_.exprId) == extended.output.map(_.exprId))
+        assert(resolvedExtended.output.head.name == (if (legacy) "database" else "namespace"))
+        comparePlans(resolvedExtended,
+          ShowTablesCommand(Some("db"), Some("t*"), resolvedExtended.output, isExtended = true))
+        comparePlans(ShowCommandHelper.rewrite(views),
+          ShowViewsCommand("db", Some("v*"), views.output))
+        comparePlans(ShowCommandHelper.rewrite(functions),
+          ShowFunctionsCommand("db", Some("f*"), true, false, functions.output))
+      }
+    }
+  }
+
+  test("table-targeted SHOW helpers preserve Hive and V1 SHOW CREATE TABLE precedence") {
+    val identifier = Identifier.of(Array("db"), "t")
+    for {
+      provider <- Seq(v1Format, "hive")
+      useV1 <- Seq(false, true)
+      asSerde <- Seq(false, true)
+      hiveAsSerde <- Seq(false, true)
+    } {
+      withSQLConf(
+        SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION.key -> "builtin",
+        SQLConf.LEGACY_USE_V1_COMMAND.key -> useV1.toString,
+        SQLConf.HIVE_TABLE_SHOW_CREATE_TABLE_AS_SERDE.key -> hiveAsSerde.toString) {
+        val table = createV1TableMock(identifier, provider)
+        val target = ResolvedTable.create(v2SessionCatalog, identifier, table)
+        val command = ShowCreateTable(target, asSerde)
+        val expected = if (asSerde || (provider == "hive" && hiveAsSerde)) {
+          ShowCreateTableAsSerdeCommand(table.catalogTable.identifier, command.output)
+        } else if (useV1 || provider == "hive") {
+          ShowCreateTableCommand(table.catalogTable.identifier, command.output)
+        } else {
+          command
+        }
+        comparePlans(ShowCommandHelper.rewrite(command), expected)
+        assert(ShowCommandHelper.rewrite(command).output == command.output)
+      }
+    }
+  }
+
+  test("table-targeted SHOW helpers preserve raw partition specs and output attributes") {
+    val identifier = Identifier.of(Array("db"), "t")
+    val table = createV1TableMock(identifier)
+    val target = ResolvedTable.create(v2SessionCatalog, identifier, table)
+    val specification = UnresolvedPartitionSpec(Map("i" -> "01"))
+    Seq(false, true).foreach { legacy =>
+      withSQLConf(
+        SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION.key -> "builtin",
+        SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA.key -> legacy.toString) {
+        val extended = ShowTablePartition(target, specification)
+        val rewritten = ShowCommandHelper.rewrite(extended).asInstanceOf[ShowTablesCommand]
+        assert(rewritten.partitionSpec == Some(specification.spec))
+        assert(rewritten.output.map(_.exprId) == extended.output.map(_.exprId))
+        assert(rewritten.output.head.name == (if (legacy) "database" else "namespace"))
+        comparePlans(rewritten, ShowTablesCommand(
+          Some("db"), Some("t"), rewritten.output, isExtended = true, Some(specification.spec)))
+        Seq(None, Some(specification)).foreach { pattern =>
+          val command = ShowPartitions(target, pattern)
+          val result = ShowCommandHelper.rewrite(command)
+          comparePlans(result, ShowPartitionsCommand(
+            table.catalogTable.identifier, command.output, pattern.map(_.spec)))
+          assert(result.output == command.output)
+        }
+      }
+    }
+  }
+
+  test("table-targeted SHOW helpers preserve temporary-view identifiers") {
+    for (database <- Seq(None, Some("global_temp")); useV1 <- Seq(false, true)) {
+      withSQLConf(SQLConf.LEGACY_USE_V1_COMMAND.key -> useV1.toString) {
+        val identifier = Identifier.of(database.toArray, "v")
+        val metadata = createV1TableMock(
+          Identifier.of(Array("db"), "v"), tableType = CatalogTableType.VIEW).catalogTable
+        val target = ResolvedTempView(identifier, metadata)
+        val tableName = TableIdentifier("v", database)
+        Seq(false, true).foreach { asSerde =>
+          val command = ShowCreateTable(target, asSerde)
+          val expected = if (asSerde) {
+            ShowCreateTableAsSerdeCommand(tableName, command.output)
+          } else {
+            ShowCreateTableCommand(tableName, command.output)
+          }
+          comparePlans(ShowCommandHelper.rewrite(command), expected)
+        }
+        val properties = ShowTableProperties(target, Some("key"))
+        comparePlans(ShowCommandHelper.rewrite(properties),
+          ShowTablePropertiesCommand(tableName, Some("key"), properties.output))
+        val columns = ShowColumns(target, database.map(Seq(_)))
+        val expectedTableName = TableIdentifier("v")
+        comparePlans(ShowCommandHelper.rewrite(columns),
+          ShowColumnsCommand(target, database, expectedTableName, columns.output))
+      }
+    }
+  }
+
+  test("table-targeted SHOW helpers preserve keyed legacy output before V1 lowering") {
+    val identifier = Identifier.of(Array("db"), "t")
+    val table = createV1TableMock(identifier)
+    val target = ResolvedTable.create(v2SessionCatalog, identifier, table)
+    for (useV1 <- Seq(false, true); legacy <- Seq(false, true); key <- Seq(None, Some("k"))) {
+      withSQLConf(
+        SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION.key -> "builtin",
+        SQLConf.LEGACY_USE_V1_COMMAND.key -> useV1.toString,
+        SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA.key -> legacy.toString) {
+        val command = ShowTableProperties(target, key)
+        val prepared = KeepLegacyOutputs(command).asInstanceOf[ShowTableProperties]
+        val expectedOutput = if (legacy && key.isDefined) {
+          Seq(command.output.last)
+        } else {
+          command.output
+        }
+        assert(prepared.output == expectedOutput)
+        assert(KeepLegacyOutputs.keepLegacyShowTablePropertiesOutput(command).output ==
+          (if (key.isDefined) Seq(command.output.last) else command.output))
+        val expected = if (useV1) {
+          ShowTablePropertiesCommand(table.catalogTable.identifier, key, expectedOutput)
+        } else {
+          prepared
+        }
+        comparePlans(ShowCommandHelper.rewrite(prepared), expected)
+      }
+    }
+  }
+
+  test("table-targeted SHOW lowering preserves the owning rule's configuration") {
+    val owner = new SQLConf
+    var reads = 0
+    val rule = new ResolveSessionCatalog(catalogManagerWithDefault) {
+      override def conf: SQLConf = {
+        reads += 1
+        owner
+      }
+    }
+    val identifier = Identifier.of(Array("db"), "t")
+    val table = createV1TableMock(identifier)
+    val target = ResolvedTable.create(v2SessionCatalog, identifier, table)
+    Seq(false, true).foreach { enabled =>
+      owner.setConf(SQLConf.LEGACY_USE_V1_COMMAND, enabled)
+      owner.setConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA, enabled)
+      owner.setConf(SQLConf.HIVE_TABLE_SHOW_CREATE_TABLE_AS_SERDE, false)
+      owner.setConf(SQLConf.CASE_SENSITIVE, enabled)
+      withSQLConf(
+        SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION.key -> "builtin",
+        SQLConf.LEGACY_USE_V1_COMMAND.key -> (!enabled).toString,
+        SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA.key -> (!enabled).toString,
+        SQLConf.HIVE_TABLE_SHOW_CREATE_TABLE_AS_SERDE.key -> "true",
+        SQLConf.CASE_SENSITIVE.key -> (!enabled).toString) {
+        val create = ShowCreateTable(target, asSerde = false)
+        reads = 0
+        val expected = if (enabled) {
+          ShowCreateTableCommand(table.catalogTable.identifier, create.output)
+        } else {
+          create
+        }
+        comparePlans(rule(create), expected)
+        assert(reads == 2)
+        val extended = ShowTablePartition(target, UnresolvedPartitionSpec(Map("i" -> "1")))
+        reads = 0
+        assert(rule(extended).output.head.name == (if (enabled) "database" else "namespace"))
+        assert(reads == 1)
+        val properties = ShowTableProperties(target, None)
+        reads = 0
+        assert(rule(properties).isInstanceOf[ShowTablePropertiesCommand] == enabled)
+        assert(reads == 1)
+        val columns = ShowColumns(target, Some(Seq("DB")))
+        reads = 0
+        if (enabled) {
+          checkError(
+            exception = intercept[AnalysisException] { rule(columns) },
+            condition = "SHOW_COLUMNS_WITH_CONFLICT_NAMESPACE",
+            parameters = Map("namespaceA" -> "`DB`", "namespaceB" -> "`db`"))
+        } else {
+          comparePlans(rule(columns), ShowColumnsCommand(
+            target, Some("DB"), table.catalogTable.identifier, columns.output))
+        }
+        assert(reads == 1)
+      }
+    }
+  }
+
+  test("table-targeted SHOW helpers defer configuration for V2 and unresolved targets") {
+    val identifier = Identifier.of(Array("db"), "t")
+    val targets = Seq(
+      ResolvedTable.create(v2SessionCatalog, identifier, table),
+      ResolvedTable.create(testCat, identifier, createV1TableMock(identifier)),
+      UnresolvedTable(Seq("t"), "SHOW"))
+    def noConfiguration: SQLConf = fail("unexpected owning-rule configuration lookup")
+    targets.foreach { target =>
+      val commands = Seq(
+        ShowCreateTable(target, asSerde = false),
+        ShowCreateTable(target, asSerde = true),
+        ShowColumns(target, None),
+        ShowTableProperties(target, Some("k")),
+        ShowPartitions(target, None),
+        ShowTablePartition(target, UnresolvedPartitionSpec(Map("i" -> "1"))))
+      commands.foreach { command =>
+        assert(ShowCommandHelper.rewrite(command, noConfiguration) eq command)
+      }
+    }
+  }
+
+  test("SHOW helpers preserve namespace errors even when V1 commands are disabled") {
+    withSQLConf(SQLConf.LEGACY_USE_V1_COMMAND.key -> "false") {
+      Seq(Seq.empty[String], Seq("a", "b")).foreach { namespace =>
+        val target = ResolvedNamespace(v2SessionCatalog, namespace)
+        val commands = Seq(
+          ShowTables(target, None),
+          ShowTablesExtended(target, "*"),
+          ShowViews(target, None),
+          ShowFunctions(target, userScope = true, systemScope = true, pattern = None))
+        commands.foreach { command =>
+          val condition = if (namespace.isEmpty) {
+            "MISSING_DATABASE_FOR_V1_SESSION_CATALOG"
+          } else {
+            "NESTED_DATABASE_UNSUPPORTED_BY_V1_SESSION_CATALOG"
+          }
+          val parameters = if (namespace.isEmpty) Map.empty[String, String] else {
+            Map("namespace" -> "`a`.`b`")
+          }
+          checkError(
+            exception = intercept[AnalysisException] { ShowCommandHelper.rewrite(command) },
+            condition = condition,
+            parameters = parameters)
+        }
+      }
+    }
+  }
+
+  test("SHOW helpers leave V2 and unresolved targets unchanged") {
+    val targets = Seq(UnresolvedNamespace(Seq("db")), ResolvedNamespace(testCat, Seq("db")))
+    targets.foreach { target =>
+      val commands = Seq(
+        ShowTables(target, None),
+        ShowTablesExtended(target, "*"),
+        ShowFunctions(target, userScope = true, systemScope = true, pattern = None))
+      commands.foreach { command => assert(ShowCommandHelper.rewrite(command) eq command) }
+    }
+    val unresolvedViews = ShowViews(targets.head, None)
+    assert(ShowCommandHelper.rewrite(unresolvedViews) eq unresolvedViews)
+    checkError(
+      exception = intercept[AnalysisException] {
+        ShowCommandHelper.rewrite(ShowViews(targets.last, None))
+      },
+      condition = "MISSING_CATALOG_ABILITY.VIEWS",
+      parameters = Map("plugin" -> "testcat"))
+  }
+
+  test("SHOW lowering preserves the owning rule's V1 command configuration") {
+    val owner = new SQLConf
+    var reads = 0
+    val rule = new ResolveSessionCatalog(catalogManagerWithDefault) {
+      override def conf: SQLConf = {
+        reads += 1
+        owner
+      }
+    }
+    val command = ShowTables(ResolvedNamespace(v2SessionCatalog, Seq("db")), Some("t*"))
+    Seq(false, true).foreach { useV1 =>
+      owner.setConf(SQLConf.LEGACY_USE_V1_COMMAND, useV1)
+      withSQLConf(
+        SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION.key -> "builtin",
+        SQLConf.LEGACY_USE_V1_COMMAND.key -> (!useV1).toString) {
+        reads = 0
+        val resolved = rule(command)
+        if (useV1) {
+          comparePlans(resolved, ShowTablesCommand(Some("db"), Some("t*"), command.output))
+        } else {
+          assert(resolved eq command)
+        }
+        assert(resolved.output.map(_.exprId) == command.output.map(_.exprId))
+        assert(reads == 1)
+      }
+    }
+  }
+
+  test("SHOW lowering preserves the owning rule's legacy output configuration") {
+    val owner = new SQLConf
+    var reads = 0
+    val rule = new ResolveSessionCatalog(catalogManagerWithDefault) {
+      override def conf: SQLConf = {
+        reads += 1
+        owner
+      }
+    }
+    val command = ShowTablesExtended(ResolvedNamespace(v2SessionCatalog, Seq("db")), "t*")
+    Seq(false, true).foreach { legacy =>
+      owner.setConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA, legacy)
+      withSQLConf(
+        SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION.key -> "builtin",
+        SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA.key -> (!legacy).toString) {
+        reads = 0
+        val resolved = rule(command).asInstanceOf[ShowTablesCommand]
+        assert(resolved.isExtended)
+        assert(resolved.output.head.name == (if (legacy) "database" else "namespace"))
+        assert(resolved.output.map(_.exprId) == command.output.map(_.exprId))
+        assert(reads == 1)
+      }
+    }
+  }
+
+  test("SHOW lowering defers the owning rule's configuration until it is needed") {
+    val owner = new SQLConf
+    var reads = 0
+    val rule = new ResolveSessionCatalog(catalogManagerWithDefault) {
+      override def conf: SQLConf = {
+        reads += 1
+        owner
+      }
+    }
+    withSQLConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION.key -> "builtin") {
+      val targets = Seq(UnresolvedNamespace(Seq("db")), ResolvedNamespace(testCat, Seq("db")))
+      targets.foreach { target =>
+        val commands = Seq(
+          ShowTables(target, None),
+          ShowTablesExtended(target, "*"),
+          ShowFunctions(target, userScope = true, systemScope = true, pattern = None))
+        commands.foreach { command =>
+          reads = 0
+          assert(rule(command) eq command)
+          assert(reads == 0)
+        }
+      }
+      val namespace = ResolvedNamespace(v2SessionCatalog, Seq("db"))
+      val commands = Seq(
+        ShowViews(namespace, None),
+        ShowFunctions(namespace, userScope = true, systemScope = true, pattern = None))
+      commands.foreach { command =>
+        reads = 0
+        rule(command)
+        assert(reads == 0)
+      }
+      Seq(Seq.empty[String], Seq("a", "b")).foreach { name =>
+        val target = ResolvedNamespace(v2SessionCatalog, name)
+        Seq(ShowTables(target, None), ShowTablesExtended(target, "*")).foreach { command =>
+          reads = 0
+          checkError(
+            exception = intercept[AnalysisException] { rule(command) },
+            condition = if (name.isEmpty) {
+              "MISSING_DATABASE_FOR_V1_SESSION_CATALOG"
+            } else {
+              "NESTED_DATABASE_UNSUPPORTED_BY_V1_SESSION_CATALOG"
+            },
+            parameters = if (name.isEmpty) Map.empty[String, String] else {
+              Map("namespace" -> "`a`.`b`")
+            })
+          assert(reads == 0)
+        }
+      }
+    }
+  }
+
   test("drop table") {
     val tableName1 = "db.v1Table"
     val tableIdent1 = ResolvedIdentifier(v2SessionCatalog, Identifier.of(Array("db"), "v1Table"))
@@ -1024,6 +1428,70 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     val sql4 = "DESC TABLE v"
     val parsed4 = parseAndResolve(sql4)
     assert(parsed4.isInstanceOf[DescribeTableCommand])
+  }
+
+  gridTest("DESCRIBE lowering preserves command output")(
+      Seq("DESC TABLE v1Table", "DESC TABLE EXTENDED v1Table",
+        "DESC TABLE v1Table PARTITION(a=1)", "DESC TABLE v1Table i",
+        "DESC NAMESPACE default")) { statement =>
+    withSQLConf(
+        SQLConf.LEGACY_USE_V1_COMMAND.key -> "true",
+        SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA.key -> "false",
+        SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION.key -> "builtin") {
+      val command = parsePlan(statement)
+      val analyzer = new Analyzer(catalogManagerWithoutDefault) {
+        override val extendedResolutionRules: Seq[Rule[LogicalPlan]] = Seq(
+          new ResolveSessionCatalog(this.catalogManager))
+      }
+      val analyzed = analyzer.execute(command)
+      assert(analyzed.isInstanceOf[RunnableCommand])
+      assert(analyzed.output == command.output)
+    }
+  }
+
+  gridTest("DESCRIBE NAMESPACE preserves the owning rule's deferred configuration")(
+      Seq(false, true)) { useV1Command =>
+    withSQLConf(
+        SQLConf.LEGACY_USE_V1_COMMAND.key -> (!useV1Command).toString,
+        SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION.key -> "builtin") {
+      val ownerConf = new SQLConf
+      ownerConf.setConf(SQLConf.LEGACY_USE_V1_COMMAND, useV1Command)
+      var reads = 0
+      val rule = new ResolveSessionCatalog(catalogManagerWithoutDefault) {
+        override def conf: SQLConf = {
+          reads += 1
+          ownerConf
+        }
+      }
+      val command = DescribeNamespace(
+        ResolvedNamespace(v2SessionCatalog, Seq("default")), extended = false)
+      val resolved = rule(command)
+      assert(resolved.isInstanceOf[DescribeDatabaseCommand] == useV1Command)
+      assert(resolved.output == command.output)
+      if (!useV1Command) assert(resolved eq command)
+      assert(reads == 1)
+
+      reads = 0
+      val v2Command = command.copy(namespace = ResolvedNamespace(testCat, Seq("ns")))
+      assert(rule(v2Command) eq v2Command)
+      assert(reads == 0)
+
+      val invalid = command.copy(
+        namespace = ResolvedNamespace(v2SessionCatalog, Seq("db", "nested")))
+      checkError(
+        exception = intercept[AnalysisException](rule(invalid)),
+        condition = "NESTED_DATABASE_UNSUPPORTED_BY_V1_SESSION_CATALOG",
+        parameters = Map("namespace" -> "`db`.`nested`"))
+      assert(reads == 0)
+    }
+  }
+
+  test("DESCRIBE helpers return an unhandled command unchanged") {
+    val relation = parseAndResolve("DESC TABLE testcat.tab").asInstanceOf[DescribeRelation]
+    assert(DescribeCommandHelper.rewriteDescribeRelation(relation) eq relation)
+    val partition = parseAndResolve("DESC TABLE testcat.tab PARTITION(a=1)")
+      .asInstanceOf[DescribeTablePartition]
+    assert(DescribeCommandHelper.rewriteDescribeTablePartition(partition) eq partition)
   }
 
   test("DELETE FROM") {
@@ -1461,6 +1929,25 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       }
       assert(ex.getCondition === "INSERT_REPLACE_USING_BY_NAME_NOT_ENABLED")
     }
+  }
+
+  test("ALTER COLUMN preserves the owning rule's deferred resolver") {
+    var reads = 0
+    val rule = new ResolveSessionCatalog(catalogManagerWithDefault) {
+      override def conf: SQLConf = {
+        reads += 1
+        SQLConf.get
+      }
+    }
+    val identifier = Identifier.of(Array("default"), "t")
+    val v1Table = createV1TableMock(identifier)
+    val target = ResolvedTable.create(v2SessionCatalog, identifier, v1Table)
+    val specification = AlterColumnSpec(
+      ResolvedFieldName(Nil, v1Table.schema("i")), None, None, Some("comment"), None, None)
+    reads = 0
+    val resolved = rule(AlterColumns(target, Seq(specification)))
+    assert(resolved.isInstanceOf[AlterTableChangeColumnCommand])
+    assert(reads == 1)
   }
 
   test("alter table: alter column") {
@@ -3132,6 +3619,31 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     }
   }
 
+  gridTest("RTAS preserves the owning rule's deferred default provider")(
+      Seq(false, true)) { explicitProvider =>
+    val owner = new SQLConf
+    owner.setConfString("spark.sql.sources.default", v2Format)
+    var reads = 0
+    val rule = new ResolveSessionCatalog(catalogManagerWithDefault) {
+      override def conf: SQLConf = {
+        reads += 1
+        owner
+      }
+    }
+    val specification = TableSpec(
+      Map.empty, if (explicitProvider) Some(v2Format) else None,
+      Map.empty, None, None, None, None, external = false)
+    val command = ReplaceTableAsSelect(
+      ResolvedIdentifier(v2SessionCatalog, Identifier.of(Array("default"), "t")),
+      Nil, LocalRelation(AttributeReference("i", IntegerType)()), specification, Map.empty,
+      orCreate = false)
+    reads = 0
+    withSQLConf("spark.sql.sources.default" -> "hive") {
+      assert(rule(command) eq command)
+      assert(reads == (if (explicitProvider) 0 else 1))
+    }
+  }
+
   test("RTAS statement with constraints") {
     Seq(
       "CONSTRAINT pk PRIMARY KEY (id)",
@@ -3181,7 +3693,8 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       exception = intercept[ParseException] {
         parsePlan(query)
       },
-      condition = "_LEGACY_ERROR_TEMP_0046",
+      condition = "INVALID_SQL_SYNTAX.CREATE_TEMP_TABLE_WITHOUT_PROVIDER",
+      sqlState = "42000",
       parameters = Map(),
       context = ExpectedContext(fragment = query, start = 0, stop = 48))
   }
@@ -3483,7 +3996,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       val ident = Identifier.of(Array.empty[String], "tab")
       val cachedRelation = DataSourceV2Relation.create(table, Some(testCat), Some(ident))
       var sharedRelationCacheLookups = 0
-      val sharedRelationCache: RelationCache = (_, _, _, _, _) => {
+      val sharedRelationCache: RelationCache = (_, _, _, _) => {
         sharedRelationCacheLookups += 1
         Some(cachedRelation)
       }
@@ -3521,7 +4034,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         readOpts: java.util.Map[String, String]): DataSourceV2Relation = {
       AnalysisContext.withNewAnalysisContext {
         val sharedRelationCache: RelationCache =
-          (_, _, _, _, _) => Some(cachedRelationWith(cacheOpts))
+          (_, _, _, _) => Some(cachedRelationWith(cacheOpts))
         val rule = new RelationResolution(catalogManagerWithDefault, sharedRelationCache)
         val unresolved =
           UnresolvedRelation(Seq("testcat", "tab"), new CaseInsensitiveStringMap(readOpts))
@@ -3583,7 +4096,11 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       val cachedTable = newTable("table-id")
       val catalog = mock(classOf[TableCatalog])
       when(catalog.name()).thenReturn("statecat")
-      when(catalog.tableStateOptionKeys()).thenReturn(java.util.Set.of("state"))
+      var tableStateOptionKeyCalls = 0
+      when(catalog.tableStateOptionKeys()).thenAnswer((_: InvocationOnMock) => {
+        tableStateOptionKeyCalls += 1
+        java.util.Set.of("state")
+      })
       var loads = 0
       when(catalog.loadTable(
         any[Identifier],
@@ -3601,18 +4118,23 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         sharedRelationCacheEntry(catalog, ident, currentTable, cachedTable)
       var sharedRelationCacheLookups = 0
       val sharedRelationCache: RelationCache =
-        (_, _, _, _, _) => {
+        (_, _, _, _) => {
           sharedRelationCacheLookups += 1
           sharedRelationCacheCandidate
         }
       val resolver = new RelationResolution(manager, sharedRelationCache)
 
       def resolveWith(splitSize: String): DataSourceV2Relation = {
+        tableStateOptionKeyCalls = 0
         val unresolved = UnresolvedRelation(Seq("statecat", "tab"), options(splitSize))
-        resolver.resolveRelation(unresolved) match {
+        val resolved = resolver.resolveRelation(unresolved) match {
           case Some(AsDataSourceV2Relation(relation)) => relation
           case other => fail(s"failed to resolve as v2 relation: $other")
         }
+        assert(
+          tableStateOptionKeyCalls == 1,
+          s"expected one table-state option projection, got: $tableStateOptionKeyCalls")
+        resolved
       }
 
       AnalysisContext.withNewAnalysisContext {
@@ -3680,6 +4202,45 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         relation
       case _ =>
         fail(s"failed to resolve $unresolvedRelation as v2 table")
+    }
+  }
+
+  test("SPARK-34586: CREATE/CTAS/REPLACE/RTAS resolve with the declared write distribution " +
+    "and ordering") {
+    val idAsc = sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
+    val bucketDesc = sort(
+      bucket(8, Array(FieldReference("s"))), SortDirection.DESCENDING, NullOrdering.NULLS_FIRST)
+    Seq(
+      ("CREATE TABLE mydb.table_name (id bigint, description string) USING parquet " +
+        "ORDERED BY id",
+        true, classOf[CreateTable], WriteDistributionMode.RANGE, Seq(idAsc), None),
+      ("CREATE TABLE mydb.table_name (id bigint, description string) USING parquet " +
+        "PARTITIONED BY (bucket(8, description)) DISTRIBUTED BY PARTITION ORDERED BY id",
+        true, classOf[CreateTable], WriteDistributionMode.HASH, Seq(idAsc),
+        Some(Seq(bucket(8, Array(FieldReference("description")))))),
+      ("CREATE TABLE mydb.table_name (id bigint, description string) USING parquet " +
+        "PARTITIONED BY (bucket(8, description)) LOCALLY ORDERED BY (id)",
+        true, classOf[CreateTable], WriteDistributionMode.NONE, Seq(idAsc), None),
+      ("CREATE TABLE testcat.mydb.table_name USING parquet UNORDERED AS SELECT * FROM src",
+        false, classOf[CreateTableAsSelect], WriteDistributionMode.NONE, Seq.empty, None),
+      (s"REPLACE TABLE testcat.tab (i INT, s STRING) USING $v2Format " +
+        "ORDERED BY (bucket(8, s) DESC NULLS FIRST)",
+        false, classOf[ReplaceTable], WriteDistributionMode.RANGE, Seq(bucketDesc), None),
+      (s"REPLACE TABLE testcat.tab USING $v2Format " +
+        "ORDERED BY (bucket(8, s) DESC NULLS FIRST) AS SELECT * FROM src",
+        false, classOf[ReplaceTableAsSelect], WriteDistributionMode.RANGE, Seq(bucketDesc), None)
+    ).foreach { case (sql, withDefault, planClass, mode, ordering, partitioning) =>
+      val (plan, actualMode) = parseAndResolve(sql, withDefault) match {
+        case c: CreateTable => (c, c.writeDistributionMode)
+        case c: CreateTableAsSelect => (c, c.writeDistributionMode)
+        case r: ReplaceTable => (r, r.writeDistributionMode)
+        case r: ReplaceTableAsSelect => (r, r.writeDistributionMode)
+        case other => fail(s"unexpected plan for $sql: $other")
+      }
+      assert(planClass.isInstance(plan), sql)
+      assert(actualMode == mode, sql)
+      assert(plan.writeOrdering == ordering, sql)
+      partitioning.foreach(p => assert(plan.partitioning == p, sql))
     }
   }
 

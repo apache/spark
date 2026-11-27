@@ -16,12 +16,12 @@
 #
 
 import functools
+import importlib
 import inspect
 import threading
-import importlib
 import time
 from types import ModuleType
-from typing import Tuple, Union, List, Callable, Any, Type
+from typing import Any, Callable, List, Tuple, Type, Union
 
 __all__: List[str] = []
 

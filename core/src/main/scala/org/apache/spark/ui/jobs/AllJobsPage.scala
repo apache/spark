@@ -260,7 +260,9 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
         UIUtils.prependBaseUri(request, parent.basePath),
         "jobs", // subPath
         killEnabled,
-        jobIdTitle
+        jobIdTitle,
+        parent.actionsViaGetEnabled,
+        parent.csrfToken
       ).table(jobPage)
     } catch {
       case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
@@ -369,12 +371,19 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
                 ("Running", "hold", "Are you sure you want to hold this application? All " +
                   "executors will be decommissioned after finishing their running tasks.")
               }
+              val label = action.capitalize
+              // Same form as the kill buttons; see UIUtils.actionFormMethod.
               <li>
                 <strong>Application:</strong>
                 {status}
-                <a href={s"$basePathUri/jobs/$action/"}
-                   data-confirm-message={confirm}
-                   class="confirm-link">{s"($action)"}</a>
+                <form action={s"$basePathUri/jobs/$action/"}
+                      method={UIUtils.actionFormMethod(parent.actionsViaGetEnabled)}
+                      class="d-inline">
+                  <input type="hidden" name="csrfToken" value={parent.csrfToken}/>
+                  <button type="submit"
+                          data-confirm-message={confirm}
+                          class="btn btn-sm btn-outline-secondary confirm-link">{label}</button>
+                </form>
                 {parent.lastHoldRequestStatus.getOrElse("")}
               </li>
             }
@@ -553,7 +562,9 @@ private[ui] class JobPagedTable(
     basePath: String,
     subPath: String,
     killEnabled: Boolean,
-    jobIdTitle: String
+    jobIdTitle: String,
+    actionsViaGetEnabled: Boolean,
+    csrfToken: String
   ) extends PagedTable[JobTableRowData] {
 
   private val (sortColumn, desc, pageSize) = getTableParameters(request, jobTag, jobIdTitle)
@@ -612,11 +623,17 @@ private[ui] class JobPagedTable(
     val job = jobTableRow.jobData
 
     val killLink = if (killEnabled) {
-      // SPARK-6846 this should be POST-only but YARN AM won't proxy POST
-      val killLinkUri = s"$basePath/jobs/job/kill/?id=${job.jobId}"
-      <a href={killLinkUri}
-         data-kill-message={s"Are you sure you want to kill job ${job.jobId} ?"}
-         class="kill-link float-end">(kill)</a>
+      // The same form the master UI uses for killing applications and drivers; only the
+      // method follows spark.ui.actionsViaGetEnabled, see UIUtils.actionFormMethod.
+      <form action={s"$basePath/jobs/job/kill/"}
+            method={UIUtils.actionFormMethod(actionsViaGetEnabled)}
+            class="d-inline float-end">
+        <input type="hidden" name="id" value={job.jobId.toString}/>
+        <input type="hidden" name="csrfToken" value={csrfToken}/>
+        <button type="submit"
+                data-kill-message={s"Are you sure you want to kill job ${job.jobId} ?"}
+                class="btn btn-sm btn-outline-danger kill-link">Kill</button>
+      </form>
     } else {
       Seq.empty
     }

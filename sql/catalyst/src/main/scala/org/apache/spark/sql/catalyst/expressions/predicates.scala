@@ -27,9 +27,10 @@ import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedPlanId
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReference
 import org.apache.spark.sql.catalyst.expressions.Cast._
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LeafNode, LogicalPlan, Project, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, Join, LeafNode, LocalLimit, LogicalPlan, Offset, Project, Sample, Sort, Union}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.{CollationFactory, TypeUtils}
 import org.apache.spark.sql.internal.SQLConf
@@ -118,36 +119,42 @@ trait PredicateHelper extends AliasHelper with Logging {
    */
   def findExpressionAndTrackLineageDown(
       exp: Expression,
-      plan: LogicalPlan): Option[(Expression, LogicalPlan)] = {
-    if (exp.references.isEmpty) return None
+      plan: LogicalPlan): Option[(Expression, LogicalPlan)] =
+    findExpressionAndTrackAllLineagesDown(exp, plan).headOption
+
+  /**
+   * Like [[findExpressionAndTrackLineageDown]], but returns every lineage, not only the first one.
+   * It follows each branch of a union, and each child that has the references of exp. With
+   * `strict`, it returns no lineage at all if it cannot follow exp down one of those.
+   */
+  def findExpressionAndTrackAllLineagesDown(
+      exp: Expression,
+      plan: LogicalPlan,
+      strict: Boolean = false): Seq[(Expression, LogicalPlan)] = {
+    if (exp.references.isEmpty) return Nil
+
+    // The lineages of each expression in the plan it is paired with.
+    def lineages(pairs: Seq[(Expression, LogicalPlan)]): Seq[(Expression, LogicalPlan)] = {
+      val found = pairs.map { case (e, p) => findExpressionAndTrackAllLineagesDown(e, p, strict) }
+      if (strict && found.exists(_.isEmpty)) Nil else found.flatten
+    }
 
     plan match {
       case p: Project =>
         val aliases = getAliasMap(p)
-        findExpressionAndTrackLineageDown(replaceAlias(exp, aliases), p.child)
+        findExpressionAndTrackAllLineagesDown(replaceAlias(exp, aliases), p.child, strict)
       // we can unwrap only if there are row projections, and no aggregation operation
       case a: Aggregate =>
         val aliasMap = getAliasMap(a)
-        findExpressionAndTrackLineageDown(replaceAlias(exp, aliasMap), a.child)
+        findExpressionAndTrackAllLineagesDown(replaceAlias(exp, aliasMap), a.child, strict)
       case l: LeafNode if exp.references.subsetOf(l.outputSet) =>
-        Some((exp, l))
+        Seq((exp, l))
       case u: Union =>
         val index = u.output.indexWhere(_.semanticEquals(exp))
-        if (index > -1) {
-          u.children
-            .flatMap(child => findExpressionAndTrackLineageDown(child.output(index), child))
-            .headOption
-        } else {
-          None
-        }
+        if (index > -1) lineages(u.children.map(child => (child.output(index), child))) else Nil
       case other =>
-        other.children.flatMap {
-          child => if (exp.references.subsetOf(child.outputSet)) {
-            findExpressionAndTrackLineageDown(exp, child)
-          } else {
-            None
-          }
-        }.headOption
+        lineages(other.children.filter(child => exp.references.subsetOf(child.outputSet))
+          .map(child => (exp, child)))
     }
   }
 
@@ -223,6 +230,102 @@ trait PredicateHelper extends AliasHelper with Logging {
     case e: Unevaluable => false
     case e => e.children.forall(canEvaluateWithinJoin)
   }
+
+  /**
+   * The output columns of `plan` that can fail to compute. Under whole-stage codegen, a
+   * projection or an aggregation computes a deterministic column for a row only when a condition
+   * above first reads it, and `PushPredicateThroughNonJoin` pushes a condition below a projection
+   * with the expression substituted. So a condition over such a column can fail as its expression
+   * does. The columns are:
+   *  - A deterministic column of a [[Project]] whose expression
+   *    [[ExprUtils.canEvaluateUnconditionally]] rejects or reads such a column of its child.
+   *  - A result column of an [[Aggregate]] whose expression, with each aggregate function taken
+   *    as its value, is deterministic and rejected by it. Only an aggregation with grouping keys
+   *    under whole-stage codegen computes it lazily, so this is conservative for the others,
+   *    e.g. a global aggregation or an `ObjectHashAggregateExec`.
+   *
+   * These operators pass such columns of their children through:
+   *  - [[Filter]] and [[Sample]].
+   *  - [[LocalLimit]], [[GlobalLimit]] and [[Offset]]. A global limit or an offset passes them
+   *    through only when its input has a single partition; otherwise the exchange below it
+   *    computes every column, and this is conservative.
+   *  - [[Sort]]. It passes them through only when the physical plan removes it as redundant, as
+   *    when its child is already sorted; otherwise it computes every column, and this is
+   *    conservative.
+   *  - [[Join]], from both sides. Only the streamed side of a broadcast hash join passes them
+   *    through; a build side, a shuffled hash join or a sort-merge join computes every column, so
+   *    this is conservative for them.
+   *
+   * Other columns and operators do not count:
+   *  - A non-deterministic column, computed for every row the operator outputs, and the grouping
+   *    keys and aggregate functions of an aggregation, computed on every row it gets.
+   *  - The columns through any other operator, e.g. a `Union`, `Generate`, `Deduplicate`,
+   *    `Window` or `Repartition`, whose input rows get every column computed.
+   *    `FinishAnalysis` removes `SubqueryAlias` and `ResolvedHint` before the rules that call
+   *    this run, and a `Tail` is only at the top of a plan.
+   */
+  protected def failableOutput(plan: LogicalPlan): AttributeSet = plan match {
+    case Project(projectList, child) =>
+      val below = failableOutput(child)
+      AttributeSet(projectList.collect {
+        case a: Alias if a.child.deterministic &&
+            (!ExprUtils.canEvaluateUnconditionally(a.child) ||
+              a.child.references.exists(below.contains)) => a.toAttribute
+        case a: Attribute if below.contains(a) => a
+      })
+    case agg: Aggregate =>
+      AttributeSet(agg.aggregateExpressions.flatMap {
+        case a: Alias =>
+          val result = a.child.transform { case e: AggregateExpression => e.resultAttribute }
+          if (result.deterministic && !ExprUtils.canEvaluateUnconditionally(result)) {
+            Some(a.toAttribute)
+          } else {
+            None
+          }
+        case _ => None
+      })
+    case j: Join => failableOutput(j.left) ++ failableOutput(j.right)
+    case _: Filter | _: Sample | _: LocalLimit | _: GlobalLimit | _: Offset | _: Sort =>
+      failableOutput(plan.children.head)
+    case _ => AttributeSet.empty
+  }
+
+  /**
+   * Splits conjuncts, in their written order, into the ones that may be evaluated ahead of the
+   * others, by pushing them below a join, moving them into the condition of a join or combining
+   * them into the filter below, and the ones that may not. A non-deterministic or throwable
+   * conjunct may not, and nor may a conjunct written after it that can fail: one that
+   * [[ExprUtils.canEvaluateUnconditionally]] rejects or that reads a column of `plans`, the
+   * inputs of the joins or of the filter below, that can fail (see
+   * `failableOutput`). It would be evaluated on rows that the conjunct before it may have
+   * dropped. The conjuncts that may not move are returned in their written order.
+   *
+   * If `afterBarrier` is true, the conjuncts are treated as written after a conjunct outside
+   * `conditions` that keeps the ones that can fail in place, such as a throwable one in the
+   * condition of the join below them, so only the ones that can not fail may move.
+   */
+  protected def splitMovable(
+      conditions: Seq[Expression],
+      plans: Seq[LogicalPlan],
+      afterBarrier: Boolean = false): (Seq[Expression], Seq[Expression]) = {
+    val (leading, following) = if (afterBarrier) {
+      (Nil, conditions)
+    } else {
+      conditions.span(cond => cond.deterministic && !cond.throwable)
+    }
+    lazy val failable = AttributeSet.fromAttributeSets(plans.map(failableOutput))
+    val (cannotFail, stayUp) = following.partition { cond =>
+      ExprUtils.canEvaluateUnconditionally(cond) && !cond.references.exists(failable.contains)
+    }
+    (leading ++ cannotFail, stayUp)
+  }
+
+  /**
+   * Returns true if `condition`, the condition of a join or a filter whose inputs are `plans`, has
+   * a conjunct that may not move (see [[splitMovable]]).
+   */
+  protected def hasImmovableConjunct(condition: Expression, plans: Seq[LogicalPlan]): Boolean =
+    splitMovable(splitConjunctivePredicates(condition), plans)._2.nonEmpty
 
   /**
    * Returns a filter that its reference is a subset of `outputSet` and it contains the maximum
@@ -323,7 +426,7 @@ trait PredicateHelper extends AliasHelper with Logging {
   since = "1.0.0",
   group = "predicate_funcs")
 case class Not(child: Expression)
-  extends UnaryExpression with Predicate with ImplicitCastInputTypes {
+  extends UnaryExpression with Predicate with ImplicitCastInputTypes with NoThrow {
   override def nullIntolerant: Boolean = true
 
   override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
@@ -460,7 +563,7 @@ case class UnresolvedInSubqueryPlanId(values: Seq[Expression], planId: Long)
   since = "1.0.0",
   group = "predicate_funcs")
 // scalastyle:on line.size.limit
-case class In(value: Expression, list: Seq[Expression]) extends Predicate {
+case class In(value: Expression, list: Seq[Expression]) extends Predicate with NoThrow {
 
   require(list != null, "list should not be null")
 
@@ -625,7 +728,8 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
  * Optimized version of In clause, when all filter values of In clause are
  * static.
  */
-case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with Predicate {
+case class InSet(child: Expression, hset: Set[Any])
+  extends UnaryExpression with Predicate with NoThrow {
 
   require(hset != null, "hset could not be null")
 
@@ -773,7 +877,7 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
           break;
        """)
 
-    val switchCode = if (caseBranches.size > 0) {
+    val switchCode = if (caseBranches.nonEmpty) {
       code"""
         switch (${valueGen.value}) {
           ${caseBranches.mkString("\n")}
@@ -852,7 +956,7 @@ object InSet {
   since = "1.0.0",
   group = "predicate_funcs")
 case class And(left: Expression, right: Expression) extends BinaryOperator with Predicate
-  with CommutativeExpression {
+  with CommutativeExpression with NoThrow {
 
   override def inputType: AbstractDataType = BooleanType
 
@@ -955,7 +1059,7 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
   since = "1.0.0",
   group = "predicate_funcs")
 case class Or(left: Expression, right: Expression) extends BinaryOperator with Predicate
-  with CommutativeExpression {
+  with CommutativeExpression with NoThrow {
 
   override def inputType: AbstractDataType = BooleanType
 
@@ -1101,6 +1205,25 @@ object Equality {
   }
 }
 
+/** Matches a `<`/`<=`/`>`/`>=` comparison; see `unapply` for the exact normalization. */
+object RangePredicate {
+  /**
+   * Normalizes `<`, `<=`, `>`, `>=` to `(low.dataType, low, high, strict)`, with
+   * `>` and `>=` reordered so the lower bound leads. Inclusivity stays on the
+   * original predicate, which execution evaluates as-is; a strict predicate
+   * also selects the exclusive point-index bound.
+   */
+  def unapply(expression: Expression): Option[(DataType, Expression, Expression, Boolean)] = {
+    expression match {
+      case LessThan(low, high) => Some((low.dataType, low, high, true))
+      case LessThanOrEqual(low, high) => Some((low.dataType, low, high, false))
+      case GreaterThan(high, low) => Some((low.dataType, low, high, true))
+      case GreaterThanOrEqual(high, low) => Some((low.dataType, low, high, false))
+      case _ => None
+    }
+  }
+}
+
 // TODO: although map type is not orderable, technically map type should be able to be used
 // in equality comparison
 @ExpressionDescription(
@@ -1126,7 +1249,7 @@ object Equality {
   since = "1.0.0",
   group = "predicate_funcs")
 case class EqualTo(left: Expression, right: Expression)
-    extends BinaryComparison {
+    extends BinaryComparison with NoThrow {
   override def nullIntolerant: Boolean = true
   override def symbol: String = "="
 
@@ -1174,7 +1297,8 @@ case class EqualTo(left: Expression, right: Expression)
   """,
   since = "1.1.0",
   group = "predicate_funcs")
-case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComparison {
+case class EqualNullSafe(left: Expression, right: Expression)
+    extends BinaryComparison with NoThrow {
 
   override def symbol: String = "<=>"
 
@@ -1278,7 +1402,7 @@ case class EqualNull(left: Expression, right: Expression, replacement: Expressio
   since = "1.0.0",
   group = "predicate_funcs")
 case class LessThan(left: Expression, right: Expression)
-    extends BinaryComparison {
+    extends BinaryComparison with NoThrow {
   override def nullIntolerant: Boolean = true
   override def symbol: String = "<"
 
@@ -1314,7 +1438,7 @@ case class LessThan(left: Expression, right: Expression)
   since = "1.0.0",
   group = "predicate_funcs")
 case class LessThanOrEqual(left: Expression, right: Expression)
-    extends BinaryComparison {
+    extends BinaryComparison with NoThrow {
   override def nullIntolerant: Boolean = true
   override def symbol: String = "<="
 
@@ -1350,7 +1474,7 @@ case class LessThanOrEqual(left: Expression, right: Expression)
   since = "1.0.0",
   group = "predicate_funcs")
 case class GreaterThan(left: Expression, right: Expression)
-    extends BinaryComparison {
+    extends BinaryComparison with NoThrow {
   override def nullIntolerant: Boolean = true
 
   override def symbol: String = ">"
@@ -1387,7 +1511,7 @@ case class GreaterThan(left: Expression, right: Expression)
   since = "1.0.0",
   group = "predicate_funcs")
 case class GreaterThanOrEqual(left: Expression, right: Expression)
-    extends BinaryComparison {
+    extends BinaryComparison with NoThrow {
   override def nullIntolerant: Boolean = true
 
   override def symbol: String = ">="

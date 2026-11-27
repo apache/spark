@@ -18,9 +18,8 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Expression, Literal, SubqueryExpression, Unevaluable}
+import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, Literal, SubqueryExpression, Unevaluable}
 import org.apache.spark.sql.catalyst.optimizer.{ComputeCurrentTime, ReplaceExpressions}
-import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.TimestampType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -47,11 +46,7 @@ object TimeTravelSpec {
       throw QueryCompilationErrors.invalidTimestampExprForTimeTravel(
         "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.INPUT", ts)
     }
-    val tsToEval = {
-      val fakeProject = Project(Seq(Alias(ts, "ts")()), OneRowRelation())
-      ComputeCurrentTime(ReplaceExpressions(fakeProject)).asInstanceOf[Project]
-        .expressions.head.asInstanceOf[Alias].child
-    }
+    val tsToEval = ComputeCurrentTime.applyForExpression(ReplaceExpressions.replace(ts))
     tsToEval.foreach {
       case _: Unevaluable =>
         throw QueryCompilationErrors.invalidTimestampExprForTimeTravel(

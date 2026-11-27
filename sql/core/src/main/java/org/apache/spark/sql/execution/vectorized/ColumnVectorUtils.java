@@ -114,12 +114,13 @@ public class ColumnVectorUtils {
         col.setTimestampNanosVal((TimestampNanosVal) row.get(fieldIdx, t));
       } else if (pdt instanceof PhysicalVariantType) {
         col.setVariant((VariantVal)row.get(fieldIdx, t));
-      } else if (pdt instanceof PhysicalStructType) {
-        StructType st = (StructType) t;
-        InternalRow inner = row.getStruct(fieldIdx, st.fields().length);
+      } else if (pdt instanceof PhysicalStructType pst) {
+        // A struct, or a framework type stored as one, such as FileType.
+        StructField[] fields = pst.fields();
+        InternalRow inner = row.getStruct(fieldIdx, fields.length);
         InternalRow tmpRow = new GenericInternalRow(1);
-        for (int i = 0; i < st.fields().length; i++) {
-          StructField field = st.fields()[i];
+        for (int i = 0; i < fields.length; i++) {
+          StructField field = fields[i];
           tmpRow.update(0, inner.isNullAt(i) ? null : inner.get(i, field.dataType()));
           // ConstantColumnVector's constructor pre-allocates struct children, so the recursive
           // populate call below has a target vector to write into.

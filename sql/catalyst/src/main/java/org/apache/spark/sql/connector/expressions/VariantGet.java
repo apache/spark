@@ -44,7 +44,9 @@ public class VariantGet extends ExpressionWithToString {
   /**
    * Creates VariantGet expression.
    * @param child variant column reference
-   * @param path JSON path string
+   * @param path extraction path using Spark's default Variant path grammar. See
+   *             {@link org.apache.spark.sql.connector.read.VariantExtraction#metadata()} with
+   *             {@code legacyPathBackslashAsLiteral=false} for bracket-key escape rules.
    * @param targetType expected result type
    * @param failOnError whether to throw on cast failure ({@code variant_get}) or return null
    *                    ({@code try_variant_get})

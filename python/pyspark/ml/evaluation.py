@@ -16,32 +16,32 @@
 #
 
 import sys
-from abc import abstractmethod, ABCMeta
-from typing import Any, Dict, Optional, TYPE_CHECKING
+from abc import ABCMeta, abstractmethod
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
-from pyspark import since, keyword_only
-from pyspark.ml.wrapper import JavaParams
+from pyspark import keyword_only, since
+from pyspark.ml.common import inherit_doc
 from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import (
+    HasFeaturesCol,
     HasLabelCol,
     HasPredictionCol,
     HasProbabilityCol,
     HasRawPredictionCol,
-    HasFeaturesCol,
     HasWeightCol,
 )
-from pyspark.ml.common import inherit_doc
 from pyspark.ml.util import JavaMLReadable, JavaMLWritable, try_remote_evaluate
+from pyspark.ml.wrapper import JavaParams
 from pyspark.sql.dataframe import DataFrame
 
 if TYPE_CHECKING:
     from pyspark.ml._typing import (
-        ParamMap,
         BinaryClassificationEvaluatorMetricType,
         ClusteringEvaluatorDistanceMeasureType,
         ClusteringEvaluatorMetricType,
         MulticlassClassificationEvaluatorMetricType,
         MultilabelClassificationEvaluatorMetricType,
+        ParamMap,
         RankingEvaluatorMetricType,
         RegressionEvaluatorMetricType,
     )
@@ -1171,6 +1171,7 @@ class RankingEvaluator(
 if __name__ == "__main__":
     import doctest
     import tempfile
+
     import pyspark.ml.evaluation
     from pyspark.sql import SparkSession
 

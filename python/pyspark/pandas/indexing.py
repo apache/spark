@@ -22,27 +22,24 @@ A loc indexer for pandas-on-Spark DataFrame/Series.
 from abc import ABCMeta, abstractmethod
 from collections.abc import Iterable
 from functools import reduce
-from typing import Any, Optional, List, Tuple, TYPE_CHECKING, Union, cast, Sized
+from typing import TYPE_CHECKING, Any, List, Optional, Sized, Tuple, Union, cast
 
+import numpy as np
 import pandas as pd
 from pandas.api.types import is_list_like
-import numpy as np
 
-from pyspark.loose_version import LooseVersion
-from pyspark.sql import functions as F, Column as PySparkColumn
-from pyspark.sql.types import BooleanType, LongType, DataType
-from pyspark.sql.utils import is_remote
-from pyspark.errors import AnalysisException
 from pyspark import pandas as ps  # noqa: F401
+from pyspark.errors import AnalysisException
+from pyspark.loose_version import LooseVersion
 from pyspark.pandas._typing import Label, Name, Scalar
+from pyspark.pandas.exceptions import SparkPandasIndexingError, SparkPandasNotImplementedError
 from pyspark.pandas.internal import (
     DEFAULT_SERIES_NAME,
-    InternalField,
-    InternalFrame,
     NATURAL_ORDER_COLUMN_NAME,
     SPARK_DEFAULT_SERIES_NAME,
+    InternalField,
+    InternalFrame,
 )
-from pyspark.pandas.exceptions import SparkPandasIndexingError, SparkPandasNotImplementedError
 from pyspark.pandas.utils import (
     is_name_like_tuple,
     is_name_like_value,
@@ -53,6 +50,10 @@ from pyspark.pandas.utils import (
     spark_column_equals,
     verify_temp_column_name,
 )
+from pyspark.sql import Column as PySparkColumn
+from pyspark.sql import functions as F
+from pyspark.sql.types import BooleanType, DataType, LongType
+from pyspark.sql.utils import is_remote
 
 if TYPE_CHECKING:
     from pyspark.pandas.frame import DataFrame
@@ -741,7 +742,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
             cond, limit, remaining_index = self._select_rows(rows_sel)
             missing_keys: List[Name] = []
             (
-                selected_column_labels,
+                _,
                 data_spark_columns,
                 _,
                 _,
@@ -763,30 +764,6 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
                 if isinstance(value, Series):
                     value = value.spark.column
             else:
-                if (
-                    # Only apply this behavior for pandas 3+, where CoW semantics changed.
-                    LooseVersion(pd.__version__) >= "3.0.0"
-                    # Only for multi-column assignment (single-column assignment is unaffected).
-                    and len(selected_column_labels) > 1
-                    # Column selector must be list-like (e.g. ["shield", "max_speed"]), not scalar label access.
-                    and is_list_like(cols_sel)
-                    # Excludes string/bytes (single label), tuple (e.g. MultiIndex label),
-                    # and slice selectors; keeps this narrowly on explicit column lists.
-                    and not isinstance(cols_sel, (str, bytes, tuple, slice))
-                    # Only trigger when cached/anchored Series exist on the frame,
-                    # matching the problematic case where views were materialized before assignment.
-                    and hasattr(self._psdf_or_psser, "_psseries")
-                ):
-                    selected_column_labels_set = set(selected_column_labels)
-                    selected_labels_in_internal_order = [
-                        label
-                        for label in self._internal.column_labels
-                        if label in selected_column_labels_set
-                    ]
-                    if selected_column_labels != selected_labels_in_internal_order:
-                        # If requested columns are in different order than the DataFrame's internal order,
-                        # it returns early (no-op), matching pandas 3 behavior for that edge case.
-                        return
                 value = F.lit(value)
 
             new_data_spark_columns = []
@@ -1887,12 +1864,14 @@ class iLocIndexer(LocIndexerLike):
 
 
 def _test() -> None:
-    import os
     import doctest
+    import os
     import sys
-    from pyspark.sql import SparkSession
-    import pyspark.pandas.indexing
+
     from pandas.util.version import Version
+
+    import pyspark.pandas.indexing
+    from pyspark.sql import SparkSession
 
     os.chdir(os.environ["SPARK_HOME"])
 

@@ -225,7 +225,7 @@ class DataFrameJoinSuite extends SharedSparkSession
       spark.range(10e10.toLong)
         .join(spark.range(10e10.toLong), "id")
         .queryExecution.executedPlan
-    assert(plan1.collect { case p: BroadcastHashJoinExec => p }.size == 0)
+    assert(plan1.collect { case p: BroadcastHashJoinExec => p }.isEmpty)
 
     // now with a hint it should be broadcasted
     val plan2 =
@@ -447,7 +447,8 @@ class DataFrameJoinSuite extends SharedSparkSession
             }
             assert(broadcastExchanges.size == 1)
             val tables = broadcastExchanges.head.collect {
-              case FileSourceScanExec(_, _, _, _, _, _, _, _, Some(tableIdent), _, _) => tableIdent
+              case FileSourceScanExec(_, _, _, _, _, _, _, _, Some(tableIdent), _, _, _) =>
+                tableIdent
             }
             assert(tables.size == 1)
             assert(tables.head ===
@@ -638,5 +639,61 @@ class DataFrameJoinSuite extends SharedSparkSession
       ($"left.a".isNull && $"right.x".isNull))
 
     checkAnswer(left.join(right, condition), Row(0, 10, 1, 22))
+  }
+
+  test("SPARK-62054: cost-based join reorder keeps a join condition over one side") {
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true", SQLConf.JOIN_REORDER_ENABLED.key -> "true") {
+      withTable("s", "v", "w") {
+        Seq((-1, 10), (0, 20), (1, 20)).toDF("id", "value").write.saveAsTable("s")
+        Seq(10, 20).toDF("value").write.saveAsTable("v")
+        Seq(20).toDF("value").write.saveAsTable("w")
+        Seq("s", "v", "w").foreach { t =>
+          sql(s"ANALYZE TABLE $t COMPUTE STATISTICS FOR ALL COLUMNS")
+        }
+        // The throwable condition over sv stays in the join condition, and it is false on the
+        // row whose id is 0. The project in sv keeps ReorderJoin from flattening the joins.
+        val df = sql(
+          """SELECT sv.id FROM (SELECT s.id, s.value FROM s JOIN v ON s.value = v.value) sv
+            |JOIN w ON sv.value = w.value AND
+            |  CASE WHEN sv.id > 0 THEN true WHEN sv.id = 0 THEN false
+            |  ELSE raise_error('boom') END
+            |""".stripMargin)
+        checkAnswer(df, Row(1))
+      }
+    }
+  }
+
+  test("SPARK-62054: cost-based join reorder does not evaluate a join condition on the rows " +
+    "that a join condition before it removes") {
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true", SQLConf.JOIN_REORDER_ENABLED.key -> "true",
+        SQLConf.ANSI_ENABLED.key -> "true") {
+      val tables = Seq("t1", "t2", "t3", "u1", "u2", "u3")
+      withTable(tables: _*) {
+        Seq((1, 1, 5), (2, 2, 5)).toDF("k", "v", "f").write.saveAsTable("t1")
+        Seq[(Int, Option[Int])]((1, None), (2, Some(1))).toDF("k", "g").write.saveAsTable("t2")
+        Seq((1, 1), (2, 0)).toDF("v", "w").write.saveAsTable("t3")
+        Seq[(Int, Option[Int], Option[Int], Int, Int)](
+          (1, None, None, -1, 1), (2, Some(5), Some(0), 1, 1))
+          .toDF("k", "a", "b", "c", "v").write.saveAsTable("u1")
+        ((5, 6) +: (1 to 50).map(i => (100 + i, 200 + i))).toDF("a", "b").write.saveAsTable("u2")
+        Seq(1).toDF("v").write.saveAsTable("u3")
+        tables.foreach(t => sql(s"ANALYZE TABLE $t COMPUTE STATISTICS FOR ALL COLUMNS"))
+        // The throwable CASE WHEN in the lower ON clause is NULL on the row whose k is 1, on which
+        // the division in the upper ON clause would fail.
+        checkAnswer(sql(
+          """SELECT x.k FROM (SELECT t1.k, t1.v FROM t1 JOIN t2 ON t1.k = t2.k AND
+            |  CASE WHEN t1.f < 0 THEN raise_error('neg') ELSE t1.f > t2.g END) x
+            |JOIN t3 ON x.v = t3.v AND 10 / (x.k - t3.w) > 0
+            |""".stripMargin), Row(2))
+        // The OR in the lower ON clause is NULL on the row whose k is 1, on which the throwable
+        // CASE WHEN in the upper ON clause would raise the error. The lower join is joined last.
+        checkAnswer(sql(
+          """SELECT x.k FROM (SELECT u1.k, u1.c, u1.v FROM u1 JOIN u2
+            |  ON u1.a = u2.a OR u1.b = u2.b) x
+            |JOIN u3 ON x.v = u3.v AND
+            |  CASE WHEN x.c > 0 THEN true WHEN x.c = 0 THEN false ELSE raise_error('n') END
+            |""".stripMargin), Row(2))
+      }
+    }
   }
 }

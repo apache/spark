@@ -19,19 +19,21 @@
 A wrapper for GroupedData to behave like pandas GroupBy.
 """
 
-from abc import ABCMeta, abstractmethod
 import inspect
+import warnings
+from abc import ABCMeta, abstractmethod
 from collections import defaultdict, namedtuple
 from functools import partial, wraps
 from itertools import product
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     Dict,
     Generic,
     Iterator,
-    Mapping,
     List,
+    Mapping,
     Optional,
     Sequence,
     Set,
@@ -40,68 +42,68 @@ from typing import (
     TypeVar,
     Union,
     cast,
-    TYPE_CHECKING,
 )
-import warnings
 
 import pandas as pd
-from pandas.api.types import is_number, is_hashable, is_list_like
+from pandas.api.types import is_hashable, is_list_like, is_number
 
-from pyspark.sql import Column, DataFrame as SparkDataFrame, Window, functions as F
-from pyspark.sql.internal import InternalFunction as SF
-from pyspark.sql.types import (
-    BooleanType,
-    DataType,
-    DoubleType,
-    NumericType,
-    StructField,
-    StructType,
-    StringType,
-)
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark._globals import _NoValue, _NoValueType
 from pyspark.loose_version import LooseVersion
 from pyspark.pandas._typing import Axis, FrameLike, Label, Name
-from pyspark.pandas.typedef import infer_return_type, DataFrameType, ScalarType, SeriesType
+from pyspark.pandas.config import get_option
+from pyspark.pandas.correlation import (
+    CORRELATION_CORR_OUTPUT_COLUMN,
+    CORRELATION_COUNT_OUTPUT_COLUMN,
+    CORRELATION_VALUE_1_COLUMN,
+    CORRELATION_VALUE_2_COLUMN,
+    compute,
+)
+from pyspark.pandas.exceptions import DataError
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.internal import (
-    InternalField,
-    InternalFrame,
     HIDDEN_COLUMNS,
     NATURAL_ORDER_COLUMN_NAME,
-    SPARK_INDEX_NAME_FORMAT,
     SPARK_DEFAULT_SERIES_NAME,
+    SPARK_INDEX_NAME_FORMAT,
     SPARK_INDEX_NAME_PATTERN,
+    InternalField,
+    InternalFrame,
 )
 from pyspark.pandas.missing.groupby import (
     MissingPandasLikeDataFrameGroupBy,
     MissingPandasLikeSeriesGroupBy,
 )
 from pyspark.pandas.series import Series, first_series
-from pyspark.pandas.config import get_option
-from pyspark.pandas.correlation import (
-    compute,
-    CORRELATION_VALUE_1_COLUMN,
-    CORRELATION_VALUE_2_COLUMN,
-    CORRELATION_CORR_OUTPUT_COLUMN,
-    CORRELATION_COUNT_OUTPUT_COLUMN,
-)
+from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_precision_scale
+from pyspark.pandas.typedef import DataFrameType, ScalarType, SeriesType, infer_return_type
 from pyspark.pandas.utils import (
     align_diff_frames,
     ansi_mode_context,
     is_name_like_tuple,
     is_name_like_value,
+    log_advice,
     name_like_string,
     same_anchor,
     scol_for,
     verify_temp_column_name,
-    log_advice,
 )
-from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_precision_scale
-from pyspark.pandas.exceptions import DataError
+from pyspark.sql import Column, Window
+from pyspark.sql import DataFrame as SparkDataFrame
+from pyspark.sql import functions as F
+from pyspark.sql.internal import InternalFunction as SF
+from pyspark.sql.types import (
+    BooleanType,
+    DataType,
+    DoubleType,
+    NumericType,
+    StringType,
+    StructField,
+    StructType,
+)
 
 if TYPE_CHECKING:
-    from pyspark.pandas.window import RollingGroupby, ExpandingGroupby, ExponentialMovingGroupby
+    from pyspark.pandas.window import ExpandingGroupby, ExponentialMovingGroupby, RollingGroupby
 
 
 FuncT = TypeVar("FuncT", bound=Callable[..., Any])
@@ -114,6 +116,18 @@ def with_ansi_mode_context(f: FuncT) -> FuncT:
             return f(self, *args, **kwargs)
 
     return cast(FuncT, _with_ansi_mode_context)
+
+
+def _drop_group_keys(pdf: pd.DataFrame, groupkey_names: List[str]) -> pd.DataFrame:
+    """
+    Drop the group key columns from a pandas group, keeping the `name` attribute that pandas
+    sets to the group key, which `drop` does not carry over to the new DataFrame.
+    """
+    pdf_without_keys = pdf.drop(groupkey_names, axis=1)
+    # Read `name` from `__dict__` so that a column named "name" is not picked up instead.
+    if "name" in pdf.__dict__:
+        object.__setattr__(pdf_without_keys, "name", pdf.__dict__["name"])
+    return pdf_without_keys
 
 
 # to keep it the same as pandas
@@ -397,6 +411,8 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                         )
                     )
 
+                elif aggfunc == "size":
+                    reordered.append(F.expr("count(1) as `{0}`".format(data_col)))
                 else:
                     reordered.append(
                         F.expr("{1}(`{0}`) as `{2}`".format(col_name, aggfunc, data_col))
@@ -2035,7 +2051,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         else:
 
             def pandas_apply(pdf: pd.DataFrame, *a: Any, **k: Any) -> Any:
-                return f(pdf.drop(groupkey_names, axis=1), *a, **k)
+                return f(_drop_group_keys(pdf, groupkey_names), *a, **k)
 
         should_return_series = False
 
@@ -2268,7 +2284,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 f = func
 
             def wrapped_func(pdf: pd.DataFrame) -> pd.DataFrame:
-                return f(pdf.drop(groupkey_names, axis=1))
+                return f(_drop_group_keys(pdf, groupkey_names))
 
             def pandas_filter(pdf: pd.DataFrame) -> pd.DataFrame:
                 return pdf.groupby(groupkey_names).filter(wrapped_func).drop(groupkey_names, axis=1)
@@ -5029,12 +5045,14 @@ def normalize_keyword_aggregation(
 
 
 def _test() -> None:
-    import os
     import doctest
+    import os
     import sys
+
     import numpy
-    from pyspark.sql import SparkSession
+
     import pyspark.pandas.groupby
+    from pyspark.sql import SparkSession
 
     os.chdir(os.environ["SPARK_HOME"])
 

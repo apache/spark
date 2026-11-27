@@ -22,14 +22,14 @@ import java.sql.{Connection, PreparedStatement, ResultSet, SQLException}
 import scala.util.Using
 import scala.util.control.NonFatal
 
-import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, SparkException, TaskContext}
+import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.SQL_TEXT
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.{DataSourceMetricsMixin, ExternalEngineDatasourceRDD}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
@@ -72,6 +72,10 @@ object JDBCRDD extends Logging {
     try {
       getQueryOutputSchema(fullQuery, options, dialect, conn)
     } catch {
+      // Must precede isObjectNotFoundException, whose default matches any 42xxx SQLSTATE.
+      case e: SQLException if dialect.isPermissionDeniedException(e) =>
+        throw QueryExecutionErrors.jdbcExternalEnginePermissionError(
+          fullQuery, e, isSchemaResolution = true)
       // By checking isObjectNotFoundException before isSyntaxErrorBestEffort, we can reliably
       // distinguish between the case where the table does not exist and other SQL syntax errors.
       // This order is important because when a table does not exist, the exception raised can
@@ -83,19 +87,8 @@ object JDBCRDD extends Logging {
         dialect.isNotSelectableObjectException(e) =>
         throw QueryCompilationErrors.objectNotSelectableError(catalogName.get, ident.get, e)
       case e: SQLException if dialect.isSyntaxErrorBestEffort(e) =>
-        throw new SparkException(
-          errorClass = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_OUTPUT_SCHEMA_RESOLUTION",
-          messageParameters = Map(
-            "jdbcQuery" -> fullQuery,
-            "externalEngineError" -> e.getMessage.replaceAll("\\.+$", "")
-          ),
-          cause = e)
-    }
-  }
-
-  def resolveTable(options: JDBCOptions): StructType = {
-    JdbcUtils.withConnection(options) {
-      resolveTable(options, _)
+        throw QueryExecutionErrors.jdbcExternalEngineSyntaxError(
+          fullQuery, e, isSchemaResolution = true)
     }
   }
 
@@ -105,9 +98,7 @@ object JDBCRDD extends Logging {
     Using.resource(conn.prepareStatement(query)) { statement =>
       statement.setQueryTimeout(options.queryTimeout)
       Using.resource(statement.executeQuery()) { rs =>
-        JdbcUtils.getSchema(conn, rs, dialect, alwaysNullable = true,
-          isTimestampNTZ = options.preferTimestampNTZ,
-          preferTimestampNanos = options.preferTimestampNanos)
+        JdbcUtils.getSchema(conn, rs, dialect, options, alwaysNullable = true)
       }
     }
   }
@@ -165,7 +156,8 @@ object JDBCRDD extends Logging {
       limit: Int = 0,
       sortOrders: Array[String] = Array.empty[String],
       offset: Int = 0,
-      additionalMetrics: Map[String, SQLMetric] = Map()): RDD[InternalRow] = {
+      additionalMetrics: Map[String, SQLMetric] = Map(),
+      databaseMetadata: Option[JDBCDatabaseMetadata] = None): RDD[InternalRow] = {
     val url = options.url
     val dialect = JdbcDialects.get(url)
     val quotedColumns = if (groupByColumns.isEmpty) {
@@ -185,7 +177,8 @@ object JDBCRDD extends Logging {
       parts,
       url,
       options,
-      databaseMetadata = JDBCDatabaseMetadata.fromJDBCConnectionFactory(connectionFactory),
+      databaseMetadata = databaseMetadata.getOrElse(
+        JDBCDatabaseMetadata.fromJDBCConnectionFactory(connectionFactory)),
       groupByColumns,
       sampleClause,
       limit,
@@ -243,13 +236,15 @@ class JDBCRDD(
     // H2's JDBC driver does not support the setSchema() method.  We pass a
     // fully-qualified table name in the SELECT statement.  I don't know how to
     // talk about a table in a completely portable way.
-    var builder = dialect
-      .getJdbcSQLQueryBuilder(options)
-      .withPredicates(predicates, partition.getOrElse(JDBCPartition(whereClause = null, idx = 1)))
-      .withColumns(columns)
-      .withSortOrders(sortOrders)
-      .withLimit(limit)
-      .withOffset(offset)
+    var builder = JdbcUtils.withLegacyIntegralCastPushdown(options.legacyIntegralCastPushdown) {
+      dialect
+        .getJdbcSQLQueryBuilder(options)
+        .withPredicates(predicates, partition.getOrElse(JDBCPartition(whereClause = null, idx = 1)))
+        .withColumns(columns)
+        .withSortOrders(sortOrders)
+        .withLimit(limit)
+        .withOffset(offset)
+    }
 
     groupByColumns.foreach { groupByKeys =>
       builder = builder.withGroupByColumns(groupByKeys)
@@ -374,14 +369,13 @@ class JDBCRDD(
       try {
         stmt.executeQuery()
       } catch {
+        // Before the syntax check, as in resolveTable: some dialects treat any 42xxx as syntax.
+        case e: SQLException if dialect.isPermissionDeniedException(e) =>
+          throw QueryExecutionErrors.jdbcExternalEnginePermissionError(
+            sqlText, e, isSchemaResolution = false)
         case e: SQLException if dialect.isSyntaxErrorBestEffort(e) =>
-          throw new SparkException(
-            errorClass = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_QUERY_EXECUTION",
-            messageParameters = Map(
-              "jdbcQuery" -> sqlText,
-              "externalEngineError" -> e.getMessage.replaceAll("\\.+$", "")
-            ),
-            cause = e)
+          throw QueryExecutionErrors.jdbcExternalEngineSyntaxError(
+            sqlText, e, isSchemaResolution = false)
       }
     }
 
@@ -391,7 +385,8 @@ class JDBCRDD(
         dialect,
         schema,
         inputMetrics,
-        Some(fetchAndTransformToInternalRowsMetric))
+        Some(fetchAndTransformToInternalRowsMetric),
+        Some(options))
 
     CompletionIterator[InternalRow, Iterator[InternalRow]](
       new InterruptibleIterator(context, rowsIterator), close())

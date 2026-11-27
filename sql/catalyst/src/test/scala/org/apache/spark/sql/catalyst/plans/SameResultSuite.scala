@@ -20,10 +20,12 @@ package org.apache.spark.sql.catalyst.plans
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.types.BooleanType
 
 /**
  * Tests for the sameResult function of [[LogicalPlan]].
@@ -86,5 +88,18 @@ class SameResultSuite extends SparkFunSuite {
     val df1Optimized = Optimize.execute(df1.analyze)
     val df2Optimized = Optimize.execute(df2.analyze)
     assertSameResult(df1Optimized, df2Optimized)
+  }
+
+  test("SPARK-61818: existence join") {
+    val Seq(a, b, _) = testRelation.output
+    val a2 = testRelation2.output.head
+    def existenceJoin(condition: Expression): LogicalPlan = {
+      // `RewritePredicateSubquery` creates a fresh `exists` attribute for every join it builds.
+      val exists = AttributeReference("exists", BooleanType, nullable = false)()
+      testRelation.join(testRelation2, ExistenceJoin(exists), Some(condition))
+        .where(exists || b > 0)
+    }
+    assertSameResult(existenceJoin(a === a2), existenceJoin(a === a2))
+    assertSameResult(existenceJoin(a === a2), existenceJoin(a > a2), result = false)
   }
 }

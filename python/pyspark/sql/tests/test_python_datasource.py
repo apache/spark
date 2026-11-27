@@ -16,24 +16,28 @@
 #
 import contextlib
 import io
+import json
+import logging
 import os
 import tempfile
 import unittest
-import logging
-import json
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
-from typing import Callable, Iterable, List, Union, Iterator, Tuple
+from typing import Callable, Iterable, Iterator, List, Tuple, Union
+from unittest import mock
 
-from pyspark.errors import AnalysisException, PythonException
+from pyspark.errors import AnalysisException, PySparkNotImplementedError, PythonException
 from pyspark.memory_profiler_ext import has_memory_profiler
 from pyspark.sql.datasource import (
     CaseInsensitiveDict,
+    ClusteredDistribution,
     DataSource,
     DataSourceArrowWriter,
     DataSourceReader,
+    DataSourceStreamWriter,
     DataSourceWriter,
+    Distribution,
     EqualNullSafe,
     EqualTo,
     Filter,
@@ -46,24 +50,127 @@ from pyspark.sql.datasource import (
     LessThan,
     LessThanOrEqual,
     Not,
+    NullOrdering,
+    OrderedDistribution,
+    SortDirection,
+    SortOrder,
     StringContains,
     StringEndsWith,
     StringStartsWith,
+    UnspecifiedDistribution,
     WriterCommitMessage,
 )
 from pyspark.sql.functions import spark_partition_id
 from pyspark.sql.session import SparkSession
-from pyspark.sql.types import Row, StructField, StructType, IntegerType, DecimalType, VariantVal
+from pyspark.sql.types import DecimalType, IntegerType, Row, StructField, StructType, VariantVal
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import (
     SPARK_HOME,
     ReusedSQLTestCase,
 )
 from pyspark.testing.utils import (
+    eventually,
     have_pyarrow,
     pyarrow_requirement_message,
 )
 from pyspark.util import is_remote_only
+
+
+class PythonDataSourceWorkerUtilsTests(unittest.TestCase):
+    def test_profiler_accumulators_are_created_only_when_profiling_is_enabled(self):
+        from pyspark.accumulators import (
+            INT_ACCUMULATOR_PARAM,
+            SpecialAccumulatorIds,
+            _accumulatorRegistry,
+            _deserialize_accumulator,
+        )
+        from pyspark.serializers import SpecialLengths
+        from pyspark.serializers import read_int as read_serialized_int
+
+        with mock.patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
+            from pyspark.sql.worker import utils as worker_utils
+
+        self.addCleanup(_accumulatorRegistry.clear)
+
+        def run_worker(profiler, regular_accumulator_id=None):
+            infile = io.BytesIO()
+            outfile = io.BytesIO()
+            main_call_count = 0
+
+            def main(_infile, _outfile):
+                nonlocal main_call_count
+                main_call_count += 1
+                if regular_accumulator_id is not None:
+                    _deserialize_accumulator(
+                        regular_accumulator_id,
+                        0,
+                        INT_ACCUMULATOR_PARAM,
+                    )
+
+            with mock.patch.multiple(
+                worker_utils,
+                check_python_version=mock.DEFAULT,
+                start_faulthandler_periodic_traceback=mock.DEFAULT,
+                setup_memory_limits=mock.DEFAULT,
+                setup_spark_files=mock.DEFAULT,
+                setup_broadcasts=mock.DEFAULT,
+                RunnerConf=mock.DEFAULT,
+                read_int=mock.DEFAULT,
+                WorkerPerfProfiler=mock.DEFAULT,
+                WorkerMemoryProfiler=mock.DEFAULT,
+            ) as patched:
+                patched["RunnerConf"].return_value.profiler = profiler
+                patched["read_int"].return_value = SpecialLengths.END_OF_STREAM
+                patched["WorkerPerfProfiler"].return_value = contextlib.nullcontext()
+                patched["WorkerMemoryProfiler"].return_value = contextlib.nullcontext()
+
+                worker_utils.worker_run(main, infile, outfile)
+
+                profiler_calls = (
+                    patched["WorkerPerfProfiler"].call_count,
+                    patched["WorkerMemoryProfiler"].call_count,
+                )
+
+            outfile.seek(0)
+            return (
+                read_serialized_int(outfile),
+                set(_accumulatorRegistry),
+                profiler_calls,
+                main_call_count,
+            )
+
+        profiler_accumulator_ids = {
+            SpecialAccumulatorIds.SQL_UDF_PROFIER,
+            SpecialAccumulatorIds.SQL_UDF_PROFIER_V2,
+        }
+        test_cases = [
+            (None, 0, set(), (0, 0)),
+            ("unsupported", 0, set(), (0, 0)),
+            ("perf", 2, profiler_accumulator_ids, (1, 0)),
+            ("memory", 2, profiler_accumulator_ids, (0, 1)),
+        ]
+        for profiler, update_count, accumulator_ids, profiler_calls in test_cases:
+            with self.subTest(profiler=profiler):
+                self.assertEqual(
+                    run_worker(profiler),
+                    (update_count, accumulator_ids, profiler_calls, 1),
+                )
+
+        self.assertEqual(
+            run_worker(None, regular_accumulator_id=1),
+            (1, {1}, (0, 0), 1),
+        )
+
+    @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+    def test_deserialize_unsupported_filter(self):
+        with mock.patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
+            from pyspark.sql.worker.data_source_pushdown_filters import deserializeFilter
+
+        with self.assertRaises(PySparkNotImplementedError) as pe:
+            deserializeFilter({"name": "UnknownFilter", "columnPath": ["x"], "isNegated": False})
+
+        self.assertEqual(pe.exception.getCondition(), "UNSUPPORTED_FILTER")
+        self.assertEqual(pe.exception.getMessageParameters(), {"name": "UnknownFilter"})
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
@@ -364,7 +471,10 @@ class BasePythonDataSourceTestsMixin:
 
         with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
             self.spark.dataSource.register(TestDataSource)
-            with self.assertRaisesRegex(Exception, "DATA_SOURCE_EXTRANEOUS_FILTERS"):
+            with self.assertRaisesRegex(
+                Exception,
+                "DATA_SOURCE_EXTRANEOUS_FILTERS.*returned filters that are not part of the input",
+            ):
                 self.spark.read.format("test").load().filter("x = 1").show()
 
     def test_filter_pushdown_error(self):
@@ -408,6 +518,641 @@ class BasePythonDataSourceTestsMixin:
             df = self.spark.read.format("TestDataSource").schema("x int").load()
             with self.assertRaisesRegex(Exception, "DATA_SOURCE_PUSHDOWN_DISABLED"):
                 df.show()
+
+    def test_limit_pushdown(self):
+        class TestDataSourceReader(DataSourceReader):
+            def __init__(self):
+                self.limit = None
+
+            def pushLimit(self, limit: int) -> bool:
+                self.limit = limit
+                return True
+
+            def partitions(self):
+                assert self.limit == 2, self.limit
+                return super().partitions()
+
+            def read(self, partition):
+                assert self.limit == 2, self.limit
+                # Only produce as many rows as the query asked for.
+                for i in range(self.limit):
+                    yield (i,)
+
+        class TestDataSource(DataSource):
+            def schema(self):
+                return "x int"
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf({"spark.sql.python.limitPushdown.enabled": True}):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").load().limit(2)
+            assertDataFrameEqual(df, [Row(x=0), Row(x=1)])
+
+    def test_limit_pushdown_not_supported(self):
+        class TestDataSourceReader(DataSourceReader):
+            def pushLimit(self, limit: int) -> bool:
+                # The reader cannot make use of the limit.
+                return False
+
+            def read(self, partition):
+                yield from [(0,), (1,), (2,)]
+
+        class TestDataSource(DataSource):
+            def schema(self):
+                return "x int"
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf({"spark.sql.python.limitPushdown.enabled": True}):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").load().limit(2)
+            assertDataFrameEqual(df, [Row(x=0), Row(x=1)])
+
+    def test_limit_pushdown_rejected_does_not_plan_under_mutated_state(self):
+        # A reader may mutate itself while considering a limit and then reject it. partitions()
+        # and read() must not run under that rejected state; the scan must behave as if pushLimit
+        # was never called.
+        class TestDataSourceReader(DataSourceReader):
+            def __init__(self):
+                self.considering_limit = False
+
+            def pushLimit(self, limit: int) -> bool:
+                # Mutate self, then reject the limit.
+                self.considering_limit = True
+                return False
+
+            def partitions(self):
+                assert not self.considering_limit, "partitions() planned under rejected limit"
+                return [InputPartition(0)]
+
+            def read(self, partition):
+                assert not self.considering_limit, "read() planned under rejected limit"
+                yield from [(0,), (1,), (2,)]
+
+        class TestDataSource(DataSource):
+            def schema(self):
+                return "x int"
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf({"spark.sql.python.limitPushdown.enabled": True}):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").load().limit(2)
+            assertDataFrameEqual(df, [Row(x=0), Row(x=1)])
+
+    def test_limit_pushdown_partitions_planned_after_push_limit(self):
+        # With both filter and limit pushdown enabled, partitions() must be planned only after
+        # pushLimit -- never in the filter-pushdown pass before the limit is known -- so a reader
+        # that shapes partitions from the pushed limit sees it, and does not do (discarded) full
+        # partition discovery first.
+        class TestDataSourceReader(DataSourceReader):
+            def __init__(self):
+                self.limit = None
+
+            def pushFilters(self, filters: List[Filter]) -> Iterable[Filter]:
+                return []  # accept all filters
+
+            def pushLimit(self, limit: int) -> bool:
+                self.limit = limit
+                return True
+
+            def partitions(self):
+                # Fails if planned before pushLimit set the limit.
+                assert self.limit == 2, self.limit
+                return [InputPartition(0)]
+
+            def read(self, partition):
+                assert self.limit == 2, self.limit
+                yield from [(1,), (1,)]
+
+        class TestDataSource(DataSource):
+            def schema(self):
+                return "x int"
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf(
+            {
+                "spark.sql.python.filterPushdown.enabled": True,
+                "spark.sql.python.limitPushdown.enabled": True,
+            }
+        ):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").load().filter("x = 1").limit(2)
+            assertDataFrameEqual(df, [Row(x=1), Row(x=1)])
+
+    def test_limit_pushdown_over_delivering_reader(self):
+        # A reader that accepts the limit but ignores it must not change the query result:
+        # Spark always applies the limit again after the scan.
+        class TestDataSourceReader(DataSourceReader):
+            def pushLimit(self, limit: int) -> bool:
+                return True
+
+            def read(self, partition):
+                yield from [(i,) for i in range(100)]
+
+        class TestDataSource(DataSource):
+            def schema(self):
+                return "x int"
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf({"spark.sql.python.limitPushdown.enabled": True}):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").load().limit(3)
+            self.assertEqual(df.count(), 3)
+
+    def test_limit_pushdown_with_filter(self):
+        # The limit is pushed after the filters, and the reader sees both. All filters are
+        # accepted here, so no post-scan filter remains to block limit pushdown.
+        class TestDataSourceReader(DataSourceReader):
+            def __init__(self):
+                self.filters = []
+                self.limit = None
+
+            def pushFilters(self, filters: List[Filter]) -> Iterable[Filter]:
+                self.filters = list(filters)
+                return []
+
+            def pushLimit(self, limit: int) -> bool:
+                # pushFilters must have been called before pushLimit.
+                assert EqualTo(("x",), 1) in self.filters, self.filters
+                self.limit = limit
+                return True
+
+            def read(self, partition):
+                assert EqualTo(("x",), 1) in self.filters, self.filters
+                assert self.limit == 5, self.limit
+                yield from [(1,), (1,)]
+
+        class TestDataSource(DataSource):
+            def schema(self):
+                return "x int"
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf(
+            {
+                "spark.sql.python.filterPushdown.enabled": True,
+                "spark.sql.python.limitPushdown.enabled": True,
+            }
+        ):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").load().filter("x = 1").limit(5)
+            # All filters are reported as fully pushed, so Spark does not re-apply them.
+            assertDataFrameEqual(df, [Row(x=1), Row(x=1)])
+
+    def test_limit_pushdown_blocked_by_post_scan_filter(self):
+        # A filter that the reader does not accept stays as a post-scan filter, which prevents
+        # LIMIT from being pushed: applying the limit before that filter could drop rows the
+        # query needs. The result must still be correct.
+        class TestDataSourceReader(DataSourceReader):
+            def pushFilters(self, filters: List[Filter]) -> Iterable[Filter]:
+                # Accept nothing.
+                return filters
+
+            def pushLimit(self, limit: int) -> bool:
+                raise AssertionError("pushLimit should not be called")
+
+            def read(self, partition):
+                yield from [(1,), (2,), (1,)]
+
+        class TestDataSource(DataSource):
+            def schema(self):
+                return "x int"
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf(
+            {
+                "spark.sql.python.filterPushdown.enabled": True,
+                "spark.sql.python.limitPushdown.enabled": True,
+            }
+        ):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").load().filter("x = 1").limit(5)
+            assertDataFrameEqual(df, [Row(x=1), Row(x=1)])
+
+    def test_limit_pushdown_rejected_with_accepted_filter(self):
+        # The reader accepts the filter but rejects the limit. Because every filter was pushed,
+        # no post-scan filter blocks the limit, so pushLimit is called -- and returns False. The
+        # worker then plans no read info (the rejected reader may be mutated), so build() re-plans
+        # the filters-only read from a fresh reader. That re-plan must reproduce the pushed-filter
+        # state, and the reader must return only the matching rows.
+        class TestDataSourceReader(DataSourceReader):
+            def __init__(self):
+                self.filters = []
+
+            def pushFilters(self, filters: List[Filter]) -> Iterable[Filter]:
+                self.filters = list(filters)
+                return []  # accept all filters
+
+            def pushLimit(self, limit: int) -> bool:
+                # pushLimit runs only after the filters were accepted.
+                assert EqualTo(("x",), 1) in self.filters, self.filters
+                return False  # reject the limit
+
+            def read(self, partition):
+                # Spark removed the accepted filter, so the reader must apply it itself.
+                assert EqualTo(("x",), 1) in self.filters, self.filters
+                yield from [(1,), (1,)]
+
+        class TestDataSource(DataSource):
+            def schema(self):
+                return "x int"
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf(
+            {
+                "spark.sql.python.filterPushdown.enabled": True,
+                "spark.sql.python.limitPushdown.enabled": True,
+            }
+        ):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").load().filter("x = 1").limit(5)
+            assertDataFrameEqual(df, [Row(x=1), Row(x=1)])
+
+    def test_limit_pushdown_nondeterministic_push_filters(self):
+        # Pushing a limit replays pushFilters on a fresh reader. Spark has already committed to
+        # the first pass's filter decision, so a reader that reports a different supported set
+        # the second time must fail the query instead of silently returning wrong rows.
+        with tempfile.TemporaryDirectory(prefix="test_limit_pushdown_nondet") as d:
+            counter_path = os.path.join(d, "calls")
+
+            class TestDataSourceReader(DataSourceReader):
+                def pushFilters(self, filters: List[Filter]) -> Iterable[Filter]:
+                    # Accept everything on the first call, nothing on the replay.
+                    n = 0
+                    if os.path.exists(counter_path):
+                        with open(counter_path) as f:
+                            n = int(f.read().strip() or 0)
+                    with open(counter_path, "w") as f:
+                        f.write(str(n + 1))
+                    return [] if n == 0 else list(filters)
+
+                def pushLimit(self, limit: int) -> bool:
+                    return True
+
+                def read(self, partition):
+                    yield from [(1,), (2,), (3,)]
+
+            class TestDataSource(DataSource):
+                def schema(self):
+                    return "x int"
+
+                def reader(self, schema) -> "DataSourceReader":
+                    return TestDataSourceReader()
+
+            with self.sql_conf(
+                {
+                    "spark.sql.python.filterPushdown.enabled": True,
+                    "spark.sql.python.limitPushdown.enabled": True,
+                }
+            ):
+                self.spark.dataSource.register(TestDataSource)
+                df = self.spark.read.format("TestDataSource").load().filter("x = 1").limit(5)
+                with self.assertRaisesRegex(Exception, "must be deterministic"):
+                    df.collect()
+
+    def test_limit_pushdown_rejected_nondeterministic_push_filters(self):
+        # When a pushed limit is rejected, planning falls back to a fresh reader. That fallback
+        # replay of pushFilters must also be validated: a reader that agrees on the earlier passes
+        # but diverges on the fallback must fail the query, not silently read unfiltered rows.
+        with tempfile.TemporaryDirectory(prefix="test_limit_pushdown_reject_nondet") as d:
+            counter_path = os.path.join(d, "calls")
+
+            class TestDataSourceReader(DataSourceReader):
+                def pushFilters(self, filters: List[Filter]) -> Iterable[Filter]:
+                    n = 0
+                    if os.path.exists(counter_path):
+                        with open(counter_path) as f:
+                            n = int(f.read().strip() or 0)
+                    with open(counter_path, "w") as f:
+                        f.write(str(n + 1))
+                    # Accept everything on the first two passes, nothing on the fallback replay.
+                    return [] if n < 2 else list(filters)
+
+                def pushLimit(self, limit: int) -> bool:
+                    return False  # reject the limit, triggering the fresh-reader fallback
+
+                def read(self, partition):
+                    yield from [(1,), (2,), (3,)]
+
+            class TestDataSource(DataSource):
+                def schema(self):
+                    return "x int"
+
+                def reader(self, schema) -> "DataSourceReader":
+                    return TestDataSourceReader()
+
+            with self.sql_conf(
+                {
+                    "spark.sql.python.filterPushdown.enabled": True,
+                    "spark.sql.python.limitPushdown.enabled": True,
+                }
+            ):
+                self.spark.dataSource.register(TestDataSource)
+                df = self.spark.read.format("TestDataSource").load().filter("x = 1").limit(5)
+                with self.assertRaisesRegex(Exception, "must be deterministic"):
+                    df.collect()
+
+    def test_limit_pushdown_zero(self):
+        # `LIMIT 0` never reaches the data source: EliminateLimits rewrites it to an empty
+        # relation before operator pushdown runs, so the scan is removed altogether and neither
+        # pushLimit nor read is called.
+        class TestDataSourceReader(DataSourceReader):
+            def pushLimit(self, limit: int) -> bool:
+                raise AssertionError("pushLimit should not be called for LIMIT 0")
+
+            def read(self, partition):
+                raise AssertionError("read should not be called for LIMIT 0")
+
+        class TestDataSource(DataSource):
+            def schema(self):
+                return "x int"
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf({"spark.sql.python.limitPushdown.enabled": True}):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").load().limit(0)
+            assertDataFrameEqual(df, [])
+
+    def test_limit_pushdown_disabled_with_filter_pushdown_enabled(self):
+        # The reader implements pushLimit while limit pushdown is disabled. Filter pushdown runs
+        # a different planning worker, which must not silently ignore pushLimit either.
+        class TestDataSourceReader(DataSourceReader):
+            def pushFilters(self, filters: List[Filter]) -> Iterable[Filter]:
+                return []
+
+            def pushLimit(self, limit: int) -> bool:
+                return True
+
+            def read(self, partition):
+                yield from [(1,)]
+
+        class TestDataSource(DataSource):
+            def schema(self):
+                return "x int"
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf(
+            {
+                "spark.sql.python.filterPushdown.enabled": True,
+                "spark.sql.python.limitPushdown.enabled": False,
+            }
+        ):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").load().filter("x = 1").limit(1)
+            with self.assertRaisesRegex(Exception, "DATA_SOURCE_PUSHDOWN_DISABLED"):
+                df.show()
+
+    def test_filter_pushdown_disabled_with_limit_pushdown_enabled(self):
+        # The reader implements pushFilters while filter pushdown is disabled. A limit-only scan
+        # runs the limit-pushdown worker, which caches the read info, so `plan_data_source_read`
+        # never runs. That worker must not silently ignore pushFilters either. No filter is used
+        # here on purpose: with filter pushdown disabled a filter would stay above the scan and
+        # block limit pushdown, so the limit worker would never run.
+        class TestDataSourceReader(DataSourceReader):
+            def pushFilters(self, filters: List[Filter]) -> Iterable[Filter]:
+                return []
+
+            def pushLimit(self, limit: int) -> bool:
+                return True
+
+            def read(self, partition):
+                yield from [(1,)]
+
+        class TestDataSource(DataSource):
+            def schema(self):
+                return "x int"
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf(
+            {
+                "spark.sql.python.filterPushdown.enabled": False,
+                "spark.sql.python.limitPushdown.enabled": True,
+            }
+        ):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").load().limit(1)
+            with self.assertRaisesRegex(Exception, "DATA_SOURCE_PUSHDOWN_DISABLED"):
+                df.show()
+
+    def test_limit_pushdown_disabled(self):
+        class TestDataSourceReader(DataSourceReader):
+            def pushLimit(self, limit: int) -> bool:
+                assert False
+
+            def read(self, partition):
+                assert False
+
+        class TestDataSource(DataSource):
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf({"spark.sql.python.limitPushdown.enabled": False}):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").schema("x int").load()
+            with self.assertRaisesRegex(Exception, "DATA_SOURCE_PUSHDOWN_DISABLED"):
+                df.show()
+
+    def test_pushdown_disabled_check_survives_reused_readinfo_cache(self):
+        # The provider caches the pushdown-free read info across scans of the same relation. That
+        # cache must not hide the DATA_SOURCE_PUSHDOWN_DISABLED check: warming it with pushdown
+        # enabled and then rescanning the same relation with pushdown disabled must still raise,
+        # because the reader implements a pushdown method the disabled config would silently
+        # ignore. The cache records the pushdown flags it was populated under and recomputes when
+        # they change, so the check runs for the flags currently in effect.
+        class TestDataSourceReader(DataSourceReader):
+            def pushFilters(self, filters: List[Filter]) -> Iterable[Filter]:
+                return []
+
+            def read(self, partition):
+                yield from [(0,), (1,)]
+
+        class TestDataSource(DataSource):
+            def schema(self):
+                return "x int"
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        self.spark.dataSource.register(TestDataSource)
+        df = self.spark.read.format("TestDataSource").load()
+
+        # Warm the provider's read-info cache with filter pushdown enabled. The query has no
+        # filters, so pushFilters is never called and the check passes.
+        with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
+            assertDataFrameEqual(df, [Row(x=0), Row(x=1)])
+
+        # Rescan the same relation with filter pushdown disabled. `df.select("*")` re-plans the
+        # scan on the same (provider-scoped) data source, so a stale cache would skip the check.
+        with self.sql_conf({"spark.sql.python.filterPushdown.enabled": False}):
+            with self.assertRaisesRegex(Exception, "DATA_SOURCE_PUSHDOWN_DISABLED"):
+                df.select("*").collect()
+
+    def test_pushdown_disabled_check_survives_reused_readinfo_cache_limit(self):
+        # Symmetric to the filter case above, for the limit flag. The read-info cache is keyed by
+        # both pushdown flags, so a regression that dropped only the limit flag from the key must
+        # be caught too. Warm the cache with limit pushdown enabled (no LIMIT in the query, so
+        # pushLimit is never called and the check passes), then rescan the same relation with
+        # limit pushdown disabled and assert the reader's pushLimit implementation is reported
+        # instead of silently ignored.
+        class TestDataSourceReader(DataSourceReader):
+            def pushLimit(self, limit: int) -> bool:
+                return True
+
+            def read(self, partition):
+                yield from [(0,), (1,)]
+
+        class TestDataSource(DataSource):
+            def schema(self):
+                return "x int"
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        self.spark.dataSource.register(TestDataSource)
+        df = self.spark.read.format("TestDataSource").load()
+
+        with self.sql_conf({"spark.sql.python.limitPushdown.enabled": True}):
+            assertDataFrameEqual(df, [Row(x=0), Row(x=1)])
+
+        with self.sql_conf({"spark.sql.python.limitPushdown.enabled": False}):
+            with self.assertRaisesRegex(Exception, "DATA_SOURCE_PUSHDOWN_DISABLED"):
+                df.select("*").collect()
+
+    def test_limit_pushdown_not_implemented(self):
+        # A reader that does not implement pushLimit is unaffected when the conf is on.
+        class TestDataSourceReader(DataSourceReader):
+            def read(self, partition):
+                yield from [(0,), (1,), (2,)]
+
+        class TestDataSource(DataSource):
+            def schema(self):
+                return "x int"
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf({"spark.sql.python.limitPushdown.enabled": True}):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").load().limit(2)
+            assertDataFrameEqual(df, [Row(x=0), Row(x=1)])
+
+    def test_limit_pushdown_only_does_not_call_push_filters(self):
+        # A limit-only query (no filters) must not trigger a spurious pushFilters([]) call, even
+        # when filter pushdown is also enabled: the worker skips pushFilters when there is nothing
+        # to push. A reader may therefore implement both and still expect pushFilters to be called
+        # only when the query has pushable filters.
+        class TestDataSourceReader(DataSourceReader):
+            def __init__(self):
+                self.limit = None
+
+            def pushFilters(self, filters: List[Filter]) -> Iterable[Filter]:
+                raise AssertionError("pushFilters should not be called without filters")
+
+            def pushLimit(self, limit: int) -> bool:
+                self.limit = limit
+                return True
+
+            def read(self, partition):
+                assert self.limit == 2, self.limit
+                yield from [(0,), (1,)]
+
+        class TestDataSource(DataSource):
+            def schema(self):
+                return "x int"
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf(
+            {
+                "spark.sql.python.filterPushdown.enabled": True,
+                "spark.sql.python.limitPushdown.enabled": True,
+            }
+        ):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").load().limit(2)
+            assertDataFrameEqual(df, [Row(x=0), Row(x=1)])
+
+    def test_limit_pushdown_invalid_return_type(self):
+        # pushLimit must return a bool. A non-bool return is rejected during planning.
+        class TestDataSourceReader(DataSourceReader):
+            def pushLimit(self, limit: int):
+                return "yes"
+
+            def read(self, partition):
+                yield from [(0,), (1,), (2,)]
+
+        class TestDataSource(DataSource):
+            def schema(self):
+                return "x int"
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf({"spark.sql.python.limitPushdown.enabled": True}):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").load().limit(2)
+            with self.assertRaisesRegex(Exception, "DATA_SOURCE_INVALID_RETURN_TYPE"):
+                df.collect()
+
+    def test_filter_pushdown_no_limit_with_limit_pushdown_enabled(self):
+        # Filter pushdown defers planning while limit pushdown is enabled, expecting a possible
+        # limit pass. When the query has no limit, that pass never comes, so build() plans the
+        # read with the filters only. The reader accepts the filter (so Spark removes it from the
+        # plan), which means the deferred re-plan must reproduce the pushed-filter state and the
+        # reader itself must return only the matching rows.
+        class TestDataSourceReader(DataSourceReader):
+            def __init__(self):
+                self.filters = []
+
+            def pushFilters(self, filters: List[Filter]) -> Iterable[Filter]:
+                self.filters = list(filters)
+                return []  # accept all filters
+
+            def pushLimit(self, limit: int) -> bool:
+                raise AssertionError("pushLimit should not be called without a limit")
+
+            def read(self, partition):
+                # Spark removed the accepted filter, so the reader is responsible for it.
+                assert EqualTo(("x",), 1) in self.filters, self.filters
+                yield from [(1,), (1,)]
+
+        class TestDataSource(DataSource):
+            def schema(self):
+                return "x int"
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf(
+            {
+                "spark.sql.python.filterPushdown.enabled": True,
+                "spark.sql.python.limitPushdown.enabled": True,
+            }
+        ):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").load().filter("x = 1")
+            assertDataFrameEqual(df, [Row(x=1), Row(x=1)])
 
     def _check_filters(self, sql_type, sql_filter, python_filters):
         """
@@ -755,6 +1500,715 @@ class BasePythonDataSourceTestsMixin:
             df2 = self.spark.read.format("json").load(d)
             assertDataFrameEqual(df2, df)
 
+    WRITE_DIST_CONF = "spark.sql.python.writeDistributionAndOrdering.enabled"
+
+    # AQE coalescing would merge the post-shuffle partitions of these tiny test inputs back
+    # into a single task, which hides how the required distribution split them up.
+    NO_COALESCE_CONF = "spark.sql.adaptive.coalescePartitions.enabled"
+
+    # Without coalescing, every one of the default 200 shuffle partitions would start a Python
+    # write task. Keys "a" and "b" still land in different partitions out of 4.
+    SHUFFLE_PARTITIONS_CONF = "spark.sql.shuffle.partitions"
+
+    def _write_conf(self, enabled=True):
+        return {
+            "spark.sql.adaptive.enabled": True,
+            self.WRITE_DIST_CONF: enabled,
+            self.NO_COALESCE_CONF: False,
+            self.SHUFFLE_PARTITIONS_CONF: 4,
+        }
+
+    def _register_write_requirements_source(
+        self,
+        name,
+        path,
+        distribution=None,
+        ordering=None,
+        strictly_required=None,
+        num_partitions=None,
+        advisory_size=None,
+    ):
+        """Registers a data source whose writer records the rows each task received.
+
+        Each task writes the rows it was handed to its own JSON file under `path`, so a
+        test can read them back with `_read_tasks` and assert on how Spark distributed and
+        ordered the data. Files are used rather than an in-memory collection because the
+        writer runs in a separate Python worker process.
+        """
+
+        class TestWriter(DataSourceWriter):
+            def write(self, iterator):
+                from pyspark import TaskContext
+
+                rows = [[row.key, row.value] for row in iterator]
+                output = os.path.join(path, f"{TaskContext.get().partitionId()}.json")
+                with open(output, "w") as f:
+                    json.dump(rows, f)
+                return WriterCommitMessage()
+
+            if distribution is not None:
+
+                def requiredDistribution(self):
+                    return distribution
+
+            if ordering is not None:
+
+                def requiredOrdering(self):
+                    return ordering
+
+            if strictly_required is not None:
+
+                def distributionStrictlyRequired(self):
+                    return strictly_required
+
+            if num_partitions is not None:
+
+                def requiredNumPartitions(self):
+                    return num_partitions
+
+            if advisory_size is not None:
+
+                def advisoryPartitionSizeInBytes(self):
+                    return advisory_size
+
+        class TestDataSource(DataSource):
+            @classmethod
+            def name(cls):
+                return name
+
+            def writer(self, schema, overwrite):
+                return TestWriter()
+
+        self.spark.dataSource.register(TestDataSource)
+
+    def _read_tasks(self, path):
+        """Returns the rows each write task received, as a list of lists of [key, value]."""
+        tasks = []
+        for entry in sorted(os.listdir(path)):
+            with open(os.path.join(path, entry)) as f:
+                rows = json.load(f)
+            # Skip tasks that got no rows; they say nothing about distribution.
+            if rows:
+                tasks.append(rows)
+        return tasks
+
+    def _input_tasks(self, df):
+        """Returns the rows in each non-empty partition of `df`, in `_read_tasks` form."""
+        # spark_partition_id rather than df.rdd, which Spark Connect does not support.
+        tasks = {}
+        for r in df.select("key", "value", spark_partition_id().alias("pid")).collect():
+            tasks.setdefault(r.pid, []).append([r.key, r.value])
+        return [tasks[pid] for pid in sorted(tasks)]
+
+    def _write_df(self):
+        # Start from several partitions with interleaved keys, so that a required
+        # distribution has to move rows in order to co-locate them.
+        return self.spark.createDataFrame(
+            [(k, v) for v in range(3) for k in ["a", "b"]], "key string, value int"
+        ).repartition(4)
+
+    def test_write_no_requirements_keeps_input_layout(self):
+        with tempfile.TemporaryDirectory(prefix="write_req_default") as d:
+            self._register_write_requirements_source("write_req_default", d)
+            df = self._write_df()
+            with self.sql_conf(self._write_conf()):
+                df.write.format("write_req_default").mode("append").save()
+                expected = self._input_tasks(df)
+            # A writer that asks for nothing gets the input partitioning untouched.
+            self.assertEqual(self._read_tasks(d), expected)
+
+    def test_write_clustered_distribution(self):
+        with tempfile.TemporaryDirectory(prefix="write_req_clustered") as d:
+            self._register_write_requirements_source(
+                "write_req_clustered", d, distribution=ClusteredDistribution((("key",),))
+            )
+            with self.sql_conf(self._write_conf()):
+                self._write_df().write.format("write_req_clustered").mode("append").save()
+            tasks = self._read_tasks(d)
+            # Rows are clustered by `key`, so each task sees exactly one key.
+            for rows in tasks:
+                self.assertEqual(len({key for key, _ in rows}), 1)
+            # The two keys land in two different tasks, and no row is lost.
+            self.assertEqual(len(tasks), 2)
+            self.assertEqual(sum(len(rows) for rows in tasks), 6)
+
+    def test_write_required_ordering(self):
+        with tempfile.TemporaryDirectory(prefix="write_req_ordering") as d:
+            self._register_write_requirements_source(
+                "write_req_ordering",
+                d,
+                distribution=ClusteredDistribution((("key",),)),
+                ordering=[SortOrder(("key",)), SortOrder(("value",), SortDirection.DESCENDING)],
+            )
+            with self.sql_conf(self._write_conf()):
+                self._write_df().write.format("write_req_ordering").mode("append").save()
+            # Within each task rows arrive sorted by key asc, then value desc.
+            for rows in self._read_tasks(d):
+                self.assertEqual(rows, sorted(rows, key=lambda r: (r[0], -r[1])))
+
+    def test_write_null_ordering(self):
+        df = self.spark.createDataFrame(
+            [("a", v) for v in [1, None, 2]], "key string, value int"
+        ).repartition(3)
+        cases = [
+            # Without an explicit null ordering, nulls go first for an ascending sort and last
+            # for a descending one.
+            ("write_req_nulls_default_asc", SortOrder(("value",)), [None, 1, 2]),
+            (
+                "write_req_nulls_default",
+                SortOrder(("value",), SortDirection.DESCENDING),
+                [2, 1, None],
+            ),
+            (
+                "write_req_nulls_first",
+                SortOrder(("value",), SortDirection.DESCENDING, NullOrdering.NULLS_FIRST),
+                [None, 2, 1],
+            ),
+            (
+                "write_req_nulls_last",
+                SortOrder(("value",), SortDirection.ASCENDING, NullOrdering.NULLS_LAST),
+                [1, 2, None],
+            ),
+        ]
+        for name, order, expected in cases:
+            with self.subTest(name=name), tempfile.TemporaryDirectory(prefix=name) as d:
+                self._register_write_requirements_source(
+                    name, d, distribution=ClusteredDistribution((("key",),)), ordering=[order]
+                )
+                with self.sql_conf(self._write_conf()):
+                    df.write.format(name).mode("append").save()
+                self.assertEqual([[v for _, v in rows] for rows in self._read_tasks(d)], [expected])
+
+    def test_write_nested_column_path(self):
+        with tempfile.TemporaryDirectory(prefix="write_req_nested") as d:
+            self._register_write_requirements_source(
+                "write_req_nested", d, distribution=ClusteredDistribution((("s", "k"),))
+            )
+            df = self._write_df().selectExpr(
+                "key", "value", "named_struct('k', key, 'v', value) AS s"
+            )
+            with self.sql_conf(self._write_conf()):
+                df.write.format("write_req_nested").mode("append").save()
+            # Clustering by the nested field `s.k`, which equals `key`, co-locates each key.
+            # Clustering by the whole struct `s` would not, as `s.v` varies within a key.
+            tasks = self._read_tasks(d)
+            for rows in tasks:
+                self.assertEqual(len({key for key, _ in rows}), 1)
+            self.assertEqual(len(tasks), 2)
+            self.assertEqual(sum(len(rows) for rows in tasks), 6)
+
+    def test_write_requirements_use_writer_inputs(self):
+        # The planning writer gets the write's schema, options and overwrite flag: it clusters
+        # by the column named in an option, and only when all three are what the write passed.
+        # The option is set and read with different casing, as option keys are case-insensitive.
+        for mode in ["append", "overwrite"]:
+            name = f"write_req_inputs_{mode}"
+            expected_overwrite = mode == "overwrite"
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory(prefix=name) as d:
+
+                class InputsWriter(DataSourceWriter):
+                    def __init__(self, schema, options, overwrite):
+                        self.schema = schema
+                        self.options = options
+                        self.overwrite = overwrite
+
+                    def write(self, iterator):
+                        from pyspark import TaskContext
+
+                        rows = [[row.key, row.value] for row in iterator]
+                        output = os.path.join(d, f"{TaskContext.get().partitionId()}.json")
+                        with open(output, "w") as f:
+                            json.dump(rows, f)
+                        return WriterCommitMessage()
+
+                    def requiredDistribution(self):
+                        assert self.schema.fieldNames() == ["key", "value"], self.schema
+                        assert self.overwrite is expected_overwrite, self.overwrite
+                        return ClusteredDistribution(((self.options["cluster_by"],),))
+
+                class InputsDataSource(DataSource):
+                    @classmethod
+                    def name(cls):
+                        return name
+
+                    def writer(self, schema, overwrite):
+                        return InputsWriter(schema, self.options, overwrite)
+
+                self.spark.dataSource.register(InputsDataSource)
+                with self.sql_conf(self._write_conf()):
+                    writer = self._write_df().write.format(name)
+                    writer.option("Cluster_By", "key").mode(mode).save()
+                tasks = self._read_tasks(d)
+                for rows in tasks:
+                    self.assertEqual(len({key for key, _ in rows}), 1)
+                self.assertEqual(len(tasks), 2)
+                self.assertEqual(sum(len(rows) for rows in tasks), 6)
+
+    def test_write_requirements_planned_once(self):
+        # Spark reads each requirement separately, but asks the Python writer only once per write.
+        with tempfile.TemporaryDirectory(prefix="write_req_once") as d:
+            calls = os.path.join(d, "calls")
+
+            def record(method):
+                with open(calls, "a") as f:
+                    f.write(method + "\n")
+
+            class CountingWriter(DataSourceWriter):
+                def write(self, iterator):
+                    return WriterCommitMessage()
+
+                def requiredDistribution(self):
+                    record("requiredDistribution")
+                    return ClusteredDistribution((("key",),))
+
+                def distributionStrictlyRequired(self):
+                    record("distributionStrictlyRequired")
+                    return True
+
+                def requiredNumPartitions(self):
+                    record("requiredNumPartitions")
+                    return 0
+
+                def advisoryPartitionSizeInBytes(self):
+                    record("advisoryPartitionSizeInBytes")
+                    return 0
+
+                def requiredOrdering(self):
+                    record("requiredOrdering")
+                    return [SortOrder(("value",))]
+
+            class CountingDataSource(DataSource):
+                @classmethod
+                def name(cls):
+                    return "write_req_once"
+
+                def writer(self, schema, overwrite):
+                    return CountingWriter()
+
+            self.spark.dataSource.register(CountingDataSource)
+            with self.sql_conf(self._write_conf()):
+                self._write_df().write.format("write_req_once").mode("append").save()
+            with open(calls) as f:
+                recorded = f.read().split()
+            # Each requirement was evaluated exactly once.
+            self.assertEqual(
+                sorted(recorded),
+                [
+                    "advisoryPartitionSizeInBytes",
+                    "distributionStrictlyRequired",
+                    "requiredDistribution",
+                    "requiredNumPartitions",
+                    "requiredOrdering",
+                ],
+            )
+
+    def test_write_non_strict_distribution(self):
+        # A single key spread over several input partitions, with a tiny advisory size, so that
+        # adaptive execution splits its skewed shuffle partition whenever it is allowed to.
+        df = self.spark.createDataFrame(
+            [("a", v) for v in range(40)], "key string, value int"
+        ).repartition(4)
+        # None leaves distributionStrictlyRequired unset, which must default to strict.
+        for strict in [True, False, None]:
+            name = f"write_req_strict_{str(strict).lower()}"
+            with self.subTest(strict=strict), tempfile.TemporaryDirectory(prefix=name) as d:
+                self._register_write_requirements_source(
+                    name,
+                    d,
+                    distribution=ClusteredDistribution((("key",),)),
+                    strictly_required=strict,
+                    advisory_size=1,
+                )
+                with self.sql_conf(self._write_conf()):
+                    df.write.format(name).mode("append").save()
+                tasks = self._read_tasks(d)
+                self.assertEqual(sum(len(rows) for rows in tasks), 40)
+                # Only a best-effort distribution may split the key across tasks.
+                if strict is False:
+                    self.assertGreater(len(tasks), 1)
+                else:
+                    self.assertEqual(len(tasks), 1)
+
+    def test_write_invalid_strictly_required(self):
+        with tempfile.TemporaryDirectory(prefix="write_req_bad_strict") as d:
+            self._register_write_requirements_source(
+                "write_req_bad_strict",
+                d,
+                distribution=ClusteredDistribution((("key",),)),
+                strictly_required="false",
+            )
+            with self.sql_conf(self._write_conf()):
+                with self.assertRaises(AnalysisException) as cm:
+                    self._write_df().write.format("write_req_bad_strict").mode("append").save()
+            self.assertIn("DATA_SOURCE_TYPE_MISMATCH", str(cm.exception))
+
+    def test_write_required_num_partitions(self):
+        with tempfile.TemporaryDirectory(prefix="write_req_num_parts") as d:
+            self._register_write_requirements_source(
+                "write_req_num_parts",
+                d,
+                distribution=ClusteredDistribution((("value",),)),
+                num_partitions=2,
+            )
+            # More distinct values than requested partitions, which the 4 shuffle partitions of
+            # `_write_conf` would otherwise spread over more than 2 tasks.
+            df = self.spark.createDataFrame(
+                [("a", v) for v in range(16)], "key string, value int"
+            ).repartition(4)
+            with self.sql_conf(self._write_conf()):
+                df.write.format("write_req_num_parts").mode("append").save()
+            tasks = self._read_tasks(d)
+            self.assertEqual(len(tasks), 2)
+            self.assertEqual(sum(len(rows) for rows in tasks), 16)
+
+    def test_write_ordered_distribution(self):
+        with tempfile.TemporaryDirectory(prefix="write_req_ordered_dist") as d:
+            self._register_write_requirements_source(
+                "write_req_ordered_dist",
+                d,
+                distribution=OrderedDistribution((SortOrder(("value",)),)),
+            )
+            df = self.spark.createDataFrame(
+                [("a", v) for v in range(16)], "key string, value int"
+            ).repartition(4)
+            with self.sql_conf(self._write_conf()):
+                df.write.format("write_req_ordered_dist").mode("append").save()
+            tasks = self._read_tasks(d)
+            # Range partitioning by `value`: each task holds a contiguous range of values, and
+            # the ranges increase with the partition id. Hash clustering would interleave them.
+            self.assertGreater(len(tasks), 1)
+            for prev, cur in zip(tasks, tasks[1:]):
+                self.assertLess(max(v for _, v in prev), min(v for _, v in cur))
+            self.assertEqual(sorted(v for rows in tasks for _, v in rows), list(range(16)))
+
+    def test_write_unspecified_distribution_with_ordering(self):
+        with tempfile.TemporaryDirectory(prefix="write_req_unspec") as d:
+            self._register_write_requirements_source(
+                "write_req_unspec",
+                d,
+                distribution=UnspecifiedDistribution(),
+                ordering=[SortOrder(("value",))],
+            )
+            # One partition holding the values in descending order, so the sort must reorder it.
+            df = self.spark.createDataFrame(
+                [("a", v) for v in reversed(range(6))], "key string, value int"
+            ).coalesce(1)
+            with self.sql_conf(self._write_conf()):
+                df.write.format("write_req_unspec").mode("append").save()
+            # Ordering alone is a local sort, so rows stay in their partition but arrive sorted.
+            self.assertEqual(
+                [[v for _, v in rows] for rows in self._read_tasks(d)], [list(range(6))]
+            )
+
+    def test_write_requirements_disabled(self):
+        # With the config off, a writer that asks for nothing keeps the input layout.
+        with tempfile.TemporaryDirectory(prefix="write_req_disabled") as d:
+            self._register_write_requirements_source("write_req_disabled", d)
+            df = self._write_df()
+            with self.sql_conf(self._write_conf(enabled=False)):
+                df.write.format("write_req_disabled").mode("append").save()
+                expected = self._input_tasks(df)
+            self.assertEqual(self._read_tasks(d), expected)
+
+        # A writer that overrides any requirement method fails rather than have it ignored.
+        cases = [
+            ("requiredDistribution", dict(distribution=ClusteredDistribution((("key",),)))),
+            ("distributionStrictlyRequired", dict(strictly_required=True)),
+            ("requiredNumPartitions", dict(num_partitions=2)),
+            ("advisoryPartitionSizeInBytes", dict(advisory_size=1)),
+            ("requiredOrdering", dict(ordering=[SortOrder(("value",))])),
+        ]
+        for method, requirements in cases:
+            name = f"write_req_disabled_{method.lower()}"
+            with self.subTest(method=method), tempfile.TemporaryDirectory(prefix=name) as d:
+                self._register_write_requirements_source(name, d, **requirements)
+                with self.sql_conf(self._write_conf(enabled=False)):
+                    with self.assertRaises(AnalysisException) as cm:
+                        self._write_df().write.format(name).mode("append").save()
+                self.assertIn("DATA_SOURCE_WRITE_REQUIREMENTS_DISABLED", str(cm.exception))
+                self.assertIn(f"implements {method}()", str(cm.exception))
+                self.assertEqual(os.listdir(d), [])
+
+    def test_write_requirements_skipped_for_streaming(self):
+        # The requirements come from the batch writer, which this streaming-only sink lacks,
+        # so a streaming write must not ask for them.
+        class StreamOnlyWriter(DataSourceStreamWriter):
+            def __init__(self, path):
+                self.path = path
+
+            def write(self, iterator):
+                from pyspark import TaskContext
+
+                rows = [row.id for row in iterator]
+                output = os.path.join(self.path, f"{TaskContext.get().partitionId()}.json")
+                with open(output, "w") as f:
+                    json.dump(rows, f)
+                return WriterCommitMessage()
+
+            def commit(self, messages, batchId):
+                pass
+
+            def abort(self, messages, batchId):
+                pass
+
+        class StreamOnlySink(DataSource):
+            @classmethod
+            def name(cls):
+                return "write_req_stream_only"
+
+            def streamWriter(self, schema, overwrite):
+                return StreamOnlyWriter(self.options["path"])
+
+        with tempfile.TemporaryDirectory(prefix="write_req_stream") as root:
+            src, out, ckpt = (os.path.join(root, n) for n in ("src", "out", "ckpt"))
+            os.mkdir(out)
+            self.spark.range(0, 6).write.json(src)
+            self.spark.dataSource.register(StreamOnlySink)
+            with self.sql_conf(self._write_conf()):
+                q = (
+                    self.spark.readStream.schema("id long")
+                    .json(src)
+                    .writeStream.format("write_req_stream_only")
+                    .option("checkpointLocation", ckpt)
+                    .trigger(availableNow=True)
+                    .start(out)
+                )
+                q.awaitTermination()
+            self.assertIsNone(q.exception())
+            written = []
+            for entry in os.listdir(out):
+                with open(os.path.join(out, entry)) as f:
+                    written.extend(json.load(f))
+            self.assertEqual(sorted(written), list(range(6)))
+
+    def test_write_requirements_skipped_for_continuous(self):
+        # A continuous query builds its write on the thread that starts it, which must not ask
+        # the batch writer for requirements either: this sink's batch writer requires a
+        # distribution that continuous execution rejects.
+        class NoopStreamWriter(DataSourceStreamWriter):
+            def write(self, iterator):
+                for _ in iterator:
+                    pass
+                return WriterCommitMessage()
+
+            def commit(self, messages, batchId):
+                pass
+
+            def abort(self, messages, batchId):
+                pass
+
+        class ClusteredWriter(DataSourceWriter):
+            def write(self, iterator):
+                return WriterCommitMessage()
+
+            def requiredDistribution(self):
+                return ClusteredDistribution((("value",),))
+
+        class ContinuousSink(DataSource):
+            @classmethod
+            def name(cls):
+                return "write_req_continuous"
+
+            def writer(self, schema, overwrite):
+                return ClusteredWriter()
+
+            def streamWriter(self, schema, overwrite):
+                return NoopStreamWriter()
+
+        self.spark.dataSource.register(ContinuousSink)
+        with tempfile.TemporaryDirectory(prefix="write_req_continuous") as ckpt:
+            with self.sql_conf(self._write_conf()):
+                q = (
+                    self.spark.readStream.format("rate")
+                    .load()
+                    .writeStream.format("write_req_continuous")
+                    .option("checkpointLocation", ckpt)
+                    .trigger(continuous="1 second")
+                    .start()
+                )
+            try:
+                self.assertTrue(q.isActive)
+                self.assertIsNone(q.exception())
+            finally:
+                q.stop()
+
+    def test_write_invalid_requirement_values(self):
+        cases = [
+            ("write_req_bad_num_parts_bool", dict(num_partitions=True)),
+            ("write_req_bad_num_parts_float", dict(num_partitions=1.5)),
+            ("write_req_bad_num_parts_big", dict(num_partitions=2**31)),
+            ("write_req_bad_advisory_float", dict(advisory_size=1.5)),
+            ("write_req_bad_advisory_big", dict(advisory_size=2**63)),
+            ("write_req_bad_ordering_type", dict(ordering="value")),
+            ("write_req_bad_sort_order", dict(ordering=[("value",)])),
+            ("write_req_bad_direction", dict(ordering=[SortOrder(("value",), "asc")])),
+            (
+                "write_req_bad_null_ordering",
+                dict(ordering=[SortOrder(("value",), SortDirection.ASCENDING, "first")]),
+            ),
+        ]
+        for name, requirements in cases:
+            with self.subTest(name=name), tempfile.TemporaryDirectory(prefix=name) as d:
+                self._register_write_requirements_source(
+                    name, d, distribution=ClusteredDistribution((("key",),)), **requirements
+                )
+                with self.sql_conf(self._write_conf()):
+                    with self.assertRaises(AnalysisException) as cm:
+                        self._write_df().write.format(name).mode("append").save()
+                self.assertIn("DATA_SOURCE_TYPE_MISMATCH", str(cm.exception))
+
+    def test_write_partition_sizing_without_distribution(self):
+        cases = [
+            ("write_req_bad_num_parts", dict(num_partitions=3), "PARTITION_NUM"),
+            ("write_req_bad_advisory", dict(advisory_size=1024), "PARTITION_SIZE"),
+        ]
+        for name, requirements, error in cases:
+            with self.subTest(name=name), tempfile.TemporaryDirectory(prefix=name) as d:
+                self._register_write_requirements_source(
+                    name, d, distribution=UnspecifiedDistribution(), **requirements
+                )
+                with self.sql_conf(self._write_conf()):
+                    with self.assertRaises(AnalysisException) as cm:
+                        self._write_df().write.format(name).mode("append").save()
+                self.assertIn(
+                    f"INVALID_WRITE_DISTRIBUTION.{error}_WITH_UNSPECIFIED_DISTRIBUTION",
+                    str(cm.exception),
+                )
+
+    def test_write_partition_sizing_below_one_means_none(self):
+        # Values below 1 mean no requirement, including ones that would overflow the JVM fields.
+        with tempfile.TemporaryDirectory(prefix="write_req_below_one") as d:
+            self._register_write_requirements_source(
+                "write_req_below_one",
+                d,
+                distribution=UnspecifiedDistribution(),
+                num_partitions=-(2**40),
+                advisory_size=-(2**70),
+            )
+            df = self._write_df()
+            with self.sql_conf(self._write_conf()):
+                df.write.format("write_req_below_one").mode("append").save()
+                expected = self._input_tasks(df)
+            self.assertEqual(self._read_tasks(d), expected)
+
+    def test_write_num_partitions_and_advisory_size(self):
+        with tempfile.TemporaryDirectory(prefix="write_req_both_sizes") as d:
+            self._register_write_requirements_source(
+                "write_req_both_sizes",
+                d,
+                distribution=ClusteredDistribution((("key",),)),
+                num_partitions=3,
+                advisory_size=1024,
+            )
+            with self.sql_conf(self._write_conf()):
+                with self.assertRaises(AnalysisException) as cm:
+                    self._write_df().write.format("write_req_both_sizes").mode("append").save()
+            self.assertIn("INVALID_WRITE_DISTRIBUTION.PARTITION_NUM_AND_SIZE", str(cm.exception))
+
+    def test_write_empty_distribution(self):
+        cases = [
+            ("write_req_empty_clustering", ClusteredDistribution(()), "'clustering'"),
+            ("write_req_empty_ordering", OrderedDistribution(()), "'ordering'"),
+        ]
+        for name, distribution, field in cases:
+            with self.subTest(name=name), tempfile.TemporaryDirectory(prefix=name) as d:
+                self._register_write_requirements_source(name, d, distribution=distribution)
+                with self.sql_conf(self._write_conf()):
+                    with self.assertRaises(AnalysisException) as cm:
+                        self._write_df().write.format(name).mode("append").save()
+                self.assertIn("DATA_SOURCE_EMPTY_DISTRIBUTION", str(cm.exception))
+                self.assertIn(f"empty {field}", str(cm.exception))
+
+    def test_write_invalid_column_path(self):
+        # A bare string is a common mistake: a column must be a tuple of name parts.
+        cases = [
+            (
+                "write_req_bad_cluster_column",
+                dict(distribution=ClusteredDistribution(("key",))),
+                "key",
+            ),
+            ("write_req_bad_order_column", dict(ordering=[SortOrder("value")]), "value"),
+            (
+                "write_req_bad_range_column",
+                dict(distribution=OrderedDistribution((SortOrder("value"),))),
+                "value",
+            ),
+            ("write_req_empty_order_column", dict(ordering=[SortOrder(())]), ()),
+            (
+                "write_req_bad_range_column_part",
+                dict(distribution=OrderedDistribution((SortOrder(("value", 1)),))),
+                ("value", 1),
+            ),
+        ]
+        for name, requirements, column in cases:
+            with self.subTest(name=name), tempfile.TemporaryDirectory(prefix=name) as d:
+                self._register_write_requirements_source(name, d, **requirements)
+                with self.sql_conf(self._write_conf()):
+                    with self.assertRaises(AnalysisException) as cm:
+                        self._write_df().write.format(name).mode("append").save()
+                self.assertIn("DATA_SOURCE_INVALID_COLUMN_PATH", str(cm.exception))
+                self.assertIn(f"invalid column reference: {column!r}", str(cm.exception))
+
+    def test_write_invalid_distribution_type(self):
+        cases = [
+            ("write_req_bad_dist", "clustered by key", "an instance of Distribution"),
+            ("write_req_base_dist", Distribution(), "one of UnspecifiedDistribution"),
+            # A bare string or SortOrder where the field needs a tuple of them.
+            (
+                "write_req_bad_clustering",
+                ClusteredDistribution("key"),
+                "a tuple of ColumnPath for 'ClusteredDistribution.clustering'",
+            ),
+            (
+                "write_req_bad_range_ordering",
+                OrderedDistribution(SortOrder(("value",))),
+                "a tuple of SortOrder for 'OrderedDistribution.ordering'",
+            ),
+        ]
+        for name, distribution, expected in cases:
+            with self.subTest(name=name), tempfile.TemporaryDirectory(prefix=name) as d:
+                self._register_write_requirements_source(name, d, distribution=distribution)
+                with self.sql_conf(self._write_conf()):
+                    with self.assertRaises(AnalysisException) as cm:
+                        self._write_df().write.format(name).mode("append").save()
+                self.assertIn("DATA_SOURCE_TYPE_MISMATCH", str(cm.exception))
+                self.assertIn(f"Expected {expected}", str(cm.exception))
+
+    def test_write_requirements_writer_type_mismatch(self):
+        class NotAWriter:
+            def write(self, iterator):
+                return WriterCommitMessage()
+
+        class NotAWriterDataSource(DataSource):
+            @classmethod
+            def name(cls):
+                return "write_req_not_a_writer"
+
+            def writer(self, schema, overwrite):
+                return NotAWriter()
+
+        self.spark.dataSource.register(NotAWriterDataSource)
+        with self.sql_conf(self._write_conf()):
+            with self.assertRaises(AnalysisException) as cm:
+                self._write_df().write.format("write_req_not_a_writer").mode("append").save()
+        # Planning asks the writer for its requirements, so it is the first to reject it.
+        self.assertIn("write distribution and ordering", str(cm.exception))
+        self.assertIn("Expected an instance of DataSourceWriter", str(cm.exception))
+
+    def test_write_unknown_column(self):
+        with tempfile.TemporaryDirectory(prefix="write_req_unknown_column") as d:
+            self._register_write_requirements_source(
+                "write_req_unknown_column", d, distribution=ClusteredDistribution((("nosuch",),))
+            )
+            with self.sql_conf(self._write_conf()):
+                with self.assertRaises(AnalysisException) as cm:
+                    self._write_df().write.format("write_req_unknown_column").mode("append").save()
+            self.check_error(
+                exception=cm.exception,
+                errorClass="_LEGACY_ERROR_TEMP_1137",
+                messageParameters={"name": "nosuch", "outputStr": "key,value"},
+            )
+
     def test_data_source_type_mismatch(self):
         class TestDataSource(DataSource):
             @classmethod
@@ -927,49 +2381,56 @@ class BasePythonDataSourceTestsMixin:
                 ],
             )
 
-            logs = self.spark.tvf.python_worker_logs()
+            # Worker logs are captured asynchronously from the worker's stdout and only
+            # become visible once the trailing block is flushed, so they may not all be
+            # present immediately after the query completes. Poll until they show up.
+            @eventually(timeout=5, catch_assertions=True)
+            def check_logs():
+                logs = self.spark.tvf.python_worker_logs()
 
-            assertDataFrameEqual(
-                logs.select("level", "msg", "context", "logger"),
-                [
-                    Row(
-                        level="WARNING",
-                        msg=msg,
-                        context=context,
-                        logger="test_data_source_reader",
-                    )
-                    for msg, context in [
-                        (
-                            "TestJsonDataSource.__init__: ['path']",
-                            {"class_name": "TestJsonDataSource", "func_name": "__init__"},
-                        ),
-                        (
-                            "TestJsonDataSource.name",
-                            {"class_name": "TestJsonDataSource", "func_name": "name"},
-                        ),
-                        (
-                            "TestJsonDataSource.schema",
-                            {"class_name": "TestJsonDataSource", "func_name": "schema"},
-                        ),
-                        (
-                            "TestJsonDataSource.reader: ['name', 'age']",
-                            {"class_name": "TestJsonDataSource", "func_name": "reader"},
-                        ),
-                        (
-                            "TestJsonReader.__init__: ['path']",
-                            {"class_name": "TestJsonDataSource", "func_name": "reader"},
-                        ),
-                        (
-                            "TestJsonReader.partitions",
-                            {"class_name": "TestJsonReader", "func_name": "partitions"},
-                        ),
-                        (
-                            "TestJsonReader.read: InputPartition(value=None)",
-                            {"class_name": "TestJsonReader", "func_name": "read"},
-                        ),
-                    ]
-                ],
-            )
+                assertDataFrameEqual(
+                    logs.select("level", "msg", "context", "logger"),
+                    [
+                        Row(
+                            level="WARNING",
+                            msg=msg,
+                            context=context,
+                            logger="test_data_source_reader",
+                        )
+                        for msg, context in [
+                            (
+                                "TestJsonDataSource.__init__: ['path']",
+                                {"class_name": "TestJsonDataSource", "func_name": "__init__"},
+                            ),
+                            (
+                                "TestJsonDataSource.name",
+                                {"class_name": "TestJsonDataSource", "func_name": "name"},
+                            ),
+                            (
+                                "TestJsonDataSource.schema",
+                                {"class_name": "TestJsonDataSource", "func_name": "schema"},
+                            ),
+                            (
+                                "TestJsonDataSource.reader: ['name', 'age']",
+                                {"class_name": "TestJsonDataSource", "func_name": "reader"},
+                            ),
+                            (
+                                "TestJsonReader.__init__: ['path']",
+                                {"class_name": "TestJsonDataSource", "func_name": "reader"},
+                            ),
+                            (
+                                "TestJsonReader.partitions",
+                                {"class_name": "TestJsonReader", "func_name": "partitions"},
+                            ),
+                            (
+                                "TestJsonReader.read: InputPartition(value=None)",
+                                {"class_name": "TestJsonReader", "func_name": "read"},
+                            ),
+                        ]
+                    ],
+                )
+
+            check_logs()
 
     @unittest.skipIf(is_remote_only(), "Requires JVM access")
     def test_data_source_reader_pushdown_with_logging(self):
@@ -1034,53 +2495,60 @@ class BasePythonDataSourceTestsMixin:
                 ],
             )
 
-            logs = self.spark.tvf.python_worker_logs()
+            # Worker logs are captured asynchronously from the worker's stdout and only
+            # become visible once the trailing block is flushed, so they may not all be
+            # present immediately after the query completes. Poll until they show up.
+            @eventually(timeout=5, catch_assertions=True)
+            def check_logs():
+                logs = self.spark.tvf.python_worker_logs()
 
-            assertDataFrameEqual(
-                logs.select("level", "msg", "context", "logger"),
-                [
-                    Row(
-                        level="WARNING",
-                        msg=msg,
-                        context=context,
-                        logger="test_data_source_reader_pushdown",
-                    )
-                    for msg, context in [
-                        (
-                            "TestJsonDataSource.__init__: ['path']",
-                            {"class_name": "TestJsonDataSource", "func_name": "__init__"},
-                        ),
-                        (
-                            "TestJsonDataSource.name",
-                            {"class_name": "TestJsonDataSource", "func_name": "name"},
-                        ),
-                        (
-                            "TestJsonDataSource.schema",
-                            {"class_name": "TestJsonDataSource", "func_name": "schema"},
-                        ),
-                        (
-                            "TestJsonDataSource.reader: ['name', 'age']",
-                            {"class_name": "TestJsonDataSource", "func_name": "reader"},
-                        ),
-                        (
-                            "TestJsonReader.pushFilters: [IsNotNull(attribute=('age',))]",
-                            {"class_name": "TestJsonReader", "func_name": "pushFilters"},
-                        ),
-                        (
-                            "TestJsonReader.__init__: ['path']",
-                            {"class_name": "TestJsonDataSource", "func_name": "reader"},
-                        ),
-                        (
-                            "TestJsonReader.partitions",
-                            {"class_name": "TestJsonReader", "func_name": "partitions"},
-                        ),
-                        (
-                            "TestJsonReader.read: InputPartition(value=None)",
-                            {"class_name": "TestJsonReader", "func_name": "read"},
-                        ),
-                    ]
-                ],
-            )
+                assertDataFrameEqual(
+                    logs.select("level", "msg", "context", "logger"),
+                    [
+                        Row(
+                            level="WARNING",
+                            msg=msg,
+                            context=context,
+                            logger="test_data_source_reader_pushdown",
+                        )
+                        for msg, context in [
+                            (
+                                "TestJsonDataSource.__init__: ['path']",
+                                {"class_name": "TestJsonDataSource", "func_name": "__init__"},
+                            ),
+                            (
+                                "TestJsonDataSource.name",
+                                {"class_name": "TestJsonDataSource", "func_name": "name"},
+                            ),
+                            (
+                                "TestJsonDataSource.schema",
+                                {"class_name": "TestJsonDataSource", "func_name": "schema"},
+                            ),
+                            (
+                                "TestJsonDataSource.reader: ['name', 'age']",
+                                {"class_name": "TestJsonDataSource", "func_name": "reader"},
+                            ),
+                            (
+                                "TestJsonReader.pushFilters: [IsNotNull(attribute=('age',))]",
+                                {"class_name": "TestJsonReader", "func_name": "pushFilters"},
+                            ),
+                            (
+                                "TestJsonReader.__init__: ['path']",
+                                {"class_name": "TestJsonDataSource", "func_name": "reader"},
+                            ),
+                            (
+                                "TestJsonReader.partitions",
+                                {"class_name": "TestJsonReader", "func_name": "partitions"},
+                            ),
+                            (
+                                "TestJsonReader.read: InputPartition(value=None)",
+                                {"class_name": "TestJsonReader", "func_name": "read"},
+                            ),
+                        ]
+                    ],
+                )
+
+            check_logs()
 
     @unittest.skipIf(is_remote_only(), "Requires JVM access")
     def test_data_source_writer_with_logging(self):
@@ -1159,84 +2627,91 @@ class BasePythonDataSourceTestsMixin:
                 with self.assertRaises(Exception, msg="abort test"):
                     df.write.format("my-json").mode("append").option("abort", "true").save(d)
 
-                logs = self.spark.tvf.python_worker_logs()
+                # Worker logs are captured asynchronously from the worker's stdout and only
+                # become visible once the trailing block is flushed, so they may not all be
+                # present immediately after the query completes. Poll until they show up.
+                @eventually(timeout=5, catch_assertions=True)
+                def check_logs():
+                    logs = self.spark.tvf.python_worker_logs()
 
-                # We could get either 1 or 2 "TestJsonWriter.write: abort test" logs because
-                # the operation is time sensitive. When the first partition gets aborted,
-                # the executor will cancel the rest of the tasks. Whether we are able to get
-                # the second log depends on whether the second partition starts before the
-                # cancellation. When we use simple worker, the second log is often missing
-                # because the spawn overhead is large.
-                non_abort_logs = logs.select("level", "msg", "context", "logger").filter(
-                    "msg != 'TestJsonWriter.write: abort test'"
-                )
-                abort_logs = logs.select("level", "msg", "context", "logger").filter(
-                    "msg == 'TestJsonWriter.write: abort test'"
-                )
-                assertDataFrameEqual(
-                    non_abort_logs,
-                    [
-                        Row(
-                            level="WARNING",
-                            msg=msg,
-                            context=context,
-                            logger="test_datasource_writer",
-                        )
-                        for msg, context in [
-                            (
-                                "TestJsonDataSource.name",
-                                {"class_name": "TestJsonDataSource", "func_name": "name"},
-                            ),
-                            (
-                                "TestJsonDataSource.writer: (['name', 'age'], {True})",
-                                {"class_name": "TestJsonDataSource", "func_name": "writer"},
-                            ),
-                            (
-                                "TestJsonWriter.__init__: ['path']",
-                                {"class_name": "TestJsonDataSource", "func_name": "writer"},
-                            ),
-                            (
-                                "TestJsonWriter.write: 1, [{'name': 'Diana', 'age': 28}]",
-                                {"class_name": "TestJsonWriter", "func_name": "write"},
-                            ),
-                            (
-                                "TestJsonWriter.write: 1, [{'name': 'Charlie', 'age': 35}]",
-                                {"class_name": "TestJsonWriter", "func_name": "write"},
-                            ),
-                            (
-                                "TestJsonWriter.commit: 2",
-                                {"class_name": "TestJsonWriter", "func_name": "commit"},
-                            ),
-                            (
-                                "TestJsonDataSource.name",
-                                {"class_name": "TestJsonDataSource", "func_name": "name"},
-                            ),
-                            (
-                                "TestJsonDataSource.writer: (['name', 'age'], {False})",
-                                {"class_name": "TestJsonDataSource", "func_name": "writer"},
-                            ),
-                            (
-                                "TestJsonWriter.__init__: ['abort', 'path']",
-                                {"class_name": "TestJsonDataSource", "func_name": "writer"},
-                            ),
-                            (
-                                "TestJsonWriter.abort",
-                                {"class_name": "TestJsonWriter", "func_name": "abort"},
-                            ),
-                        ]
-                    ],
-                )
-                assertDataFrameEqual(
-                    abort_logs.dropDuplicates(["msg"]),
-                    [
-                        Row(
-                            level="WARNING",
-                            msg="TestJsonWriter.write: abort test",
-                            context={"class_name": "TestJsonWriter", "func_name": "write"},
-                            logger="test_datasource_writer",
-                        )
-                    ],
-                )
+                    # We could get either 1 or 2 "TestJsonWriter.write: abort test" logs because
+                    # the operation is time sensitive. When the first partition gets aborted,
+                    # the executor will cancel the rest of the tasks. Whether we are able to get
+                    # the second log depends on whether the second partition starts before the
+                    # cancellation. When we use simple worker, the second log is often missing
+                    # because the spawn overhead is large.
+                    non_abort_logs = logs.select("level", "msg", "context", "logger").filter(
+                        "msg != 'TestJsonWriter.write: abort test'"
+                    )
+                    abort_logs = logs.select("level", "msg", "context", "logger").filter(
+                        "msg == 'TestJsonWriter.write: abort test'"
+                    )
+                    assertDataFrameEqual(
+                        non_abort_logs,
+                        [
+                            Row(
+                                level="WARNING",
+                                msg=msg,
+                                context=context,
+                                logger="test_datasource_writer",
+                            )
+                            for msg, context in [
+                                (
+                                    "TestJsonDataSource.name",
+                                    {"class_name": "TestJsonDataSource", "func_name": "name"},
+                                ),
+                                (
+                                    "TestJsonDataSource.writer: (['name', 'age'], {True})",
+                                    {"class_name": "TestJsonDataSource", "func_name": "writer"},
+                                ),
+                                (
+                                    "TestJsonWriter.__init__: ['path']",
+                                    {"class_name": "TestJsonDataSource", "func_name": "writer"},
+                                ),
+                                (
+                                    "TestJsonWriter.write: 1, [{'name': 'Diana', 'age': 28}]",
+                                    {"class_name": "TestJsonWriter", "func_name": "write"},
+                                ),
+                                (
+                                    "TestJsonWriter.write: 1, [{'name': 'Charlie', 'age': 35}]",
+                                    {"class_name": "TestJsonWriter", "func_name": "write"},
+                                ),
+                                (
+                                    "TestJsonWriter.commit: 2",
+                                    {"class_name": "TestJsonWriter", "func_name": "commit"},
+                                ),
+                                (
+                                    "TestJsonDataSource.name",
+                                    {"class_name": "TestJsonDataSource", "func_name": "name"},
+                                ),
+                                (
+                                    "TestJsonDataSource.writer: (['name', 'age'], {False})",
+                                    {"class_name": "TestJsonDataSource", "func_name": "writer"},
+                                ),
+                                (
+                                    "TestJsonWriter.__init__: ['abort', 'path']",
+                                    {"class_name": "TestJsonDataSource", "func_name": "writer"},
+                                ),
+                                (
+                                    "TestJsonWriter.abort",
+                                    {"class_name": "TestJsonWriter", "func_name": "abort"},
+                                ),
+                            ]
+                        ],
+                    )
+                    assertDataFrameEqual(
+                        abort_logs.dropDuplicates(["msg"]),
+                        [
+                            Row(
+                                level="WARNING",
+                                msg="TestJsonWriter.write: abort test",
+                                context={"class_name": "TestJsonWriter", "func_name": "write"},
+                                logger="test_datasource_writer",
+                            )
+                        ],
+                    )
+
+                check_logs()
 
     def test_data_source_perf_profiler(self):
         with self.sql_conf({"spark.sql.pyspark.dataSource.profiler": "perf"}):

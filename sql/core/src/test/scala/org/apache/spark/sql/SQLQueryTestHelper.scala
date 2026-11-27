@@ -52,6 +52,10 @@ trait SQLQueryTestHelper extends SQLConfHelper with Logging {
       .replaceAll("plan_id=\\d+", "plan_id=x")
       .replaceAll("uuid\\(Some\\(-?\\d+\\)\\)", "uuid(Some(x))")
       .replaceAll(
+        "(?i)(EventTimeWatermark )\\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-" +
+          "[0-9a-f]{4}-[0-9a-f]{12}\\b",
+        "$1xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
+      .replaceAll(
         s"Location.*$clsName/",
         s"Location $notIncludedMsg/{warehouse_dir}/")
       .replaceAll(s"file:[^\\s,]*$clsName", s"file:$notIncludedMsg/{warehouse_dir}")
@@ -93,6 +97,10 @@ trait SQLQueryTestHelper extends SQLConfHelper with Logging {
     // objects such as views. Therefore any following queries that reference these objects should
     // find them in the catalog.
     val df = session.sql(sql)
+    getNormalizedQueryAnalysisResult(df)
+  }
+
+  protected def getNormalizedQueryAnalysisResult(df: DataFrame): (String, Seq[String]) = {
     val schema = df.schema.catalogString
     val analyzed = df.queryExecution.analyzed
     // Determine if the analyzed plan contains any nondeterministic expressions.
@@ -135,6 +143,8 @@ trait SQLQueryTestHelper extends SQLConfHelper with Logging {
    */
   protected def isSemanticallySorted(plan: LogicalPlan): Boolean = plan match {
     case _: Join | _: Aggregate | _: Generate | _: Sample | _: Distinct => false
+    // EXECUTE IMMEDIATE holds its command payload outside the normal child-plan list.
+    case ExecuteImmediateCommand(sourceStatement) => isSemanticallySorted(sourceStatement)
     case _: DescribeCommandBase
          | _: DescribeColumnCommand
          | _: DescribeRelation
@@ -474,7 +484,7 @@ trait SQLQueryTestHelper extends SQLConfHelper with Logging {
 
   protected def getSparkSettings(comments: Array[String]): Array[(String, String)] = {
     val settingLines = comments.filter(_.startsWith("--SET ")).map(_.substring(6))
-    settingLines.flatMap(_.split(",").map { kv =>
+    settingLines.flatMap(_.split(",(?=\\s*[^,=]+\\s*=)").map { kv =>
       val (conf, value) = kv.span(_ != '=')
       conf.trim -> value.substring(1).trim
     })

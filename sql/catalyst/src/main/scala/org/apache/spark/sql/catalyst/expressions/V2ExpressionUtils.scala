@@ -19,14 +19,18 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.lang.reflect.{Method, Modifier}
 
+import scala.util.Try
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{FUNCTION_NAME, FUNCTION_PARAM}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchFunctionException, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.encoders.EncoderUtils
+import org.apache.spark.sql.catalyst.expressions.aggregate.V2Aggregator
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, SampleMethod}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.fromAttributes
 import org.apache.spark.sql.connector.catalog.{FunctionCatalog, Identifier}
 import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.connector.catalog.functions.ScalarFunction.MAGIC_METHOD_NAME
@@ -45,15 +49,22 @@ import org.apache.spark.util.ArrayImplicits._
 object V2ExpressionUtils extends SQLConfHelper with Logging {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 
+  /**
+   * Variant of `resolveRef` that returns `None` if no attribute matches the reference. It still
+   * throws for a nested-field extraction error, such as a missing nested field, or an ambiguous
+   * reference.
+   */
+  private[sql] def resolveRefOpt(
+      ref: NamedReference, plan: LogicalPlan): Option[NamedExpression] = {
+    plan.resolve(ref.fieldNames.toImmutableArraySeq, conf.resolver)
+  }
+
   def resolveRef[T <: NamedExpression](ref: NamedReference, plan: LogicalPlan): T = {
-    plan.resolve(ref.fieldNames.toImmutableArraySeq, conf.resolver) match {
-      case Some(namedExpr) =>
-        namedExpr.asInstanceOf[T]
-      case None =>
-        val name = ref.fieldNames.toImmutableArraySeq.quoted
-        val outputString = plan.output.map(_.name).mkString(",")
-        throw QueryCompilationErrors.cannotResolveAttributeError(name, outputString)
-    }
+    resolveRefOpt(ref, plan).getOrElse {
+      val name = ref.fieldNames.toImmutableArraySeq.quoted
+      val outputString = plan.output.map(_.name).mkString(",")
+      throw QueryCompilationErrors.cannotResolveAttributeError(name, outputString)
+    }.asInstanceOf[T]
   }
 
   def resolveRefs[T <: NamedExpression](refs: Seq[NamedReference], plan: LogicalPlan): Seq[T] = {
@@ -67,7 +78,35 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       refs: Array[NamedReference],
       output: Seq[Attribute]): AttributeSet = {
     val plan = LocalRelation(output)
-    AttributeSet(resolveRefs[Attribute](refs.toImmutableArraySeq, plan))
+    AttributeSet(resolveRefs[NamedExpression](refs.toImmutableArraySeq, plan))
+  }
+
+  /**
+   * Resolves data source runtime-filter attributes and wraps resolution failures with connector
+   * context.
+   */
+  private[sql] def resolveDataSourceRuntimeFilterRefs(
+      refs: Array[NamedReference],
+      output: Seq[Attribute],
+      method: String,
+      scanClass: String): AttributeSet = {
+    if (refs.isEmpty) return AttributeSet.empty
+
+    val plan = LocalRelation(output)
+    val resolvedAttrs = refs.map { ref =>
+      try {
+        resolveRef[NamedExpression](ref, plan)
+      } catch {
+        case e: AnalysisException =>
+          throw QueryCompilationErrors.cannotResolveDataSourceRuntimeFilterAttributeError(
+            attribute = ref.fieldNames,
+            method = method,
+            scanClass = scanClass,
+            relationOutput = fromAttributes(output),
+            cause = e)
+      }
+    }
+    AttributeSet(resolvedAttrs)
   }
 
   /**
@@ -174,9 +213,54 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
     case V2SampleMethod.SYSTEM => SampleMethod.System
   }
 
+  /**
+   * Binds a V2 [[UnboundFunction]] to the given arguments and turns the resulting
+   * [[BoundFunction]] into a Catalyst expression. The optional display name preserves identifier
+   * parts in diagnostics.
+   *
+   * An aggregate function is returned as a bare [[V2Aggregator]] so that callers can wrap it into
+   * an `AggregateExpression` carrying DISTINCT / FILTER, which is not known here.
+   */
+  def bindFunction(
+      unbound: UnboundFunction,
+      arguments: Seq[Expression],
+      displayName: Option[FunctionIdentifier] = None): Expression = {
+    val inputType = StructType(arguments.zipWithIndex.map {
+      case (exp, pos) => StructField(s"_$pos", exp.dataType, exp.nullable)
+    })
+    val bound = try {
+      unbound.bind(inputType)
+    } catch {
+      case unsupported: UnsupportedOperationException =>
+        throw QueryCompilationErrors.functionCannotProcessInputError(
+          displayName.map(_.unquotedString).getOrElse(unbound.name()), arguments, unsupported)
+    }
+
+    val inputTypesLength = bound.inputTypes().length
+    if (inputTypesLength != arguments.length) {
+      throw QueryCompilationErrors.v2FunctionInvalidInputTypeLengthError(
+        displayName.map(_.unquotedString).getOrElse(bound.name()),
+        arguments.length,
+        inputTypesLength)
+    }
+
+    bound match {
+      case scalarFunc: ScalarFunction[_] =>
+        resolveScalarFunction(scalarFunc, arguments, displayName)
+      case aggFunc: AggregateFunction[_, _] =>
+        V2Aggregator(aggFunc, arguments)
+      case _ =>
+        throw new AnalysisException(
+          errorClass = "INVALID_UDF_IMPLEMENTATION",
+          messageParameters = Map(
+            "funcName" -> displayName.map(_.quotedString).getOrElse(toSQLId(bound.name()))))
+    }
+  }
+
   def resolveScalarFunction(
       scalarFunc: ScalarFunction[_],
-      arguments: Seq[Expression]): Expression = {
+      arguments: Seq[Expression],
+      displayName: Option[FunctionIdentifier] = None): Expression = {
     val declaredInputTypes = scalarFunc.inputTypes().toImmutableArraySeq
     val argClasses = declaredInputTypes.map(EncoderUtils.dataTypeJavaClass)
     findMethod(scalarFunc, MAGIC_METHOD_NAME, argClasses) match {
@@ -202,7 +286,9 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
           case _ =>
             throw new AnalysisException(
               errorClass = "SCALAR_FUNCTION_NOT_FULLY_IMPLEMENTED",
-              messageParameters = Map("scalarFunc" -> toSQLId(scalarFunc.name())))
+              messageParameters = Map(
+                "scalarFunc" -> displayName.map(_.quotedString).getOrElse(
+                  toSQLId(scalarFunc.name()))))
         }
     }
   }
@@ -227,7 +313,7 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
   def toCatalyst(expr: V2Expression): Option[Expression] = expr match {
     case _: AlwaysTrue => Some(Literal.TrueLiteral)
     case _: AlwaysFalse => Some(Literal.FalseLiteral)
-    case l: V2Literal[_] => Some(Literal(l.value, l.dataType))
+    case l: V2Literal[_] => Try(Literal.create(l.value, l.dataType)).toOption
     case r: NamedReference => Some(UnresolvedAttribute(r.fieldNames.toImmutableArraySeq))
     case c: V2Cast => toCatalyst(c.expression).map(Cast(_, c.dataType, ansiEnabled = true))
     case p: PartitionPredicateImpl => Some(p.expression)
@@ -260,15 +346,16 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       case "STARTS_WITH" => convertBinaryExpr(expr, StartsWith)
       case "ENDS_WITH" => convertBinaryExpr(expr, EndsWith)
       case "CONTAINS" => convertBinaryExpr(expr, Contains)
-      case "IN" => convertExpr(expr, children => In(children.head, children.tail))
-      case "BOOLEAN_EXPRESSION" => toCatalyst(expr.children().head)
+      case "IN" if expr.children.nonEmpty =>
+        convertExpr(expr, children => In(children.head, children.tail))
+      case "BOOLEAN_EXPRESSION" => convertUnaryExpr(expr, identity)
       case _ => None
     }
   }
 
   private def convertConditionalFunc(expr: GeneralScalarExpression): Option[Expression] = {
     expr.name match {
-      case "CASE_WHEN" =>
+      case "CASE_WHEN" if expr.children.length >= 2 =>
         convertExpr(expr, children =>
           if (children.length % 2 == 0) {
             val branches = children.grouped(2).map { case Seq(c, v) => (c, v) }.toSeq
@@ -297,9 +384,9 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       case "/" => convertBinaryExpr(expr, Divide(_, _, evalMode = EvalMode.ANSI))
       case "%" => convertBinaryExpr(expr, Remainder(_, _, evalMode = EvalMode.ANSI))
       case "ABS" => convertUnaryExpr(expr, Abs(_, failOnError = true))
-      case "COALESCE" => convertExpr(expr, Coalesce)
-      case "GREATEST" => convertExpr(expr, Greatest)
-      case "LEAST" => convertExpr(expr, Least)
+      case "COALESCE" if expr.children.nonEmpty => convertExpr(expr, Coalesce)
+      case "GREATEST" if expr.children.length >= 2 => convertExpr(expr, Greatest)
+      case "LEAST" if expr.children.length >= 2 => convertExpr(expr, Least)
       case "RAND" =>
         if (expr.children.isEmpty) {
           Some(new Rand())
@@ -322,7 +409,7 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       case "DEGREES" => convertUnaryExpr(expr, ToDegrees)
       case "RADIANS" => convertUnaryExpr(expr, ToRadians)
       case "SIGN" => convertUnaryExpr(expr, Signum)
-      case "WIDTH_BUCKET" =>
+      case "WIDTH_BUCKET" if expr.children.length == 4 =>
         convertExpr(
           expr,
           children => WidthBucket(children(0), children(1), children(2), children(3)))

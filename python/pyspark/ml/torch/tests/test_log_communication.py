@@ -18,18 +18,19 @@
 from __future__ import absolute_import, division, print_function
 
 import contextlib
-from io import StringIO
 import sys
 import time
-from typing import Any, Callable
 import unittest
+from io import StringIO
+from struct import pack
+from typing import Any, Callable
 
 import pyspark.ml.torch.log_communication
 from pyspark.ml.torch.log_communication import (
-    LogStreamingServer,
+    _SERVER_POLL_INTERVAL,
     LogStreamingClient,
     LogStreamingClientBase,
-    _SERVER_POLL_INTERVAL,
+    LogStreamingServer,
 )
 
 
@@ -57,7 +58,7 @@ class LogStreamingServiceTestCase(unittest.TestCase):
         server = LogStreamingServer()
         server.start()
         time.sleep(1)
-        client = LogStreamingClient("localhost", server.port)
+        client = LogStreamingClient("localhost", server.port, auth_secret=server.auth_secret)
         with patch_stderr() as output:
             client.send("msg 001")
             client.send("msg 002")
@@ -77,8 +78,8 @@ class LogStreamingServiceTestCase(unittest.TestCase):
         server = LogStreamingServer()
         server.start()
         time.sleep(1)
-        client1 = LogStreamingClient("localhost", server.port)
-        client2 = LogStreamingClient("localhost", server.port)
+        client1 = LogStreamingClient("localhost", server.port, auth_secret=server.auth_secret)
+        client2 = LogStreamingClient("localhost", server.port, auth_secret=server.auth_secret)
         with patch_stderr() as output:
             client1.send("c1 msg1")
             time.sleep(_SERVER_POLL_INTERVAL + 1)
@@ -98,7 +99,7 @@ class LogStreamingServiceTestCase(unittest.TestCase):
         server = LogStreamingServer()
         server.start()
         time.sleep(1)
-        client = LogStreamingClient("localhost", server.port)
+        client = LogStreamingClient("localhost", server.port, auth_secret=server.auth_secret)
         client.send("msg 001")
         server.shutdown()
         for i in range(5):
@@ -111,7 +112,7 @@ class LogStreamingServiceTestCase(unittest.TestCase):
         server = LogStreamingServer()
         server.start()
         time.sleep(1)
-        client = LogStreamingClient("localhost", server.port)
+        client = LogStreamingClient("localhost", server.port, auth_secret=server.auth_secret)
         with patch_stderr() as output:
             client._connect()
             # test client send half message first
@@ -131,7 +132,7 @@ class LogStreamingServiceTestCase(unittest.TestCase):
             server = LogStreamingServer()
             server.start()
             time.sleep(1)
-            client = LogStreamingClient("localhost", server.port)
+            client = LogStreamingClient("localhost", server.port, auth_secret=server.auth_secret)
             client_ops(client)
             server.shutdown()
             client.close()
@@ -158,6 +159,61 @@ class LogStreamingServiceTestCase(unittest.TestCase):
         run_test(client_ops_send_half_msg)
         run_test(client_ops_send_a_msg)
         run_test(client_ops_send_a_msg_and_close)
+
+    def test_unauthenticated_client_is_ignored(self) -> None:
+        server = LogStreamingServer()
+        server.start()
+        time.sleep(1)
+        good_client = LogStreamingClient("localhost", server.port, auth_secret=server.auth_secret)
+        bad_client = LogStreamingClient("localhost", server.port, auth_secret="wrong-secret")
+        no_secret_client = LogStreamingClient("localhost", server.port)
+        with patch_stderr() as output:
+            bad_client.send("forged msg")
+            no_secret_client.send("noauth msg")
+            time.sleep(_SERVER_POLL_INTERVAL + 1)
+            good_client.send("real msg")
+            time.sleep(_SERVER_POLL_INTERVAL + 1)
+            output = output.getvalue()
+            self.assertIn("real msg\n", output)
+            self.assertNotIn("forged msg", output)
+            self.assertNotIn("noauth msg", output)
+        bad_client.close()
+        no_secret_client.close()
+        good_client.close()
+        server.shutdown()
+
+    def test_oversized_frame_drops_connection(self) -> None:
+        server = LogStreamingServer()
+        server.start()
+        time.sleep(1)
+        client = LogStreamingClient("localhost", server.port, auth_secret=server.auth_secret)
+        with patch_stderr() as output:
+            client._connect()
+            # Declare a frame far larger than the server-side cap: the server
+            # must drop the connection instead of buffering the payload.
+            client.sock.sendall(pack(">i", 0x7FFFFFFF))
+            time.sleep(_SERVER_POLL_INTERVAL + 1)
+            client.send("dropped")
+            time.sleep(_SERVER_POLL_INTERVAL + 1)
+            self.assertNotIn("dropped", output.getvalue())
+        client.close()
+        server.shutdown()
+
+    def test_empty_message_frame(self) -> None:
+        # Blank log lines reach the client as empty strings; the zero-length
+        # frame must not break the connection.
+        server = LogStreamingServer()
+        server.start()
+        time.sleep(1)
+        client = LogStreamingClient("localhost", server.port, auth_secret=server.auth_secret)
+        with patch_stderr() as output:
+            client.send("")
+            time.sleep(_SERVER_POLL_INTERVAL + 1)
+            client.send("alive")
+            time.sleep(_SERVER_POLL_INTERVAL + 1)
+            self.assertIn("\nalive\n", output.getvalue())
+        client.close()
+        server.shutdown()
 
 
 if __name__ == "__main__":

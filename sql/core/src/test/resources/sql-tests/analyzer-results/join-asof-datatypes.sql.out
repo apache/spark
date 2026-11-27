@@ -225,13 +225,57 @@ ASOF JOIN (
   MATCH_CONDITION (t.k >= r.k)
 -- !query analysis
 Project [k#x.tag AS tag#x, k#x.inner_seq AS inner_seq#x]
-+- AsOfJoin (named_struct(inner_ts, k#x.inner_ts, inner_seq, k#x.inner_seq, tag, k#x.tag) >= named_struct(inner_ts, k#x.inner_ts, inner_seq, k#x.inner_seq, tag, k#x.tag)), Inner
++- AsOfJoin (k#x >= k#x), Inner
    :- SubqueryAlias t
    :  +- LocalRelation [k#x]
    +- SubqueryAlias r
       +- Project [k#x]
          +- SubqueryAlias r
             +- LocalRelation [k#x]
+
+
+-- !query
+SELECT r.k.y AS matched
+FROM VALUES (named_struct('a', 2, 'b', 5)) AS t(k)
+ASOF JOIN VALUES (named_struct('x', 1, 'y', 9)) AS r(k)
+  MATCH_CONDITION (t.k >= r.k)
+-- !query analysis
+Project [k#x.y AS matched#x]
++- AsOfJoin (k#x >= k#x), Inner
+   :- SubqueryAlias t
+   :  +- LocalRelation [k#x]
+   +- SubqueryAlias r
+      +- LocalRelation [k#x]
+
+
+-- !query
+SELECT r.k.a AS matched
+FROM VALUES (named_struct('a', 3)) AS t(k)
+ASOF JOIN VALUES
+    (named_struct('a', CAST(1 AS BIGINT))),
+    (named_struct('a', CAST(4 AS BIGINT))) AS r(k)
+  MATCH_CONDITION (t.k >= r.k)
+-- !query analysis
+Project [k#x.a AS matched#xL]
++- AsOfJoin (cast(k#x as struct<a:bigint>) >= k#x), Inner
+   :- SubqueryAlias t
+   :  +- LocalRelation [k#x]
+   +- SubqueryAlias r
+      +- LocalRelation [k#x]
+
+
+-- !query
+SELECT t.id, r.tag AS matched
+FROM VALUES (1, named_struct()) AS t(id, k) ASOF JOIN
+     VALUES (named_struct(), 'hit') AS r(k, tag)
+  MATCH_CONDITION (t.k >= r.k)
+-- !query analysis
+Project [id#x, tag#x AS matched#x]
++- AsOfJoin (k#x >= k#x), Inner
+   :- SubqueryAlias t
+   :  +- LocalRelation [id#x, k#x]
+   +- SubqueryAlias r
+      +- LocalRelation [k#x, tag#x]
 
 
 -- !query
@@ -275,17 +319,154 @@ Project [d#x, ts#x AS matched_ts#x]
 
 
 -- !query
-SELECT t.ts, r.ts_ntz AS matched_ts_ntz
-FROM VALUES (TIMESTAMP '2026-06-29 10:00:00') AS t(ts) ASOF JOIN
-     VALUES (TIMESTAMP_NTZ '2026-06-29 09:00:00') AS r(ts_ntz)
-  MATCH_CONDITION (t.ts >= r.ts_ntz)
+SET spark.sql.session.timeZone=America/Los_Angeles
 -- !query analysis
-Project [ts#x, ts_ntz#x AS matched_ts_ntz#x]
-+- AsOfJoin (ts#x >= cast(ts_ntz#x as timestamp)), Inner
+SetCommand (spark.sql.session.timeZone,Some(America/Los_Angeles))
+
+
+-- !query
+SELECT l.id, r.id
+FROM VALUES
+  (TIMESTAMP_LTZ '2024-03-10 10:05:00Z', 1),
+  (TIMESTAMP_LTZ '2024-03-10 10:55:00Z', 2) AS l(ts, id)
+LEFT ASOF JOIN VALUES
+  (TIMESTAMP_NTZ '2024-03-10 02:50:00', 1),
+  (TIMESTAMP_NTZ '2024-03-10 03:00:00', 2),
+  (TIMESTAMP_NTZ '2024-03-10 03:15:00', 3) AS r(ts, id)
+MATCH_CONDITION (l.ts <= r.ts)
+-- !query analysis
+Project [id#x, id#x]
++- AsOfJoin (ts#x <= cast(ts#x as timestamp)), LeftOuter
+   :- SubqueryAlias l
+   :  +- LocalRelation [ts#x, id#x]
+   +- SubqueryAlias r
+      +- LocalRelation [ts#x, id#x]
+
+
+-- !query
+SELECT l.id, r.id
+FROM VALUES
+  (TIMESTAMP_LTZ '2024-03-10 10:05:00Z', 1),
+  (TIMESTAMP_LTZ '2024-03-10 10:55:00Z', 2) AS l(ts, id)
+LEFT ASOF JOIN VALUES
+  (TIMESTAMP_NTZ '2024-03-10 02:50:00', 1),
+  (TIMESTAMP_NTZ '2024-03-10 03:00:00', 2),
+  (TIMESTAMP_NTZ '2024-03-10 03:15:00', 3) AS r(ts, id)
+MATCH_CONDITION (l.ts >= r.ts)
+-- !query analysis
+Project [id#x, id#x]
++- AsOfJoin (ts#x >= cast(ts#x as timestamp)), LeftOuter
+   :- SubqueryAlias l
+   :  +- LocalRelation [ts#x, id#x]
+   +- SubqueryAlias r
+      +- LocalRelation [ts#x, id#x]
+
+
+-- !query
+SELECT r.id
+FROM VALUES (TIMESTAMP_LTZ '2024-03-10 10:15:00Z', 2L) AS l(ts, n)
+LEFT ASOF JOIN VALUES
+  (TIMESTAMP_NTZ '2024-03-10 02:50:00', 1, 1),
+  (TIMESTAMP_NTZ '2024-03-10 03:15:00', 1, 2),
+  (TIMESTAMP_NTZ '2024-03-10 03:15:00', 3, 3) AS r(ts, n, id)
+MATCH_CONDITION ((l.ts, l.n) <= (r.ts, r.n))
+-- !query analysis
+Project [id#x]
++- AsOfJoin (named_struct(ts, ts#x, n, n#xL) <= cast(named_struct(ts, ts#x, n, n#x) as struct<ts:timestamp,n:bigint>)), LeftOuter
+   :- SubqueryAlias l
+   :  +- LocalRelation [ts#x, n#xL]
+   +- SubqueryAlias r
+      +- LocalRelation [ts#x, n#x, id#x]
+
+
+-- !query
+RESET spark.sql.session.timeZone
+-- !query analysis
+ResetCommand spark.sql.session.timeZone
+
+
+-- !query
+SELECT t.d, r.s AS matched_s
+FROM VALUES (DATE '2026-06-29') AS t(d) ASOF JOIN
+     VALUES ('2026-06-28'), ('2026-06-29') AS r(s)
+  MATCH_CONDITION (t.d >= r.s)
+-- !query analysis
+Project [d#x, s#x AS matched_s#x]
++- AsOfJoin (d#x >= cast(s#x as date)), Inner
+   :- SubqueryAlias t
+   :  +- LocalRelation [d#x]
+   +- SubqueryAlias r
+      +- LocalRelation [s#x]
+
+
+-- !query
+SELECT t.ts, r.s AS matched_s
+FROM VALUES (TIMESTAMP '2026-06-29 10:00:00') AS t(ts) ASOF JOIN
+     VALUES ('2026-06-29 09:00:00'), ('2026-06-29 10:00:00') AS r(s)
+  MATCH_CONDITION (t.ts >= r.s)
+-- !query analysis
+Project [ts#x, s#x AS matched_s#x]
++- AsOfJoin (ts#x >= cast(s#x as timestamp)), Inner
    :- SubqueryAlias t
    :  +- LocalRelation [ts#x]
    +- SubqueryAlias r
-      +- LocalRelation [ts_ntz#x]
+      +- LocalRelation [s#x]
+
+
+-- !query
+SELECT t.k, r.s AS matched_s
+FROM VALUES (25) AS t(k) ASOF JOIN
+     VALUES ('9'), ('10'), ('20') AS r(s)
+  MATCH_CONDITION (t.k >= r.s)
+-- !query analysis
+Project [k#x, s#x AS matched_s#x]
++- AsOfJoin (cast(k#x as bigint) >= cast(s#x as bigint)), Inner
+   :- SubqueryAlias t
+   :  +- LocalRelation [k#x]
+   +- SubqueryAlias r
+      +- LocalRelation [s#x]
+
+
+-- !query
+SELECT t.s, r.d AS matched_d
+FROM VALUES ('2026-06-29') AS t(s) ASOF JOIN
+     VALUES (DATE '2026-06-28'), (DATE '2026-06-29') AS r(d)
+  MATCH_CONDITION (t.s >= r.d)
+-- !query analysis
+Project [s#x, d#x AS matched_d#x]
++- AsOfJoin (cast(s#x as date) >= d#x), Inner
+   :- SubqueryAlias t
+   :  +- LocalRelation [s#x]
+   +- SubqueryAlias r
+      +- LocalRelation [d#x]
+
+
+-- !query
+SELECT t.ts, r.s AS matched_s
+FROM VALUES (TIMESTAMP_NTZ '2026-06-29 10:00:00') AS t(ts) ASOF JOIN
+     VALUES ('2026-06-29 09:00:00'), ('2026-06-29 10:00:00') AS r(s)
+  MATCH_CONDITION (t.ts >= r.s)
+-- !query analysis
+Project [ts#x, s#x AS matched_s#x]
++- AsOfJoin (ts#x >= cast(s#x as timestamp_ntz)), Inner
+   :- SubqueryAlias t
+   :  +- LocalRelation [ts#x]
+   +- SubqueryAlias r
+      +- LocalRelation [s#x]
+
+
+-- !query
+SELECT t.tm, r.s AS matched_s
+FROM VALUES (TIME '10:00:00') AS t(tm) ASOF JOIN
+     VALUES ('09:00:00'), ('10:00:00') AS r(s)
+  MATCH_CONDITION (t.tm >= r.s)
+-- !query analysis
+Project [tm#x, s#x AS matched_s#x]
++- AsOfJoin (tm#x >= cast(s#x as time(6))), Inner
+   :- SubqueryAlias t
+   :  +- LocalRelation [tm#x]
+   +- SubqueryAlias r
+      +- LocalRelation [s#x]
 
 
 -- !query
@@ -296,6 +477,21 @@ FROM VALUES (ARRAY(1, 3)) AS t(a) ASOF JOIN
 -- !query analysis
 Project [a#x, a#x AS matched_a#x]
 +- AsOfJoin (a#x >= a#x), Inner
+   :- SubqueryAlias t
+   :  +- LocalRelation [a#x]
+   +- SubqueryAlias r
+      +- LocalRelation [a#x]
+
+
+-- !query
+SELECT t.a, r.a AS matched_a
+FROM VALUES (ARRAY(1, 3)) AS t(a) ASOF JOIN
+     VALUES (ARRAY(CAST(1 AS BIGINT), CAST(2 AS BIGINT))),
+            (ARRAY(CAST(1 AS BIGINT), CAST(4 AS BIGINT))) AS r(a)
+  MATCH_CONDITION (t.a >= r.a)
+-- !query analysis
+Project [a#x, a#x AS matched_a#x]
++- AsOfJoin (cast(a#x as array<bigint>) >= a#x), Inner
    :- SubqueryAlias t
    :  +- LocalRelation [a#x]
    +- SubqueryAlias r
@@ -333,3 +529,67 @@ Project [c1#x, c2#x]
    :  +- LocalRelation [c1#x, c2#x]
    +- SubqueryAlias r
       +- LocalRelation [c1#x, c2#x]
+
+
+-- !query
+SELECT size(r.a) AS matched_size
+FROM VALUES (ARRAY(named_struct(), named_struct())) AS t(a) ASOF JOIN
+     VALUES (ARRAY(named_struct())),
+            (ARRAY(named_struct(), named_struct())),
+            (ARRAY(named_struct(), named_struct(), named_struct())) AS r(a)
+  MATCH_CONDITION (t.a >= r.a)
+-- !query analysis
+Project [size(a#x, false) AS matched_size#x]
++- AsOfJoin (a#x >= a#x), Inner
+   :- SubqueryAlias t
+   :  +- LocalRelation [a#x]
+   +- SubqueryAlias r
+      +- LocalRelation [a#x]
+
+
+-- !query
+SELECT size(r.a) AS matched_size
+FROM VALUES (ARRAY(named_struct(), named_struct())) AS t(a) ASOF JOIN
+     VALUES (ARRAY(named_struct())),
+            (ARRAY(named_struct(), named_struct())),
+            (ARRAY(named_struct(), named_struct(), named_struct())) AS r(a)
+  MATCH_CONDITION (t.a > r.a)
+-- !query analysis
+Project [size(a#x, false) AS matched_size#x]
++- AsOfJoin (a#x > a#x), Inner
+   :- SubqueryAlias t
+   :  +- LocalRelation [a#x]
+   +- SubqueryAlias r
+      +- LocalRelation [a#x]
+
+
+-- !query
+SELECT size(r.a) AS matched_size
+FROM VALUES (ARRAY(named_struct(), named_struct())) AS t(a) ASOF JOIN
+     VALUES (ARRAY(named_struct())),
+            (ARRAY(named_struct(), named_struct())),
+            (ARRAY(named_struct(), named_struct(), named_struct())) AS r(a)
+  MATCH_CONDITION (t.a <= r.a)
+-- !query analysis
+Project [size(a#x, false) AS matched_size#x]
++- AsOfJoin (a#x <= a#x), Inner
+   :- SubqueryAlias t
+   :  +- LocalRelation [a#x]
+   +- SubqueryAlias r
+      +- LocalRelation [a#x]
+
+
+-- !query
+SELECT size(r.a) AS matched_size
+FROM VALUES (ARRAY(named_struct(), named_struct())) AS t(a) ASOF JOIN
+     VALUES (ARRAY(named_struct())),
+            (ARRAY(named_struct(), named_struct())),
+            (ARRAY(named_struct(), named_struct(), named_struct())) AS r(a)
+  MATCH_CONDITION (t.a < r.a)
+-- !query analysis
+Project [size(a#x, false) AS matched_size#x]
++- AsOfJoin (a#x < a#x), Inner
+   :- SubqueryAlias t
+   :  +- LocalRelation [a#x]
+   +- SubqueryAlias r
+      +- LocalRelation [a#x]

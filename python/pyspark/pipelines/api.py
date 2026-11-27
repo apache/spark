@@ -17,18 +17,18 @@
 from typing import Callable, Dict, List, Literal, Optional, Union, overload
 
 from pyspark.errors import PySparkTypeError, PySparkValueError
-from pyspark.pipelines.graph_element_registry import get_active_graph_element_registry
-from pyspark.pipelines.type_error_utils import validate_optional_list_of_str_arg
 from pyspark.pipelines.flow import AutoCdcFlow, Flow, QueryFunction
+from pyspark.pipelines.graph_element_registry import get_active_graph_element_registry
+from pyspark.pipelines.output import (
+    MaterializedView,
+    Sink,
+    StreamingTable,
+    TemporaryView,
+)
 from pyspark.pipelines.source_code_location import (
     get_caller_source_code_location,
 )
-from pyspark.pipelines.output import (
-    MaterializedView,
-    StreamingTable,
-    TemporaryView,
-    Sink,
-)
+from pyspark.pipelines.type_error_utils import validate_optional_list_of_str_arg
 from pyspark.sql import Column
 from pyspark.sql.types import StructType
 
@@ -539,6 +539,9 @@ def create_auto_cdc_flow(
     stored_as_scd_type: Optional[Literal[1, 2, "1", "2"]] = None,
     name: Optional[str] = None,
     *,
+    ignore_null_updates: bool = False,
+    ignore_null_updates_column_list: Optional[Union[List[str], List[Column]]] = None,
+    ignore_null_updates_except_column_list: Optional[Union[List[str], List[Column]]] = None,
     track_history_column_list: Optional[Union[List[str], List[Column]]] = None,
     track_history_except_column_list: Optional[Union[List[str], List[Column]]] = None,
     spark_conf: Optional[Dict[str, str]] = None,
@@ -587,6 +590,20 @@ def create_auto_cdc_flow(
         this list will be in the output table.
     :param stored_as_scd_type: The SCD type for the target table. 1 (or "1") and 2 (or "2") are \
         supported. When not specified, the server default applies.
+    :param ignore_null_updates: When True, null values in an incoming update are ignored and the \
+        existing target value is preserved, for every column. Defaults to False, in which case \
+        nulls overwrite the target. Mutually exclusive with ignore_null_updates_column_list and \
+        ignore_null_updates_except_column_list; because only True requests ignore-null updates, \
+        leaving it False (the default) alongside either list is a no-op, not a conflict.
+    :param ignore_null_updates_column_list: The subset of columns for which null values in an \
+        incoming update are ignored. This should be a list of column identifiers without \
+        qualifiers, expressed as either Python strings or PySpark Columns. Mutually exclusive \
+        with ignore_null_updates and ignore_null_updates_except_column_list.
+    :param ignore_null_updates_except_column_list: The subset of columns for which null values \
+        in an incoming update overwrite the target; nulls are ignored for all other columns. \
+        This should be a list of column identifiers without qualifiers, expressed as either \
+        Python strings or PySpark Columns. Mutually exclusive with ignore_null_updates and \
+        ignore_null_updates_column_list.
     :param track_history_column_list: SCD2-only. Columns whose value change opens a new history \
         record; two consecutive upsert events for the same key are coalesced into the same \
         history record when they agree on every tracked column. When not specified, every \
@@ -637,6 +654,15 @@ def create_auto_cdc_flow(
                 "arg_type": type(name).__name__,
             },
         )
+    if type(ignore_null_updates) is not bool:
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "ignore_null_updates",
+                "expected_type": "bool",
+                "arg_type": type(ignore_null_updates).__name__,
+            },
+        )
 
     if name is None:
         name = target
@@ -653,6 +679,14 @@ def create_auto_cdc_flow(
         arg_name="track_history_except_column_list",
         column_list=track_history_except_column_list,
     )
+    ignore_null_updates_column_list = _normalize_optional_column_list(
+        arg_name="ignore_null_updates_column_list",
+        column_list=ignore_null_updates_column_list,
+    )
+    ignore_null_updates_except_column_list = _normalize_optional_column_list(
+        arg_name="ignore_null_updates_except_column_list",
+        column_list=ignore_null_updates_except_column_list,
+    )
 
     # An include/except pair is mutually exclusive. The server enforces this too, but failing
     # here avoids a round-trip. An empty list serializes identically to an omitted one (an unset
@@ -667,6 +701,38 @@ def create_auto_cdc_flow(
         "track_history_except_column_list",
         track_history_except_column_list,
     )
+    # ignore_null_updates (ignore nulls on all columns), ignore_null_updates_column_list, and
+    # ignore_null_updates_except_column_list are three mutually exclusive ways to request
+    # ignore-null updates. A list counts as specified when it is not None, even if it is empty.
+    specified_ignore_null_options = [
+        arg_name
+        for arg_name, specified in (
+            ("ignore_null_updates", ignore_null_updates),
+            ("ignore_null_updates_column_list", ignore_null_updates_column_list is not None),
+            (
+                "ignore_null_updates_except_column_list",
+                ignore_null_updates_except_column_list is not None,
+            ),
+        )
+        if specified
+    ]
+    if len(specified_ignore_null_options) > 1:
+        raise PySparkValueError(
+            errorClass="CANNOT_SET_TOGETHER",
+            messageParameters={"arg_list": ", ".join(specified_ignore_null_options)},
+        )
+    # Neither ignore-null list may be empty. An empty repeated field is indistinguishable from an
+    # unset one on the wire, so an empty list cannot express a selection; use
+    # ignore_null_updates=True to ignore nulls on all columns.
+    for arg_name, columns in (
+        ("ignore_null_updates_column_list", ignore_null_updates_column_list),
+        ("ignore_null_updates_except_column_list", ignore_null_updates_except_column_list),
+    ):
+        if columns is not None and len(columns) == 0:
+            raise PySparkValueError(
+                errorClass="CANNOT_BE_EMPTY",
+                messageParameters={"item": f"column in {arg_name}"},
+            )
 
     if isinstance(sequence_by, str):
         sequence_by = _connect_expr(sequence_by)
@@ -738,6 +804,9 @@ def create_auto_cdc_flow(
         column_list=column_list,
         except_column_list=except_column_list,
         stored_as_scd_type=stored_as_scd_type,
+        ignore_null_updates=ignore_null_updates,
+        ignore_null_updates_column_list=ignore_null_updates_column_list,
+        ignore_null_updates_except_column_list=ignore_null_updates_except_column_list,
         track_history_column_list=track_history_column_list,
         track_history_except_column_list=track_history_except_column_list,
         spark_conf=spark_conf or {},

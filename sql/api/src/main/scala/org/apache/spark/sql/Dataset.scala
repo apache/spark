@@ -21,7 +21,7 @@ import java.util
 import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.annotation.{ClassicOnly, DeveloperApi, Stable, Unstable}
+import org.apache.spark.annotation.{ClassicOnly, DeveloperApi, Experimental, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
 import org.apache.spark.rdd.RDD
@@ -1623,6 +1623,109 @@ abstract class Dataset[T] extends Serializable {
       encoder: Encoder[K]): KeyValueGroupedDataset[K, T] = {
     groupByKey(ToScalaUDF(func))(encoder)
   }
+
+  /**
+   * Splits timestamp ranges across fixed bins and proportionally scales selected FLOAT or DOUBLE
+   * columns. The result includes all input columns and three appended columns: `bin_start`,
+   * `bin_end`, and `bin_distribute_ratio`.
+   *
+   * The range and distribution arguments must directly reference top-level columns of this
+   * Dataset. Use `select` to project computed, cast, or nested values into columns first.
+   *
+   * The range columns must have the same timestamp type. The bin width must be a positive,
+   * constant day-time interval. Bins align to 1970-01-01 00:00:00, in the session time zone for
+   * TIMESTAMP.
+   *
+   * A NULL range bound produces one row with NULL bin columns and NULL scaled values. A
+   * zero-length range produces one row with an overlap ratio of 1.0. An inverted range raises an
+   * error.
+   *
+   * {{{
+   *   df.binBy(col("start"), col("end"), expr("INTERVAL 5 MINUTES"), Array(col("value")))
+   * }}}
+   *
+   * This operation requires `spark.sql.binByRelationOperator.enabled` to be true.
+   *
+   * @param rangeStart
+   *   Timestamp column for the inclusive range start.
+   * @param rangeEnd
+   *   Timestamp column for the exclusive range end.
+   * @param binWidth
+   *   Positive, constant day-time interval expression.
+   * @param distributeUniform
+   *   Nonempty array of FLOAT or DOUBLE columns to scale.
+   * @group untypedrel
+   * @since 4.4.0
+   */
+  @Experimental
+  def binBy(
+      rangeStart: Column,
+      rangeEnd: Column,
+      binWidth: Column,
+      distributeUniform: Array[Column]): DataFrame
+
+  /**
+   * Splits timestamp ranges across fixed bins with an explicit alignment origin.
+   *
+   * @see
+   *   `org.apache.spark.sql.Dataset.binBy(Column, Column, Column, Array[Column])`
+   * @param rangeStart
+   *   Top-level timestamp column for the inclusive range start.
+   * @param rangeEnd
+   *   Top-level timestamp column for the exclusive range end, with the same type as `rangeStart`.
+   * @param binWidth
+   *   Positive, constant day-time interval expression.
+   * @param distributeUniform
+   *   Nonempty array of top-level FLOAT or DOUBLE columns to scale.
+   * @param alignTo
+   *   Constant alignment origin with the same timestamp type as the range columns, or null for
+   *   the default origin.
+   * @group untypedrel
+   * @since 4.4.0
+   */
+  @Experimental
+  def binBy(
+      rangeStart: Column,
+      rangeEnd: Column,
+      binWidth: Column,
+      distributeUniform: Array[Column],
+      alignTo: Column): DataFrame
+
+  /**
+   * Splits timestamp ranges across fixed bins with optional alignment and output column names.
+   *
+   * @see
+   *   `org.apache.spark.sql.Dataset.binBy(Column, Column, Column, Array[Column])`
+   * @param rangeStart
+   *   Top-level timestamp column for the inclusive range start.
+   * @param rangeEnd
+   *   Top-level timestamp column for the exclusive range end, with the same type as `rangeStart`.
+   * @param binWidth
+   *   Positive, constant day-time interval expression.
+   * @param distributeUniform
+   *   Nonempty array of top-level FLOAT or DOUBLE columns to scale.
+   * @param alignTo
+   *   Constant alignment origin with the same timestamp type as the range columns, or null for
+   *   the default origin.
+   * @param binStartName
+   *   Name for the appended bin-start column, or null for `bin_start`.
+   * @param binEndName
+   *   Name for the appended bin-end column, or null for `bin_end`.
+   * @param binDistributeRatioName
+   *   Name for the appended overlap-ratio column, or null for `bin_distribute_ratio`.
+   * @group untypedrel
+   * @since 4.4.0
+   */
+  @Experimental
+  def binBy(
+      rangeStart: Column,
+      rangeEnd: Column,
+      binWidth: Column,
+      distributeUniform: Array[Column],
+      alignTo: Column,
+      binStartName: String,
+      binEndName: String,
+      binDistributeRatioName: String): DataFrame
 
   /**
    * Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns

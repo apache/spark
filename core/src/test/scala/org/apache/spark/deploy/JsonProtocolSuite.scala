@@ -39,6 +39,18 @@ class JsonProtocolSuite extends SparkFunSuite with JsonTestUtils {
     assertValidDataInJson(output, JsonMethods.parse(JsonConstants.appInfoJsonStr))
   }
 
+  test("SPARK-59055: writeApplicationInfo with the hold status") {
+    val appInfo = createAppInfo()
+    appInfo.holdSupported = true
+    appInfo.held = true
+    val output = JsonProtocol.writeApplicationInfo(appInfo)
+    assertValidJson(output)
+    assert(output \ "holdsupported" === JBool(true))
+    assert(output \ "held" === JBool(true))
+    // The application has no executor left, so its hold is complete.
+    assert(output \ "draining" === JInt(0))
+  }
+
   test("writeWorkerInfo") {
     val output = JsonProtocol.writeWorkerInfo(createWorkerInfo())
     assertValidJson(output)
@@ -191,7 +203,9 @@ object JsonConstants {
       |"resourcesperslave":[{"name":"fpga",
       |"amount":3},{"name":"gpu","amount":3}],
       |"submitdate":"%s",
-      |"state":"WAITING","duration":%d}
+      |"state":"WAITING",
+      |"holdsupported":false,"held":false,"draining":0,
+      |"duration":%d}
     """.format(System.getProperty("user.name", "<unknown>"),
         submitDate.toString, currTimeInMillis - appInfoStartTime).stripMargin
 

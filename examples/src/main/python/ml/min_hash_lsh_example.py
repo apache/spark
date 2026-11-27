@@ -23,9 +23,10 @@ Run with:
 # $example on$
 from pyspark.ml.feature import MinHashLSH
 from pyspark.ml.linalg import Vectors
-from pyspark.sql.functions import col
+
 # $example off$
 from pyspark.sql import SparkSession
+from pyspark.sql.functions import col
 
 if __name__ == "__main__":
     spark = SparkSession \

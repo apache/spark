@@ -38,6 +38,8 @@ class OrcDeserializer(
 
   private val resultRow = new SpecificInternalRow(requiredSchema.map(_.dataType))
 
+  private val existenceDefaultValues = ResolveDefaultColumns.existenceDefaultValues(requiredSchema)
+
   private lazy val bitmask = ResolveDefaultColumns.existenceDefaultsBitmask(requiredSchema)
 
   // `fieldWriters(index)` is
@@ -49,14 +51,13 @@ class OrcDeserializer(
     // ADD COLUMN c DEFAULT <value>" on the Orc table, this adds one field to the Catalyst schema.
     // Then if we query the old files with the new Catalyst schema, we should only apply the
     // existence default value to the columns whose IDs are not explicitly requested.
-    val existingValues = ResolveDefaultColumns.existenceDefaultValues(requiredSchema)
-    if (ResolveDefaultColumns.hasExistenceDefaultValues(requiredSchema)) {
-      for (i <- 0 until existingValues.length) {
+    if (existenceDefaultValues.exists(_ != null)) {
+      for (i <- 0 until existenceDefaultValues.length) {
         bitmask(i) =
           if (requestedColIds(i) != -1) {
             false
           } else {
-            existingValues(i) != null
+            existenceDefaultValues(i) != null
           }
       }
     }
@@ -85,7 +86,7 @@ class OrcDeserializer(
       }
       targetColumnIndex += 1
     }
-    applyExistenceDefaultValuesToRow(requiredSchema, resultRow, bitmask)
+    applyExistenceDefaultValuesToRow(existenceDefaultValues, resultRow, bitmask)
     resultRow
   }
 
@@ -102,7 +103,7 @@ class OrcDeserializer(
       }
       targetColumnIndex += 1
     }
-    applyExistenceDefaultValuesToRow(requiredSchema, resultRow, bitmask)
+    applyExistenceDefaultValuesToRow(existenceDefaultValues, resultRow, bitmask)
     resultRow
   }
 
@@ -136,7 +137,7 @@ class OrcDeserializer(
       case DoubleType => (ordinal, value) =>
         updater.setDouble(ordinal, value.asInstanceOf[DoubleWritable].get)
 
-      case StringType => (ordinal, value) =>
+      case _: StringType => (ordinal, value) =>
         updater.set(ordinal, UTF8String.fromBytes(value.asInstanceOf[Text].copyBytes))
 
       case BinaryType => (ordinal, value) =>

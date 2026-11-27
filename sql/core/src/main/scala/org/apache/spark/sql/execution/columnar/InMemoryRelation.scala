@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.plans.{logical, QueryPlan}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.catalyst.util.{truncatedString, CaseInsensitiveMap}
 import org.apache.spark.sql.columnar.{CachedBatch, CachedBatchSerializer, SimpleMetricsCachedBatch, SimpleMetricsCachedBatchSerializer}
 import org.apache.spark.sql.execution._
@@ -240,9 +241,11 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
     // Find the ordinals and data types of the requested columns.
     val requestedColumnIndices = CachedColumnIndices(cacheAttributes, selectedAttributes)
 
+    // The columns are read as the types they are cached as: a UDT as its SQL type, and a
+    // framework type stored as a struct, such as FileType, as its representation.
     val columnTypes = selectedAttributes.map(_.dataType match {
       case udt: UserDefinedType[_] => udt.sqlType
-      case other => other
+      case other => TypeOps.rowRepresentationOrSelf(other)
     }).toArray
 
     input.mapPartitionsInternal { cachedBatchIterator =>
@@ -289,8 +292,15 @@ case class CachedRDDBuilder(
   // late updates from making a rebuilt cache appear complete.
   private var partitionStats = newPartitionStats()
 
-  val cachedName = tableName.map(n => s"In-memory table $n")
-    .getOrElse(Utils.abbreviate(cachedPlan.toString, 1024))
+  // Resolved on first access (cache materialization for anonymous caches). For adaptive plans,
+  // the name reflects the final plan.
+  lazy val cachedName: String = tableName.map(n => s"In-memory table $n").getOrElse {
+    if (cachedPlan.conf.getConf(SQLConf.DATAFRAME_CACHE_PLAN_ID_NAME_ENABLED)) {
+      s"CachedRDD (plan_id=${cachedPlan.id})"
+    } else {
+      Utils.abbreviate(cachedPlan.toString, 1024)
+    }
+  }
 
   val supportsColumnarInput: Boolean = {
     cachedPlan.supportsColumnar &&
@@ -376,10 +386,7 @@ case class CachedRDDBuilder(
         val cachedPlanConf = cachedPlan.conf.clone()
 
         def hasStrictReads(conf: SQLConf): Boolean = SQLConf.withExistingConf(conf) {
-          fileSourceOptions.forall { options =>
-            val effectiveOptions = new FileSourceOptions(options)
-            !effectiveOptions.ignoreMissingFiles && !effectiveOptions.ignoreCorruptFiles
-          }
+          fileSourceOptions.forall(options => new FileSourceOptions(options).hasStrictFileReads)
         }
 
         val (inputRDD, strictPhysicalReads) = SQLConf.withExistingConf(materializationConf) {
@@ -419,8 +426,13 @@ case class CachedRDDBuilder(
         // SPARK-49982: during RDD execution, AQE will execute all stages except ResultStage. If any
         // failure happen, the failure will be cached and the next SQL cache caller will hit the
         // negative cache. Therefore we need to recache the plan.
+        // This runs under this builder's lock, possibly on the thread of a subquery that a
+        // dependent's build is waiting for. Re-caching a dependent that reads this plan only
+        // inside a subquery would wait for that dependent's lock and deadlock. Such a dependent
+        // is re-planned when its own adaptive build fails; a non-adaptive one is not re-planned
+        // by this path.
         val session = cachedPlan.session
-        session.sharedState.cacheManager.recacheByPlan(session, logicalPlan)
+        session.sharedState.cacheManager.recacheByPlanOutsideSubqueries(session, logicalPlan)
         throw e
     }
     // Records one successful partition materialization: this partition's (rows, bytes) keyed by its
@@ -710,16 +722,22 @@ case class InMemoryRelation(
     val newOutputOrdering = outputOrdering
       .map(_.transform { case a: Attribute => map(a) })
       .asInstanceOf[Seq[SortOrder]]
-    InMemoryRelation(newOutput, cacheBuilder, newOutputOrdering, statsOfPlanToCache)
+    // `attributeStats` is keyed by attribute, so it has to be re-keyed onto `newOutput` as well,
+    // otherwise every column stat lookup misses for the new relation and the estimates silently
+    // fall back to the un-filtered defaults. `statsOfPlanToCache` is a `var` that starts as null.
+    val newStatsOfPlanToCache = if (statsOfPlanToCache == null) {
+      null
+    } else {
+      LogicalRDD.rewriteStatistics(statsOfPlanToCache, map)
+    }
+    InMemoryRelation(newOutput, cacheBuilder, newOutputOrdering, newStatsOfPlanToCache)
   }
 
-  override def newInstance(): this.type = {
-    InMemoryRelation(
-      output.map(_.newInstance()),
-      cacheBuilder,
-      outputOrdering,
-      statsOfPlanToCache).asInstanceOf[this.type]
-  }
+  // Goes through `withOutput` so that `outputOrdering` is re-mapped onto the fresh exprIds.
+  // Returning a relation whose `outputOrdering` still references the old attributes would break
+  // canonicalization, which re-maps the ordering through the relation's own `output`.
+  override def newInstance(): this.type =
+    withOutput(output.map(_.newInstance())).asInstanceOf[this.type]
 
   // override `clone` since the default implementation won't carry over mutable states.
   override def clone(): LogicalPlan = {

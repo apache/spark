@@ -24,7 +24,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{HASH_JOIN_KEYS, JOIN_CONDITION}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractFiltersAndInnerJoins, ExtractSingleColumnNullAwareAntiJoin}
+import org.apache.spark.sql.catalyst.planning.{ExtractAllEquiJoinKeys, ExtractEquiJoinKeys, ExtractFiltersAndInnerJoins, ExtractSingleColumnNullAwareAntiJoin}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -97,19 +97,32 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(INNER_LIKE_JOIN), ruleId) {
+    // `ExtractFiltersAndInnerJoins` does not flatten a lower join or filter with a condition that
+    // may not move (see `splitMovable`), so such conditions are only in the top join or filter.
+    // They stay in a filter above all the joins, which takes the place of the top join or filter.
+    // `CombineFilters` does not combine a condition that can fail from a filter above into it.
     case p @ ExtractFiltersAndInnerJoins(input, conditions)
         if input.size > 2 && conditions.nonEmpty =>
-      val reordered = if (conf.starSchemaDetection && !conf.cboEnabled) {
+      // The first join that covers the references of a condition can be below the filter or the
+      // join that the condition is written in, where it would be evaluated on rows that a join
+      // above removes. So the conditions that may not move (see `splitMovable`) stay in a filter
+      // above all the joins. `conditions` are in their written order: the ones of a lower join or
+      // filter before the ones above it. A movable condition written after a kept one can not
+      // fail, so it goes into a join, and any filter that `createOrderedJoin` adds only has
+      // conditions written before the kept ones.
+      val (movable, keptAbove) = splitMovable(conditions, input.map(_._1))
+      val joined = if (conf.starSchemaDetection && !conf.cboEnabled) {
         val starJoinPlan = StarSchemaDetection.reorderStarJoins(input, conditions)
         if (starJoinPlan.nonEmpty) {
           val rest = input.filterNot(starJoinPlan.contains(_))
-          createOrderedJoin(starJoinPlan ++ rest, conditions)
+          createOrderedJoin(starJoinPlan ++ rest, movable)
         } else {
-          createOrderedJoin(input, conditions)
+          createOrderedJoin(input, movable)
         }
       } else {
-        createOrderedJoin(input, conditions)
+        createOrderedJoin(input, movable)
       }
+      val reordered = keptAbove.reduceLeftOption(And).map(Filter(_, joined)).getOrElse(joined)
 
       if (p.sameOutput(reordered)) {
         reordered
@@ -153,6 +166,9 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
  *   SELECT t1.* FROM t1
  * }}}
  *
+ * An [[ExternalLookupJoin]] is never right or full outer, so only the left outer cases of 1 and
+ * 2 apply to it. Case 3 cannot: no lookup side reports distinct keys.
+ *
  * This rule should be executed before pushing down the Filter
  */
 object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
@@ -179,15 +195,19 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
-  private def buildNewJoinType(filter: Filter, join: Join): JoinType = {
+  private def buildNewJoinType(
+      filter: Filter,
+      left: LogicalPlan,
+      right: LogicalPlan,
+      joinType: JoinType): JoinType = {
     val conditions = splitConjunctivePredicates(filter.condition) ++ filter.constraints
-    val leftConditions = conditions.filter(_.references.subsetOf(join.left.outputSet))
-    val rightConditions = conditions.filter(_.references.subsetOf(join.right.outputSet))
+    val leftConditions = conditions.filter(_.references.subsetOf(left.outputSet))
+    val rightConditions = conditions.filter(_.references.subsetOf(right.outputSet))
 
     lazy val leftHasNonNullPredicate = leftConditions.exists(canFilterOutNull)
     lazy val rightHasNonNullPredicate = rightConditions.exists(canFilterOutNull)
 
-    join.joinType match {
+    joinType match {
       case RightOuter if leftHasNonNullPredicate => Inner
       case LeftOuter if rightHasNonNullPredicate => Inner
       case FullOuter if leftHasNonNullPredicate && rightHasNonNullPredicate => Inner
@@ -205,19 +225,39 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
     }.forall(ae => ae.isDistinct || EliminateDistinct.isDuplicateAgnostic(ae.aggregateFunction))
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsPattern(OUTER_JOIN), ruleId) {
-    case f @ Filter(condition, j @ Join(_, _, RightOuter | LeftOuter | FullOuter, _, _)) =>
-      val newJoinType = buildNewJoinType(f, j)
-      if (j.joinType == newJoinType) f else Filter(condition, j.copy(joinType = newJoinType))
+  /**
+   * The left side of a left outer join. An external lookup join returns every stream row at least
+   * once as well, so a duplicate-agnostic aggregate over its stream side does not need it either.
+   */
+  private object LeftOuterJoinLeftSide {
+    def unapply(plan: LogicalPlan): Option[LogicalPlan] = plan match {
+      case Join(left, _, LeftOuter, _, _) => Some(left)
+      case ExternalLookupJoin(left, _, LeftOuter, _, _, _) => Some(left)
+      case _ => None
+    }
+  }
 
-    case a @ Aggregate(_, _, Join(left, _, LeftOuter, _, _), _)
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsAnyPattern(OUTER_JOIN, EXTERNAL_LOOKUP_JOIN), ruleId) {
+    case f @ Filter(condition, j @ Join(_, _, RightOuter | LeftOuter | FullOuter, _, _)) =>
+      val newJoinType = buildNewJoinType(f, j.left, j.right, j.joinType)
+      if (j.joinType == newJoinType) f else Filter(condition, j.copy(joinType = newJoinType))
+    // A filter that rejects the null lookup columns of a stream row without a match turns a left
+    // outer lookup join into an inner one. This rule only changes the join type. Then
+    // PushDownPredicates, in the same batch, moves the filter's lookup-side conjuncts onto the
+    // lookup side. Each rule keeps the result on its own, so excluding either one loses only that
+    // pushdown.
+    case f @ Filter(condition, j @ ExternalLookupJoin(left, right, LeftOuter, _, _, _)) =>
+      val newJoinType = buildNewJoinType(f, left, right, LeftOuter)
+      if (newJoinType == LeftOuter) f else Filter(condition, j.copy(joinType = newJoinType))
+
+    case a @ Aggregate(_, _, LeftOuterJoinLeftSide(left), _)
         if a.references.subsetOf(left.outputSet) && allDuplicateAgnostic(a) =>
       a.copy(child = left)
     case a @ Aggregate(_, _, Join(_, right, RightOuter, _, _), _)
         if a.references.subsetOf(right.outputSet) && allDuplicateAgnostic(a) =>
       a.copy(child = right)
-    case a @ Aggregate(_, _, p @ Project(projectList, Join(left, _, LeftOuter, _, _)), _)
+    case a @ Aggregate(_, _, p @ Project(projectList, LeftOuterJoinLeftSide(left)), _)
         if projectList.forall(_.deterministic) && p.references.subsetOf(left.outputSet) &&
           allDuplicateAgnostic(a) =>
       a.copy(child = p.copy(child = left))
@@ -226,12 +266,12 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
           allDuplicateAgnostic(a) =>
       a.copy(child = p.copy(child = right))
 
-    case p @ Project(_, ExtractEquiJoinKeys(LeftOuter, _, rightKeys, _, _, left, right, _))
-        if right.distinctKeys.exists(_.subsetOf(ExpressionSet(rightKeys))) &&
+    case p @ Project(_, ExtractAllEquiJoinKeys(LeftOuter, _, rightKeys, _, _, left, right, _))
+        if right.distinctKeys.exists(_.subsetOf(DistinctKeyVisitor.joinKeySet(rightKeys))) &&
           p.references.subsetOf(left.outputSet) =>
       p.copy(child = left)
-    case p @ Project(_, ExtractEquiJoinKeys(RightOuter, leftKeys, _, _, _, left, right, _))
-        if left.distinctKeys.exists(_.subsetOf(ExpressionSet(leftKeys))) &&
+    case p @ Project(_, ExtractAllEquiJoinKeys(RightOuter, leftKeys, _, _, _, left, right, _))
+        if left.distinctKeys.exists(_.subsetOf(DistinctKeyVisitor.joinKeySet(leftKeys))) &&
           p.references.subsetOf(right.outputSet) =>
       p.copy(child = right)
   }
@@ -353,6 +393,86 @@ trait JoinSelectionHelper extends Logging {
     }
   }
 
+  /**
+   * How `JoinSelection` plans `join` when it has no equi-join keys and
+   * `canPlanAsBroadcastHashJoin(join, conf)` is false: the side a broadcast nested loop join
+   * builds, or `None` for a Cartesian product. Rules that need to know or price the plan a non-equi
+   * join gets can share it. Without equi-join keys, only a single-column null-aware anti join can
+   * be a broadcast hash join.
+   *
+   * With hints, it builds a broadcast-hinted side, or else plans a Cartesian product under a
+   * shuffle-replicate hint. Otherwise, or if no hint applies, it builds a side small enough to
+   * broadcast, or else plans a Cartesian product for an inner join, or else builds the side the
+   * join requires or prefers, however large. A side hinted NO_BROADCAST_AND_REPLICATION is never
+   * broadcast by size, and the hint rules out a Cartesian product, so the other side is built. Of
+   * two candidate sides, it builds the smaller for an inner or full join, the left for a right
+   * join, and the right for a left join. A LeftSingle join, though, always builds its right side,
+   * the only side `BroadcastNestedLoopJoinExec` can build for it, whatever the hints and sizes.
+   */
+  def getNonEquiJoinBuildSide(join: Join, conf: SQLConf): Option[BuildSide] = {
+    val Join(left, right, joinType, _, hint) = join
+    val desiredBuildSide = if (joinType.isInstanceOf[InnerLike] || joinType == FullOuter) {
+      getSmallerSide(left, right)
+    } else {
+      // For perf reasons, `BroadcastNestedLoopJoinExec` prefers to broadcast left side if
+      // it's a right join, and broadcast right side if it's a left join.
+      // TODO: revisit it. If left side is much smaller than the right side, it may be better
+      // to broadcast the left side even if it's a left join.
+      if (canBuildBroadcastLeft(joinType)) BuildLeft else BuildRight
+    }
+
+    // The side to broadcast by hint, or by size, if any. `BroadcastNestedLoopJoinExec` can't build
+    // the left side of a LeftSingle join, so that side never qualifies.
+    // TODO: teach `BroadcastNestedLoopJoinExec` to build the left side of a LeftSingle join by
+    // detecting more than one match per left row, so a small outer side can be broadcast instead
+    // of a large subquery side.
+    def broadcastSide(onlyLookingAtHint: Boolean): Option[BuildSide] = {
+      val buildLeft = if (joinType == LeftSingle) {
+        false
+      } else if (onlyLookingAtHint) {
+        hintToBroadcastLeft(hint)
+      } else {
+        canBroadcastBySize(left, conf) && !hintToNotBroadcastAndReplicateLeft(hint)
+      }
+      val buildRight = if (onlyLookingAtHint) {
+        hintToBroadcastRight(hint)
+      } else {
+        canBroadcastBySize(right, conf) && !hintToNotBroadcastAndReplicateRight(hint)
+      }
+      if (buildLeft && buildRight) {
+        Some(desiredBuildSide)
+      } else if (buildLeft) {
+        Some(BuildLeft)
+      } else if (buildRight) {
+        Some(BuildRight)
+      } else {
+        None
+      }
+    }
+
+    val cartesianProduct =
+      joinType.isInstanceOf[InnerLike] && !hintToNotBroadcastAndReplicate(hint)
+    // The last resort could be very slow or OOM. It builds the desired side unless the join
+    // requires a particular build side (e.g. NO_BROADCAST_AND_REPLICATION hint).
+    def withoutHint: Option[BuildSide] = broadcastSide(onlyLookingAtHint = false).orElse {
+      if (cartesianProduct) {
+        None
+      } else {
+        Some(getBroadcastNestedLoopJoinBuildSide(hint, joinType).getOrElse(desiredBuildSide))
+      }
+    }
+
+    if (hint.isEmpty) {
+      withoutHint
+    } else {
+      broadcastSide(onlyLookingAtHint = true) match {
+        case hinted @ Some(_) => hinted
+        case None if hintToShuffleReplicateNL(hint) && cartesianProduct => None
+        case None => withoutHint
+      }
+    }
+  }
+
   def getSmallerSide(left: LogicalPlan, right: LogicalPlan): BuildSide = {
     if (right.stats.sizeInBytes <= left.stats.sizeInBytes) BuildRight else BuildLeft
   }
@@ -417,14 +537,13 @@ trait JoinSelectionHelper extends Logging {
 
   /**
    * The build side a broadcast hash join would use, or `None` when one is ruled out by the join
-   * shape or by a hint.
+   * shape, a hint, or its size.
    *
-   * `Some` does not promise the planner picks a broadcast hash join: a `SHUFFLE_MERGE` or
-   * `SHUFFLE_REPLICATE_NL` hint is tried before the sizes are consulted, join keys no hash join
-   * supports send it to a sort merge join, and AQE re-estimates the sizes at runtime. Within the
-   * broadcast decision itself this does follow the planner's precedence: a hinted broadcast first,
-   * a hinted shuffle hash join as a veto, then the sizes. Callers that only need to know whether a
-   * broadcast hash join is possible should use `canPlanAsBroadcastHashJoin`.
+   * For equi-joins, `Some` does not promise the planner picks a broadcast hash join: other hints,
+   * unsupported join keys, or AQE can select another strategy. For a single-column null-aware anti
+   * join, the dedicated and automatic broadcast thresholds determine eligibility before hints.
+   * Callers that only need to know whether a broadcast hash join is possible should use
+   * `canPlanAsBroadcastHashJoin`.
    */
   def getBroadcastHashJoinBuildSide(join: Join, conf: SQLConf): Option[BuildSide] = join match {
     case ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _, _, _, _) =>
@@ -432,15 +551,32 @@ trait JoinSelectionHelper extends Logging {
       // supports cannot honor that hint either, so it does not veto here; the sizes then still
       // produce an answer, which over-approximates `JoinSelection` (it falls through to a sort
       // merge join). That over-approximation predates this method and is kept deliberately, so
-      // that `canPlanAsBroadcastHashJoin` keeps its truth table.
-      val noShufflePlannedBefore = !hashJoinSupported(leftKeys, rightKeys) ||
-        getShuffleHashJoinBuildSide(join, hintOnly = true, conf).isEmpty
+      // that `canPlanAsBroadcastHashJoin` keeps its truth table. `hashJoinSupported` comes last,
+      // as it logs a warning for keys that no hash join supports.
+      val noShufflePlannedBefore =
+        getShuffleHashJoinBuildSide(join, hintOnly = true, conf).isEmpty ||
+          !hashJoinSupported(leftKeys, rightKeys)
       getBroadcastBuildSide(join, hintOnly = true, conf).orElse {
         if (noShufflePlannedBefore) getBroadcastBuildSide(join, hintOnly = false, conf) else None
       }
-    // `JoinSelection` always builds from the right for this shape.
+    // `JoinSelection` always builds from the right for this shape. The applicable automatic
+    // broadcast threshold floors a nonnegative dedicated threshold. As before, threshold
+    // eligibility takes precedence over join hints. This same decision intentionally controls
+    // aggregate pushdown. If neither threshold admits the hash join, regular planning may still
+    // broadcast the right side for a nested-loop join. The thresholds limit hash relation
+    // construction, not all broadcasts.
     case j @ ExtractSingleColumnNullAwareAntiJoin(_, _) =>
-      if (canBroadcastBySize(j.right, conf)) Some(BuildRight) else None
+      val dedicatedThreshold = conf.nullAwareAntiJoinBroadcastThreshold
+      val canBroadcast = dedicatedThreshold < 0 ||
+        (dedicatedThreshold > 0 && {
+          val rightSize = j.right.stats.sizeInBytes
+          rightSize >= 0 && rightSize <= dedicatedThreshold
+        }) || canBroadcastBySize(j.right, conf)
+      if (canBroadcast) {
+        Some(BuildRight)
+      } else {
+        None
+      }
     case _ => None
   }
 

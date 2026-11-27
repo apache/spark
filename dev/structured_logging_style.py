@@ -17,10 +17,10 @@
 # limitations under the License.
 #
 
-import os
-import sys
-import re
 import glob
+import os
+import re
+import sys
 
 
 def main():
@@ -41,7 +41,12 @@ def main():
 
     nonmigrated_files = {}
 
-    scala_files = glob.glob(os.path.join(__file__, "../", "**", "*.scala"), recursive=True)
+    # Scan the Scala files under the repository root regardless of the current working directory.
+    os.chdir(os.path.join(os.path.dirname(os.path.realpath(__file__)), ".."))
+    scala_files = glob.glob(os.path.join("**", "*.scala"), recursive=True)
+    if not scala_files:
+        print("[error] Found no Scala files to check.", file=sys.stderr)
+        sys.exit(-1)
 
     for file in scala_files:
         skip_file = False

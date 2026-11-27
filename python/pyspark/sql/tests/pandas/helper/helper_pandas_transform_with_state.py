@@ -15,29 +15,30 @@
 # limitations under the License.
 #
 
-from abc import abstractmethod
 import sys
+import unittest
+from abc import abstractmethod
 from typing import (
     Iterator,
     NamedTuple,
     Optional,
 )
-import unittest
+
 from pyspark.errors import PySparkRuntimeError
 from pyspark.sql.streaming import StatefulProcessor, StatefulProcessorHandle
 from pyspark.sql.types import (
-    StringType,
-    StructType,
-    StructField,
-    Row,
-    IntegerType,
-    TimestampType,
-    LongType,
-    BooleanType,
-    FloatType,
-    DoubleType,
     ArrayType,
+    BooleanType,
+    DoubleType,
+    FloatType,
+    IntegerType,
+    LongType,
     MapType,
+    Row,
+    StringType,
+    StructField,
+    StructType,
+    TimestampType,
 )
 from pyspark.testing.utils import have_pandas
 
@@ -896,6 +897,12 @@ class PandasListStateProcessor(StatefulProcessor):
     def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
         import datetime
 
+        self.list_state1.put([(1,)])
+        assert self.list_state1.exists()
+        self.list_state1.clear()
+        assert not self.list_state1.exists()
+        assert list(self.list_state1.get()) == []
+
         count = 0
         time_list = []
         for pdf in rows:
@@ -961,6 +968,12 @@ class RowListStateProcessor(StatefulProcessor):
 
     def handleInputRows(self, key, rows, timerValues) -> Iterator[Row]:
         import datetime
+
+        self.list_state1.put([(1,)])
+        assert self.list_state1.exists()
+        self.list_state1.clear()
+        assert not self.list_state1.exists()
+        assert list(self.list_state1.get()) == []
 
         count = 0
         time_list = []
@@ -1808,6 +1821,7 @@ class PandasStatefulProcessorCompositeType(StatefulProcessor):
         attributes_map, confs_map = self._update_map_state(key, total_temperature)
 
         import json
+
         import numpy as np
 
         def np_int64_to_int(x):

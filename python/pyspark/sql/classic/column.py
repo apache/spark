@@ -15,32 +15,33 @@
 # limitations under the License.
 #
 
-import sys
 import json
+import sys
 import warnings
 from typing import (
-    cast,
-    overload,
+    TYPE_CHECKING,
     Any,
     Callable,
     Iterable,
     List,
     Optional,
     Tuple,
-    TYPE_CHECKING,
     Union,
+    cast,
+    overload,
 )
 
-from pyspark.sql.column import Column as ParentColumn
 from pyspark.errors import PySparkAttributeError, PySparkTypeError, PySparkValueError
 from pyspark.errors.utils import with_origin_to_class
+from pyspark.sql.column import Column as ParentColumn
 from pyspark.sql.types import DataType
-from pyspark.sql.utils import get_active_spark_context, enum_to_value
+from pyspark.sql.utils import enum_to_value, get_active_spark_context
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
+
     from pyspark.core.context import SparkContext
-    from pyspark.sql._typing import ColumnOrName, LiteralType, DecimalLiteral, DateTimeLiteral
+    from pyspark.sql._typing import ColumnOrName, DateTimeLiteral, DecimalLiteral, LiteralType
     from pyspark.sql.window import WindowSpec
 
 __all__ = ["Column"]
@@ -444,11 +445,21 @@ class Column(ParentColumn):
     def startswith(
         self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
     ) -> ParentColumn:
+        # The JVM `startsWith` is overloaded for `Column` and `String`. A `str` can only bind the
+        # `String` overload, but for `None` (a JVM null) Py4J may pick the `Column` overload and
+        # fail with a NullPointerException, so pass other literals as a `Column`.
+        other = enum_to_value(other)
+        if not isinstance(other, (ParentColumn, str)):
+            other = Column(_create_column_from_literal(other))
         return _bin_op("startsWith", self, other)
 
     def endswith(
         self, other: Union[ParentColumn, "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
     ) -> ParentColumn:
+        # See the comment in `startswith`.
+        other = enum_to_value(other)
+        if not isinstance(other, (ParentColumn, str)):
+            other = Column(_create_column_from_literal(other))
         return _bin_op("endsWith", self, other)
 
     def like(self: ParentColumn, other: str) -> ParentColumn:
@@ -674,8 +685,9 @@ class Column(ParentColumn):
 
 def _test() -> None:
     import doctest
-    from pyspark.sql import SparkSession
+
     import pyspark.sql.column
+    from pyspark.sql import SparkSession
 
     # It inherits docstrings but doctests cannot detect them so we run
     # the parent classe's doctests here directly.

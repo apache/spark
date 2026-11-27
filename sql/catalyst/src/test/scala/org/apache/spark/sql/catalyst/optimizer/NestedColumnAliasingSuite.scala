@@ -35,6 +35,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = Batch("Nested column pruning", FixedPoint(100),
+      RewriteSizeOfArrayStruct,
       ColumnPruning,
       CollapseProject,
       RemoveNoopOperators) :: Nil
@@ -239,6 +240,46 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     comparePlans(optimized, expected)
   }
 
+  test("SPARK-58735: size(array<struct>) prunes to a single element field") {
+    def collectArrayStructFields(plan: LogicalPlan): Seq[GetArrayStructFields] =
+      plan.flatMap(_.expressions.flatMap(_.collect { case g: GetArrayStructFields => g })).distinct
+
+    // `size(friends)` should be rewritten to read only one field of the element struct,
+    // so nested column pruning reads a single column instead of the whole `friends` struct.
+    val query = contact.select(Size($"friends", legacySizeOfNull = false)).analyze
+    val optimized = Optimize.execute(query)
+
+    // The rewrite preserves the user-visible output name (`size(friends)`); only the read
+    // schema changes.
+    val expected = contact
+      .select(Size(
+        GetArrayStructFields($"friends",
+          field = StructField("first", StringType),
+          ordinal = 0,
+          numFields = 3,
+          containsNull = true),
+        legacySizeOfNull = false).as("size(friends)"))
+      .analyze
+    comparePlans(optimized, expected)
+
+    // Only the single (first, atomic) field is extracted.
+    val extracted = collectArrayStructFields(optimized)
+    assert(extracted.map(_.field.name) == Seq("first"),
+      s"expected only `first` to be read, but got:\n$optimized")
+  }
+
+  test("SPARK-58735: size over array<primitive> / already-extracted field is not rewritten") {
+    // `friends.first` is already a single-field extraction (array<string>). The rule must not
+    // wrap it again (idempotence) and must not add any further extraction.
+    val alreadyExtracted = GetArrayStructFields($"friends",
+      field = StructField("first", StringType), ordinal = 0, numFields = 3, containsNull = true)
+    val query = contact.select(Size(alreadyExtracted, legacySizeOfNull = false)).analyze
+    val optimized = Optimize.execute(query)
+
+    val expected = contact.select(Size(alreadyExtracted, legacySizeOfNull = false)).analyze
+    comparePlans(optimized, expected)
+  }
+
   test("nested field pruning for getting struct field in map") {
     val field1 = GetStructField(GetMapValue($"relatives", Literal("key")), 0, Some("first"))
     val field2 = GetArrayStructFields(child = MapValues($"relatives"),
@@ -290,6 +331,50 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
       .analyze
 
     comparePlans(optimized, expected)
+  }
+
+  test("Redundant nested fields are detected through cosmetic variations of their parents") {
+    val a = $"a".struct(StructType.fromDDL("b struct<c: int, d: int>, e int"))
+    // `a.b`, referenced many times below.
+    val ab = GetStructField(a, 0, Some("b"))
+    // `a.b` without the field name.
+    val unnamedAb = GetStructField(a, 0, None)
+    // `a.b.c` over the unnamed `a.b`.
+    val abc = GetStructField(unnamedAb, 0, Some("c"))
+    // `a.b.d` over a qualified `a`.
+    val abd = GetStructField(
+      GetStructField(a.withQualifier(Seq("t")), 0, Some("b")), 1, Some("d"))
+
+    val attrToExtractValues = NestedColumnAliasing.getAttributeToExtractValues(
+      Seq.fill(100)(ab) ++ Seq(unnamedAb, abc, abd), Seq.empty)
+
+    assert(attrToExtractValues.keys.map(_.exprId).toSeq == Seq(a.exprId))
+    assert(attrToExtractValues.values.toSeq == Seq(Seq(ab, unnamedAb)))
+  }
+
+  test("Nested fields are not redundant with non-deterministic parents") {
+    // `getAttributeToExtractValues` only returns a column if its kept reads' leaf counts sum to
+    // fewer than its own leaf count. The kept reads below sum to 5, so `e` through `h` pad `a` to
+    // 6 leaves.
+    val a = $"a".array(StructType.fromDDL("b struct<c: int, d: int>, e int, f int, g int, h int"))
+    // `a[ordinal].b` and `a[ordinal].b.c`.
+    def parentAndChild(ordinal: Expression): Seq[ExtractValue] = {
+      val parent = GetStructField(GetArrayItem(a, ordinal), 0, Some("b"))
+      Seq(parent, GetStructField(parent, 0, Some("c")))
+    }
+
+    val deterministicReadPair = parentAndChild(Literal(0))
+    val nondeterministicReadPair = parentAndChild(Cast(Rand(Literal(0L)), IntegerType))
+    // `a[rand].b` is non-deterministic, so `a[rand].b.c` is not redundant with it, while the
+    // redundant deterministic `a[0].b.c` is still dropped.
+    assert(
+      NestedColumnAliasing.getAttributeToExtractValues(
+        deterministicReadPair ++ nondeterministicReadPair,
+        Seq.empty
+      )
+      .values
+      .toSeq == Seq(deterministicReadPair.take(1) ++ nondeterministicReadPair)
+    )
   }
 
   test("Nested field pruning for Project and Generate") {

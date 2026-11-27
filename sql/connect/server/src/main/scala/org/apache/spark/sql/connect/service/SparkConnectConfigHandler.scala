@@ -22,6 +22,7 @@ import scala.util.matching.Regex
 
 import io.grpc.stub.StreamObserver
 
+import org.apache.spark.SparkThrowable
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.SECRET_REDACTION_PATTERN
@@ -85,12 +86,24 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
     operation.getPairsList.asScala.iterator.foreach { pair =>
       val (key, value) = SparkConnectConfigHandler.toKeyValue(pair)
       try {
+        // `RuntimeConfig.set` refuses a write that would leave the session's Python worker
+        // environment invalid, and does the check and the write as one unit. The server writes
+        // through a classic `RuntimeConfig`, so that covers this path with no work here; the call
+        // stays inside the try so a `silent` request reports the refusal as a warning, like any
+        // other rejected write.
         conf.set(key, value.orNull)
         getWarning(key).foreach(builder.addWarnings)
       } catch {
         case e: Throwable =>
           if (silent) {
-            builder.addWarnings(s"Failed to set $key to $value due to ${e.getMessage}")
+            // The condition, not the message: `INVALID_CONF_VALUE` quotes the rejected value,
+            // and this warning outlives the response -- the Scala client logs it and the Python
+            // client raises it -- while every read through this handler is redacted.
+            val condition = e match {
+              case t: SparkThrowable if t.getCondition != null => t.getCondition
+              case _ => e.getClass.getName
+            }
+            builder.addWarnings(s"Failed to set $key ($condition)")
           } else {
             throw e
           }

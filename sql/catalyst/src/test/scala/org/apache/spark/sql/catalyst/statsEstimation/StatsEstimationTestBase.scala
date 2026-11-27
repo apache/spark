@@ -19,10 +19,12 @@ package org.apache.spark.sql.catalyst.statsEstimation
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegerType, StringType}
+import org.apache.spark.sql.types.{CharType, IntegerType, StringType, StructField, StructType, VarcharType}
 
 
 trait StatsEstimationTestBase extends SparkFunSuite {
@@ -46,11 +48,43 @@ trait StatsEstimationTestBase extends SparkFunSuite {
 
   def getColSize(attribute: Attribute, colStat: ColumnStat): Long = attribute.dataType match {
     // For UTF8String: base + offset + numBytes
-    case StringType => colStat.avgLen.getOrElse(attribute.dataType.defaultSize.toLong) + 8 + 4
+    case _: StringType => colStat.avgLen.getOrElse(attribute.dataType.defaultSize.toLong) + 8 + 4
     case _ => colStat.avgLen.getOrElse(attribute.dataType.defaultSize)
   }
 
   def attr(colName: String): AttributeReference = AttributeReference(colName, IntegerType)()
+
+  /** A CHAR(n) column as a table scan outputs it, before read-side padding. */
+  def charAttr(colName: String, n: Int): AttributeReference =
+    DataTypeUtils.toAttribute(CharVarcharUtils.replaceCharVarcharWithStringInSchema(
+      StructType(Seq(StructField(colName, CharType(n))))).head)
+
+  /**
+   * A VARCHAR(n) column as a table scan outputs it when CHAR and VARCHAR are not first-class
+   * types; `firstClassRead` gives the read its VARCHAR type.
+   */
+  def varcharAttr(colName: String, n: Int): AttributeReference =
+    DataTypeUtils.toAttribute(CharVarcharUtils.replaceCharVarcharWithStringInSchema(
+      StructType(Seq(StructField(colName, VarcharType(n))))).head)
+
+  /**
+   * A CHAR or VARCHAR scan column as a scan reads it when CHAR and VARCHAR are first-class types:
+   * in a read-side check under standard semantics, and under `preserveCharVarcharTypeInfo` alone
+   * in the read-side padding for CHAR and as is for VARCHAR. The read has the CHAR or VARCHAR type.
+   */
+  def firstClassRead(attr: Attribute, standardSemantics: Boolean): Expression = {
+    val conf = SQLConf.get.clone()
+    conf.setConf(if (standardSemantics) SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS
+      else SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO, true)
+    SQLConf.withExistingConf(conf)(CharVarcharUtils.addPaddingForScan(attr)) match {
+      case a: Attribute => a.withDataType(
+        CharVarcharUtils.getRawType(a.metadata).getOrElse(fail(s"not CHAR or VARCHAR: $a")))
+      case read => read
+    }
+  }
+
+  /** A CHAR or VARCHAR scan column wrapped as standard CHAR/VARCHAR semantics read it. */
+  def readSideCheck(attr: Attribute): Expression = firstClassRead(attr, standardSemantics = true)
 
   /** Convert (column name, column stat) pairs to an AttributeMap based on plan output. */
   def toAttributeMap(colStats: Seq[(String, ColumnStat)], plan: LogicalPlan)

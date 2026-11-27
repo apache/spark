@@ -32,6 +32,7 @@ Python Data Source
     DataSource.writer
     DataSourceReader.partitions
     DataSourceReader.pushFilters
+    DataSourceReader.pushLimit
     DataSourceReader.read
     DataSourceRegistration.register
     DataSourceStreamReader.commit
@@ -43,5 +44,10 @@ Python Data Source
     DataSourceStreamReader.reportLatestOffset
     DataSourceStreamReader.stop
     DataSourceWriter.abort
+    DataSourceWriter.advisoryPartitionSizeInBytes
     DataSourceWriter.commit
+    DataSourceWriter.distributionStrictlyRequired
+    DataSourceWriter.requiredDistribution
+    DataSourceWriter.requiredNumPartitions
+    DataSourceWriter.requiredOrdering
     DataSourceWriter.write

@@ -16,7 +16,11 @@
  */
 package org.apache.spark.sql.execution.datasources.parquet;
 
+import java.io.IOException;
+
+import org.apache.parquet.bytes.ByteBufferInputStream;
 import org.apache.parquet.column.values.ValuesReader;
+import org.apache.parquet.io.ParquetDecodingException;
 import org.apache.parquet.io.api.Binary;
 import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
@@ -26,6 +30,18 @@ import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
  * of methods that are not supported by concrete implementations
  */
 public class VectorizedReaderBase extends ValuesReader implements VectorizedValuesReader {
+
+  /**
+   * Skips exactly `n` bytes of `in`. `ByteBufferInputStream.skip` silently skips fewer bytes
+   * when the page is too short, so a corrupt page must fail here instead.
+   */
+  static void skipFully(ByteBufferInputStream in, long n) {
+    try {
+      in.skipFully(n);
+    } catch (IOException e) {
+      throw new ParquetDecodingException("Failed to skip " + n + " bytes", e);
+    }
+  }
 
   /**
    * Encodes an unsigned long as a minimal big-endian two's-complement byte array

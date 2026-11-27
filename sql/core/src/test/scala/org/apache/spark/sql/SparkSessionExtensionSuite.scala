@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql
 
+import java.io.File
 import java.util.{Locale, UUID}
 
 import scala.collection.mutable.ListBuffer
@@ -26,15 +27,16 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedAttribute, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.resolver.ExplicitlyUnsupportedResolverFeature
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Final, Max, Partial}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface, SqlStatementSplitResult}
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, AggregateHint, ColumnStat, Limit, LocalRelation, LogicalPlan, Project, Range, Sort, SortHint, Statistics, UnresolvedHint}
-import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, SinglePartition}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, AggregateHint, ColumnStat, Deduplicate, Limit, LocalRelation, LogicalPlan, Project, Range, Sort, SortHint, Statistics, UnresolvedHint}
+import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, SinglePartition, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.classic.ClassicConversions._
@@ -42,18 +44,20 @@ import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.write.WriterCommitMessage
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, AQEShuffleReadExec, QueryStageExec, ShuffleQueryStageExec}
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, AQEShuffleReadExec, AQEShuffleReadRule, QueryStageExec, ShuffleQueryStageExec}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.datasources.{FileFormat, WriteFilesExec, WriteFilesExecBase, WriteFilesSpec}
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, BroadcastExchangeLike, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, BroadcastExchangeLike, ENSURE_REQUIREMENTS, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.COLUMN_BATCH_SIZE
 import org.apache.spark.sql.internal.StaticSQLConf.SPARK_SESSION_EXTENSIONS
+import org.apache.spark.sql.internal.StaticSQLConf.SPARK_SESSION_EXTENSIONS_DEFAULT_LIST
 import org.apache.spark.sql.types.{DataType, Decimal, IntegerType, LongType, Metadata, StructType}
 import org.apache.spark.sql.vectorized.{ColumnarArray, ColumnarBatch, ColumnarMap, ColumnVector}
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.Utils
 
 /**
  * Test cases for the [[SparkSessionExtensions]].
@@ -61,6 +65,18 @@ import org.apache.spark.unsafe.types.UTF8String
 class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
   private def create(
       builder: SparkSessionExtensionsProvider): Seq[SparkSessionExtensionsProvider] = Seq(builder)
+
+  private def assertSingleProjectLiteral(
+      plan: LogicalPlan,
+      expected: Any,
+      clue: String): Unit = {
+    val literals = plan.collect {
+      case Project(projectList, _) => projectList.collect {
+        case Alias(Literal(value, _), _) => value
+      }
+    }.flatten
+    assert(literals === Seq(expected), s"$clue, plan:\n$plan")
+  }
 
   private def stop(spark: SparkSession): Unit = {
     spark.stop()
@@ -187,6 +203,226 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("SPARK-59144: injected json_array replacement receives an expanded star") {
+    // An injected `json_array` takes over `system.builtin.json_array`, so `json_array(*)` must
+    // route to it with the star expanded, not hit the built-in routed-JSON direct-star rejection.
+    // The replacement returns its argument count, so two columns yield 2 iff the star was expanded.
+    val extensions = create { extensions =>
+      extensions.injectFunction((
+        FunctionIdentifier("json_array"),
+        new ExpressionInfo("noClass", "json_array"),
+        (children: Seq[Expression]) => Literal(children.size)))
+    }
+    withSession(extensions) { session =>
+      val query = "SELECT json_array(*) FROM VALUES (1, 'x') AS t(a, b)"
+      Seq(false, true).foreach { singlePass =>
+        session.conf.set(
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key, singlePass.toString)
+        val analyzed = session.sql(query).queryExecution.analyzed
+        assert(analyzed.resolved, s"singlePass=$singlePass")
+        assertSingleProjectLiteral(
+          analyzed,
+          2,
+          s"injected function should receive expanded star, singlePass=$singlePass")
+        assert(!analyzed.exists(_.expressions.exists(_.exists(_.isInstanceOf[Star]))),
+          s"star should be expanded for the injected function, singlePass=$singlePass")
+      }
+      session.conf.unset(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key)
+      // The fixed-point analyzer runs it end to end: the two columns expand to two arguments.
+      val rows = session.sql(query).collect()
+      assert(rows.length === 1 && rows(0) === Row(2))
+    }
+  }
+
+  test("SPARK-59243: injected json_array replacement wins a nested clause-free call") {
+    // An injected replacement must own `json_array(json_array(1))`, as it owns the flat call. It
+    // returns its argument count, so the result is 1 iff it won (it owns the inner call too).
+    val extensions = create { extensions =>
+      extensions.injectFunction((
+        FunctionIdentifier("json_array"),
+        new ExpressionInfo("noClass", "json_array"),
+        (children: Seq[Expression]) => Literal(children.size)))
+    }
+    withSession(extensions) { session =>
+      val query = "SELECT json_array(json_array(1))"
+      try {
+        Seq(false, true).foreach { singlePass =>
+          session.conf.set(
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key, singlePass.toString)
+          val analyzed = session.sql(query).queryExecution.analyzed
+          assert(analyzed.resolved, s"singlePass=$singlePass")
+          assertSingleProjectLiteral(
+            analyzed,
+            1,
+            s"injected replacement should win the nested call, singlePass=$singlePass")
+        }
+
+        session.conf.set(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key, "false")
+        assert(
+          session.sql(query).collect() === Array(Row(1)),
+          "injected replacement should win the nested call")
+        // A clause selects Spark's constructor for that call only; qualifying does not, as the
+        // replacement owns it.
+        assert(session.sql("SELECT json_array(json_array(1) NULL ON NULL)").collect() ===
+          Array(Row("[1]")))
+        assert(session.sql("SELECT json_array(json_array(1 NULL ON NULL) NULL ON NULL)")
+          .collect() === Array(Row("[[1]]")))
+        assert(session.sql("SELECT builtin.json_array(builtin.json_array(1))").collect() ===
+          Array(Row(1)))
+      } finally {
+        session.conf.unset(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key)
+      }
+    }
+  }
+
+  test("SPARK-59243: injected replacements keep their type for nested calls under a view " +
+      "default collation") {
+    // An INT-returning replacement keeps INT for nested calls under a view default collation.
+    // Strict single-pass rejects a view body with a non-builtin function, so only fixed-point.
+    val extensions = create { extensions =>
+      Seq("json_array", "json_object").foreach { name =>
+        extensions.injectFunction((
+          FunctionIdentifier(name),
+          new ExpressionInfo("noClass", name),
+          (children: Seq[Expression]) => Literal(children.size)))
+      }
+    }
+    withSession(extensions) { session =>
+      session.conf.set(SQLConf.OBJECT_LEVEL_COLLATIONS_ENABLED.key, "true")
+      try {
+        session.sql(
+          """CREATE VIEW v DEFAULT COLLATION UTF8_LCASE AS
+            |SELECT json_array(json_array(1)) AS a,
+            |       json_object('a', json_object('b', 1)) AS o,
+            |       json_object('a' VALUE json_object('b' VALUE 1)) AS ov""".stripMargin)
+        val schema = session.table("v").schema
+        Seq("a", "o", "ov").foreach { c =>
+          assert(schema(c).dataType === IntegerType, s"for $c")
+        }
+        assert(session.table("v").collect() === Array(Row(1, 2, 2)))
+      } finally {
+        session.sql("DROP VIEW IF EXISTS v")
+      }
+    }
+  }
+
+  test("SPARK-59243: injected json_array replacement receives expanded star in a nested call") {
+    // The outer clause-free call routes through `UnresolvedRoutedJsonArray` because of the nested
+    // JSON_ARRAY sibling. If an injected replacement owns `json_array`, the direct star must expand
+    // for that replacement instead of taking the stock built-in rejection path.
+    val extensions = create { extensions =>
+      extensions.injectFunction((
+        FunctionIdentifier("json_array"),
+        new ExpressionInfo("noClass", "json_array"),
+        (children: Seq[Expression]) => Literal(children.size)))
+    }
+    withSession(extensions) { session =>
+      val query = "SELECT json_array(*, json_array(1)) FROM VALUES (1, 'x') AS t(a, b)"
+      try {
+        Seq(false, true).foreach { singlePass =>
+          session.conf.set(
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key, singlePass.toString)
+          val analyzed = session.sql(query).queryExecution.analyzed
+          assert(analyzed.resolved, s"singlePass=$singlePass")
+          assertSingleProjectLiteral(
+            analyzed,
+            3,
+            s"injected function should receive expanded nested star, singlePass=$singlePass")
+          assert(!analyzed.exists(_.expressions.exists(_.exists(_.isInstanceOf[Star]))),
+            s"star should be expanded for the injected function, singlePass=$singlePass")
+        }
+
+        session.conf.set(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key, "false")
+        assert(
+          session.sql(query).collect() === Array(Row(3)),
+          "injected replacement should receive both star columns plus the nested array")
+      } finally {
+        session.conf.unset(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key)
+      }
+    }
+  }
+
+  test("SPARK-59243: injected json_object replacement receives plain nested arguments") {
+    // A routed JSON_OBJECT wrapper must keep stock built-in splice metadata out of replacement
+    // functions: the replacement should see ordinary key/value expressions, not parser-only tags.
+    val extensions = create { extensions =>
+      extensions.injectFunction((
+        FunctionIdentifier("json_object"),
+        new ExpressionInfo("noClass", "json_object"),
+        (children: Seq[Expression]) => {
+          val hasTaggingExpression = children.exists(_.exists(_.isInstanceOf[TaggingExpression]))
+          Literal(if (hasTaggingExpression) "wrapped" else s"plain-${children.length}")
+        }))
+    }
+    withSession(extensions) { session =>
+      val queries = Seq(
+        "SELECT json_object('a', json_object('b', 1))",
+        "SELECT json_object('a' VALUE json_object('b' VALUE 1))",
+        "SELECT json_object('a': json_object('b': 1))")
+      try {
+        Seq(false, true).foreach { singlePass =>
+          session.conf.set(
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key, singlePass.toString)
+          queries.foreach { query =>
+            val analyzed = session.sql(query).queryExecution.analyzed
+            assert(analyzed.resolved, s"singlePass=$singlePass for $query")
+            assertSingleProjectLiteral(
+              analyzed,
+              UTF8String.fromString("plain-2"),
+              s"injected replacement should receive plain arguments, singlePass=$singlePass")
+          }
+        }
+      } finally {
+        session.conf.unset(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key)
+      }
+    }
+  }
+
+  test("SPARK-59243: injected json_object replacement receives an expanded star") {
+    // A routed JSON_OBJECT with a direct star (`'a' VALUE *`) plus a nested JSON_OBJECT sibling
+    // goes through `UnresolvedRoutedJsonObject`. If an injected replacement owns `json_object`, the
+    // direct star must expand for that replacement instead of taking the stock built-in rejection
+    // -- the json_object analog of the nested json_array star case. The replacement returns its
+    // argument count, so the flattened list ['a', a, b, 'b', json_object('c' VALUE 1)] yields 5
+    // iff the star expanded (the nested object is itself one argument, however it resolves).
+    val extensions = create { extensions =>
+      extensions.injectFunction((
+        FunctionIdentifier("json_object"),
+        new ExpressionInfo("noClass", "json_object"),
+        (children: Seq[Expression]) => Literal(children.size)))
+    }
+    withSession(extensions) { session =>
+      Seq(
+        "SELECT json_object('a' VALUE *, 'b' VALUE json_object('c' VALUE 1)) " +
+          "FROM VALUES ('id', 7) AS t(a, b)",
+        "SELECT json_object('a': *, 'b': json_object('c': 1)) " +
+          "FROM VALUES ('id', 7) AS t(a, b)"
+      ).foreach { query =>
+        try {
+          Seq(false, true).foreach { singlePass =>
+            session.conf.set(
+              SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key, singlePass.toString)
+            val analyzed = session.sql(query).queryExecution.analyzed
+            assert(analyzed.resolved, s"singlePass=$singlePass for $query")
+            assertSingleProjectLiteral(
+              analyzed,
+              5,
+              s"injected replacement should receive the expanded star, singlePass=$singlePass")
+            assert(!analyzed.exists(_.expressions.exists(_.exists(_.isInstanceOf[Star]))),
+              s"star should be expanded for the injected function, singlePass=$singlePass")
+          }
+
+          session.conf.set(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key, "false")
+          assert(
+            session.sql(query).collect() === Array(Row(5)),
+            s"injected replacement should receive both star columns plus the nested object: $query")
+        } finally {
+          session.conf.unset(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key)
+        }
+      }
+    }
+  }
+
   test("inject table function") {
     val extensions = create { extensions =>
       extensions.injectTableFunction(MyExtensions.myTableFunction)
@@ -214,12 +450,383 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
     }
   }
 
+  private val REDIRECT_SUFFIX = "-redirected"
+
+  /**
+   * Rewrites `parquet`.`<path>` to `parquet`.`<path>-redirected`, standing in for an extension
+   * that has to adjust path-based relations before their metadata is resolved.
+   */
+  case class RedirectPathRelation(spark: SparkSession) extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan =
+      plan.resolveOperators {
+        case u: UnresolvedRelation
+            if u.multipartIdentifier.size == 2 &&
+              u.multipartIdentifier.head.equalsIgnoreCase("parquet") &&
+              !u.multipartIdentifier.last.endsWith(REDIRECT_SUFFIX) =>
+          u.copy(multipartIdentifier =
+            Seq(u.multipartIdentifier.head, u.multipartIdentifier.last + REDIRECT_SUFFIX))
+      }
+  }
+
+  /**
+   * Replaces a projection that does not already contain a scalar subquery with one over
+   * [[IntroducePathSubquery.path]]. [[RedirectPathRelation]] then has to rewrite that relation,
+   * which only happens if hint rules run again on subqueries created by an earlier rule.
+   */
+  case class IntroducePathSubquery(spark: SparkSession) extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
+      case project @ Project(projectList, _)
+          if IntroducePathSubquery.path.isDefined &&
+            !projectList.exists(_.exists(
+              _.isInstanceOf[org.apache.spark.sql.catalyst.expressions.ScalarSubquery])) =>
+        val path = IntroducePathSubquery.path.get
+        val relation = UnresolvedRelation(Seq("parquet", path))
+        val countStar = org.apache.spark.sql.catalyst.analysis.UnresolvedFunction(
+          Seq("count"),
+          Seq(org.apache.spark.sql.catalyst.analysis.UnresolvedStar(None)),
+          isDistinct = false)
+        val subqueryPlan = Aggregate(Nil, Seq(Alias(countStar, "c")()), relation)
+        val scalar = org.apache.spark.sql.catalyst.expressions.ScalarSubquery(subqueryPlan)
+        project.copy(projectList = Seq(Alias(scalar, "c")()))
+    }
+  }
+
+  object IntroducePathSubquery {
+    var path: Option[String] = None
+  }
+
   test("inject custom hint rule") {
     withSession(Seq(_.injectHintResolutionRule(MyHintRule))) { session =>
       assert(
         session.range(1).hint("CONVERT_TO_EMPTY").logicalPlan.isInstanceOf[LocalRelation],
         "plan is expected to be a local relation"
       )
+    }
+  }
+
+  test("SPARK-59574: inject custom hint rule with single-pass resolver") {
+    withSession(Seq(_.injectHintResolutionRule(MyHintRule))) { session =>
+      session.conf.set(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key, "true")
+      session.conf.set(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key, "false")
+      assert(
+        session.range(1).hint("CONVERT_TO_EMPTY").logicalPlan.isInstanceOf[LocalRelation],
+        "plan is expected to be a local relation"
+      )
+    }
+  }
+
+  /**
+   * [[Deduplicate]] is not among the operators the single-pass Resolver can resolve, and it is not
+   * listed in `ExplicitlyUnsupportedResolverFeature.OPERATORS` either, so a rule that introduces
+   * it makes the single-pass resolution fail rather than fall back.
+   */
+  case class DeduplicatingRule(spark: SparkSession) extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan match {
+      case _: Deduplicate => plan
+      case _ => Deduplicate(Nil, plan)
+    }
+  }
+
+  test("SPARK-59574: rule introducing an operator unsupported by single-pass fails resolution") {
+    withSession(Seq(_.injectHintResolutionRule(DeduplicatingRule))) { session =>
+      session.conf.set(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key, "true")
+      session.conf.set(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key, "false")
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          session.sql("SELECT id FROM VALUES (1), (2) AS t(id)").queryExecution.analyzed
+        },
+        condition = "UNSUPPORTED_SINGLE_PASS_ANALYZER_FEATURE",
+        parameters = Map(
+          "feature" ->
+            ("class org.apache.spark.sql.catalyst.plans.logical.Deduplicate operator resolution")
+        )
+      )
+    }
+
+    // In dual-run the failure is reported against the fixed-point result rather than falling
+    // back, because the plan only becomes unsupported after the guard has already accepted it.
+    // Before this change the same query failed too, with LOGICAL_PLAN_COMPARISON_MISMATCH, as
+    // only the fixed-point half applied the rule.
+    withSession(Seq(_.injectHintResolutionRule(DeduplicatingRule))) { session =>
+      session.conf.set(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key, "false")
+      session.conf.set(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key, "true")
+
+      val error = intercept[AnalysisException] {
+        session.sql("SELECT id FROM VALUES (1), (2) AS t(id)").queryExecution.analyzed
+      }
+      assert(
+        error.getCondition ===
+        "HYBRID_ANALYZER_EXCEPTION.SINGLE_PASS_FAILED_FIXED_POINT_SUCCEEDED"
+      )
+    }
+  }
+
+  test("SPARK-59574: injected hint rules are bound by spark.sql.analyzer.maxIterations") {
+    val maxIterations = 5
+    Seq(false, true).foreach { singlePass =>
+      withSession(Seq(_.injectHintResolutionRule(_ => AddLimitAlways))) { session =>
+        session.conf.set(SQLConf.ANALYZER_MAX_ITERATIONS.key, maxIterations.toString)
+        session.conf.set(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key, singlePass.toString)
+        session.conf.set(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key, "false")
+
+        // The rule never reaches a fixed point, so both analyzers are expected to stop at
+        // spark.sql.analyzer.maxIterations and to report that exact bound in the error.
+        val error = intercept[RuntimeException] {
+          session.range(1).logicalPlan
+        }
+        val message = error.getMessage
+        assert(
+          message.contains(s"Max iterations ($maxIterations) reached for batch Hints"),
+          s"unexpected error for singlePass=$singlePass: $message"
+        )
+        assert(
+          message.contains(SQLConf.ANALYZER_MAX_ITERATIONS.key),
+          s"unexpected error for singlePass=$singlePass: $message"
+        )
+      }
+    }
+  }
+
+  test("SPARK-59574: containing plan's hint batch sees an unprocessed subquery") {
+    Seq(false, true).foreach { singlePass =>
+      var sawUnprocessedSubquery = false
+      case class ObserveThenRename(spark: SparkSession) extends Rule[LogicalPlan] {
+        private val original = Seq("nosuch_order_table")
+
+        override def apply(plan: LogicalPlan): LogicalPlan = {
+          plan.expressions.foreach { expression =>
+            expression.foreach {
+              case subquery: org.apache.spark.sql.catalyst.expressions.ScalarSubquery =>
+                subquery.plan.foreach {
+                  case relation: UnresolvedRelation
+                      if relation.multipartIdentifier == original =>
+                    sawUnprocessedSubquery = true
+                  case _ =>
+                }
+              case _ =>
+            }
+          }
+          plan.resolveOperators {
+            case relation: UnresolvedRelation if relation.multipartIdentifier == original =>
+              relation.copy(multipartIdentifier = Seq("nosuch_order_table_renamed"))
+          }
+        }
+      }
+
+      withSession(Seq(_.injectHintResolutionRule(ObserveThenRename))) { session =>
+        session.conf.set(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key, singlePass.toString)
+        session.conf.set(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key, "false")
+        intercept[AnalysisException] {
+          session.sql("SELECT (SELECT * FROM nosuch_order_table)").queryExecution.analyzed
+        }
+        assert(sawUnprocessedSubquery, s"subquery was already rewritten (singlePass=$singlePass)")
+      }
+    }
+  }
+
+  test("SPARK-59574: subquery created by a hint rule is rewritten before metadata lookup") {
+    Seq(false, true).foreach { singlePass =>
+      withSession(Seq(
+          _.injectHintResolutionRule(IntroducePathSubquery.apply),
+          _.injectHintResolutionRule(RedirectPathRelation))) { session =>
+        val dir = Utils.createTempDir()
+        try {
+          val path = new File(dir, "data").getCanonicalPath
+          session.range(1).write.parquet(path)
+          session.range(3).write.parquet(path + REDIRECT_SUFFIX)
+          IntroducePathSubquery.path = Some(path)
+          session.conf.set(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key, singlePass.toString)
+          session.conf.set(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key, "false")
+
+          assert(session.sql("SELECT 1").head().getLong(0) === 3)
+        } finally {
+          IntroducePathSubquery.path = None
+          Utils.deleteRecursively(dir)
+        }
+      }
+    }
+  }
+
+  test("SPARK-59574: injected hint rules honour spark.sql.optimizer.disableHints") {
+    Seq(false, true).foreach { singlePass =>
+      withSession(Seq(_.injectHintResolutionRule(MyHintRule))) { session =>
+        session.conf.set(SQLConf.DISABLE_HINTS.key, "true")
+        session.conf.set(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key, singlePass.toString)
+        session.conf.set(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key, "false")
+
+        // The "Disable Hints" batch removes the hint before the "Hints" batch runs, so the
+        // injected rule never sees it and the plan keeps its original shape.
+        assert(
+          !session.range(1).hint("CONVERT_TO_EMPTY").logicalPlan.isInstanceOf[LocalRelation],
+          s"the hint should have been removed before the rule ran (singlePass=$singlePass)"
+        )
+      }
+    }
+  }
+
+  test("SPARK-59574: hint rule rewrites path relations") {
+    checkHintRuleRewritesPathRelations(singlePass = false, dualRun = false)
+  }
+
+  test("SPARK-59574: hint rule rewrites path relations with single-pass resolver") {
+    checkHintRuleRewritesPathRelations(singlePass = true, dualRun = false)
+  }
+
+  test("SPARK-59574: hint rule rewrites path relations in dual-run") {
+    checkHintRuleRewritesPathRelations(singlePass = false, dualRun = true)
+  }
+
+  test("SPARK-59574: hint rule rewrites path relations with the resolver enabled tentatively") {
+    checkHintRuleRewritesPathRelations(singlePass = false, dualRun = false, tentative = true)
+  }
+
+  test("SPARK-59574: hint rule rewrites path relations in a view body") {
+    withSession(Seq(_.injectHintResolutionRule(RedirectPathRelation))) { session =>
+      val dir = Utils.createTempDir()
+      try {
+        val path = new File(dir, "data").getCanonicalPath
+        session.range(1).write.parquet(path)
+        session.range(3).write.parquet(path + REDIRECT_SUFFIX)
+        session.sql(s"CREATE VIEW v AS SELECT * FROM parquet.`$path`")
+
+        // The fixed-point Analyzer applies the rules to a view body, because it resolves the body
+        // by re-entering the whole Analyzer. Dual-run agrees with it: the single-pass half bails
+        // out on the view (see below) and the result is taken from the fixed-point half.
+        Seq(false, true).foreach { dualRun =>
+          session.conf.set(
+            SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key,
+            dualRun.toString)
+
+          assert(
+            session.sql("SELECT count(*) FROM v").head().getLong(0) === 3,
+            s"unexpected result for the view body with dualRun=$dualRun"
+          )
+        }
+
+        // The single-pass Resolver does not support resolving a view body that holds a relation
+        // yet, independently of this change, so with the single-pass resolver forced there is no
+        // result to compare against. The check is kept to document that this is an unsupported
+        // feature and not a wrong answer.
+        session.conf.set(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key, "true")
+        session.conf.set(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key, "false")
+
+        intercept[ExplicitlyUnsupportedResolverFeature] {
+          session.sql("SELECT count(*) FROM v").head()
+        }
+      } finally {
+        session.conf.unset(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key)
+        session.conf.unset(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key)
+        session.sql("DROP VIEW IF EXISTS v")
+        Utils.deleteRecursively(dir)
+      }
+    }
+  }
+
+  /**
+   * Limits an [[Aggregate]] handed to it as the root, and leaves [[Aggregate]]s deeper in the plan
+   * alone. The result of a query therefore depends on which roots the rule was handed.
+   */
+  case class LimitAggregateRoot(spark: SparkSession) extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan match {
+      case aggregate: Aggregate => Limit(Literal(1), aggregate)
+      case other => other
+    }
+  }
+
+  test("SPARK-59574: root-sensitive hint rule sees a CTE query as one plan") {
+    // (singlePass, dualRun, tentative)
+    Seq((false, false, false), (true, false, false), (false, true, false), (false, false, true))
+      .foreach { case (singlePass, dualRun, tentative) =>
+        withSession(Seq(_.injectHintResolutionRule(LimitAggregateRoot))) { session =>
+          session.conf.set(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key, singlePass.toString)
+          session.conf.set(
+            SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key,
+            dualRun.toString)
+          session.conf.set(
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key,
+            tentative.toString)
+
+          // Both analyzers hand the rule the whole CTE query, whose root is not an Aggregate, so
+          // the CTE definition keeps both of its groups. Handing the rule the definition on its
+          // own would limit it to one.
+          val query =
+            """WITH a AS (SELECT id, count(*) AS c FROM VALUES (1), (2) AS t(id) GROUP BY id)
+              |SELECT count(*) FROM a""".stripMargin
+          assert(
+            session.sql(query).head().getLong(0) === 2,
+            s"unexpected result for singlePass=$singlePass, dualRun=$dualRun, " +
+              s"tentative=$tentative"
+          )
+        }
+      }
+  }
+
+  test("SPARK-59574: CTE definitions do not multiply hint rule invocations") {
+    val invocations = Seq(false, true).map { singlePass =>
+      var count = 0
+      case class CountInvocations(spark: SparkSession) extends Rule[LogicalPlan] {
+        override def apply(plan: LogicalPlan): LogicalPlan = {
+          count += 1
+          plan
+        }
+      }
+
+      withSession(Seq(_.injectHintResolutionRule(CountInvocations))) { session =>
+        session.conf.set(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key, singlePass.toString)
+        session.conf.set(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key, "false")
+
+        session.sql(
+          """WITH a AS (SELECT 1 AS id), b AS (SELECT 2 AS id), c AS (SELECT 3 AS id)
+            |SELECT * FROM a UNION ALL SELECT * FROM b UNION ALL SELECT * FROM c""".stripMargin
+        ).queryExecution.analyzed
+      }
+      count
+    }
+
+    assert(
+      invocations.head == invocations.last,
+      s"fixed-point and single-pass invoked the rule ${invocations.mkString(" and ")} times"
+    )
+  }
+
+  /**
+   * Hint resolution rules run before relation metadata is resolved, which is what allows an
+   * extension to rewrite a path-based relation - for example to attach storage credentials to it
+   * before the files are listed. Redirecting the relation to another directory makes that
+   * rewrite observable in the query result.
+   */
+  private def checkHintRuleRewritesPathRelations(
+      singlePass: Boolean,
+      dualRun: Boolean,
+      tentative: Boolean = false): Unit = {
+    withSession(Seq(_.injectHintResolutionRule(RedirectPathRelation))) { session =>
+      val dir = Utils.createTempDir()
+      try {
+        val path = new File(dir, "data").getCanonicalPath
+        session.range(1).write.parquet(path)
+        session.range(3).write.parquet(path + REDIRECT_SUFFIX)
+
+        session.conf.set(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key, singlePass.toString)
+        session.conf.set(
+          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key,
+          dualRun.toString)
+        session.conf.set(
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key,
+          tentative.toString)
+
+        // The rule is expected to have redirected every relation to the directory holding three
+        // rows, so a count of one means the original path was listed instead.
+        Seq(
+          s"SELECT count(*) FROM parquet.`$path`",
+          s"WITH cte AS (SELECT * FROM parquet.`$path`) SELECT count(*) FROM cte",
+          s"SELECT (SELECT count(*) FROM parquet.`$path`)"
+        ).foreach { query =>
+          assert(session.sql(query).head().getLong(0) === 3, s"unexpected result for: $query")
+        }
+      } finally {
+        Utils.deleteRecursively(dir)
+      }
     }
   }
 
@@ -486,6 +1093,79 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("SPARK-60483: use the operator default list ahead of user extensions") {
+    val session = SparkSession.builder()
+      .master("local[1]")
+      .config(SPARK_SESSION_EXTENSIONS_DEFAULT_LIST.key, classOf[MyExtensions].getCanonicalName)
+      .config(SPARK_SESSION_EXTENSIONS.key, classOf[MyExtensions2].getCanonicalName)
+      .getOrCreate()
+    try {
+      val orderedRules = Seq(MyRule(session), MyRule2(session))
+      val orderedCheckRules = Seq(MyCheckRule(session), MyCheckRule2(session))
+      assert(session.sessionState.analyzer.extendedResolutionRules.containsSlice(orderedRules))
+      assert(session.sessionState.analyzer.extendedCheckRules.containsSlice(orderedCheckRules))
+      assert(session.sessionState.planner.strategies.containsSlice(
+        Seq(MySparkStrategy(session), MySparkStrategy2(session))))
+    } finally {
+      stop(session)
+    }
+  }
+
+  test("SPARK-60483: use the operator default list when user extensions are unset") {
+    val session = SparkSession.builder()
+      .master("local[1]")
+      .config(SPARK_SESSION_EXTENSIONS_DEFAULT_LIST.key, classOf[MyExtensions].getCanonicalName)
+      .getOrCreate()
+    try {
+      assert(session.sessionState.analyzer.extendedResolutionRules.contains(MyRule(session)))
+      assert(session.sessionState.planner.strategies.contains(MySparkStrategy(session)))
+    } finally {
+      stop(session)
+    }
+  }
+
+  test("SPARK-60483: an extension listed by both the operator and the user is applied once") {
+    // De-duplicated across the two lists; the next test pins which position is kept and that
+    // repeats in spark.sql.extensions stay.
+    val session = SparkSession.builder()
+      .master("local[1]")
+      .config(SPARK_SESSION_EXTENSIONS_DEFAULT_LIST.key, classOf[MyExtensions].getCanonicalName)
+      .config(SPARK_SESSION_EXTENSIONS.key, classOf[MyExtensions].getCanonicalName)
+      .getOrCreate()
+    try {
+      assert(session.sessionState.analyzer.extendedResolutionRules.count(_ === MyRule(session)) ===
+        1)
+    } finally {
+      stop(session)
+    }
+  }
+
+  test("SPARK-60483: a shared extension is applied last-win with user-list repeats kept") {
+    // The shared extension must run only at its user-list positions; plain concatenation,
+    // first-win, and whole-list distinct all give a different rule order here.
+    val appender = new LogAppender("SPARK-60483 dedup warning")
+    withLogAppender(appender) {
+      val session = SparkSession.builder()
+        .master("local[1]")
+        .config(SPARK_SESSION_EXTENSIONS_DEFAULT_LIST.key, classOf[MyExtensions].getCanonicalName)
+        .config(SPARK_SESSION_EXTENSIONS.key, Seq(
+          classOf[MyExtensions].getCanonicalName,
+          classOf[MyExtensions2].getCanonicalName,
+          classOf[MyExtensions].getCanonicalName).mkString(","))
+        .getOrCreate()
+      try {
+        val rules = session.sessionState.analyzer.extendedResolutionRules
+        assert(rules.filter(r => r == MyRule(session) || r == MyRule2(session)) ===
+          Seq(MyRule(session), MyRule2(session), MyRule(session)))
+      } finally {
+        stop(session)
+      }
+    }
+    val messages = appender.loggingEvents.map(_.getMessage.getFormattedMessage)
+    assert(messages.exists(m => m.contains(SPARK_SESSION_EXTENSIONS_DEFAULT_LIST.key) &&
+      m.contains(s"appears in ${SPARK_SESSION_EXTENSIONS.key}.")))
+  }
+
   test("use the last registered function name when there are duplicates") {
     val session = SparkSession.builder()
       .master("local[1]")
@@ -615,6 +1295,265 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
         assert(collectFirst(df.queryExecution.executedPlan) {
           case _: SortExec => true
         }.isDefined)
+      }
+    }
+  }
+
+  /**
+   * Prepares a plan whose `UnionExec` was made by an injected rule, then turns
+   * `UNION_OUTPUT_PARTITIONING` off and reads that node again. A union the `StampUnionDecisions`
+   * barrier following the hook reached keeps answering from the decision it was prepared with; one
+   * that reached no barrier and no snapshot pass has nothing to answer from, so this read derives
+   * an answer from the conf as it is now and comes back `UnknownPartitioning`. `UnionCodegenSuite`
+   * covers the stamping itself by calling the rule directly, so it stays green if one of the
+   * post-hook listings is dropped; these pin the post-hook stamping in each pipeline.
+   */
+  private def checkInjectedUnionIsStamped(
+      extensions: Seq[SparkSessionExtensionsProvider], aqeEnabled: Boolean): Unit = {
+    withSession(extensions) { session =>
+      session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, aqeEnabled)
+      // The union ends up over the projection above a repartition by `k`, so it has a concrete
+      // partitioning to pass through. A filter would not do: `PushPredicateThroughNonJoin` pushes
+      // it below the exchange.
+      val df = session.range(0, 20, 1, 2).selectExpr("id % 5 AS k", "id AS v")
+        .repartition(4, col("k")).selectExpr("k", "v + 1 AS w")
+      // Also what makes the final adaptive plan available in the two AQE cases. `w` is `id + 1`, so
+      // a union that dropped or duplicated a row would show up here.
+      assert(df.collect().map(_.getLong(1)).sorted.toSeq == (1L to 20L).toSeq,
+        "the injected union must not drop or duplicate rows")
+
+      val unions = collect(df.queryExecution.executedPlan) { case u: UnionExec => u }
+      assert(unions.size == 1, s"expected the one union the rule adds, got ${unions.size}")
+      val union = unions.head
+      val prepared = union.outputPartitioning
+      assert(!prepared.isInstanceOf[UnknownPartitioning],
+        s"this union must be prepared partitioning-aware, got $prepared")
+
+      session.conf.set(SQLConf.UNION_OUTPUT_PARTITIONING.key, false)
+      assert(union.outputPartitioning == prepared,
+        "no barrier stamped the union the rule added, so this conf change decided it: " +
+          s"${union.outputPartitioning}")
+    }
+  }
+
+  test("SPARK-59122: the barrier after the injected columnar rules stamps a union they added") {
+    checkInjectedUnionIsStamped(
+      create(_.injectColumnar(_ => WrapRootInUnionColumnarRule)), aqeEnabled = false)
+  }
+
+  test("SPARK-59122: a union an injected query stage prep rule adds is stamped before execution") {
+    // The barrier in `postStageCreationRules` stands behind the one after the prep rules, so the
+    // conf flip in `checkInjectedUnionIsStamped` cannot tell them apart. What only the earlier one
+    // can do is have the answer ready for the stage optimizers, which run in between and read it:
+    // `CoalesceShufflePartitions` asks whether a union's children have to be coalesced as one
+    // group. `ObserveUnionPartitioning` reads the node from there, so removing the earlier barrier
+    // fails this case.
+    val seen = ListBuffer.empty[Partitioning]
+    checkInjectedUnionIsStamped(
+      create { extensions =>
+        extensions.injectQueryStagePrepRule(_ => WrapRootInUnion)
+        extensions.injectQueryStageOptimizerRule(_ => ObserveUnionPartitioning(seen))
+      }, aqeEnabled = true)
+    assert(seen.nonEmpty, "the stage optimizers must have seen the union")
+    assert(!seen.exists(_.isInstanceOf[UnknownPartitioning]),
+      s"the barrier after the prep rules must decide before the stage optimizers read: $seen")
+  }
+
+  test("SPARK-59122: the barrier in AQE post stage creation stamps a union added there") {
+    // With AQE on, the columnar rules reach this plan only through `postStageCreationRules`: the
+    // root of the plan `QueryExecution.preparations` hands them is `AdaptiveSparkPlanExec`, which
+    // `WrapRootInUnion` leaves alone. An injected stage-optimizer rule runs ahead of the same
+    // barrier, so it needs no case of its own.
+    checkInjectedUnionIsStamped(
+      create(_.injectColumnar(_ => WrapRootInUnionColumnarRule)), aqeEnabled = true)
+  }
+
+  test("SPARK-59122: a union one injected prep rule adds is recorded before the next one reads") {
+    // The barrier sits after the whole injected list, so between two of them a fresh union used to
+    // have no record and answered live. A rule planning requirements over it could then elide an
+    // exchange over a concrete partitioning while the barrier stamped the preparation's value and
+    // execution concatenated, which puts one group in two partitions.
+    // `SnapshotUnionPreparationConf.before` lists a snapshot pass ahead of each injected rule.
+    val seen = ListBuffer.empty[Partitioning]
+    checkInjectedUnionIsStamped(
+      create { extensions =>
+        extensions.injectQueryStagePrepRule(_ => WrapRootInUnion)
+        extensions.injectQueryStagePrepRule(_ => ObserveUnionPartitioning(seen))
+      }, aqeEnabled = true)
+    assert(seen.nonEmpty, "the second prep rule must have seen the union")
+    assert(!seen.exists(_.isInstanceOf[UnknownPartitioning]),
+      s"the snapshot pass between the two rules must have recorded the conf: $seen")
+  }
+
+  test("SPARK-59122: a union an injected post planner strategy rule adds is recorded next") {
+    // These rules run before `ensureRequirements`, so a reader among them can still drop an
+    // exchange over a union another of them created, which makes this the injected list where the
+    // window costs wrong rows rather than a lost fusion.
+    val seen = ListBuffer.empty[Partitioning]
+    checkInjectedUnionIsStamped(
+      create { extensions =>
+        extensions.injectQueryPostPlannerStrategyRule(_ => WrapRootInUnion)
+        extensions.injectQueryPostPlannerStrategyRule(_ => ObserveUnionPartitioning(seen))
+      }, aqeEnabled = true)
+    assert(seen.nonEmpty, "the second post planner strategy rule must have seen the union")
+    assert(!seen.exists(_.isInstanceOf[UnknownPartitioning]),
+      s"the snapshot pass between the two rules must have recorded the conf: $seen")
+  }
+
+  test("SPARK-59122: a union one injected stage optimizer rule adds is recorded before the next") {
+    // These rules are folded over inside `optimizeQueryStage`, which has no list to put a pass
+    // into, so the record is written on each rule result that changed the plan. What this case
+    // reads is the next rule; the `ValidateRequirements` check in the same fold answers from the
+    // same write, and reaching it takes an injected rule that is itself an `AQEShuffleReadRule`,
+    // since the built-in ones are listed ahead of the injected list.
+    val seen = ListBuffer.empty[Partitioning]
+    withSession(create { extensions =>
+      extensions.injectQueryStageOptimizerRule(_ => WrapRootInUnion)
+      extensions.injectQueryStageOptimizerRule(_ => ObserveUnionPartitioning(seen))
+    }) { session =>
+      session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, true)
+      val df = session.range(0, 20, 1, 2).selectExpr("id % 5 AS k", "id AS v")
+        .repartition(4, col("k")).selectExpr("k", "v + 1 AS w")
+      assert(df.collect().map(_.getLong(1)).sorted.toSeq == (1L to 20L).toSeq,
+        "the injected union must not drop or duplicate rows")
+      // These rules run on each stage's plan as well, and the union the first one adds inside the
+      // shuffle stands over a range, which has nothing to pass through either way.
+      assert(seen.exists(!_.isInstanceOf[UnknownPartitioning]),
+        s"the union over the shuffle read must answer from the recorded conf: $seen")
+    }
+  }
+
+  test("SPARK-59122: a union one injected columnar rule adds is recorded before the next") {
+    // The injected columnar rules share one `ApplyColumnarRulesAndInsertTransitions`, so the record
+    // rides on each rule's own transitions, one override per phase. The post transitions run in
+    // reverse list order and the pre transitions in list order, so each phase needs the rule that
+    // adds the union injected at the other end.
+    Seq(false, true).foreach { aqeEnabled =>
+      val post = ListBuffer.empty[Partitioning]
+      checkInjectedUnionIsStamped(
+        create { extensions =>
+          extensions.injectColumnar(_ => ObserveUnionPartitioningColumnarRule(post))
+          extensions.injectColumnar(_ => WrapRootInUnionColumnarRule)
+        }, aqeEnabled)
+      val pre = ListBuffer.empty[Partitioning]
+      checkInjectedUnionIsStamped(
+        create { extensions =>
+          extensions.injectColumnar(_ => WrapRootInUnionPreColumnarRule)
+          extensions.injectColumnar(_ => ObserveUnionPartitioningPreColumnarRule(pre))
+        }, aqeEnabled)
+      Seq("post" -> post, "pre" -> pre).foreach { case (phase, seen) =>
+        assert(seen.nonEmpty,
+          s"the second columnar rule must have seen the union, $phase, aqe=$aqeEnabled")
+        assert(!seen.exists(_.isInstanceOf[UnknownPartitioning]),
+          s"the record must ride behind the rule that added it, $phase, aqe=$aqeEnabled: $seen")
+      }
+    }
+  }
+
+  test("SPARK-59122: the codegen conf is recorded for a prep rule after the one that added it") {
+    // The same window, read through the codegen gate rather than the partitioning. The repartition
+    // is what makes AQE engage at all; it is round-robin, so the union above it has nothing to pass
+    // through and stays plain, which leaves its gate turning on the codegen confs. Only enablement
+    // is observable here: a one-child union is under any legal `maxChildren`, which cannot go below
+    // two, so `UnionCodegenSuite` pins that field on a union of three.
+    val seen = ListBuffer.empty[Boolean]
+    withSession(create { extensions =>
+      extensions.injectQueryStagePrepRule(_ => WrapRootInUnion)
+      extensions.injectQueryStagePrepRule(_ => ObserveUnionSupportCodegen(seen))
+    }) { session =>
+      session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, true)
+      val df = session.range(0, 20, 1, 2).repartition(2).selectExpr("id + 1 AS w")
+      assert(df.collect().map(_.getLong(0)).sorted.toSeq == (1L to 20L).toSeq,
+        "the injected union must not drop or duplicate rows")
+      assert(seen.nonEmpty, "the second prep rule must have seen the union")
+      assert(seen.forall(identity),
+        s"the snapshot pass between the two rules must have recorded the codegen conf: $seen")
+    }
+  }
+
+  test("SPARK-59122: an injected shuffle read rule's union is recorded before validation") {
+    // The other consumer inside `optimizeQueryStage`. For an `AQEShuffleReadRule` the fold checks
+    // the rewrite with `ValidateRequirements` and keeps the plan from before the rule when it
+    // fails, so a union the rule put under the aggregate is present afterwards only if the check
+    // saw the recorded conf. The flip lands after the wrapper read its snapshot, so the live value
+    // says the union concatenates while the record says it passes the partitioning through.
+    withSession(create(_.injectQueryStageOptimizerRule(_ => WrapAggChildInUnion))) { session =>
+      session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, true)
+      session.conf.set(SQLConf.UNION_OUTPUT_PARTITIONING.key, true)
+      val df = session.range(0, 20, 1, 2).selectExpr("id % 5 AS k").groupBy("k").count()
+      assert(df.queryExecution.executedPlan.isInstanceOf[AdaptiveSparkPlanExec])
+
+      session.conf.set(SQLConf.UNION_OUTPUT_PARTITIONING.key, false)
+      assert(df.collect().map(r => (r.getLong(0), r.getLong(1))).sortBy(_._1).toSeq ==
+        (0L until 5L).map((_, 4L)), "the injected union must not drop or duplicate rows")
+
+      val unions = collect(df.queryExecution.executedPlan) { case u: UnionExec => u }
+      assert(unions.size == 1,
+        "the aggregate's requirement must have been judged against the recorded conf, or the " +
+          s"rewrite was dropped, got\n${df.queryExecution.executedPlan}")
+    }
+  }
+
+  test("SPARK-59122: the barrier in AQE post stage creation stamps from the adaptive snapshot") {
+    // The cases above leave the conf where it is until their barriers have run, so one answering
+    // from a read of its own rather than the snapshot `AdaptiveSparkPlanExec` took at construction
+    // would pass them too. Here the two differ: the flip lands after the wrapper is built and
+    // before the stage carrying the injected union is created. This is where it can be seen, since
+    // the rules listed per stage are the ones built anew each time; the lists that run per
+    // re-planning round are built once, with the snapshot, so a barrier in them cannot take a
+    // later value to begin with.
+    withSession(create(_.injectColumnar(_ => WrapRootInUnionColumnarRule))) { session =>
+      session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, true)
+      session.conf.set(SQLConf.UNION_OUTPUT_PARTITIONING.key, true)
+      val df = session.range(0, 20, 1, 2).selectExpr("id % 5 AS k", "id AS v")
+        .repartition(4, col("k")).selectExpr("k", "v + 1 AS w")
+      // Constructing the wrapper is what reads AQE's snapshot.
+      assert(df.queryExecution.executedPlan.isInstanceOf[AdaptiveSparkPlanExec])
+
+      session.conf.set(SQLConf.UNION_OUTPUT_PARTITIONING.key, false)
+      // The stages, the columnar rules and the barrier behind them all run here.
+      assert(df.collect().map(_.getLong(1)).sorted.toSeq == (1L to 20L).toSeq,
+        "the injected union must not drop or duplicate rows")
+
+      val unions = collect(df.queryExecution.executedPlan) { case u: UnionExec => u }
+      assert(unions.size == 1, s"expected the one union the rule adds, got ${unions.size}")
+      assert(!unions.head.outputPartitioning.isInstanceOf[UnknownPartitioning],
+        "the barrier must stamp from the snapshot, not from the value the conf holds when it " +
+          s"runs, got ${unions.head.outputPartitioning}")
+    }
+  }
+
+  test("SPARK-59122: a late AQE barrier records the codegen confs the wrapper was built with") {
+    // The same divergence read through the codegen gate. A barrier taking the value the conf holds
+    // when it runs would record fusion as out, so nothing would fuse and the copy of the union
+    // inside the shell would carry no `numOutputRows`. Round-robin children, so the union has
+    // nothing to pass through and stays plain, which is what leaves its gate on these two confs.
+    withSession(create(_.injectColumnar(_ => RebuildRootUnionColumnarRule))) { session =>
+      session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, true)
+      Seq(
+        "enablement" -> (SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key -> "false"),
+        "the child cap" -> (SQLConf.WHOLESTAGE_UNION_MAX_CHILDREN.key -> "2")
+      ).foreach { case (what, (key, flipped)) =>
+        session.conf.set(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key, "true")
+        // Three children, so that a cap of two excludes this union; the cap cannot go below two.
+        session.conf.set(SQLConf.WHOLESTAGE_UNION_MAX_CHILDREN.key, "3")
+        val df = session.range(0, 20, 1, 2).repartition(2)
+          .union(session.range(20, 40, 1, 2).repartition(2))
+          .union(session.range(40, 60, 1, 2).repartition(2))
+        assert(df.queryExecution.executedPlan.isInstanceOf[AdaptiveSparkPlanExec])
+
+        session.conf.set(key, flipped)
+        assert(df.collect().map(_.longValue()).sorted.toSeq == (0L until 60L).toSeq,
+          "the rebuilt union must not drop or duplicate rows")
+
+        val fused = collect(df.queryExecution.executedPlan) { case w: WholeStageCodegenExec => w }
+          .flatMap(_.collect { case u: UnionExec => u })
+        assert(fused.size == 1, s"the rebuilt union must fuse with $what flipped, got\n" +
+          df.queryExecution.executedPlan)
+        assert(fused.head.children.forall(_.isInstanceOf[InputAdapter]),
+          s"expected the copy inside the shell, got ${fused.head.children.map(_.getClass)}")
+        assert(fused.head.metrics("numOutputRows").value == 60,
+          s"the copy inside the shell must count the rows with $what flipped")
       }
     }
   }
@@ -1356,6 +2295,11 @@ class YourExtensions extends SparkSessionExtensionsProvider {
   }
 }
 
+// Never reaches a fixed point, used to check the iteration limit of the "Hints" batch.
+object AddLimitAlways extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = Limit(Literal(1), plan)
+}
+
 object AddLimit extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan match {
     case Limit(_, _) => plan
@@ -1384,6 +2328,120 @@ object MyQueryPostPlannerStrategyRule extends Rule[SparkPlan] {
       case h: HashAggregateExec if h.aggregateExpressions.map(_.mode).contains(Final) =>
         SortExec(h.groupingExpressions.map(k => SortOrder.apply(k, Ascending)), false, h)
     }
+  }
+}
+
+/**
+ * Stands for an extension that introduces a `UnionExec` of its own: replaces a root `ProjectExec`
+ * with a fresh one-child union, which carries no stamped decision because it is a new instance, and
+ * leaves the rows alone. Matching only the root keeps it idempotent, since the root is a
+ * `UnionExec` afterwards; matching a `ProjectExec` keeps it out of the way of
+ * `postStageCreationRules`, which requires the exchange it is handed to stay an exchange.
+ */
+object WrapRootInUnion extends Rule[SparkPlan] {
+  override def apply(plan: SparkPlan): SparkPlan = plan match {
+    case p: ProjectExec => UnionExec(Seq(p))
+    case other => other
+  }
+}
+
+/**
+ * Stands for an injected shuffle-read optimizer that builds a parent over a `UnionExec` of its own:
+ * a fresh one-child union under the final aggregate, which leaves the rows alone and makes
+ * `ValidateRequirements` judge the aggregate's clustering requirement against what that union
+ * reports. `optimizeQueryStage` drops the whole rewrite when that check fails, so the union
+ * survives only if it answered from the recorded conf. Matching `Final` mode keeps it off the
+ * partial aggregate inside the shuffle stage, whose requirement is unspecified either way.
+ */
+object WrapAggChildInUnion extends Rule[SparkPlan] with AQEShuffleReadRule {
+  override protected def supportedShuffleOrigins: Seq[ShuffleOrigin] = Seq(ENSURE_REQUIREMENTS)
+
+  override def apply(plan: SparkPlan): SparkPlan = plan.transformUp {
+    case agg: HashAggregateExec
+        if agg.aggregateExpressions.exists(_.mode == Final) &&
+          !agg.child.isInstanceOf[UnionExec] =>
+      agg.withNewChildren(Seq(UnionExec(Seq(agg.child))))
+  }
+}
+
+/** The columnar-rule wrapper for `WrapRootInUnion`. */
+object WrapRootInUnionColumnarRule extends ColumnarRule {
+  override def postColumnarTransitions: Rule[SparkPlan] = WrapRootInUnion
+}
+
+/** `WrapRootInUnion` in the other phase, where the injected rules run in list order. */
+object WrapRootInUnionPreColumnarRule extends ColumnarRule {
+  override def preColumnarTransitions: Rule[SparkPlan] = WrapRootInUnion
+}
+
+/**
+ * Stands for an extension that returns a `UnionExec` of its own in place of one already in the
+ * plan: a fresh instance over the same children, so it carries no stamped decision, and the rows
+ * are the same ones. Replaces the root only, which is where `postStageCreationRules` hands it a
+ * union; a stage's own plan is rooted at the exchange, so those applications leave it alone.
+ */
+object RebuildRootUnion extends Rule[SparkPlan] {
+  override def apply(plan: SparkPlan): SparkPlan = plan match {
+    case u: UnionExec => UnionExec(u.children)
+    case other => other
+  }
+}
+
+/** The columnar-rule wrapper for `RebuildRootUnion`. */
+object RebuildRootUnionColumnarRule extends ColumnarRule {
+  override def postColumnarTransitions: Rule[SparkPlan] = RebuildRootUnion
+}
+
+/**
+ * Records what each `UnionExec` reports, with `UNION_OUTPUT_PARTITIONING` turned off: a concrete
+ * answer can then only come from a decision stamped earlier, or from the conf a snapshot pass
+ * recorded. Injected as a stage-optimizer rule it runs after the barrier at the end of the query
+ * stage preparation rules; injected as a prep rule it runs among them. Puts the conf back, so
+ * nothing downstream sees the flip.
+ */
+case class ObserveUnionPartitioning(seen: ListBuffer[Partitioning]) extends Rule[SparkPlan] {
+  override def apply(plan: SparkPlan): SparkPlan = {
+    plan.foreach {
+      case u: UnionExec =>
+        val enabled = u.conf.getConf(SQLConf.UNION_OUTPUT_PARTITIONING)
+        u.conf.setConf(SQLConf.UNION_OUTPUT_PARTITIONING, false)
+        try seen += u.outputPartitioning
+        finally u.conf.setConf(SQLConf.UNION_OUTPUT_PARTITIONING, enabled)
+      case _ =>
+    }
+    plan
+  }
+}
+
+/** The columnar-rule wrapper for `ObserveUnionPartitioning`. */
+case class ObserveUnionPartitioningColumnarRule(seen: ListBuffer[Partitioning])
+  extends ColumnarRule {
+  override def postColumnarTransitions: Rule[SparkPlan] = ObserveUnionPartitioning(seen)
+}
+
+/** `ObserveUnionPartitioning` in the other phase. */
+case class ObserveUnionPartitioningPreColumnarRule(seen: ListBuffer[Partitioning])
+  extends ColumnarRule {
+  override def preColumnarTransitions: Rule[SparkPlan] = ObserveUnionPartitioning(seen)
+}
+
+/**
+ * Records whether each `UnionExec` says it supports codegen, read with
+ * `WHOLESTAGE_UNION_CODEGEN_ENABLED` turned off: a `true` can then only come from the conf a
+ * snapshot pass recorded for it, or from a decision stamped earlier. Puts the conf back, so nothing
+ * downstream sees the flip.
+ */
+case class ObserveUnionSupportCodegen(seen: ListBuffer[Boolean]) extends Rule[SparkPlan] {
+  override def apply(plan: SparkPlan): SparkPlan = {
+    plan.foreach {
+      case u: UnionExec =>
+        val enabled = u.conf.getConf(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED)
+        u.conf.setConf(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED, false)
+        try seen += u.supportCodegen
+        finally u.conf.setConf(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED, enabled)
+      case _ =>
+    }
+    plan
   }
 }
 

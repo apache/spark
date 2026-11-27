@@ -15,25 +15,26 @@
 # limitations under the License.
 #
 
-from contextlib import redirect_stdout
 import datetime
-from enum import Enum
-from inspect import getmembers, isfunction, isclass
 import io
-from itertools import chain
 import math
 import re
 import unittest
+from contextlib import redirect_stdout
+from enum import Enum
+from inspect import getmembers, isclass, isfunction
+from itertools import chain
 
 from pyspark.errors import PySparkTypeError, PySparkValueError, SparkRuntimeException
 from pyspark.errors.exceptions.base import IllegalArgumentException
-from pyspark.sql import Row, Window, functions as F, types
+from pyspark.sql import Row, Window, types
+from pyspark.sql import functions as F
 from pyspark.sql.avro.functions import from_avro, to_avro
 from pyspark.sql.column import Column
 from pyspark.sql.functions.builtin import nullifzero, randstr, uniform, zeroifnull
-from pyspark.sql.types import StructType, StructField, StringType
+from pyspark.sql.types import StringType, StructField, StructType
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
-from pyspark.testing.utils import have_numpy, assertDataFrameEqual
+from pyspark.testing.utils import assertDataFrameEqual, have_numpy
 
 
 class FunctionsTestsMixin:
@@ -985,7 +986,7 @@ class FunctionsTestsMixin:
         assertDataFrameEqual([Row(b=-1)], actual_with_threshold)
 
     def test_vector_functions(self):
-        from pyspark.sql.types import ArrayType, FloatType, StructType, StructField
+        from pyspark.sql.types import ArrayType, FloatType, StructField, StructType
 
         schema = StructType(
             [
@@ -1024,6 +1025,16 @@ class FunctionsTestsMixin:
         sum_result = df3.select(F.vector_sum("v")).first()[0]
         self.assertAlmostEqual(sum_result[0], 4.0, places=4)
         self.assertAlmostEqual(sum_result[1], 6.0, places=4)
+
+    def test_vector_sum_double(self):
+        from pyspark.sql.types import ArrayType, DoubleType
+
+        schema = StructType([StructField("v", ArrayType(DoubleType()))])
+        data = [([16777216.0, 1.0],), ([1.0, 1e-8],)]
+        df = self.spark.createDataFrame(data, schema).repartition(2)
+        result = df.select(F.vector_sum("v"))
+        self.assertEqual(result.schema[0].dataType, ArrayType(DoubleType(), containsNull=False))
+        self.assertEqual(result.first()[0], [16777217.0, 1.00000001])
 
     def test_jaro_winkler_similarity_function(self):
         df = self.spark.createDataFrame([("MARTHA", "MARHTA")], ["l", "r"])
@@ -1619,9 +1630,150 @@ class FunctionsTestsMixin:
         self.assertTrue(isinstance(aqt[1], list))
         self.assertEqual(len(aqt[1]), 3)
         self.assertTrue(all(isinstance(q, float) for q in aqt[1]))
+        self.assertEqual(df.stat.approxQuantile("a", [0, 0.5, 1], 0.0), [0.0, 4.0, 9.0])
         self.assertRaises(TypeError, lambda: df.stat.approxQuantile(123, [0.1, 0.9], 0.1))
         self.assertRaises(TypeError, lambda: df.stat.approxQuantile(("a", 123), [0.1, 0.9], 0.1))
         self.assertRaises(TypeError, lambda: df.stat.approxQuantile(["a", 123], [0.1, 0.9], 0.1))
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.stat.approxQuantile("a", [0.1, "0.9"], 0.1)
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "probabilities",
+                "expected_type": "list[float, int]",
+                "arg_type": "str",
+            },
+        )
+
+        with self.assertRaises(PySparkValueError) as pe:
+            df.stat.approxQuantile("a", [0.1, 1.5], 0.1)
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="VALUE_OUT_OF_BOUNDS",
+            messageParameters={
+                "arg_name": "probabilities",
+                "lower_bound": "0",
+                "upper_bound": "1",
+                "actual": "1.5",
+            },
+        )
+
+        with self.assertRaises(PySparkValueError) as pe:
+            df.stat.approxQuantile("a", [0.1, -0.1], 0.1)
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="VALUE_OUT_OF_BOUNDS",
+            messageParameters={
+                "arg_name": "probabilities",
+                "lower_bound": "0",
+                "upper_bound": "1",
+                "actual": "-0.1",
+            },
+        )
+
+        with self.assertRaises(PySparkValueError) as pe:
+            df.stat.approxQuantile("a", [0.1, float("nan")], 0.1)
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="VALUE_OUT_OF_BOUNDS",
+            messageParameters={
+                "arg_name": "probabilities",
+                "lower_bound": "0",
+                "upper_bound": "1",
+                "actual": "nan",
+            },
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.stat.approxQuantile("a", [0.1, True], 0.1)
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "probabilities",
+                "expected_type": "list[float, int]",
+                "arg_type": "bool",
+            },
+        )
+
+        # A value error earlier in the list must not hide a type error later in the list:
+        # types are validated for every element before any value is checked, regardless
+        # of which order the bad elements appear in.
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.stat.approxQuantile("a", [1.5, "0.9"], 0.1)
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "probabilities",
+                "expected_type": "list[float, int]",
+                "arg_type": "str",
+            },
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.stat.approxQuantile("a", ["0.9", 1.5], 0.1)
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "probabilities",
+                "expected_type": "list[float, int]",
+                "arg_type": "str",
+            },
+        )
+
+        with self.assertRaises(PySparkValueError) as pe:
+            df.stat.approxQuantile("a", (0.1, 1.5), 0.1)
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="VALUE_OUT_OF_BOUNDS",
+            messageParameters={
+                "arg_name": "probabilities",
+                "lower_bound": "0",
+                "upper_bound": "1",
+                "actual": "1.5",
+            },
+        )
+
+        with self.assertRaises(PySparkValueError) as pe:
+            df.stat.approxQuantile("a", [0.1, 0.5, 0.9], float("nan"))
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="NEGATIVE_VALUE",
+            messageParameters={"arg_name": "relativeError", "arg_value": "nan"},
+        )
+
+        for relative_error in (True, False):
+            with self.subTest(relative_error=relative_error):
+                with self.assertRaises(PySparkTypeError) as pe:
+                    df.stat.approxQuantile("a", [0.5], relative_error)
+                self.check_error(
+                    exception=pe.exception,
+                    errorClass="NOT_EXPECTED_TYPE",
+                    messageParameters={
+                        "expected_type": "float or int",
+                        "arg_name": "relativeError",
+                        "arg_type": "bool",
+                    },
+                )
+
+        self.assertEqual(df.stat.approxQuantile("a", [0.5], 0), [4.0])
+
+        quantiles = df.stat.approxQuantile("a", [0.5], 1)
+        self.assertEqual(len(quantiles), 1)
+        self.assertEqual(quantiles, df.stat.approxQuantile("a", [0.5], 1.0))
 
     def test_sorting_functions_with_column(self):
         self.check_sorting_functions_with_column(Column)
@@ -3669,6 +3821,10 @@ class FunctionsTestsMixin:
             df.select(F.to_json(F.variant_strip_nulls(strip_v, False))),
             ['{"a":1,"c":[1,null]}', '{"a":1,"c":[1,null]}'],
         )
+        check(df.select(F.to_json(F.variant_pick(v, "$.a"))), ['{"a":1}', "{}"])
+        check(df.select(F.to_json(F.variant_pick(v, df.path))), ['{"a":1}', '{"b":2}'])
+        check(df.select(F.to_json(F.variant_pick(v, F.lit(None)))), ["{}", "{}"])
+        check(df.select(F.to_json(F.variant_pick(v, "$.a", df.path))), ['{"a":1}', '{"b":2}'])
         check(df.select(F.schema_of_variant(v)), ["OBJECT<a: BIGINT>", "OBJECT<b: BIGINT>"])
         check(df.select(F.schema_of_variant_agg(v)), ["OBJECT<a: BIGINT, b: BIGINT>"])
 
@@ -4294,6 +4450,24 @@ class FunctionsTestsMixin:
         result_128 = df.select(F.xxh3_128(F.col("a").cast("binary"))).collect()
         # Value from DataFrameFunctionsSuite.scala
         self.assertEqual(result_128[0][0], "9e947f00ecd6acb2244da40f405c870e")
+
+    def test_farm_fingerprint(self):
+        """Test farm_fingerprint function"""
+        df = self.spark.createDataFrame([("Spark",), ("",), (None,)], ["data"])
+        result = df.select(F.farm_fingerprint("data")).collect()
+
+        # Values from HashExpressionsSuite.scala
+        self.assertEqual(result[0][0], -2743780590904673122)  # "Spark"
+        self.assertEqual(result[1][0], -7286425919675154353)  # empty string
+        self.assertIsNone(result[2][0])  # null
+
+        df_binary = self.spark.createDataFrame([(bytearray([1, 2, 3, 4, 5, 6]),)], ["data"])
+        result_binary = df_binary.select(F.farm_fingerprint("data")).collect()
+        self.assertEqual(result_binary[0][0], 8673355959317488908)
+
+        # Matches BigQuery FARM_FINGERPRINT('1footrue').
+        df_bq = self.spark.createDataFrame([("1footrue",)], ["data"])
+        self.assertEqual(df_bq.select(F.farm_fingerprint("data")).first()[0], -1541654101129638711)
 
 
 class FunctionsTests(FunctionsTestsMixin, ReusedSQLTestCase):

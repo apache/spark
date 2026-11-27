@@ -32,7 +32,8 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasCheckpointInterval, HasFeaturesCol, HasMaxIter, HasSeed}
+import org.apache.spark.ml.param.shared.{HasCheckpointInterval, HasFeaturesCol,
+  HasIntermediateStorageLevel, HasMaxIter, HasSeed}
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
@@ -54,7 +55,7 @@ import org.apache.spark.util.PeriodicCheckpointer
 import org.apache.spark.util.VersionUtils
 
 private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasMaxIter
-  with HasSeed with HasCheckpointInterval {
+  with HasSeed with HasCheckpointInterval with HasIntermediateStorageLevel {
 
   /**
    * Param for the number of topics (clusters) to infer. Must be &gt; 1. Default: 10.
@@ -1015,6 +1016,15 @@ class LDA @Since("1.6.0") (
   @Since("2.0.0")
   def setKeepLastCheckpoint(value: Boolean): this.type = set(keepLastCheckpoint, value)
 
+  /**
+   * Sets the storage level for intermediate datasets when using the online optimizer.
+   * Default is "MEMORY_AND_DISK".
+   *
+   * @group expertSetParam
+   */
+  @Since("4.5.0")
+  def setIntermediateStorageLevel(value: String): this.type = set(intermediateStorageLevel, value)
+
   @Since("1.6.0")
   override def copy(extra: ParamMap): LDA = defaultCopy(extra)
 
@@ -1026,7 +1036,7 @@ class LDA @Since("1.6.0") (
     instr.logDataset(dataset)
     instr.logParams(this, featuresCol, topicDistributionCol, k, maxIter, subsamplingRate,
       checkpointInterval, keepLastCheckpoint, optimizeDocConcentration, topicConcentration,
-      learningDecay, optimizer, learningOffset, seed)
+      learningDecay, optimizer, learningOffset, seed, intermediateStorageLevel)
 
     val oldData = LDA.getOldDataset(dataset, $(featuresCol))
       .setName("training instances")
@@ -1038,7 +1048,7 @@ class LDA @Since("1.6.0") (
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE &&
       getOptimizer.toLowerCase(Locale.ROOT) == "online"
     if (handlePersistence) {
-      oldData.persist(StorageLevel.MEMORY_AND_DISK)
+      oldData.persist(StorageLevel.fromString($(intermediateStorageLevel)))
     }
 
     val oldLDA = new OldLDA()

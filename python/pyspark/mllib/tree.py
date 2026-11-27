@@ -15,16 +15,16 @@
 # limitations under the License.
 #
 
-import sys
 import random
+import sys
+from typing import TYPE_CHECKING, Dict, Optional, Tuple, Union, overload
 
 from pyspark import since
-from pyspark.mllib.common import callMLlibFunc, inherit_doc, JavaModelWrapper
+from pyspark.core.rdd import RDD
+from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc, inherit_doc
 from pyspark.mllib.linalg import _convert_to_vector
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.util import JavaLoader, JavaSaveable
-from typing import Dict, Optional, Tuple, Union, overload, TYPE_CHECKING
-from pyspark.core.rdd import RDD
 
 if TYPE_CHECKING:
     from pyspark.mllib._typing import VectorLike

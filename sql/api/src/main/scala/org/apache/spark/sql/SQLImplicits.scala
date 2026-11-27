@@ -112,6 +112,9 @@ trait EncoderImplicits extends LowPrioritySQLImplicits with Serializable {
   implicit def newGeographyEncoder: Encoder[org.apache.spark.sql.types.Geography] =
     DEFAULT_GEOGRAPHY_ENCODER
 
+  /** @since 4.5.0 */
+  implicit def newFileRefEncoder: Encoder[org.apache.spark.sql.types.FileRef] = Encoders.FILE
+
   /** @since 2.2.0 */
   implicit def newDateEncoder: Encoder[java.sql.Date] = Encoders.DATE
 

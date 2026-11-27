@@ -23,9 +23,10 @@ import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
 import org.apache.spark.sql.connector.FakeV2ProviderWithCustomSchema
 import org.apache.spark.sql.connector.catalog.{InMemoryScanMergingPartitionFilterCatalog, InMemoryScanMergingReportingCatalog}
-import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, DataSourceV2ScanRelation}
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.tags.DataSourceV2Test
 
 /**
  * End-to-end test for the DSv2 scan-merge gap this change closes: a source whose (equal) filter is
@@ -36,11 +37,13 @@ import org.apache.spark.sql.test.SharedSparkSession
  * push-predicates call would only run the first pass, see the filter come back post-scan,
  * mis-classify it as non-strict and decline the merge (leaving two scans).
  */
+@DataSourceV2Test
 class DSv2PlanMergingSuite extends QueryTest with SharedSparkSession
-  with BeforeAndAfter {
+  with BeforeAndAfter with V2ScanMergingTestHelper {
 
   private val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
   private val tbl = "scanmerge.t"
+  private val tbl2 = "scanmerge.t2"
 
   before {
     spark.conf.set("spark.sql.catalog.scanmerge",
@@ -54,11 +57,6 @@ class DSv2PlanMergingSuite extends QueryTest with SharedSparkSession
     spark.conf.unset("spark.sql.catalog.scanmerge")
     spark.conf.unset("spark.sql.catalog.scanmergereport")
   }
-
-  private def v2Scans(df: DataFrame): Seq[DataSourceV2ScanRelation] =
-    df.queryExecution.optimizedPlan.collectWithSubqueries {
-      case s: DataSourceV2ScanRelation => s
-    }
 
   // A successful DSv2 merge builds the scan and leaves NO bare DataSourceV2Relation in the plan.
   // A leaked deferred scan (e.g. if a future recursion arm forwarded `deferredScan` without
@@ -174,12 +172,35 @@ class DSv2PlanMergingSuite extends QueryTest with SharedSparkSession
     }
   }
 
+  test("SPARK-40259: do not merge DSv2 scans from different tables") {
+    withTable(tbl, tbl2) {
+      sql(s"CREATE TABLE $tbl (part_col string, c1 int) USING $v2Source " +
+        "PARTITIONED BY (part_col)")
+      sql(s"CREATE TABLE $tbl2 (part_col string, c2 int) USING $v2Source " +
+        "PARTITIONED BY (part_col)")
+      sql(s"INSERT INTO $tbl VALUES ('a', 1), ('a', 2)")
+      sql(s"INSERT INTO $tbl2 VALUES ('a', 10), ('a', 30)")
+
+      val df = sql(
+        s"""
+           |SELECT
+           |  (SELECT max(c1) FROM $tbl WHERE part_col IN ('a')) AS m1,
+           |  (SELECT max(c2) FROM $tbl2 WHERE part_col IN ('a')) AS m2
+           |""".stripMargin)
+
+      checkAnswer(df, Row(2, 30))
+      val scans = v2Scans(df)
+      assert(scans.map(_.canonicalized).distinct.length == 2,
+        s"scans from different tables must remain separate:\n${df.queryExecution.optimizedPlan}")
+    }
+  }
+
   test("SPARK-58549: a scan merge preserves the sources' reported key-grouped partitioning") {
     val t = "scanmergereport.t2"
     withTable(t) {
-      // V2_BUCKETING_ENABLED is what makes the preserved report reach the physical plan (only
-      // DataSourceV2ScanExecBase.outputPartitioning reads it), which the last assertion checks; AQE
-      // is off so that `executedPlan` is the plan those assertions can walk.
+      // V2_BUCKETING_ENABLED is what makes the preserved report reach the physical plan, which the
+      // last assertion checks. DataSourceV2Strategy hands the scan its key-grouped partitioning
+      // only when it is on. AQE is off so that `executedPlan` is the plan the assertions can walk.
       withSQLConf(
           SQLConf.V2_BUCKETING_ENABLED.key -> "true",
           SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {

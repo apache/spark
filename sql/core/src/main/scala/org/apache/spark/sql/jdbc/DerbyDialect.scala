@@ -38,6 +38,10 @@ private case class DerbyDialect() extends JdbcDialect with NoLegacyJDBCError {
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
 
+  // Derby's casts to integral types already truncate.
+  override def truncateFractionalValue(expr: String, from: NumericType): Option[String] =
+    Some(expr)
+
   override def isObjectNotFoundException(e: SQLException): Boolean = {
     e.getSQLState.equalsIgnoreCase("42Y07") ||
       e.getSQLState.equalsIgnoreCase("42X05") ||
@@ -80,7 +84,8 @@ private case class DerbyDialect() extends JdbcDialect with NoLegacyJDBCError {
     }
     // New table name restriction:
     // https://db.apache.org/derby/docs/10.2/ref/rrefnewtablename.html#rrefnewtablename
-    s"RENAME TABLE ${getFullyQualifiedQuotedTableName(oldTable)} TO ${newTable.name()}"
+    s"RENAME TABLE ${getFullyQualifiedQuotedTableName(oldTable)} TO " +
+      s"${quoteIdentifier(newTable.name())}"
   }
 
   // Derby currently doesn't support comment on table. Here is the ticket to add the support

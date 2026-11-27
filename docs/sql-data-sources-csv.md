@@ -63,7 +63,7 @@ Data source options of CSV can be set via:
   <tr>
     <td><code>extension</code></td>
     <td>csv</td>
-    <td>Sets the file extension for the output files. Limited to letters. Length must equal 3.</td>
+    <td>Sets the file extension for the output files. Must be non-empty and contain only letters. If it matches a compression codec suffix (for example, <code>gz</code> or <code>zst</code>), set <code>compression</code> too; otherwise Spark may try to decompress plain-text output when reading it back.</td>
     <td>write</td>
   </tr>
   <tr>
@@ -111,7 +111,7 @@ Data source options of CSV can be set via:
   <tr>
     <td><code>inferSchema</code></td>
     <td>false</td>
-    <td>Infers the input schema automatically from data. It requires one extra pass over the data. CSV built-in functions ignore this option.</td>
+    <td>Infers the input schema automatically from data. It requires one extra pass over the data. CSV built-in functions ignore this option, except as noted under <code>variantRespectInferSchema</code>.</td>
     <td>read</td>
   </tr>
   <tr>
@@ -143,6 +143,12 @@ Data source options of CSV can be set via:
     <td></td>
     <td>Sets the string representation of a null value. Since 2.0.1, this <code>nullValue</code> param applies to all supported types including the string type.</td>
     <td>read/write</td>
+  </tr>
+  <tr>
+    <td><code>treatNullAsEmptyString</code></td>
+    <td></td>
+    <td>Controls how null values are written when <code>nullValue</code> is left at its default (empty string). When <code>true</code>, a null is written through <code>emptyValue</code> (a quoted empty string <code>""</code> by default), which makes it indistinguishable from an actual empty string. When <code>false</code>, a null is written as a bare, unquoted empty token, so it can be told apart from an empty string. When unset, the write follows the session default. Setting a non-empty <code>nullValue</code> makes this option a no-op, since the <code>nullValue</code> is then written verbatim. This option only affects writing.</td>
+    <td>write</td>
   </tr>
   <tr>
     <td><code>nanValue</code></td>
@@ -225,7 +231,13 @@ Data source options of CSV can be set via:
   <tr>
     <td><code>singleVariantColumn</code></td>
     <td>(none)</td>
-    <td>If specified, the entire CSV record is parsed and stored as a single column of <code>VariantType</code> with the given column name, instead of being split into individual fields.</td>
+    <td>If specified, the entire CSV record is parsed and stored as a single column of <code>VariantType</code> with the given column name, instead of being split into individual fields. By default, scalar values are type-inferred inside the variant on a best-effort basis (for example, <code>"0001"</code> may be inferred as the integer <code>1</code>). To preserve scalar values as strings, set <code>variantRespectInferSchema</code> to <code>true</code> and <code>inferSchema</code> to <code>false</code>.</td>
+    <td>read</td>
+  </tr>
+  <tr>
+    <td><code>variantRespectInferSchema</code></td>
+    <td>false</td>
+    <td>When reading into a <code>VARIANT</code> (see <code>singleVariantColumn</code> or a <code>VariantType</code> column in the schema), controls whether the <code>inferSchema</code> option is honored. When <code>true</code> and <code>inferSchema</code> is <code>false</code>, scalar values are preserved as strings inside the variant instead of being inferred as boolean, long, decimal, date, or timestamp. When <code>false</code> (the default), scalar types are inferred on a best-effort basis regardless of <code>inferSchema</code>. Enabling this option forces <code>from_csv</code> to observe <code>inferSchema</code> when reading into a <code>VARIANT</code>.</td>
     <td>read</td>
   </tr>
   <tr>
@@ -284,6 +296,12 @@ Data source options of CSV can be set via:
     <td>(none)</td>
     <td>Compression codec to use when saving to file. This can be one of the known case-insensitive shorten names (<code>none</code>, <code>bzip2</code>, <code>gzip</code>, <code>lz4</code>, <code>snappy</code> and <code>deflate</code>). CSV built-in functions ignore this option.</td>
     <td>write</td>
+  </tr>
+  <tr>
+    <td><code>decompression</code></td>
+    <td>(none)</td>
+    <td>Compression codec used to decompress the input files, instead of inferring it from each file name extension. This can be one of the known case-insensitive short names (<code>none</code>, <code>uncompressed</code>, <code>bzip2</code>, <code>deflate</code>, <code>gzip</code>, <code>lz4</code>, <code>snappy</code>, <code>zstd</code>, <code>zstandard</code> and <code>zst</code>) or a fully qualified Hadoop <code>CompressionCodec</code> class name. <code>none</code> and <code>uncompressed</code> read the files as-is, even when the file name carries a compression extension. The codec applies to every file read. When archive reading is enabled (<code>spark.sql.files.archive.reader.enabled</code>), setting it when the input includes an archive file (<code>.tar</code>, <code>.tar.gz</code>, <code>.tgz</code>, <code>.zip</code> or <code>.7z</code>) is not supported and fails the query. Unlike the write option <code>compression</code>, which is ignored on read, it does not affect writes. CSV built-in functions ignore this option.</td>
+    <td>read</td>
   </tr>
   <tr>
     <td><code>timeZone</code></td>

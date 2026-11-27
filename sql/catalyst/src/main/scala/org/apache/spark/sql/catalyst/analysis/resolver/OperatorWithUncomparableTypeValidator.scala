@@ -20,20 +20,21 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{Distinct, LogicalPlan, SetOperation}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{DataType, MapType, VariantType}
+import org.apache.spark.sql.types.{DataType, FileType, MapType, VariantType}
 
 /**
  * [[OperatorWithUncomparableTypeValidator]] performs the validation of a logical plan to ensure
  * that it (if it is [[Distinct]] or [[SetOperation]]) does not contain any uncomparable types:
- * [[VariantType]] or [[MapType]].
+ * [[VariantType]], [[MapType]] or [[FileType]].
  */
 object OperatorWithUncomparableTypeValidator {
 
   /**
    * Validates that the provided logical plan does not contain any uncomparable types:
-   * [[VariantType]] or [[MapType]] (throws a specific user-facing error if it does). Operators
-   * that are not supported are [[Distinct]] and [[SetOperation]] ([[Union]], [[Except]],
-   * [[Intersect]]).
+   * [[VariantType]], [[MapType]] or [[FileType]] (throws a specific user-facing error if it
+   * does). Operators that are not supported are [[Distinct]] and [[SetOperation]] ([[Except]],
+   * [[Intersect]]). [[Union]] is not a [[SetOperation]], so UNION ALL is allowed, while UNION
+   * DISTINCT is rejected through the [[Distinct]] above it.
    */
   def validate(operator: LogicalPlan, output: Seq[Attribute]): Unit = {
     operator match {
@@ -46,6 +47,10 @@ object OperatorWithUncomparableTypeValidator {
           if (hasVariantType(element.dataType)) {
             throwUnsupportedSetOperationOnVariantType(element, unsupportedOperator)
           }
+
+          if (hasFileType(element.dataType)) {
+            throwUnsupportedSetOperationOnFileType(element, unsupportedOperator)
+          }
         }
       case _ =>
     }
@@ -57,6 +62,10 @@ object OperatorWithUncomparableTypeValidator {
 
   private def hasVariantType(dt: DataType): Boolean = {
     dt.existsRecursively(_.isInstanceOf[VariantType])
+  }
+
+  private def hasFileType(dt: DataType): Boolean = {
+    dt.existsRecursively(_.isInstanceOf[FileType])
   }
 
   private def throwUnsupportedSetOperationOnMapType(
@@ -73,6 +82,15 @@ object OperatorWithUncomparableTypeValidator {
       unresolvedPlan: LogicalPlan): Unit = {
     throw QueryCompilationErrors.unsupportedSetOperationOnVariantType(
       variantCol = variantCol,
+      origin = unresolvedPlan.origin
+    )
+  }
+
+  private def throwUnsupportedSetOperationOnFileType(
+      fileCol: Attribute,
+      unresolvedPlan: LogicalPlan): Unit = {
+    throw QueryCompilationErrors.unsupportedSetOperationOnFileType(
+      fileCol = fileCol,
       origin = unresolvedPlan.origin
     )
   }

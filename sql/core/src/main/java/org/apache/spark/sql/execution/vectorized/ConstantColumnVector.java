@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.vectorized;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 
+import org.apache.spark.sql.catalyst.types.ops.TypeOps$;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.sql.vectorized.ColumnVector;
 import org.apache.spark.sql.vectorized.ColumnarArray;
@@ -63,7 +64,7 @@ public class ConstantColumnVector extends ColumnVector {
     super(type);
     this.numRows = numRows;
 
-    if (type instanceof StructType structType) {
+    if (TypeOps$.MODULE$.rowRepresentationOrSelf(type) instanceof StructType structType) {
       this.childData = new ConstantColumnVector[structType.fields().length];
       for (int i = 0; i < structType.fields().length; i++) {
         this.childData[i] = new ConstantColumnVector(1, structType.fields()[i].dataType());

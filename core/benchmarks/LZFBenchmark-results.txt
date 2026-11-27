@@ -2,18 +2,18 @@
 Benchmark LZFCompressionCodec
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 9V74 80-Core Processor
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 Compress small objects:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------------
-Compression 256000000 int values in parallel                521            542          16        491.2           2.0       1.0X
-Compression 256000000 int values single-threaded            522            538          24        490.1           2.0       1.0X
+Compression 256000000 int values in parallel                604            609           6        423.7           2.4       1.0X
+Compression 256000000 int values single-threaded            560            562           2        457.3           2.2       1.1X
 
-OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 9V74 80-Core Processor
+OpenJDK 64-Bit Server VM 21.0.13.0.3+1-LTS on Linux 7.0.0-1019-azure
+AMD EPYC 7763 64-Core Processor
 Compress large objects:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -----------------------------------------------------------------------------------------------------------------------------
-Compression 1024 array values in 1 threads                53             56           3          0.0       51488.0       1.0X
-Compression 1024 array values single-threaded             34             35           0          0.0       33270.0       1.5X
+Compression 1024 array values in 1 threads                46             51           3          0.0       44982.1       1.0X
+Compression 1024 array values single-threaded             35             35           0          0.0       34065.8       1.3X
 
 

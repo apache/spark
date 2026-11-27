@@ -17,10 +17,10 @@
 
 package org.apache.spark.graphx.lib
 
-import scala.collection.{mutable, Map}
 import scala.reflect.ClassTag
 
 import org.apache.spark.graphx._
+import org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap
 
 /** Label Propagation algorithm. */
 object LabelPropagation {
@@ -29,7 +29,7 @@ object LabelPropagation {
    *
    * Each node in the network is initially assigned to its own community. At every superstep, nodes
    * send their community affiliation to all neighbors and update their state to the mode community
-   * affiliation of incoming messages.
+   * affiliation of incoming messages. Ties are broken by choosing the smallest label.
    *
    * LPA is a standard community detection algorithm for graphs. It is very inexpensive
    * computationally, although (1) convergence is not guaranteed and (2) one can end up with
@@ -47,24 +47,45 @@ object LabelPropagation {
     require(maxSteps > 0, s"Maximum of steps must be greater than 0, but got ${maxSteps}")
 
     val lpaGraph = graph.mapVertices { case (vid, _) => vid }
-    def sendMessage(e: EdgeTriplet[VertexId, ED]): Iterator[(VertexId, Map[VertexId, Long])] = {
-      Iterator((e.srcId, Map(e.dstAttr -> 1L)), (e.dstId, Map(e.srcAttr -> 1L)))
+    type LabelCounts = GraphXPrimitiveKeyOpenHashMap[VertexId, Long]
+    def labelCount(label: VertexId): LabelCounts = {
+      val counts = new LabelCounts(1)
+      counts.update(label, 1L)
+      counts
     }
-    def mergeMessage(count1: Map[VertexId, Long], count2: Map[VertexId, Long])
-      : Map[VertexId, Long] = {
-      // Mimics the optimization of breakOut, not present in Scala 2.13, while working in 2.12
-      val map = mutable.Map[VertexId, Long]()
-      (count1.keySet ++ count2.keySet).foreach { i =>
-        val count1Val = count1.getOrElse(i, 0L)
-        val count2Val = count2.getOrElse(i, 0L)
-        map.put(i, count1Val + count2Val)
+    def sendMessage(e: EdgeTriplet[VertexId, ED]): Iterator[(VertexId, LabelCounts)] = {
+      Iterator((e.srcId, labelCount(e.dstAttr)), (e.dstId, labelCount(e.srcAttr)))
+    }
+    // Merges in place: adds count2 into count1 and returns count1. This is safe because
+    // sendMessage always creates new maps and vertexProgram does not modify its message.
+    // Plain while loops over the internal arrays avoid a tuple and boxed values per entry.
+    def mergeMessage(count1: LabelCounts, count2: LabelCounts): LabelCounts = {
+      val labels = count2.keySet
+      var pos = labels.nextPos(0)
+      while (pos >= 0) {
+        count1.setMerge(labels.getValue(pos), count2._values(pos), _ + _)
+        pos = labels.nextPos(pos + 1)
       }
-      map
+      count1
     }
-    def vertexProgram(vid: VertexId, attr: Long, message: Map[VertexId, Long]): VertexId = {
-      if (message.isEmpty) attr else message.maxBy(_._2)._1
+    // The most frequent label; ties are broken by the smallest label.
+    def vertexProgram(vid: VertexId, attr: Long, message: LabelCounts): VertexId = {
+      val labels = message.keySet
+      var best = attr
+      var bestCount = 0L
+      var pos = labels.nextPos(0)
+      while (pos >= 0) {
+        val label = labels.getValue(pos)
+        val count = message._values(pos)
+        if (count > bestCount || (count == bestCount && label < best)) {
+          best = label
+          bestCount = count
+        }
+        pos = labels.nextPos(pos + 1)
+      }
+      best
     }
-    val initialMessage = Map[VertexId, Long]()
+    val initialMessage = new LabelCounts(1)
     Pregel(lpaGraph, initialMessage, maxIterations = maxSteps)(
       vprog = vertexProgram,
       sendMsg = sendMessage,

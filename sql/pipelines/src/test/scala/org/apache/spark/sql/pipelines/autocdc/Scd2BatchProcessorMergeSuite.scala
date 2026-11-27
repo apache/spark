@@ -143,56 +143,56 @@ class Scd2BatchProcessorMergeSuite
 
     // A freshly-routed tombstone with no matching aux row is inserted live (no logical-delete
     // marker).
-    val tagged = taggedOf(Row(1, "x", 5L, 5L, Row(5L), true))
+    val tagged = taggedOf(Row(1, "x", 5L, 5L, Row(5L, null), true))
     val affected = canonicalOf()
 
     processor.mergeRowsIntoAuxiliaryTable(tagged, affected, defaultAuxTableIdentifier, batchId = 1L)
 
-    checkAnswer(auxTable, Row(1, "x", 5L, 5L, Row(5L), null))
+    checkAnswer(auxTable, Row(1, "x", 5L, 5L, Row(5L, null), null))
   }
 
   test("mergeRowsIntoAuxiliaryTable updates a surviving routed row in place") {
     // An existing hidden no-op upsert at recordStartAt=5 that survives reconciliation.
-    createAuxTable(Row(1, "old", 5L, null, Row(5L), null))
+    createAuxTable(Row(1, "old", 5L, null, Row(5L, null), null))
 
-    val tagged = taggedOf(Row(1, "new", 5L, null, Row(5L), true))
+    val tagged = taggedOf(Row(1, "new", 5L, null, Row(5L, null), true))
     // The affected row survives (still present in the routed set), so it is not logically
     // deleted; only its non-key columns are refreshed.
-    val affected = canonicalOf(Row(1, "old", 5L, null, Row(5L)))
+    val affected = canonicalOf(Row(1, "old", 5L, null, Row(5L, null)))
 
     processor.mergeRowsIntoAuxiliaryTable(tagged, affected, defaultAuxTableIdentifier, batchId = 2L)
 
-    checkAnswer(auxTable, Row(1, "new", 5L, null, Row(5L), null))
+    checkAnswer(auxTable, Row(1, "new", 5L, null, Row(5L, null), null))
   }
 
   test("mergeRowsIntoAuxiliaryTable logically deletes an affected row that did not survive") {
     // A tombstone pulled in as affected but absent from this batch's routed set.
-    createAuxTable(Row(1, "gone", 7L, 7L, Row(7L), null))
+    createAuxTable(Row(1, "gone", 7L, 7L, Row(7L, null), null))
 
     // The single tagged row is not routed to the aux table, so the affected aux row has no
     // surviving counterpart and must be logically deleted.
-    val tagged = taggedOf(Row(1, "vis", 10L, null, Row(10L), false))
-    val affected = canonicalOf(Row(1, "gone", 7L, 7L, Row(7L)))
+    val tagged = taggedOf(Row(1, "vis", 10L, null, Row(10L, null), false))
+    val affected = canonicalOf(Row(1, "gone", 7L, 7L, Row(7L, null)))
 
     processor.mergeRowsIntoAuxiliaryTable(tagged, affected, defaultAuxTableIdentifier, batchId = 3L)
 
     // Logical, not physical: the row stays but is stamped with this batch's id.
-    checkAnswer(auxTable, Row(1, "gone", 7L, 7L, Row(7L), 3L))
+    checkAnswer(auxTable, Row(1, "gone", 7L, 7L, Row(7L, null), 3L))
   }
 
   test("mergeRowsIntoAuxiliaryTable garbage-collects rows logically deleted by an older batch") {
     createAuxTable(
       // Logically deleted by an older batch (2 != 5) -> physically garbage-collected.
-      Row(1, "gc-old", 7L, 7L, Row(7L), 2L),
+      Row(1, "gc-old", 7L, 7L, Row(7L, null), 2L),
       // Still live (no marker) -> retained.
-      Row(2, "live", 3L, null, Row(3L), null),
+      Row(2, "live", 3L, null, Row(3L, null), null),
       // Logically deleted by the current batch (5 == 5) -> retained for replay-stability.
-      Row(3, "this-batch", 4L, 4L, Row(4L), 5L)
+      Row(3, "this-batch", 4L, 4L, Row(4L, null), 5L)
     )
 
     // One brand-new routed insert keeps the merge source non-empty; none of the seeded rows are
     // in the affected set, so they are all evaluated by the not-matched-by-source GC clause.
-    val tagged = taggedOf(Row(10, "newtomb", 8L, 8L, Row(8L), true))
+    val tagged = taggedOf(Row(10, "newtomb", 8L, 8L, Row(8L, null), true))
     val affected = canonicalOf()
 
     processor.mergeRowsIntoAuxiliaryTable(tagged, affected, defaultAuxTableIdentifier, batchId = 5L)
@@ -200,9 +200,9 @@ class Scd2BatchProcessorMergeSuite
     checkAnswer(
       auxTable,
       Seq(
-        Row(2, "live", 3L, null, Row(3L), null),
-        Row(3, "this-batch", 4L, 4L, Row(4L), 5L),
-        Row(10, "newtomb", 8L, 8L, Row(8L), null)
+        Row(2, "live", 3L, null, Row(3L, null), null),
+        Row(3, "this-batch", 4L, 4L, Row(4L, null), 5L),
+        Row(10, "newtomb", 8L, 8L, Row(8L, null), null)
       )
     )
   }
@@ -210,15 +210,15 @@ class Scd2BatchProcessorMergeSuite
   test("mergeRowsIntoAuxiliaryTable is replay-stable: re-running the same batchId is a no-op") {
     createAuxTable(
       // Survives reconciliation -> re-upserted in place.
-      Row(1, "old", 5L, null, Row(5L), null),
+      Row(1, "old", 5L, null, Row(5L, null), null),
       // Affected but does not survive -> logically deleted by this batch.
-      Row(2, "gone", 7L, 7L, Row(7L), null)
+      Row(2, "gone", 7L, 7L, Row(7L, null), null)
     )
 
-    val tagged = taggedOf(Row(1, "new", 5L, null, Row(5L), true))
+    val tagged = taggedOf(Row(1, "new", 5L, null, Row(5L, null), true))
     val affected = canonicalOf(
-      Row(1, "old", 5L, null, Row(5L)),
-      Row(2, "gone", 7L, 7L, Row(7L))
+      Row(1, "old", 5L, null, Row(5L, null)),
+      Row(2, "gone", 7L, 7L, Row(7L, null))
     )
 
     // First application of the batch.
@@ -238,8 +238,8 @@ class Scd2BatchProcessorMergeSuite
     checkAnswer(
       auxTable,
       Seq(
-        Row(1, "new", 5L, null, Row(5L), null),
-        Row(2, "gone", 7L, 7L, Row(7L), 7L)
+        Row(1, "new", 5L, null, Row(5L, null), null),
+        Row(2, "gone", 7L, 7L, Row(7L, null), 7L)
       )
     )
   }
@@ -247,23 +247,23 @@ class Scd2BatchProcessorMergeSuite
   test("mergeRowsIntoAuxiliaryTable applies insert, update, logical-delete, and GC in one merge") {
     createAuxTable(
       // Affected and survives reconciliation -> non-key columns updated in place.
-      Row(1, "old", 5L, null, Row(5L), null),
+      Row(1, "old", 5L, null, Row(5L, null), null),
       // Affected but does not survive -> logically deleted by this batch (stamped with batchId).
-      Row(2, "gone", 7L, 7L, Row(7L), null),
+      Row(2, "gone", 7L, 7L, Row(7L, null), null),
       // Not affected, logically deleted by an older batch (4 != 9) -> physically GC'd.
-      Row(3, "gc", 3L, 3L, Row(3L), 4L)
+      Row(3, "gc", 3L, 3L, Row(3L, null), 4L)
     )
 
     val tagged = taggedOf(
       // Matches key 1 -> update.
-      Row(1, "new", 5L, null, Row(5L), true),
+      Row(1, "new", 5L, null, Row(5L, null), true),
       // New key 4 routed to aux -> insert.
-      Row(4, "ins", 9L, 9L, Row(9L), true)
+      Row(4, "ins", 9L, 9L, Row(9L, null), true)
     )
     // Keys 1 and 2 were pulled in as affected; key 1 survives in the routed set, key 2 does not.
     val affected = canonicalOf(
-      Row(1, "old", 5L, null, Row(5L)),
-      Row(2, "gone", 7L, 7L, Row(7L))
+      Row(1, "old", 5L, null, Row(5L, null)),
+      Row(2, "gone", 7L, 7L, Row(7L, null))
     )
 
     processor.mergeRowsIntoAuxiliaryTable(tagged, affected, defaultAuxTableIdentifier, batchId = 9L)
@@ -271,9 +271,9 @@ class Scd2BatchProcessorMergeSuite
     checkAnswer(
       auxTable,
       Seq(
-        Row(1, "new", 5L, null, Row(5L), null),
-        Row(2, "gone", 7L, 7L, Row(7L), 9L),
-        Row(4, "ins", 9L, 9L, Row(9L), null)
+        Row(1, "new", 5L, null, Row(5L, null), null),
+        Row(2, "gone", 7L, 7L, Row(7L, null), 9L),
+        Row(4, "ins", 9L, 9L, Row(9L, null), null)
         // key 3 physically garbage-collected.
       )
     )
@@ -284,21 +284,21 @@ class Scd2BatchProcessorMergeSuite
       defaultAuxIdent,
       defaultAuxTableIdentifier,
       wideAuxSchema,
-      Row(1, "old-name", "active", 10, 5L, null, Row(5L), null)
+      Row(1, "old-name", "active", 10, 5L, null, Row(5L, null), null)
     )
 
     // Every non-key column (name, status, score) differs from the seeded row; the in-place update
     // must refresh all of them, not just the first.
     val tagged = microbatchOf(wideTaggedSchema)(
-      Row(1, "new-name", "inactive", 42, 5L, null, Row(5L), true)
+      Row(1, "new-name", "inactive", 42, 5L, null, Row(5L, null), true)
     )
     val affected = microbatchOf(wideCanonicalSchema)(
-      Row(1, "old-name", "active", 10, 5L, null, Row(5L))
+      Row(1, "old-name", "active", 10, 5L, null, Row(5L, null))
     )
 
     processor.mergeRowsIntoAuxiliaryTable(tagged, affected, defaultAuxTableIdentifier, batchId = 1L)
 
-    checkAnswer(auxTable, Row(1, "new-name", "inactive", 42, 5L, null, Row(5L), null))
+    checkAnswer(auxTable, Row(1, "new-name", "inactive", 42, 5L, null, Row(5L, null), null))
   }
 
   test("mergeRowsIntoAuxiliaryTable handles user columns whose names contain a dot") {
@@ -307,12 +307,12 @@ class Scd2BatchProcessorMergeSuite
     // nested-field access and the MERGE would fail to resolve the column.
     createTable(defaultAuxIdent, defaultAuxTableIdentifier, dottedAuxSchema)
 
-    val tagged = microbatchOf(dottedTaggedSchema)(Row(1, "alice", 5L, 5L, Row(5L), true))
+    val tagged = microbatchOf(dottedTaggedSchema)(Row(1, "alice", 5L, 5L, Row(5L, null), true))
     val affected = microbatchOf(dottedCanonicalSchema)()
 
     processor.mergeRowsIntoAuxiliaryTable(tagged, affected, defaultAuxTableIdentifier, batchId = 1L)
 
-    checkAnswer(auxTable, Row(1, "alice", 5L, 5L, Row(5L), null))
+    checkAnswer(auxTable, Row(1, "alice", 5L, 5L, Row(5L, null), null))
   }
 
   // ===========================================================================================
@@ -322,34 +322,34 @@ class Scd2BatchProcessorMergeSuite
   test("mergeRowsIntoTargetTable inserts a visible upsert absent from the target table") {
     createTargetTable()
 
-    val tagged = taggedOf(Row(1, "v", 5L, null, Row(5L), false))
+    val tagged = taggedOf(Row(1, "v", 5L, null, Row(5L, null), false))
     val affected = canonicalOf()
 
     processor.mergeRowsIntoTargetTable(tagged, affected, defaultTargetTableIdentifier)
 
-    checkAnswer(targetTable, Row(1, "v", 5L, null, Row(5L)))
+    checkAnswer(targetTable, Row(1, "v", 5L, null, Row(5L, null)))
   }
 
   test("mergeRowsIntoTargetTable updates a visible row matched at the same recordStartAt") {
-    createTargetTable(Row(1, "old", 5L, null, Row(5L)))
+    createTargetTable(Row(1, "old", 5L, null, Row(5L, null)))
 
     // The run head at recordStartAt=5 is now closed at 20 with refreshed data; it matches and
     // updates the existing target row in place.
-    val tagged = taggedOf(Row(1, "new", 5L, 20L, Row(5L), false))
-    val affected = canonicalOf(Row(1, "old", 5L, null, Row(5L)))
+    val tagged = taggedOf(Row(1, "new", 5L, 20L, Row(5L, null), false))
+    val affected = canonicalOf(Row(1, "old", 5L, null, Row(5L, null)))
 
     processor.mergeRowsIntoTargetTable(tagged, affected, defaultTargetTableIdentifier)
 
-    checkAnswer(targetTable, Row(1, "new", 5L, 20L, Row(5L)))
+    checkAnswer(targetTable, Row(1, "new", 5L, 20L, Row(5L, null)))
   }
 
   test("mergeRowsIntoTargetTable deletes an affected row reconciled away") {
-    createTargetTable(Row(1, "old", 5L, null, Row(5L)))
+    createTargetTable(Row(1, "old", 5L, null, Row(5L, null)))
 
     // The only tagged row routes to the aux table (e.g. closed into a tombstone), so no visible
     // row survives for key 1: the previously-affected target row must be deleted.
-    val tagged = taggedOf(Row(1, "x", 5L, 5L, Row(5L), true))
-    val affected = canonicalOf(Row(1, "old", 5L, null, Row(5L)))
+    val tagged = taggedOf(Row(1, "x", 5L, 5L, Row(5L, null), true))
+    val affected = canonicalOf(Row(1, "old", 5L, null, Row(5L, null)))
 
     processor.mergeRowsIntoTargetTable(tagged, affected, defaultTargetTableIdentifier)
 
@@ -363,34 +363,34 @@ class Scd2BatchProcessorMergeSuite
     // are filtered by the routing flag; the decomposition tail is filtered because it is not an
     // upsert-representing row.
     val tagged = taggedOf(
-      Row(1, "vis", 5L, null, Row(5L), false),
-      Row(2, "tomb", 7L, 7L, Row(7L), true),
-      Row(3, "tail", null, 9L, Row(null), false),
-      Row(4, "hidden", 5L, null, Row(5L), true)
+      Row(1, "vis", 5L, null, Row(5L, null), false),
+      Row(2, "tomb", 7L, 7L, Row(7L, null), true),
+      Row(3, "tail", null, 9L, Row(null, null), false),
+      Row(4, "hidden", 5L, null, Row(5L, null), true)
     )
     val affected = canonicalOf()
 
     processor.mergeRowsIntoTargetTable(tagged, affected, defaultTargetTableIdentifier)
 
-    checkAnswer(targetTable, Row(1, "vis", 5L, null, Row(5L)))
+    checkAnswer(targetTable, Row(1, "vis", 5L, null, Row(5L, null)))
   }
 
   test("mergeRowsIntoTargetTable applies insert, update, and delete branches in one merge") {
     createTargetTable(
-      Row(1, "old1", 5L, null, Row(5L)),
-      Row(2, "old2", 8L, null, Row(8L))
+      Row(1, "old1", 5L, null, Row(5L, null)),
+      Row(2, "old2", 8L, null, Row(8L, null))
     )
 
     val tagged = taggedOf(
       // Matches key 1 at recordStartAt=5 -> update.
-      Row(1, "new1", 5L, 30L, Row(5L), false),
+      Row(1, "new1", 5L, 30L, Row(5L, null), false),
       // New key 3 -> insert.
-      Row(3, "ins3", 12L, null, Row(12L), false)
+      Row(3, "ins3", 12L, null, Row(12L, null), false)
       // Key 2 has no surviving visible row -> delete.
     )
     val affected = canonicalOf(
-      Row(1, "old1", 5L, null, Row(5L)),
-      Row(2, "old2", 8L, null, Row(8L))
+      Row(1, "old1", 5L, null, Row(5L, null)),
+      Row(2, "old2", 8L, null, Row(8L, null))
     )
 
     processor.mergeRowsIntoTargetTable(tagged, affected, defaultTargetTableIdentifier)
@@ -398,8 +398,8 @@ class Scd2BatchProcessorMergeSuite
     checkAnswer(
       targetTable,
       Seq(
-        Row(1, "new1", 5L, 30L, Row(5L)),
-        Row(3, "ins3", 12L, null, Row(12L))
+        Row(1, "new1", 5L, 30L, Row(5L, null)),
+        Row(3, "ins3", 12L, null, Row(12L, null))
       )
     )
   }
@@ -410,31 +410,31 @@ class Scd2BatchProcessorMergeSuite
     // parsed as a nested-field access and the MERGE would fail to resolve the column.
     createTable(defaultTargetIdent, defaultTargetTableIdentifier, dottedCanonicalSchema)
 
-    val tagged = microbatchOf(dottedTaggedSchema)(Row(1, "alice", 5L, null, Row(5L), false))
+    val tagged = microbatchOf(dottedTaggedSchema)(Row(1, "alice", 5L, null, Row(5L, null), false))
     val affected = microbatchOf(dottedCanonicalSchema)()
 
     processor.mergeRowsIntoTargetTable(tagged, affected, defaultTargetTableIdentifier)
 
-    checkAnswer(targetTable, Row(1, "alice", 5L, null, Row(5L)))
+    checkAnswer(targetTable, Row(1, "alice", 5L, null, Row(5L, null)))
   }
 
   test("mergeRowsIntoTargetTable updates every non-key column of a matched row") {
     createTable(defaultTargetIdent, defaultTargetTableIdentifier, wideCanonicalSchema)
     microbatchOf(wideCanonicalSchema)(
-      Row(1, "old-name", "active", 10, 5L, null, Row(5L))
+      Row(1, "old-name", "active", 10, 5L, null, Row(5L, null))
     ).writeTo(defaultTargetTableIdentifier.quotedString).append()
 
     // Every non-key column (name, status, score) differs from the existing row; the in-place
     // update must refresh all of them, exercising the full non-key update assignment map.
     val tagged = microbatchOf(wideTaggedSchema)(
-      Row(1, "new-name", "inactive", 42, 5L, 30L, Row(5L), false)
+      Row(1, "new-name", "inactive", 42, 5L, 30L, Row(5L, null), false)
     )
     val affected = microbatchOf(wideCanonicalSchema)(
-      Row(1, "old-name", "active", 10, 5L, null, Row(5L))
+      Row(1, "old-name", "active", 10, 5L, null, Row(5L, null))
     )
 
     processor.mergeRowsIntoTargetTable(tagged, affected, defaultTargetTableIdentifier)
 
-    checkAnswer(targetTable, Row(1, "new-name", "inactive", 42, 5L, 30L, Row(5L)))
+    checkAnswer(targetTable, Row(1, "new-name", "inactive", 42, 5L, 30L, Row(5L, null)))
   }
 }

@@ -19,12 +19,13 @@ import unittest
 from collections import defaultdict
 
 from pyspark.testing.connectutils import (
-    should_test_connect,
     connect_requirement_message,
+    should_test_connect,
 )
 
 if should_test_connect:
     import grpc
+
     from pyspark.sql.connect.client.core import Retrying
     from pyspark.sql.connect.client.retries import RetryPolicy
 

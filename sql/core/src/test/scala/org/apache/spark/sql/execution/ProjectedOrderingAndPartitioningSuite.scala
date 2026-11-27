@@ -19,11 +19,14 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Attribute, AttributeReference,
+  Literal, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, HashPartitioning, KeyedPartitioning, Partitioning, PartitioningCollection, UnknownPartitioning}
 import org.apache.spark.sql.connector.catalog.functions.{BucketFunction, YearsFunction}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.expressions.Window
+import org.apache.spark.sql.functions.{col, count, lit, row_number}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DoubleType, IntegerType, StringType, TimestampType}
@@ -50,9 +53,9 @@ class ProjectedOrderingAndPartitioningSuite
               .toSet.subsetOf(Set("x", "y", "z")))
           case 1 =>
             assert(outputOrdering.size == 1)
-            assert(outputOrdering.head.sameOrderExpressions.size == 0)
+            assert(outputOrdering.head.sameOrderExpressions.isEmpty)
           case 0 =>
-            assert(outputOrdering.size == 0)
+            assert(outputOrdering.isEmpty)
         }
       }
     }
@@ -118,7 +121,7 @@ class ProjectedOrderingAndPartitioningSuite
     val outputOrdering = df.queryExecution.optimizedPlan.outputOrdering
     assert(outputOrdering.size == 1)
     assert(outputOrdering.head.sql == "(x + y) ASC NULLS FIRST")
-    assert(outputOrdering.head.sameOrderExpressions.size == 0)
+    assert(outputOrdering.head.sameOrderExpressions.isEmpty)
   }
 
   test("SPARK-42049: Improve AliasAwareOutputExpression - partitioning - multi-references") {
@@ -222,7 +225,7 @@ class ProjectedOrderingAndPartitioningSuite
 
     val df3 = df.selectExpr("id + 2 AS b")
     val outputOrdering3 = df3.queryExecution.optimizedPlan.outputOrdering
-    assert(outputOrdering3.size == 0)
+    assert(outputOrdering3.isEmpty)
   }
 
   test("SPARK-42049: Improve AliasAwareOutputExpression - no alias but still prune expressions") {
@@ -236,7 +239,7 @@ class ProjectedOrderingAndPartitioningSuite
     val outputOrdering = df2.queryExecution.optimizedPlan.outputOrdering
     assert(outputOrdering.size == 1)
     assert(outputOrdering.head.child.asInstanceOf[Attribute].name == "a")
-    assert(outputOrdering.head.sameOrderExpressions.size == 0)
+    assert(outputOrdering.head.sameOrderExpressions.isEmpty)
   }
 
   test("SPARK-46367: KeyedPartitioning expressions are projected through " +
@@ -275,7 +278,7 @@ class ProjectedOrderingAndPartitioningSuite
     project.outputPartitioning match {
       case kp: KeyedPartitioning =>
         assert(kp.expressions === Seq(x),
-          "narrowed partitioning must keep the projected expression")
+          "the projected partitioning must keep the projected expression")
         assert(kp.numPartitions === 4,
           "partition count must be preserved")
       case other =>
@@ -299,12 +302,12 @@ class ProjectedOrderingAndPartitioningSuite
       case pc: PartitioningCollection =>
         val kps = pc.partitionings.map(_.asInstanceOf[KeyedPartitioning])
         assert(kps.forall(_.expressions.length == 1),
-          "all narrowed KPs must have 1 expression")
+          "all projected KPs must have 1 expression")
         assert(kps.map(_.expressions.head.asInstanceOf[Attribute].name).toSet
           === Set("x", "x_alias"),
           "both the original and aliased attribute must appear")
         // The invariant: all KPs in the collection must share the same partitionKeys object.
-        assert(kps.tail.forall(_.partitionKeys eq kps.head.partitionKeys),
+        assert(kps.tail.forall(_.layout eq kps.head.layout),
           "all KPs must share the same partitionKeys object")
       case other =>
         fail(s"Expected PartitioningCollection, got $other")
@@ -329,11 +332,11 @@ class ProjectedOrderingAndPartitioningSuite
       case pc: PartitioningCollection =>
         val kps = pc.partitionings.map(_.asInstanceOf[KeyedPartitioning])
         assert(kps.forall(_.expressions.length == 2),
-          "narrowed KPs must have 2 expressions (z dropped, x and y kept)")
+          "projected KPs must have 2 expressions (z dropped, x and y kept)")
         assert(kps.map(_.expressions.map(_.asInstanceOf[Attribute].name)).toSet ===
           Set(Seq("x", "y"), Seq("x_alias", "y")))
-        assert(kps.tail.forall(_.partitionKeys eq kps.head.partitionKeys),
-          "all narrowed KPs must share the same partitionKeys object")
+        assert(kps.tail.forall(_.layout eq kps.head.layout),
+          "all projected KPs must share the same partitionKeys object")
       case other =>
         fail(s"Expected PartitioningCollection, got $other")
     }
@@ -359,7 +362,7 @@ class ProjectedOrderingAndPartitioningSuite
       case kp: KeyedPartitioning =>
         assert(kp.expressions.map(_.asInstanceOf[Attribute].name) === Seq("y", "z"),
           "expressions must follow original KP position order [y, z], not output order [z, y]")
-        assert(kp.isNarrowed, "dropping x must mark the KP as narrowed")
+        assert(kp.isCollapsed, "dropping x maps (1,1,1) and (2,1,1) onto the same key (1,1)")
         assert(!kp.isGrouped, "projected keys have duplicate (1,1) entries")
       case other =>
         fail(s"Expected KeyedPartitioning, got $other")
@@ -387,13 +390,13 @@ class ProjectedOrderingAndPartitioningSuite
       case pc: PartitioningCollection =>
         val kps = pc.partitionings.map(_.asInstanceOf[KeyedPartitioning])
         assert(kps.forall(_.expressions.length == 2),
-          "narrowed KPs must have 2 expressions (x dropped)")
+          "projected KPs must have 2 expressions (x dropped)")
         assert(kps.map(_.expressions.map(_.asInstanceOf[Attribute].name)).toSet ===
           Set(Seq("y", "z"), Seq("y", "z_alias")),
           "expressions must follow original KP position order [y, z/z_alias], not output order")
-        assert(kps.tail.forall(_.partitionKeys eq kps.head.partitionKeys),
-          "all narrowed KPs must share the same partitionKeys object")
-        assert(kps.forall(_.isNarrowed), "all KPs must be marked as narrowed")
+        assert(kps.tail.forall(_.layout eq kps.head.layout),
+          "all projected KPs must share the same partitionKeys object")
+        assert(kps.forall(_.isCollapsed), "all KPs must be marked as collapsed")
         assert(kps.forall(!_.isGrouped), "projected keys have duplicate (1,1) entries")
       case other =>
         fail(s"Expected PartitioningCollection, got $other")
@@ -431,7 +434,7 @@ class ProjectedOrderingAndPartitioningSuite
           Set(Seq("x", "y_alias"), Seq("x_alias", "y_alias")),
           "both x/y_alias and x_alias/y_alias projections must appear")
         // The invariant: all KPs must share the same partitionKeys object.
-        assert(kps.tail.forall(_.partitionKeys eq kps.head.partitionKeys),
+        assert(kps.tail.forall(_.layout eq kps.head.layout),
           "all KPs must share the same partitionKeys object")
       case other =>
         fail(s"Expected PartitioningCollection, got $other")
@@ -445,7 +448,7 @@ class ProjectedOrderingAndPartitioningSuite
 
     // Scenario 1: projected keys have duplicates (x-values: 1, 1, 2) -> isGrouped=false.
     // GroupPartitionsExec would merge the two x=1 partitions, carrying the same skew risk as
-    // allowKeysSubsetOfPartitionKeys. EnsureRequirements calls groupedSatisfies() directly.
+    // allowKeysSubsetOfPartitionKeys. EnsureRequirements calls mayGroupToSatisfy() directly.
     val keys2d = Seq(InternalRow(1, 1), InternalRow(1, 2), InternalRow(2, 1))
     val project = ProjectExec(Seq(x),
       DummyLeafExecWithPartitioning(output = Seq(x, y),
@@ -454,10 +457,10 @@ class ProjectedOrderingAndPartitioningSuite
     withSQLConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "false") {
       project.outputPartitioning match {
         case kp: KeyedPartitioning =>
-          assert(!kp.isGrouped, "narrowed keys must have duplicates (1 appears twice)")
-          assert(kp.isNarrowed, "projection must mark the KP as narrowed")
-          assert(!kp.groupedSatisfies(ClusteredDistribution(Seq(x))),
-            "narrowed ungrouped KP must not satisfy via groupedSatisfies without config")
+          assert(!kp.isGrouped, "collapsed keys must have duplicates (1 appears twice)")
+          assert(kp.isCollapsed, "dropping y maps (1,1) and (1,2) onto the same key 1")
+          assert(!kp.mayGroupToSatisfy(ClusteredDistribution(Seq(x))),
+            "collapsed ungrouped KP must not satisfy via mayGroupToSatisfy without config")
         case other => fail(s"Expected KeyedPartitioning, got $other")
       }
     }
@@ -465,15 +468,17 @@ class ProjectedOrderingAndPartitioningSuite
     withSQLConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
       project.outputPartitioning match {
         case kp: KeyedPartitioning =>
-          assert(kp.groupedSatisfies(ClusteredDistribution(Seq(x))),
-            "narrowed ungrouped KP must satisfy via groupedSatisfies when config is enabled")
+          assert(kp.mayGroupToSatisfy(ClusteredDistribution(Seq(x))),
+            "collapsed ungrouped KP must satisfy via mayGroupToSatisfy when config is enabled")
         case other => fail(s"Expected KeyedPartitioning, got $other")
       }
     }
 
     // Scenario 2: projected keys are distinct (x-values: 1, 2, 3) -> isGrouped=true.
     // Each projected key maps to exactly one original partition so GroupPartitionsExec does not
-    // merge any partitions. No skew risk: must satisfy ClusteredDistribution regardless of config.
+    // merge any partitions. Nothing collapsed either. The projection dropped a position but kept
+    // every key distinct, so the partitioning is not coarser than the layout it came from. There is
+    // no skew risk, so it must satisfy ClusteredDistribution regardless of config.
     val keys2dDistinct = Seq(InternalRow(1, 1), InternalRow(2, 2), InternalRow(3, 3))
     val projectDistinct = ProjectExec(Seq(x),
       DummyLeafExecWithPartitioning(output = Seq(x, y),
@@ -483,15 +488,123 @@ class ProjectedOrderingAndPartitioningSuite
       projectDistinct.outputPartitioning match {
         case kp: KeyedPartitioning =>
           assert(kp.isGrouped, "distinct projected keys must be grouped")
-          assert(kp.isNarrowed, "projection must mark the KP as narrowed")
+          assert(!kp.isCollapsed,
+            "dropping y lost no distinct key, so this partitioning is not coarser than its source")
           assert(kp.satisfies(ClusteredDistribution(Seq(x))),
-            "grouped narrowed KP must satisfy ClusteredDistribution without config (no merging)")
+            "a grouped KP must satisfy ClusteredDistribution without config (no merging)")
         case other => fail(s"Expected KeyedPartitioning, got $other")
       }
     }
   }
 
-  test("SPARK-46367: isNarrowed is sticky across chained PartitioningPreservingUnaryExecNodes") {
+  test("SPARK-58968: keysMaySatisfy asks the collapse gate of a non-grouped partitioning only") {
+    val x = AttributeReference("x", IntegerType)()
+    val y = AttributeReference("y", IntegerType)()
+    val distribution = ClusteredDistribution(Seq(x))
+
+    // Dropping y maps (1,1) and (1,2) onto the same key 1, so the projection collapses and its keys
+    // hold a duplicate.
+    val keys2d = Seq(InternalRow(1, 1), InternalRow(1, 2), InternalRow(2, 1))
+    val collapsed = KeyedPartitioning(Seq(x, y), keys2d).project(Seq(0))
+    assert(collapsed.isCollapsed && !collapsed.isGrouped)
+    val grouped = collapsed.toGrouped
+    assert(grouped.isCollapsed && grouped.isGrouped)
+
+    withSQLConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "false") {
+      // A node over the non-grouped one would coalesce the two x=1 partitions, which the gate
+      // refuses.
+      assert(!collapsed.keysMaySatisfy(distribution))
+      // That coalescing already happened, so the gate has nothing left to govern and the keys
+      // decide. `mayGroupToSatisfy` is the wrong question here, and refuses it.
+      assert(grouped.keysMaySatisfy(distribution))
+      assert(!grouped.mayGroupToSatisfy(distribution))
+    }
+  }
+
+  test("SPARK-59057: PartitioningCollection normalizes isCollapsed across its members") {
+    val x = AttributeReference("x", IntegerType)()
+    val y = AttributeReference("y", IntegerType)()
+    val z = AttributeReference("z", IntegerType)()
+    val keys = Seq(InternalRow(1), InternalRow(2))
+
+    def allCollapsed(p: Partitioning): Boolean =
+      PartitioningCollection.flatten(p).collect { case kp: KeyedPartitioning => kp }
+        .forall(_.isCollapsed)
+
+    // See the `PartitioningCollection` class doc for why a collapsed member marks the others.
+    val collection = PartitioningCollection.fromPartitionings(Seq(
+      KeyedPartitioning(Seq(x), keys),
+      KeyedPartitioning(Seq(y), keys).withLayout(_.copy(isCollapsed = true))))
+    assert(allCollapsed(collection), "a collapsed member must mark the whole collection")
+
+    // Nested collections are normalized too, so a collapsed sibling reaches into them.
+    val nested = PartitioningCollection.fromPartitionings(Seq(
+      PartitioningCollection.fromPartitionings(Seq(
+        KeyedPartitioning(Seq(x), keys), KeyedPartitioning(Seq(y), keys))),
+      KeyedPartitioning(Seq(z), keys).withLayout(_.copy(isCollapsed = true))))
+    assert(allCollapsed(nested),
+      "a collapsed sibling must mark the members of a nested collection")
+  }
+
+  test("SPARK-59057: a projection that keeps every distinct key collapses nothing") {
+    val x = AttributeReference("x", IntegerType)()
+    val y = AttributeReference("y", IntegerType)()
+
+    // The source reports two splits for the same partition value, so its keys already contain a
+    // duplicate before any projection. Dropping y maps (1,1),(1,1) onto 1 and (2,2) onto 2: two
+    // distinct keys before, two after. Grouping would merge only the two splits that already
+    // shared a key, which is what GroupPartitionsExec does for any partitioning and needs no
+    // opt-in, so `mayGroupToSatisfy` must accept it with the config off.
+    val keys = Seq(InternalRow(1, 1), InternalRow(1, 1), InternalRow(2, 2))
+    val project = ProjectExec(Seq(x),
+      DummyLeafExecWithPartitioning(output = Seq(x, y),
+        partitioning = KeyedPartitioning(Seq(x, y), keys)))
+
+    withSQLConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "false") {
+      project.outputPartitioning match {
+        case kp: KeyedPartitioning =>
+          assert(!kp.isGrouped, "the duplicate key comes from the source's two splits")
+          assert(!kp.isCollapsed, "the projection lost no distinct key")
+          assert(kp.mayGroupToSatisfy(ClusteredDistribution(Seq(x))),
+            "grouping merges only splits that already shared a key, so no opt-in is needed")
+        case other => fail(s"Expected KeyedPartitioning, got $other")
+      }
+    }
+  }
+
+  test("SPARK-58974: the collapse skew guard applies regardless of requireAllClusterKeys") {
+    val x = AttributeReference("x", IntegerType)()
+    val y = AttributeReference("y", IntegerType)()
+
+    // The projected keys have duplicates (x-values: 1, 1, 2), so grouping this partitioning merges
+    // two partitions that held distinct keys. `requireAllClusterKeys` decides which key sets count
+    // as matching; it does not authorise that merge, so the guard must answer the same either way.
+    val keys = Seq(InternalRow(1, 1), InternalRow(1, 2), InternalRow(2, 1))
+    val project = ProjectExec(Seq(x),
+      DummyLeafExecWithPartitioning(output = Seq(x, y),
+        partitioning = KeyedPartitioning(Seq(x, y), keys)))
+    val kp = project.outputPartitioning.asInstanceOf[KeyedPartitioning]
+    assert(kp.isCollapsed && !kp.isGrouped)
+
+    Seq(true, false).foreach { requireAll =>
+      // Both values on purpose: the whole claim of the fix is that the guard answers the same
+      // either way, so the `false` iteration is the control that must keep behaving as before.
+      // The required clustering is exactly this partitioning's single key, so the
+      // `requireAllClusterKeys` branch on its own would accept it.
+      val required = ClusteredDistribution(Seq(x), requireAllClusterKeys = requireAll)
+      withSQLConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "false") {
+        assert(!kp.mayGroupToSatisfy(required),
+          s"requireAllClusterKeys=$requireAll must not group a collapsed partitioning whose keys " +
+            "are no longer distinct")
+      }
+      withSQLConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+        assert(kp.mayGroupToSatisfy(required),
+          s"requireAllClusterKeys=$requireAll: the opt-in must allow the grouping")
+      }
+    }
+  }
+
+  test("SPARK-46367: isCollapsed is sticky across chained PartitioningPreservingUnaryExecNodes") {
     val x = AttributeReference("x", IntegerType)()
     val y = AttributeReference("y", IntegerType)()
 
@@ -505,10 +618,10 @@ class ProjectedOrderingAndPartitioningSuite
       outerProject.outputPartitioning match {
         case kp: KeyedPartitioning =>
           assert(!kp.isGrouped, "duplicate keys must survive the second hop")
-          assert(kp.isNarrowed,
-            "isNarrowed must be sticky: a second hop that keeps all positions must not reset it")
-          assert(!kp.groupedSatisfies(ClusteredDistribution(Seq(x))),
-            "narrowed ungrouped KP must still not satisfy ClusteredDistribution without config " +
+          assert(kp.isCollapsed,
+            "isCollapsed must be sticky: a second hop that keeps all positions must not reset it")
+          assert(!kp.mayGroupToSatisfy(ClusteredDistribution(Seq(x))),
+            "collapsed ungrouped KP must still not satisfy ClusteredDistribution without config " +
               "after a second PartitioningPreservingUnaryExecNode hop")
         case other => fail(s"Expected KeyedPartitioning, got $other")
       }
@@ -538,9 +651,9 @@ class ProjectedOrderingAndPartitioningSuite
               "bucket's column argument must be rewritten to the aliased attribute")
           case other => fail(s"Expected TransformExpression, got $other")
         }
-        assert(kp.partitionKeys eq child.partitioning.asInstanceOf[KeyedPartitioning].partitionKeys,
+        assert(kp.layout eq child.partitioning.asInstanceOf[KeyedPartitioning].layout,
           "partition keys must be unchanged")
-        assert(!kp.isNarrowed, "same number of positions: not narrowed")
+        assert(!kp.isCollapsed, "no position dropped: nothing collapsed")
       case other => fail(s"Expected KeyedPartitioning, got $other")
     }
   }
@@ -548,7 +661,7 @@ class ProjectedOrderingAndPartitioningSuite
   test("SPARK-46367: narrowing projection drops transform when its column is absent") {
     // KP([bucket(32, id), years(ts)], keys2d) through Project(id) -- ts is dropped.
     // bucket(32, id) is projectable (id in output); years(ts) is not (ts absent).
-    // Result: KP([bucket(32, id)], keys1d, isNarrowed=true, isGrouped=false).
+    // Result: KP([bucket(32, id)], keys1d, isCollapsed=true, isGrouped=false).
     val id = AttributeReference("id", IntegerType)()
     val ts = AttributeReference("ts", IntegerType)()
     val bucketExpr = TransformExpression(BucketFunction, Seq(id), Some(32))
@@ -569,7 +682,7 @@ class ProjectedOrderingAndPartitioningSuite
             assert(te.children.head.asInstanceOf[Attribute].name === "id")
           case other => fail(s"Expected TransformExpression, got $other")
         }
-        assert(kp.isNarrowed, "dropping years(ts) position must mark the KP as narrowed")
+        assert(kp.isCollapsed, "dropping years(ts) maps (0,2020) and (0,2021) onto bucket 0")
         assert(!kp.isGrouped, "projected bucket keys (0,1,0) have duplicates")
       case other => fail(s"Expected KeyedPartitioning, got $other")
     }
@@ -578,7 +691,7 @@ class ProjectedOrderingAndPartitioningSuite
   test("SPARK-46367: alias substitution rewrites years transform while preserving bucket") {
     // KP([bucket(32, id), years(ts)], keys2d) through Project(id, ts as ts_alias).
     // bucket(32, id) keeps id (no alias for id); years(ts) is rewritten to years(ts_alias).
-    // Result: KP([bucket(32, id), years(ts_alias)], keys2d) -- not narrowed.
+    // Result: KP([bucket(32, id), years(ts_alias)], keys2d), nothing collapsed.
     val id = AttributeReference("id", IntegerType)()
     val ts = AttributeReference("ts", IntegerType)()
     val bucketExpr = TransformExpression(BucketFunction, Seq(id), Some(32))
@@ -607,9 +720,9 @@ class ProjectedOrderingAndPartitioningSuite
               "years() argument must be rewritten to ts_alias")
           case other => fail(s"Expected TransformExpression at pos 1, got $other")
         }
-        assert(kp.partitionKeys eq child.partitioning.asInstanceOf[KeyedPartitioning].partitionKeys,
+        assert(kp.layout eq child.partitioning.asInstanceOf[KeyedPartitioning].layout,
           "partition keys must be unchanged")
-        assert(!kp.isNarrowed, "both positions projected: not narrowed")
+        assert(!kp.isCollapsed, "both positions projected: nothing collapsed")
       case other => fail(s"Expected KeyedPartitioning, got $other")
     }
   }
@@ -628,6 +741,35 @@ class ProjectedOrderingAndPartitioningSuite
         KeyedPartitioning(Seq(x), keys1d)))
     }
     assert(e.getMessage.contains("partitionKeys"))
+  }
+
+  test("SPARK-59121: a projection drops the reduced key marker with its own position") {
+    // KP([bucket(32, id) reduced together with bucket(24, id), years(ts)], keys2d). The marker
+    // rides on the expression, so a projection that keeps the reduced position keeps it, and one
+    // that drops that position leaves a partitioning whose expressions describe their keys again.
+    val id = AttributeReference("id", IntegerType)()
+    val ts = AttributeReference("ts", IntegerType)()
+    val reducedExpr = TransformExpression(BucketFunction, Seq(id), Some(32))
+      .reducedTogetherWith(TransformExpression(BucketFunction, Seq(id), Some(24)))
+    val yearsExpr = TransformExpression(YearsFunction, Seq(ts))
+    val keys2d = Seq(InternalRow(0, 2020), InternalRow(1, 2021))
+    val child = DummyLeafExecWithPartitioning(
+      output = Seq(id, ts),
+      partitioning = KeyedPartitioning(Seq(reducedExpr, yearsExpr), keys2d))
+
+    ProjectExec(Seq(id), child).outputPartitioning match {
+      case kp: KeyedPartitioning =>
+        assert(kp.expressions === Seq(reducedExpr), "the reduced position survives, marked")
+        assert(!kp.expressionsDescribeKeys)
+      case other => fail(s"Expected KeyedPartitioning, got $other")
+    }
+
+    ProjectExec(Seq(ts), child).outputPartitioning match {
+      case kp: KeyedPartitioning =>
+        assert(kp.expressions === Seq(yearsExpr), "only the unreduced position survives")
+        assert(kp.expressionsDescribeKeys, "no reduced position is left to refuse")
+      case other => fail(s"Expected KeyedPartitioning, got $other")
+    }
   }
 
   test("SPARK-58138: BIN BY preserves a child partitioning on a pass-through column") {
@@ -836,6 +978,276 @@ class ProjectedOrderingAndPartitioningSuite
     val shuffles = collect(plan) { case e: ShuffleExchangeExec => e }
     assert(shuffles.size == 1,
       s"Expected 1 shuffle but found ${shuffles.size}:\n$plan")
+  }
+
+  test("SPARK-62263: a foldable alias advertises both partitioning spellings") {
+    val a = AttributeReference("a", IntegerType)()
+    val child = DummyLeafExecWithPartitioning(Seq(a), HashPartitioning(Seq(Add(a, Literal(1))), 4))
+    val one = Alias(Literal(1), "one")()
+    val plan = ProjectExec(Seq(a, one), child)
+    // Both spellings are advertised, whichever one a requirement keeps.
+    assert(plan.outputPartitioning.satisfies(
+      ClusteredDistribution(Seq(Add(a, Literal(1))))))
+    assert(plan.outputPartitioning.satisfies(
+      ClusteredDistribution(Seq(Add(a, one.toAttribute)))))
+  }
+
+  test("SPARK-62263: a foldable alias must not force a redundant shuffle") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val base = spark.range(10).selectExpr("cast(id as int) as a")
+      val left = base.repartition($"a" + 1).selectExpr("a", "1 as one")
+      val right = base.selectExpr("a as k")
+      val df = left.join(right, left("a") + 1 === right("k"))
+
+      // Correct result: a in 0..8 joins with k = a + 1.
+      val rows = df.collect().map(r => (r.getInt(0), r.getInt(2))).toSet
+      assert(rows == (0 until 9).map(i => (i, i + 1)).toSet, rows)
+
+      // The Project must keep the constant spelling `a + 1` the child advertises, so the join
+      // reuses the user's `repartition(a + 1)` instead of adding a second exchange.
+      val plan = df.queryExecution.executedPlan
+      val shuffles = collect(plan) { case e: ShuffleExchangeExec => e }
+      assert(shuffles.size == 2,
+        s"Expected 2 shuffles but found ${shuffles.size}: " +
+          s"${shuffles.map(_.outputPartitioning).mkString(", ")}\n$plan")
+    }
+  }
+
+  test("SPARK-62263: an alias-spelled requirement right above the projection") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      // FoldablePropagation rewrites `a + one` to `a + 1` here, so master plans 3 shuffles.
+      val base = spark.range(10).selectExpr("cast(id as int) as a")
+      val left = base.repartition($"a" + 1).selectExpr("a", "1 as one")
+      val right = base.selectExpr("a as k")
+      val df = left.join(right, left("a") + left("one") === right("k"))
+      val plan = df.queryExecution.executedPlan
+      val shuffles = collect(plan) { case e: ShuffleExchangeExec => e }
+      assert(shuffles.size == 2,
+        s"Expected 2 shuffles but found ${shuffles.size}: " +
+          s"${shuffles.map(_.outputPartitioning).mkString(", ")}\n$plan")
+    }
+  }
+
+  test("SPARK-62263: an alias-spelled requirement across CollectMetrics") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      // CollectMetrics stops FoldablePropagation, so the join keeps the alias spelling.
+      val base = spark.range(10).selectExpr("cast(id as int) as a")
+      val right = base.selectExpr("a as k")
+      val proj = base.repartition($"a" + 1).selectExpr("a", "1 as one")
+      val obs = proj.observe("m", count(lit(1)))
+      val df = obs.join(right, obs("a") + obs("one") === right("k"))
+      val plan = df.queryExecution.executedPlan
+      val shuffles = collect(plan) { case e: ShuffleExchangeExec => e }
+      assert(shuffles.size == 2,
+        s"Expected 2 shuffles but found ${shuffles.size}: " +
+          s"${shuffles.map(_.outputPartitioning).mkString(", ")}\n$plan")
+      assert(df.collect().size == 9)
+    }
+  }
+
+  test("SPARK-62263: an alias-spelled requirement over a local checkpoint") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      // A checkpoint records only the first advertised partitioning, so the alias spelling must
+      // stay first.
+      val base = spark.range(10).selectExpr("cast(id as int) as a")
+      val right = base.selectExpr("a as k")
+      val proj = base.repartition($"a" + 1).selectExpr("a", "1 as one")
+      val cp = proj.localCheckpoint()
+      cp.count()
+      val df = cp.join(right, cp("a") + cp("one") === right("k"))
+      val plan = df.queryExecution.executedPlan
+      val shuffles = collect(plan) { case e: ShuffleExchangeExec => e }
+      // The repartition is materialized inside the checkpoint, so only the right side shuffles;
+      // the checkpoint side reuses the recorded partitioning.
+      assert(shuffles.size == 1,
+        s"Expected only the right side to shuffle but found ${shuffles.size}: " +
+          s"${shuffles.map(_.outputPartitioning).mkString(", ")}\n$plan")
+    }
+  }
+
+  test("SPARK-62263: both spellings survive an attribute rename") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val base = spark.range(10).selectExpr("cast(id as int) as a")
+      val df = base.repartition($"a" + 1).selectExpr("a as x", "1 as one")
+      val partitionings = df.queryExecution.executedPlan.outputPartitioning match {
+        case c: PartitioningCollection => c.partitionings
+        case p => Seq(p)
+      }
+      val hashes = partitionings.collect { case h: HashPartitioning => h.expressions.map(_.sql) }
+      assert(hashes.contains(Seq("(x + one)")), hashes)
+      assert(hashes.contains(Seq("(x + 1)")), hashes)
+    }
+  }
+
+  test("SPARK-62263: a multi-key partitioning is not crowded out by the alternatives") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      // Forking each of seven aliased literals into an alias and a literal would fill
+      // `EXPRESSION_PROJECTION_CANDIDATE_LIMIT` from the first collection member and drop the
+      // join's `hashpartitioning(b1..b7)`, so the window would shuffle again.
+      val l = spark.range(20).selectExpr((1 to 7).map(i => s"cast(id as int) as a$i"): _*)
+      val r = spark.range(20).selectExpr((1 to 7).map(i => s"cast(id as int) as b$i"): _*)
+      val w = Window.partitionBy((1 to 7).map(i => col(s"b$i")): _*).orderBy("a1")
+      val df = l.join(r, (1 to 7).map(i => l(s"a$i") + 1 === r(s"b$i")).reduce(_ && _))
+        .selectExpr("*", "1 as one")
+        .observe("m", count(lit(1))) // keeps FoldablePropagation from lifting `one`
+        .withColumn("rn", row_number().over(w))
+      val plan = df.queryExecution.executedPlan
+      val shuffles = collect(plan) { case e: ShuffleExchangeExec => e }
+      assert(shuffles.size == 2,
+        s"Expected 2 shuffles but found ${shuffles.size}: " +
+          s"${shuffles.map(_.outputPartitioning).mkString(", ")}\n$plan")
+    }
+  }
+
+  test("SPARK-62263: a foldable alias advertises both ordering spellings") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val base = spark.range(10).selectExpr("cast(id as int) as a")
+      val df = base.sortWithinPartitions($"a" + 1).selectExpr("a", "1 as one")
+      df.collect()
+      val ordering = df.queryExecution.executedPlan.outputOrdering
+      assert(ordering.size == 1, ordering)
+      // The alias spelling stays primary; the constant spelling is an alternative.
+      assert(ordering.head.sql == "(a + one) ASC NULLS FIRST", ordering.head.sql)
+      assert(ordering.head.sameOrderExpressions.map(_.sql) == Seq("(a + 1)"),
+        ordering.head.sameOrderExpressions)
+    }
+  }
+
+  test("SPARK-62263: a multi-key KeyedPartitioning is not crowded out by the alternatives") {
+    val a = (1 to 5).map(i => AttributeReference(s"a$i", IntegerType)())
+    val b = (1 to 5).map(i => AttributeReference(s"b$i", IntegerType)())
+    val one = Alias(Literal(1), "one")()
+    val keys = Seq(InternalRow(1, 1, 1, 1, 1), InternalRow(2, 2, 2, 2, 2))
+    val childPartitioning = PartitioningCollection.fromPartitionings(Seq(
+      KeyedPartitioning(a.map(Add(_, Literal(1))), keys),
+      KeyedPartitioning(b, keys)))
+    val child = DummyLeafExecWithPartitioning(a ++ b, childPartitioning)
+    val plan = ProjectExec(a ++ b :+ one, child)
+
+    // Without separating the two spellings, 3^5 = 243 combinations would fill
+    // `EXPRESSION_PROJECTION_CANDIDATE_LIMIT` (100) and drop `[b1..b5]`. Separating them keeps all
+    // 32 master combinations first, followed by 31 constant-containing combinations (`2^5 - 1`).
+    val kps = plan.outputPartitioning.asInstanceOf[PartitioningCollection].partitionings
+    assert(kps.size == 63, kps.size)
+    assert(plan.outputPartitioning.satisfies(ClusteredDistribution(b)))
+    assert(plan.outputPartitioning.satisfies(ClusteredDistribution(a.map(Add(_, Literal(1))))))
+    assert(plan.outputPartitioning.satisfies(ClusteredDistribution(a.map(Add(_, one.toAttribute)))))
+
+    // Outer aliases on expressions that also contain a foldable alias must not emit duplicate KPs.
+    val z = a.take(2).zipWithIndex.map { case (attr, i) =>
+      Alias(Add(attr, Literal(1)), s"z${i + 1}")()
+    }
+    val keys2d = Seq(InternalRow(1, 1), InternalRow(2, 2))
+    val dedupChild = DummyLeafExecWithPartitioning(
+      a.take(2), KeyedPartitioning(a.take(2).map(Add(_, Literal(1))), keys2d))
+    val dedupPlan = ProjectExec(a.take(2) ++ z :+ one, dedupChild)
+    val dedupKps = dedupPlan.outputPartitioning.asInstanceOf[PartitioningCollection].partitionings
+    assert(dedupKps.size == 5, dedupKps.size)
+
+    // Non-leaf foldable aliases already keep their expression in the first pass.
+    val three = Alias(Add(Literal(1), Literal(2)), "three")()
+    val nonLeafChild = DummyLeafExecWithPartitioning(
+      Seq(a.head), KeyedPartitioning(Seq(Add(a.head, Add(Literal(1), Literal(2)))),
+        Seq(InternalRow(1), InternalRow(2))))
+    val nonLeafPlan = ProjectExec(Seq(a.head, three), nonLeafChild)
+    val nonLeafKps =
+      nonLeafPlan.outputPartitioning.asInstanceOf[PartitioningCollection].partitionings
+    assert(nonLeafKps.size == 2, nonLeafKps.size)
+
+    // Positions without a foldable alias fall back to `aliasSpelling` in the constant pass.
+    val partialChildPartitioning = PartitioningCollection.fromPartitionings(Seq(
+      KeyedPartitioning(Seq(Add(a(0), Literal(1)), a(1)), keys2d),
+      KeyedPartitioning(b.take(2), keys2d)))
+    val partialPlan = ProjectExec(
+      a.take(2) ++ b.take(2) :+ one,
+      DummyLeafExecWithPartitioning(a.take(2) ++ b.take(2), partialChildPartitioning))
+    assert(partialPlan.outputPartitioning.satisfies(
+      ClusteredDistribution(Seq(Add(a(0), Literal(1)), b(1)))))
+    assert(partialPlan.outputPartitioning.satisfies(
+      ClusteredDistribution(Seq(Add(a(0), Literal(1)), a(1)))))
+  }
+
+  test("SPARK-62263: constant spellings do not crowd out later members or sameOrderExpressions") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      // NB1: 64 alias combinations on member 0 (a_i / x_i) plus 64 constant combinations must not
+      // crowd out member 1 `HashPartitioning(b1..b6)` under candidate limit 100.
+      val l = spark.range(10).selectExpr((1 to 6).map(i => s"cast(id as int) as a$i"): _*)
+      val r = spark.range(10).selectExpr((1 to 6).map(i => s"cast(id as int) as b$i"): _*)
+      val projExprs = (1 to 6).flatMap(i => Seq(s"a$i", s"a$i as x$i")) ++
+        (1 to 6).map(i => s"b$i") :+ "1 as one"
+      val w = Window.partitionBy((1 to 6).map(i => col(s"b$i")): _*).orderBy("a1")
+      val dfPart = l.join(r, (1 to 6).map(i => l(s"a$i") + 1 === r(s"b$i")).reduce(_ && _))
+        .selectExpr(projExprs: _*)
+        .observe("m", count(lit(1)))
+        .withColumn("rn", row_number().over(w))
+      val partPlan = dfPart.queryExecution.executedPlan
+      val shuffles = collect(partPlan) { case e: ShuffleExchangeExec => e }
+      assert(shuffles.size == 2,
+        s"Expected 2 shuffles but found ${shuffles.size}:\n$partPlan")
+
+      // NB2: 64 alias combinations on `SortOrder.child` plus 64 constant combinations must not
+      // crowd out `sameOrderExpressions` (`b1`) under candidate limit 100.
+      withSQLConf(SQLConf.PREFER_SORTMERGEJOIN.key -> "true") {
+        val rSingle = spark.range(10).selectExpr("cast(id as int) as b1")
+        val sumKey = (1 to 6).map(i => l(s"a$i")).reduce(_ + _) + 1
+        val ordExprs = (1 to 6).flatMap(i => Seq(s"a$i", s"a$i as x$i")) ++
+          Seq("b1", "1 as one")
+        val dfSort = l.join(rSingle, sumKey === rSingle("b1"))
+          .selectExpr(ordExprs: _*)
+          .observe("m", count(lit(1)))
+          .sortWithinPartitions($"b1")
+        val sortPlan = dfSort.queryExecution.executedPlan
+        val sorts = collect(sortPlan) { case s: SortExec => s }
+        assert(sorts.size == 2,
+          s"Expected 2 sorts but found ${sorts.size}:\n$sortPlan")
+      }
+    }
+
+    // KeyedPartitioning + HashPartitioning: `KP`'s constant spelling must come after `HP`'s alias
+    // spelling so a tight candidate limit does not drop `HP`.
+    val a = (1 to 2).map(i => AttributeReference(s"a$i", IntegerType)())
+    val b = (1 to 2).map(i => AttributeReference(s"b$i", IntegerType)())
+    val one = Alias(Literal(1), "one")()
+    val two = Alias(Literal(2), "two")()
+    val keys2d = Seq(InternalRow(1, 1), InternalRow(2, 2))
+    withSQLConf(SQLConf.EXPRESSION_PROJECTION_CANDIDATE_LIMIT.key -> "2") {
+      val mixed = PartitioningCollection.fromPartitionings(Seq(
+        KeyedPartitioning(Seq(Add(a(0), Literal(1))), Seq(InternalRow(1), InternalRow(2))),
+        HashPartitioning(Seq(b(0)), 2)))
+      val mixedPlan = ProjectExec(
+        Seq(a(0), b(0), one),
+        DummyLeafExecWithPartitioning(Seq(a(0), b(0)), mixed))
+      assert(mixedPlan.outputPartitioning.satisfies(ClusteredDistribution(Seq(b(0)))))
+    }
+
+    // NB3: When two KP members have foldable leaves at different positions, each member's own
+    // constant spelling as well as the cross-member constant spelling must be advertised.
+    val crossKp = PartitioningCollection.fromPartitionings(Seq(
+      KeyedPartitioning(Seq(Add(a(0), Literal(1)), a(1)), keys2d),
+      KeyedPartitioning(Seq(b(0), Add(b(1), Literal(2))), keys2d)))
+    val crossPlan = ProjectExec(
+      a ++ b ++ Seq(one, two),
+      DummyLeafExecWithPartitioning(a ++ b, crossKp))
+    val crossKps = crossPlan.outputPartitioning.asInstanceOf[PartitioningCollection].partitionings
+    assert(crossKps.size == 7, crossKps.size)
+    assert(crossPlan.outputPartitioning.satisfies(
+      ClusteredDistribution(Seq(Add(a(0), Literal(1)), a(1)))))
+    assert(crossPlan.outputPartitioning.satisfies(
+      ClusteredDistribution(Seq(b(0), Add(b(1), Literal(2))))))
+    assert(crossPlan.outputPartitioning.satisfies(
+      ClusteredDistribution(Seq(Add(a(0), Literal(1)), Add(b(1), Literal(2))))))
   }
 }
 

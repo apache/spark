@@ -15,10 +15,10 @@
 # limitations under the License.
 #
 
-import os
 import datetime
-from zoneinfo import ZoneInfo
+import os
 import unittest
+from zoneinfo import ZoneInfo
 
 from pyspark.testing.utils import (
     have_pandas,
@@ -100,8 +100,8 @@ class PyArrowIgnoreTimeZoneTests(unittest.TestCase):
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_timezone_with_pandas(self):
-        import pyarrow as pa
         import pandas as pd
+        import pyarrow as pa
 
         tz = "Asia/Singapore"
         ts1 = pd.Timestamp(2022, 1, 5, 15, 0, 1, tzinfo=ZoneInfo(tz))

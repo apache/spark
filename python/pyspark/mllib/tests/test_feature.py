@@ -17,11 +17,11 @@
 
 from math import sqrt
 
-from numpy import array, abs, tile
+from numpy import abs, array, tile
 
-from pyspark.mllib.linalg import SparseVector, DenseVector, Vectors
+from pyspark.mllib.feature import IDF, ElementwiseProduct, HashingTF, StandardScaler, Word2Vec
+from pyspark.mllib.linalg import DenseVector, SparseVector, Vectors
 from pyspark.mllib.linalg.distributed import RowMatrix
-from pyspark.mllib.feature import HashingTF, IDF, StandardScaler, ElementwiseProduct, Word2Vec
 from pyspark.testing.mllibutils import MLlibTestCase
 
 

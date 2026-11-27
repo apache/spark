@@ -22,12 +22,13 @@
 # cd python/packaging/classic
 # python setup.py sdist
 
-import sys
-from setuptools import setup
-import os
-from shutil import copyfile
 import glob
+import os
+import sys
 from pathlib import Path
+from shutil import copyfile
+
+from setuptools import setup
 
 if (
     # When we package, the parent directory 'client' dir
@@ -134,7 +135,7 @@ try:
     _minimum_pandas_version = "2.2.0"
     _minimum_numpy_version = "1.23.2"
     _minimum_pyarrow_version = "18.0.0"
-    _minimum_grpc_version = "1.76.0"
+    _minimum_grpc_version = "1.84.1"
     _minimum_googleapis_common_protos_version = "1.71.0"
     _minimum_pyyaml_version = "3.11"
     _minimum_zstandard_version = "0.25.0"
@@ -145,6 +146,7 @@ try:
     connect_packages = [
         "pyspark",
         "pyspark.cloudpickle",
+        "pyspark.eval_handlers",
         "pyspark.messages",
         "pyspark.messages.socket",
         "pyspark.mllib",

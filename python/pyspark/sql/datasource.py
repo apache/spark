@@ -18,7 +18,9 @@ from abc import ABC, abstractmethod
 from collections import UserDict
 from collections.abc import MutableMapping
 from dataclasses import dataclass
+from enum import Enum
 from typing import (
+    TYPE_CHECKING,
     Any,
     Iterable,
     Iterator,
@@ -28,16 +30,16 @@ from typing import (
     Tuple,
     Type,
     Union,
-    TYPE_CHECKING,
 )
 
+from pyspark.errors import PySparkNotImplementedError
 from pyspark.sql import Row
 from pyspark.sql.streaming.datasource import ReadAllAvailable, ReadLimit
 from pyspark.sql.types import StructType
-from pyspark.errors import PySparkNotImplementedError
 
 if TYPE_CHECKING:
     from pyarrow import RecordBatch
+
     from pyspark.sql.session import SparkSession
 
 __all__ = [
@@ -52,6 +54,13 @@ __all__ = [
     "DataSourceRegistration",
     "InputPartition",
     "WriterCommitMessage",
+    "SortDirection",
+    "NullOrdering",
+    "SortOrder",
+    "Distribution",
+    "UnspecifiedDistribution",
+    "ClusteredDistribution",
+    "OrderedDistribution",
     "Filter",
     "EqualTo",
     "EqualNullSafe",
@@ -527,9 +536,18 @@ class DataSourceReader(ABC):
         can improve performance by reducing the amount of data that needs to be
         processed by Spark.
 
-        This method is called once during query planning. By default, it returns
-        all filters, indicating that no filters can be pushed down. Subclasses can
-        override this method to implement filter pushdown.
+        This method may be called more than once during query planning, on separate reader
+        instances (see the note below). By default, it returns all filters, indicating that no
+        filters can be pushed down. Subclasses can override this method to implement filter
+        pushdown.
+
+        .. note::
+            When limit pushdown is enabled (see :meth:`pushLimit`), planning may create
+            additional reader instances and call this method on each with the same filters, so
+            that a reader reaches the same state before a limit is pushed and read planning runs
+            only after the limit is known. Implementations must therefore be deterministic --
+            returning a different set of supported filters across calls fails the query -- and
+            must not rely on side effects outside of `self`.
 
         It's recommended to implement this method only for data sources that natively
         support filtering, such as databases and GraphQL APIs.
@@ -577,6 +595,83 @@ class DataSourceReader(ABC):
         ...             yield filter
         """
         return filters
+
+    def pushLimit(self, limit: int) -> bool:
+        """
+        Called with the maximum number of rows that the query needs from this data source.
+
+        Limit pushdown allows the data source to fetch less data, for example by adding a
+        `LIMIT` clause to a SQL query or a page size parameter to a REST request.
+
+        This method is called once during query planning, before :meth:`partitions` and
+        :meth:`read`. By default, it returns False, indicating that the limit cannot be
+        pushed down. Subclasses can override this method to implement limit pushdown.
+
+        :meth:`pushFilters` is called before this method only when the query has filters that
+        Spark can push down; for a query without them, :meth:`pushFilters` is not called at
+        all. This method may use state that :meth:`pushFilters` set when filters were pushed,
+        but must not assume :meth:`pushFilters` ran: initialize defaults in `__init__` so this
+        method works whether or not it did.
+
+        A limit is only pushed down when every filter was pushed down, because Spark cannot
+        apply a limit before a filter it still has to evaluate itself. To benefit from limit
+        pushdown alongside filters, :meth:`pushFilters` should return an empty iterable.
+
+        Pushing down a limit is only a hint: Spark always applies the limit again after the
+        scan, so it is safe to return True even if `read()` yields more than `limit` rows.
+        Returning True never causes the query to see fewer rows than it requires.
+
+        .. versionadded:: 4.4.0
+
+        Parameters
+        ----------
+        limit : int
+            The maximum number of rows the query needs. Always positive: `LIMIT 0` is
+            optimized into an empty relation and never reaches the data source.
+
+        Returns
+        -------
+        bool
+            True if the data source will use the limit to reduce the amount of data it
+            reads, False otherwise.
+
+        Side effects
+        ------------
+        This method is allowed to modify `self`. The object must remain picklable.
+        Modifications to `self` are visible to the `partitions()` and `read()` methods
+        only when this method returns True. When it returns False, planning proceeds as if
+        `pushLimit` was never called -- `partitions()` and `read()` run on a reader that did
+        not observe these modifications -- so any state they rely on must be initialized in
+        `__init__` instead.
+
+        Notes
+        -----
+        This method is only called when the configuration
+        `spark.sql.python.limitPushdown.enabled` is set to true.
+
+        Examples
+        --------
+        Implement pushLimit to fetch fewer rows from the data source. Initialize the limit in
+        `__init__`, because :meth:`partitions` and :meth:`read` may run even when `pushLimit`
+        was not called -- for a query without a limit, or when this method returned False:
+
+        >>> class MyReader(DataSourceReader):
+        ...     def __init__(self):
+        ...         self.limit = None
+        ...
+        ...     def pushLimit(self, limit):
+        ...         # Save the limit for handling in partitions() and read().
+        ...         self.limit = limit
+        ...         return True
+        ...
+        ...     def partitions(self):
+        ...         # A limit can reduce the number of partitions, since every partition opens
+        ...         # its own connection to the data source.
+        ...         if self.limit is not None:
+        ...             return [InputPartition(None)]
+        ...         return [InputPartition(i) for i in range(16)]
+        """
+        return False
 
     def partitions(self) -> Sequence[InputPartition]:
         """
@@ -977,6 +1072,137 @@ class SimpleDataSourceStreamReader(ABC):
         ...
 
 
+class SortDirection(Enum):
+    """
+    The direction of a sort order used for write-side required ordering.
+
+    .. versionadded:: 4.5.0
+    """
+
+    ASCENDING = "ascending"
+    DESCENDING = "descending"
+
+
+class NullOrdering(Enum):
+    """
+    Where null values are placed relative to non-null values in a sort order.
+
+    .. versionadded:: 4.5.0
+    """
+
+    NULLS_FIRST = "nulls_first"
+    NULLS_LAST = "nulls_last"
+
+
+@dataclass(frozen=True)
+class SortOrder:
+    """
+    A single sort expression used by :meth:`DataSourceWriter.requiredOrdering`.
+
+    .. versionadded:: 4.5.0
+
+    Parameters
+    ----------
+    column : tuple of str
+        The column to sort by, as a non-empty :class:`ColumnPath`.
+    direction : :class:`SortDirection`, optional
+        Sort direction, ascending by default.
+    nullOrdering : :class:`NullOrdering`, optional
+        Where nulls are placed. When not given, Spark uses the default for the
+        direction: nulls first for ascending, nulls last for descending.
+
+    Examples
+    --------
+    >>> from pyspark.sql.datasource import SortOrder, SortDirection
+    >>> SortOrder(("year",))
+    SortOrder(column=('year',), direction=<SortDirection.ASCENDING: 'ascending'>, nullOrdering=None)
+    >>> SortOrder(("ts",), SortDirection.DESCENDING)  # doctest: +ELLIPSIS
+    SortOrder(column=('ts',), direction=<SortDirection.DESCENDING: 'descending'>, ...)
+    """
+
+    column: ColumnPath
+    direction: SortDirection = SortDirection.ASCENDING
+    nullOrdering: Optional[NullOrdering] = None
+
+
+@dataclass(frozen=True)
+class Distribution(ABC):
+    """
+    The base class for distributions returned by
+    :meth:`DataSourceWriter.requiredDistribution`.
+
+    .. versionadded:: 4.5.0
+
+    See Also
+    --------
+    UnspecifiedDistribution
+    ClusteredDistribution
+    OrderedDistribution
+    """
+
+
+@dataclass(frozen=True)
+class UnspecifiedDistribution(Distribution):
+    """
+    A distribution that makes no promises about the co-location of data.
+
+    This is the default: Spark writes each input partition as it is.
+
+    .. versionadded:: 4.5.0
+    """
+
+
+@dataclass(frozen=True)
+class ClusteredDistribution(Distribution):
+    """
+    A distribution where rows sharing the same values for `clustering` are
+    co-located in the same partition.
+
+    Spark satisfies this with a hash repartition on the clustering columns.
+
+    .. versionadded:: 4.5.0
+
+    Parameters
+    ----------
+    clustering : tuple of :class:`ColumnPath`\\s
+        The columns to cluster by, each a non-empty :class:`ColumnPath`. Must not
+        be empty.
+
+    Examples
+    --------
+    >>> from pyspark.sql.datasource import ClusteredDistribution
+    >>> ClusteredDistribution((("year",), ("month",)))
+    ClusteredDistribution(clustering=(('year',), ('month',)))
+    """
+
+    clustering: Tuple[ColumnPath, ...]
+
+
+@dataclass(frozen=True)
+class OrderedDistribution(Distribution):
+    """
+    A distribution where rows are ordered across partitions according to
+    `ordering`, though not necessarily within a partition.
+
+    Spark satisfies this with a range repartition on the ordering expressions.
+
+    .. versionadded:: 4.5.0
+
+    Parameters
+    ----------
+    ordering : tuple of :class:`SortOrder`\\s
+        The sort orders to range-partition by. Must not be empty.
+
+    Examples
+    --------
+    >>> from pyspark.sql.datasource import OrderedDistribution, SortOrder
+    >>> OrderedDistribution((SortOrder(("year",)),))  # doctest: +ELLIPSIS
+    OrderedDistribution(ordering=(SortOrder(column=('year',), ...),))
+    """
+
+    ordering: Tuple[SortOrder, ...]
+
+
 class DataSourceWriter(ABC):
     """
     A base class for data source writers. Data source writers are responsible for saving
@@ -984,6 +1210,163 @@ class DataSourceWriter(ABC):
 
     .. versionadded:: 4.0.0
     """
+
+    def requiredDistribution(self) -> Distribution:
+        """
+        Returns the distribution required by this write.
+
+        Spark redistributes incoming records across partitions to satisfy the
+        required distribution before passing them to :meth:`DataSourceWriter.write`.
+        Use this when the sink needs related records grouped in the same task, for
+        example one output file per partition value.
+
+        This method is called once during query planning, and only when
+        `spark.sql.python.writeDistributionAndOrdering.enabled` is set to true;
+        while it is false, a batch write fails if the writer overrides this method.
+        It is not called for streaming writes. Spark calls it on a writer that
+        :meth:`DataSource.writer` creates during planning, separate from the writer
+        that writes the data, so avoid side effects in :meth:`DataSource.writer`.
+        By default it returns :class:`UnspecifiedDistribution`, meaning Spark writes
+        each input partition as it is.
+
+        .. versionadded:: 4.5.0
+
+        Returns
+        -------
+        :class:`Distribution`
+            The required distribution. Either :class:`UnspecifiedDistribution`,
+            :class:`ClusteredDistribution`, or :class:`OrderedDistribution`.
+
+        See Also
+        --------
+        DataSourceWriter.requiredOrdering
+        DataSourceWriter.requiredNumPartitions
+
+        Examples
+        --------
+        Cluster records by the columns the sink partitions its output by:
+
+        >>> from pyspark.sql.datasource import ClusteredDistribution
+        >>> def requiredDistribution(self):
+        ...     return ClusteredDistribution(clustering=(("year",), ("month",)))
+        """
+        return UnspecifiedDistribution()
+
+    def distributionStrictlyRequired(self) -> bool:
+        """
+        Returns whether the required distribution is strict or best-effort.
+
+        When true (the default), Spark strictly satisfies the distribution returned
+        by :meth:`DataSourceWriter.requiredDistribution`. When false, Spark may
+        rebalance partitions to speed up the query, which can split a single
+        distribution value across several tasks.
+
+        Return false only when the sink tolerates a value spanning multiple tasks
+        and would rather avoid skew.
+
+        Ignored when the required distribution is :class:`UnspecifiedDistribution`.
+
+        Like :meth:`DataSourceWriter.requiredDistribution`, this method is called only
+        while planning a batch write when
+        `spark.sql.python.writeDistributionAndOrdering.enabled` is true; while it is
+        false, a batch write fails if the writer overrides this method.
+
+        .. versionadded:: 4.5.0
+
+        Returns
+        -------
+        bool
+            True if the distribution is strictly required, False for best effort.
+        """
+        return True
+
+    def requiredNumPartitions(self) -> int:
+        """
+        Returns the number of partitions required by this write.
+
+        Any value less than 1 (the default) means no requirement. Must not be
+        combined with :meth:`DataSourceWriter.advisoryPartitionSizeInBytes`, and
+        requires a distribution other than :class:`UnspecifiedDistribution`;
+        the query fails at planning time otherwise.
+
+        Like :meth:`DataSourceWriter.requiredDistribution`, this method is called only
+        while planning a batch write when
+        `spark.sql.python.writeDistributionAndOrdering.enabled` is true; while it is
+        false, a batch write fails if the writer overrides this method.
+
+        .. versionadded:: 4.5.0
+
+        Returns
+        -------
+        int
+            The required number of partitions, or 0 for no requirement.
+        """
+        return 0
+
+    def advisoryPartitionSizeInBytes(self) -> int:
+        """
+        Returns the advisory partition size in bytes for this write.
+
+        This is a hint, not a guarantee, and is ignored when adaptive query
+        execution is disabled. Any value less than 1 (the default) means no
+        preference. Must not be combined with
+        :meth:`DataSourceWriter.requiredNumPartitions`, and requires a distribution
+        other than :class:`UnspecifiedDistribution`; the query fails at planning
+        time otherwise.
+
+        Be careful with large values: they reduce write parallelism.
+
+        Like :meth:`DataSourceWriter.requiredDistribution`, this method is called only
+        while planning a batch write when
+        `spark.sql.python.writeDistributionAndOrdering.enabled` is true; while it is
+        false, a batch write fails if the writer overrides this method.
+
+        .. versionadded:: 4.5.0
+
+        Returns
+        -------
+        int
+            The advisory partition size in bytes, or 0 for no preference.
+        """
+        return 0
+
+    def requiredOrdering(self) -> Sequence[SortOrder]:
+        """
+        Returns the ordering required by this write.
+
+        Spark sorts records within each partition to satisfy the required ordering
+        before passing them to :meth:`DataSourceWriter.write`. Use this when the
+        sink writes records sequentially and needs them grouped or sorted, for
+        example to avoid keeping one open file handle per key.
+
+        This method is called once during query planning, and only when
+        `spark.sql.python.writeDistributionAndOrdering.enabled` is set to true;
+        while it is false, a batch write fails if the writer overrides this method.
+        It is not called for streaming writes. Spark calls it on a writer that
+        :meth:`DataSource.writer` creates during planning, separate from the writer
+        that writes the data, so avoid side effects in :meth:`DataSource.writer`.
+        By default it returns an empty list, meaning no ordering is required.
+
+        .. versionadded:: 4.5.0
+
+        Returns
+        -------
+        list of :class:`SortOrder`\\s
+            The required ordering, or an empty list for no requirement.
+
+        See Also
+        --------
+        DataSourceWriter.requiredDistribution
+
+        Examples
+        --------
+        Sort each partition by the sink's partition columns:
+
+        >>> from pyspark.sql.datasource import SortOrder
+        >>> def requiredOrdering(self):
+        ...     return [SortOrder(("year",)), SortOrder(("month",))]
+        """
+        return []
 
     @abstractmethod
     def write(self, iterator: Iterator[Row]) -> "WriterCommitMessage":

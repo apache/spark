@@ -188,6 +188,16 @@ struct<>
 
 
 -- !query
+create temporary view outer_gen_test(id, author, tags)
+  as values (1, 'ann', array('sql', 'spark')), (2, 'bob', array('delta')), (3, 'ann', array()),
+    (4, 'bob', null)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 create temporary view natural_join_test_t1 as select * from values
   ("one", 1), ("two", 2), ("three", 3) as natural_join_test_t1(k, v1)
 -- !query schema
@@ -934,6 +944,78 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+select x, x from t
+|> set x = 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`x`",
+    "referenceNames" : "[`spark_catalog`.`default`.`t`.`x`, `spark_catalog`.`default`.`t`.`x`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 31,
+    "fragment" : "select x, x from t\n|> set x = 1"
+  } ]
+}
+
+
+-- !query
+select x, * from t
+|> set x = 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`x`",
+    "referenceNames" : "[`spark_catalog`.`default`.`t`.`x`, `spark_catalog`.`default`.`t`.`x`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 31,
+    "fragment" : "select x, * from t\n|> set x = 1"
+  } ]
+}
+
+
+-- !query
+select * from (select x, x from t union all select x, x from t)
+|> set x = 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`x`",
+    "referenceNames" : "[`x`, `x`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 76,
+    "fragment" : "select * from (select x, x from t union all select x, x from t)\n|> set x = 1"
+  } ]
+}
+
+
+-- !query
 table t
 |> set x = 1 as z
 -- !query schema
@@ -967,6 +1049,500 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "objectName" : "",
     "startIndex" : 27,
     "stopIndex" : 37,
+    "fragment" : "col.i1 = 42"
+  } ]
+}
+
+
+-- !query
+table t
+|> eval x = 1
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+1	abc
+1	def
+
+
+-- !query
+table t
+|> eval z = 1
+-- !query schema
+struct<x:int,y:string,z:int>
+-- !query output
+0	abc	1
+1	def	1
+
+
+-- !query
+table t
+|> eval z = x + length(y), x = x * 10, zz = z + x
+-- !query schema
+struct<x:int,y:string,z:int,zz:int>
+-- !query output
+0	abc	3	3
+10	def	4	14
+
+
+-- !query
+table t
+|> eval c = 3, a = 1, b = 2
+-- !query schema
+struct<x:int,y:string,c:int,a:int,b:int>
+-- !query output
+0	abc	3	1	2
+1	def	3	1	2
+
+
+-- !query
+values (0), (1) tab(col)
+|> eval col = col * 2, half = col / 2
+-- !query schema
+struct<col:int,half:double>
+-- !query output
+0	0.0
+2	1.0
+
+
+-- !query
+values ('/API/v1/users', 1200), ('/home', 3500) as web_logs(uri, response_ms)
+|> eval duration_s = response_ms / 1000,
+        slow = if(duration_s > 2, 1, 0),
+        uri = lower(uri),
+        is_api = if(uri like '/api/%', 1, 0)
+-- !query schema
+struct<uri:string,response_ms:int,duration_s:double,slow:int,is_api:int>
+-- !query output
+/api/v1/users	1200	1.2	0	1
+/home	3500	3.5	1	0
+
+
+-- !query
+table t
+|> eval z = 1, z = z + 1
+-- !query schema
+struct<x:int,y:string,z:int>
+-- !query output
+0	abc	2
+1	def	2
+
+
+-- !query
+table t
+|> eval Z = x, z = Z + 1
+-- !query schema
+struct<x:int,y:string,z:int>
+-- !query output
+0	abc	1
+1	def	2
+
+
+-- !query
+set spark.sql.caseSensitive=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.caseSensitive	true
+
+
+-- !query
+table t
+|> eval Z = x, z = Z + 1
+-- !query schema
+struct<x:int,y:string,Z:int,z:int>
+-- !query output
+0	abc	0	1
+1	def	1	2
+
+
+-- !query
+set spark.sql.caseSensitive=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.caseSensitive	false
+
+
+-- !query
+table t
+|> eval z = x + 1
+|> where z > 1
+|> select z
+-- !query schema
+struct<z:int>
+-- !query output
+2
+
+
+-- !query
+table t
+|> eval `x.y z` = x
+-- !query schema
+struct<x:int,y:string,x.y z:int>
+-- !query output
+0	abc	0
+1	def	1
+
+
+-- !query
+select col from st
+|> eval i1 = col.i1
+-- !query schema
+struct<col:struct<i1:int,i2:int>,i1:int>
+-- !query output
+{"i1":2,"i2":3}	2
+
+
+-- !query
+table t
+|> eval m = (select max(a) from other)
+-- !query schema
+struct<x:int,y:string,m:int>
+-- !query output
+0	abc	2
+1	def	2
+
+
+-- !query
+table t
+|> eval w = sum(x) over (order by x)
+-- !query schema
+struct<x:int,y:string,w:bigint>
+-- !query output
+0	abc	0
+1	def	1
+
+
+-- !query
+table t
+|> as v
+|> eval z = v.x + 1
+|> select v.x, z
+-- !query schema
+struct<x:int,z:int>
+-- !query output
+0	1
+1	2
+
+
+-- !query
+table t
+|> eval _metadata = x + 1
+|> select x, _metadata
+-- !query schema
+struct<x:int,_metadata:int>
+-- !query output
+0	1
+1	2
+
+
+-- !query
+select 1 as eval
+|> eval eval = eval + 1
+-- !query schema
+struct<eval:int>
+-- !query output
+2
+
+
+-- !query
+select col, x from st
+|> eval col = named_struct('s', col.i1 + col.i2)
+-- !query schema
+struct<col:struct<s:int>,x:int>
+-- !query output
+{"s":5}	1
+
+
+-- !query
+table t
+|> where false
+|> eval z = x + 1, x = 0
+-- !query schema
+struct<x:int,y:string,z:int>
+-- !query output
+
+
+
+-- !query
+table t
+|> eval identifier('z') = 1, identifier('x') = z + 1
+-- !query schema
+struct<x:int,y:string,z:int>
+-- !query output
+2	abc	1
+2	def	1
+
+
+-- !query
+create or replace temporary view pipe_eval_view as
+table t
+|> eval z = x + 1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select * from pipe_eval_view
+-- !query schema
+struct<x:int,y:string,z:int>
+-- !query output
+0	abc	1
+1	def	2
+
+
+-- !query
+drop view pipe_eval_view
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select (table t |> eval z = 1 |> select z |> limit 1) as z from values (0) as o(z)
+-- !query schema
+struct<z:int>
+-- !query output
+1
+
+
+-- !query
+select x, (table other |> eval z = a + x |> aggregate max(z)) as m from t
+-- !query schema
+struct<x:int,m:int>
+-- !query output
+0	2
+1	3
+
+
+-- !query
+select 1 as a, 2 as a
+|> eval a = 3
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`a`",
+    "referenceNames" : "[`a`, `a`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 35,
+    "fragment" : "select 1 as a, 2 as a\n|> eval a = 3"
+  } ]
+}
+
+
+-- !query
+select x, x from t
+|> eval x = 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`x`",
+    "referenceNames" : "[`spark_catalog`.`default`.`t`.`x`, `spark_catalog`.`default`.`t`.`x`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 32,
+    "fragment" : "select x, x from t\n|> eval x = 1"
+  } ]
+}
+
+
+-- !query
+select x, * from t
+|> eval x = 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`x`",
+    "referenceNames" : "[`spark_catalog`.`default`.`t`.`x`, `spark_catalog`.`default`.`t`.`x`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 32,
+    "fragment" : "select x, * from t\n|> eval x = 1"
+  } ]
+}
+
+
+-- !query
+select * from (select x, x from t union all select x, x from t)
+|> eval x = 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`x`",
+    "referenceNames" : "[`x`, `x`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 77,
+    "fragment" : "select * from (select x, x from t union all select x, x from t)\n|> eval x = 1"
+  } ]
+}
+
+
+-- !query
+select * from (select x, x, x from t union all select x, x, x from t)
+|> drop x
+|> eval x = 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_REFERENCE",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "name" : "`x`",
+    "referenceNames" : "[`x`, `x`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 93,
+    "fragment" : "select * from (select x, x, x from t union all select x, x, x from t)\n|> drop x\n|> eval x = 1"
+  } ]
+}
+
+
+-- !query
+select (table t |> eval z = 1 |> limit 1) from values (0) as o(z)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_SUBQUERY_EXPRESSION.SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
+  "sqlState" : "42823",
+  "messageParameters" : {
+    "number" : "3"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 41,
+    "fragment" : "(table t |> eval z = 1 |> limit 1)"
+  } ]
+}
+
+
+-- !query
+table t
+|> eval z = sum(x)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "clause" : "EVAL",
+    "expr" : "sum(x#x)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 21,
+    "stopIndex" : 26,
+    "fragment" : "sum(x)"
+  } ]
+}
+
+
+-- !query
+table t
+|> eval x = sum(x)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "clause" : "EVAL",
+    "expr" : "sum(x#x)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 21,
+    "stopIndex" : 26,
+    "fragment" : "sum(x)"
+  } ]
+}
+
+
+-- !query
+table t
+|> eval x = 1 as z
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'as'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+select col from st
+|> eval col.i1 = 42
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0035",
+  "messageParameters" : {
+    "message" : "SQL pipe syntax |> EVAL operator with multi-part assignment key (only single-part keys are allowed)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 28,
+    "stopIndex" : 38,
     "fragment" : "col.i1 = 42"
   } ]
 }
@@ -1932,7 +2508,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0014",
+  "errorClass" : "INVALID_SQL_SYNTAX.EMPTY_TABLESAMPLE",
+  "sqlState" : "42000",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -2046,9 +2623,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0015",
+  "errorClass" : "UNSUPPORTED_FEATURE.TABLESAMPLE_METHOD",
+  "sqlState" : "0A000",
   "messageParameters" : {
-    "msg" : "byteLengthLiteral"
+    "sampleMethod" : "BYTES"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2068,9 +2646,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0016",
+  "errorClass" : "INVALID_SQL_SYNTAX.INVALID_TABLESAMPLE_METHOD",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "bytesStr" : "200"
+    "sampleMethod" : "200"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -3158,6 +3737,175 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 2 as grp
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "case" : "aliases on GROUP BY ordinals"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 52,
+    "stopIndex" : 59,
+    "fragment" : "2 as grp"
+  } ]
+}
+
+
+-- !query
+select 3 as x, 4 as y
+|> aggregate sum(y) group by x, 2 grp
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "case" : "aliases on GROUP BY ordinals"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 55,
+    "stopIndex" : 59,
+    "fragment" : "2 grp"
+  } ]
+}
+
+
+-- !query
+select 3 as x, 4 as y
+|> aggregate sum(y) group by (2) as grp
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "case" : "aliases on GROUP BY ordinals"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 52,
+    "stopIndex" : 61,
+    "fragment" : "(2) as grp"
+  } ]
+}
+
+
+-- !query
+select 3 as x, 4 as y
+|> aggregate sum(y) group by -1 as grp
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "case" : "aliases on GROUP BY ordinals"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 52,
+    "stopIndex" : 60,
+    "fragment" : "-1 as grp"
+  } ]
+}
+
+
+-- !query
+select 3 as x, 4 as y
+|> aggregate sum(y) group by x as grp
+-- !query schema
+struct<grp:int,sum(y):bigint>
+-- !query output
+3	4
+
+
+-- !query
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 1 + 1 as grp
+-- !query schema
+struct<grp:int,sum(y):bigint>
+-- !query output
+2	4
+
+
+-- !query
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 2L as grp
+-- !query schema
+struct<grp:bigint,sum(y):bigint>
+-- !query output
+2	4
+
+
+-- !query
+set spark.sql.legacy.allowAliasedPipeAggregateOrdinals=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.allowAliasedPipeAggregateOrdinals	true
+
+
+-- !query
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 2 as grp
+-- !query schema
+struct<grp:int,sum(y):bigint>
+-- !query output
+2	4
+
+
+-- !query
+set spark.sql.legacy.allowAliasedPipeAggregateOrdinals=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.allowAliasedPipeAggregateOrdinals	false
+
+
+-- !query
+set spark.sql.groupByOrdinal=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.groupByOrdinal	false
+
+
+-- !query
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 2 as grp
+-- !query schema
+struct<grp:int,sum(y):bigint>
+-- !query output
+2	4
+
+
+-- !query
+set spark.sql.groupByOrdinal=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.groupByOrdinal	true
+
+
+-- !query
 table courseSales
 |> aggregate sum(earnings) group by rollup(course, `year`)
 |> where course = 'dotNET' and `year` = '2013'
@@ -4153,7 +4901,7 @@ where web_cumulative > store_cumulative
 order by item_sk, d_date
 limit 100
 -- !query schema
-struct<item_sk:int,d_date:date,web_sales:decimal(27,2),store_sales:decimal(27,2),web_cumulative:decimal(27,2),store_cumulative:decimal(27,2)>
+struct<item_sk:bigint,d_date:date,web_sales:decimal(27,2),store_sales:decimal(27,2),web_cumulative:decimal(27,2),store_cumulative:decimal(27,2)>
 -- !query output
 
 
@@ -4217,7 +4965,7 @@ table web_v1
 |> order by item_sk, d_date
 |> limit 100
 -- !query schema
-struct<item_sk:int,d_date:date,web_sales:decimal(27,2),store_sales:decimal(27,2),web_cumulative:decimal(27,2),store_cumulative:decimal(27,2)>
+struct<item_sk:bigint,d_date:date,web_sales:decimal(27,2),store_sales:decimal(27,2),web_cumulative:decimal(27,2),store_cumulative:decimal(27,2)>
 -- !query output
 
 
@@ -4254,6 +5002,16 @@ struct<x:int,y:string,z:int>
 
 
 -- !query
+table t
+| eval z = x + length(y), x = z
+-- !query schema
+struct<x:int,y:string,z:int>
+-- !query output
+3	abc	3
+4	def	4
+
+
+-- !query
 table windowTestData
 | select cate, sum(val) over w
   window w as (partition by cate order by val)
@@ -4281,7 +5039,7 @@ from store_sales ss1
 | order by rank_col desc
 | limit 1000
 -- !query schema
-struct<item_sk:int,rank_col:decimal(11,6)>
+struct<item_sk:bigint,rank_col:decimal(11,6)>
 -- !query output
 
 
@@ -4372,6 +5130,30 @@ drop temporary variable extend
 struct<>
 -- !query output
 
+
+
+-- !query
+select x | eval from values (1, 2) as v(x, eval)
+-- !query schema
+struct<(x | eval):int>
+-- !query output
+3
+
+
+-- !query
+select x | eval as y from values (1, 2) as v(x, eval)
+-- !query schema
+struct<y:int>
+-- !query output
+3
+
+
+-- !query
+select * from values (1, 2) as v(x, eval) where (x | eval) = 3
+-- !query schema
+struct<x:int,eval:int>
+-- !query output
+1	2
 
 
 -- !query
@@ -4594,6 +5376,979 @@ table other
 struct<total_a:bigint>
 -- !query output
 4
+
+
+-- !query
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> select id
+|> select h.*
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "CANNOT_RESOLVE_STAR_EXPAND",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "columns" : "`h`, `id`",
+    "targetString" : "`h`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 86,
+    "stopIndex" : 88,
+    "fragment" : "h.*"
+  } ]
+}
+
+
+-- !query
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> select id
+|> select h.a
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`h`.`a`",
+    "proposal" : "`tab`.`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 86,
+    "stopIndex" : 88,
+    "fragment" : "h.a"
+  } ]
+}
+
+
+-- !query
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> drop h
+|> select h.*
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "CANNOT_RESOLVE_STAR_EXPAND",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "columns" : "`h`, `id`",
+    "targetString" : "`h`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 83,
+    "stopIndex" : 85,
+    "fragment" : "h.*"
+  } ]
+}
+
+
+-- !query
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> drop h
+|> select h.a
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`h`.`a`",
+    "proposal" : "`tab`.`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 83,
+    "stopIndex" : 85,
+    "fragment" : "h.a"
+  } ]
+}
+
+
+-- !query
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> aggregate count(*) as c group by id
+|> select h.a
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`h`.`a`",
+    "proposal" : "`c`, `tab`.`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 112,
+    "stopIndex" : 114,
+    "fragment" : "h.a"
+  } ]
+}
+
+
+-- !query
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> select id
+|> where h.a > 0
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`h`.`a`",
+    "proposal" : "`tab`.`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 85,
+    "stopIndex" : 87,
+    "fragment" : "h.a"
+  } ]
+}
+
+
+-- !query
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> select id
+|> extend h.a as z
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`h`.`a`",
+    "proposal" : "`tab`.`id`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 86,
+    "stopIndex" : 88,
+    "fragment" : "h.a"
+  } ]
+}
+
+
+-- !query
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> select id, h
+|> select h.*
+-- !query schema
+struct<a:int,b:int>
+-- !query output
+10	20
+
+
+-- !query
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> select h as g
+|> select g.*, g.a
+-- !query schema
+struct<a:int,b:int,a:int>
+-- !query output
+10	20	10
+
+
+-- !query
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> select h as g
+|> select h.a
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`h`.`a`",
+    "proposal" : "`g`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 90,
+    "stopIndex" : 92,
+    "fragment" : "h.a"
+  } ]
+}
+
+
+-- !query
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> as x
+|> select x.h.a
+-- !query schema
+struct<a:int>
+-- !query output
+10
+
+
+-- !query
+table outer_gen_test
+|> select id, explode_outer(tags) as tag
+-- !query schema
+struct<id:int,tag:string>
+-- !query output
+1	spark
+1	sql
+2	delta
+3	NULL
+4	NULL
+
+
+-- !query
+table outer_gen_test
+|> select id, posexplode_outer(tags)
+-- !query schema
+struct<id:int,pos:int,col:string>
+-- !query output
+1	0	sql
+1	1	spark
+2	0	delta
+3	NULL	NULL
+4	NULL	NULL
+
+
+-- !query
+table outer_gen_test
+|> select id, inline_outer(transform(tags, t -> named_struct('tag', t)))
+-- !query schema
+struct<id:int,tag:string>
+-- !query output
+1	spark
+1	sql
+2	delta
+3	NULL
+4	NULL
+
+
+-- !query
+table outer_gen_test
+|> select id, explode_outer(map_from_arrays(tags, tags))
+-- !query schema
+struct<id:int,key:string,value:string>
+-- !query output
+1	spark	spark
+1	sql	sql
+2	delta	delta
+3	NULL	NULL
+4	NULL	NULL
+
+
+-- !query
+table outer_gen_test
+|> extend explode_outer(tags) as tag
+|> select id, tag
+-- !query schema
+struct<id:int,tag:string>
+-- !query output
+1	spark
+1	sql
+2	delta
+3	NULL
+4	NULL
+
+
+-- !query
+table outer_gen_test
+|> set tags = explode_outer(tags)
+|> select id, tags
+-- !query schema
+struct<id:int,tags:string>
+-- !query output
+1	spark
+1	sql
+2	delta
+3	NULL
+4	NULL
+
+
+-- !query
+table outer_gen_test
+|> aggregate explode_outer(collect_list(id)) as id group by author
+-- !query schema
+struct<author:string,id:int>
+-- !query output
+ann	1
+ann	3
+bob	2
+bob	4
+
+
+-- !query
+table outer_gen_test
+|> where id > 10
+|> aggregate collect_list(id) as ids
+|> select explode_outer(ids)
+-- !query schema
+struct<col:int>
+-- !query output
+NULL
+
+
+-- !query
+table outer_gen_test
+|> extend posexplode_outer(tags) as (pos, tag)
+|> select id, pos, tag
+-- !query schema
+struct<id:int,pos:int,tag:string>
+-- !query output
+1	0	sql
+1	1	spark
+2	0	delta
+3	NULL	NULL
+4	NULL	NULL
+
+
+-- !query
+table outer_gen_test
+|> extend explode_outer(map_from_arrays(tags, tags)) as (k, v)
+|> select id, k, v
+-- !query schema
+struct<id:int,k:string,v:string>
+-- !query output
+1	spark	spark
+1	sql	sql
+2	delta	delta
+3	NULL	NULL
+4	NULL	NULL
+
+
+-- !query
+table outer_gen_test
+|> extend inline_outer(transform(tags, t -> named_struct('tag', t, 'len', length(t)))) as (tag, len)
+|> select id, tag, len
+-- !query schema
+struct<id:int,tag:string,len:int>
+-- !query output
+1	spark	5
+1	sql	3
+2	delta	5
+3	NULL	NULL
+4	NULL	NULL
+
+
+-- !query
+table outer_gen_test
+|> extend posexplode(tags) as (pos, tag)
+|> select id, pos, tag
+-- !query schema
+struct<id:int,pos:int,tag:string>
+-- !query output
+1	0	sql
+1	1	spark
+2	0	delta
+
+
+-- !query
+table outer_gen_test
+|> aggregate posexplode_outer(collect_list(id)) as (pos, id) group by author
+-- !query schema
+struct<author:string,pos:int,id:int>
+-- !query output
+ann	0	1
+ann	1	3
+bob	0	2
+bob	1	4
+
+
+-- !query
+table outer_gen_test
+|> aggregate explode_outer(map_from_arrays(collect_list(id), collect_list(id))) as (k, v)
+   group by author
+-- !query schema
+struct<author:string,k:int,v:int>
+-- !query output
+ann	1	1
+ann	3	3
+bob	2	2
+bob	4	4
+
+
+-- !query
+table outer_gen_test
+|> aggregate inline_outer(collect_list(named_struct('id', id, 'n', size(tags)))) as (id, n)
+   group by author
+-- !query schema
+struct<author:string,id:int,n:int>
+-- !query output
+ann	1	2
+ann	3	0
+bob	2	1
+bob	4	NULL
+
+
+-- !query
+table outer_gen_test
+|> aggregate posexplode(collect_list(id)) as (pos, id) group by author
+-- !query schema
+struct<author:string,pos:int,id:int>
+-- !query output
+ann	0	1
+ann	1	3
+bob	0	2
+bob	1	4
+
+
+-- !query
+table outer_gen_test
+|> extend stack(2, id, null) as (a)
+|> select id, a
+-- !query schema
+struct<id:int,a:int>
+-- !query output
+1	1
+1	NULL
+2	2
+2	NULL
+3	3
+3	NULL
+4	4
+4	NULL
+
+
+-- !query
+table outer_gen_test
+|> aggregate stack(2, count(*), null) as (c) group by author
+-- !query schema
+struct<author:string,c:bigint>
+-- !query output
+ann	2
+ann	NULL
+bob	2
+bob	NULL
+
+
+-- !query
+table outer_gen_test
+|> select id, stack(2, id, null) as a
+-- !query schema
+struct<id:int,a:int>
+-- !query output
+1	1
+1	NULL
+2	2
+2	NULL
+3	3
+3	NULL
+4	4
+4	NULL
+
+
+-- !query
+table outer_gen_test
+|> select id, stack(2, id, null)
+-- !query schema
+struct<id:int,col0:int>
+-- !query output
+1	1
+1	NULL
+2	2
+2	NULL
+3	3
+3	NULL
+4	4
+4	NULL
+
+
+-- !query
+table outer_gen_test
+|> extend stack(2, id, null) as a
+|> select id, a
+-- !query schema
+struct<id:int,a:int>
+-- !query output
+1	1
+1	NULL
+2	2
+2	NULL
+3	3
+3	NULL
+4	4
+4	NULL
+
+
+-- !query
+table outer_gen_test
+|> extend stack(2, id, null)
+|> select id, col0
+-- !query schema
+struct<id:int,col0:int>
+-- !query output
+1	1
+1	NULL
+2	2
+2	NULL
+3	3
+3	NULL
+4	4
+4	NULL
+
+
+-- !query
+table outer_gen_test
+|> aggregate explode_outer(collect_list(if(id > 10, id, null))) as id group by author
+-- !query schema
+struct<author:string,id:int>
+-- !query output
+ann	NULL
+bob	NULL
+
+
+-- !query
+table outer_gen_test
+|> aggregate explode(collect_list(if(id > 10, id, null))) as id group by author
+-- !query schema
+struct<author:string,id:int>
+-- !query output
+
+
+
+-- !query
+table outer_gen_test
+|> set id = stack(2, id, null)
+|> select id, author
+-- !query schema
+struct<id:int,author:string>
+-- !query output
+1	ann
+2	bob
+3	ann
+4	bob
+NULL	ann
+NULL	ann
+NULL	bob
+NULL	bob
+
+
+-- !query
+table outer_gen_test
+|> extend explode_outer(tags) as t
+|> extend posexplode_outer(array(1, 2)) as (p, v)
+|> select id, t, p, v
+-- !query schema
+struct<id:int,t:string,p:int,v:int>
+-- !query output
+1	spark	0	1
+1	spark	1	2
+1	sql	0	1
+1	sql	1	2
+2	delta	0	1
+2	delta	1	2
+3	NULL	0	1
+3	NULL	1	2
+4	NULL	0	1
+4	NULL	1	2
+
+
+-- !query
+from values (1, array('a')) as tab(id, arr)
+|> extend explode(array(1, 2)) as a, posexplode(array('x', 'y')) as (pos, b)
+|> select id, a, pos, b
+-- !query schema
+struct<id:int,a:int,pos:int,b:string>
+-- !query output
+1	1	0	x
+1	1	1	y
+1	2	0	x
+1	2	1	y
+
+
+-- !query
+table outer_gen_test
+|> extend explode_outer(tags) as t
+|> extend explode(array(1)) as e, posexplode_outer(array(1, 2)) as (p, v)
+|> select id, t, e, p, v
+-- !query schema
+struct<id:int,t:string,e:int,p:int,v:int>
+-- !query output
+1	spark	1	0	1
+1	spark	1	1	2
+1	sql	1	0	1
+1	sql	1	1	2
+2	delta	1	0	1
+2	delta	1	1	2
+3	NULL	1	0	1
+3	NULL	1	1	2
+4	NULL	1	0	1
+4	NULL	1	1	2
+
+
+-- !query
+from values (1, array('a')) as tab(id, arr)
+|> extend explode(array(1, 2)) as a, posexplode(arr) as (pos, b)
+|> select id, a, pos, b
+-- !query schema
+struct<id:int,a:int,pos:int,b:string>
+-- !query output
+1	1	0	a
+1	2	0	a
+
+
+-- !query
+table outer_gen_test
+|> extend explode_outer(tags) as t
+|> extend explode(array(1)) as e, posexplode_outer(tags) as (p, v)
+|> select id, t, e, p, v
+-- !query schema
+struct<id:int,t:string,e:int,p:int,v:string>
+-- !query output
+1	spark	1	0	sql
+1	spark	1	1	spark
+1	sql	1	0	sql
+1	sql	1	1	spark
+2	delta	1	0	delta
+3	NULL	1	NULL	NULL
+4	NULL	1	NULL	NULL
+
+
+-- !query
+table outer_gen_test
+|> extend explode_outer(tags) as t
+|> aggregate posexplode_outer(collect_list(t)) as (p, v) group by author
+-- !query schema
+struct<author:string,p:int,v:string>
+-- !query output
+ann	0	sql
+ann	1	spark
+bob	0	delta
+
+
+-- !query
+table outer_gen_test
+|> select upper(explode_outer(tags))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "expression" : "\"upper(generatorouter(explode(tags)))\""
+  }
+}
+
+
+-- !query
+select upper(explode_outer(tags)) from outer_gen_test
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "expression" : "\"upper(generatorouter(explode(tags)))\""
+  }
+}
+
+
+-- !query
+table outer_gen_test
+|> aggregate explode_outer(tags)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "PIPE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "expr" : "generatorouter(explode(tags#x))"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 35,
+    "stopIndex" : 53,
+    "fragment" : "explode_outer(tags)"
+  } ]
+}
+
+
+-- !query
+table outer_gen_test
+|> extend explode_outer(collect_list(tags))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "clause" : "EXTEND",
+    "expr" : "collect_list(tags#x)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 46,
+    "stopIndex" : 63,
+    "fragment" : "collect_list(tags)"
+  } ]
+}
+
+
+-- !query
+table outer_gen_test
+|> extend posexplode_outer(collect_list(tags)) as (pos, tag)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "clause" : "EXTEND",
+    "expr" : "collect_list(tags#x)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 49,
+    "stopIndex" : 66,
+    "fragment" : "collect_list(tags)"
+  } ]
+}
+
+
+-- !query
+table outer_gen_test
+|> aggregate posexplode_outer(tags) as (pos, tag)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "PIPE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "expr" : "generatorouter(posexplode(tags#x))"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 35,
+    "stopIndex" : 56,
+    "fragment" : "posexplode_outer(tags)"
+  } ]
+}
+
+
+-- !query
+table outer_gen_test
+|> extend upper(explode_outer(tags)) as (a, b)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "expression" : "\"upper(generatorouter(explode(tags)))\""
+  }
+}
+
+
+-- !query
+select *, upper(explode_outer(tags)) as (a, b) from outer_gen_test
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "expression" : "\"upper(generatorouter(explode(tags)))\""
+  }
+}
+
+
+-- !query
+table outer_gen_test
+|> select id, explode_outer(id)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"id\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"ARRAY\" or \"MAP\")",
+    "sqlExpr" : "\"explode(id)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 36,
+    "stopIndex" : 52,
+    "fragment" : "explode_outer(id)"
+  } ]
+}
+
+
+-- !query
+select id, explode_outer(id) from outer_gen_test
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"id\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"ARRAY\" or \"MAP\")",
+    "sqlExpr" : "\"explode(id)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 28,
+    "fragment" : "explode_outer(id)"
+  } ]
+}
+
+
+-- !query
+table outer_gen_test
+|> extend posexplode(id) as (pos, v)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"id\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"ARRAY\" or \"MAP\")",
+    "sqlExpr" : "\"posexplode(id)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 32,
+    "stopIndex" : 45,
+    "fragment" : "posexplode(id)"
+  } ]
+}
+
+
+-- !query
+select *, posexplode(id) as (pos, v) from outer_gen_test
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"id\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"ARRAY\" or \"MAP\")",
+    "sqlExpr" : "\"posexplode(id)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 11,
+    "stopIndex" : 24,
+    "fragment" : "posexplode(id)"
+  } ]
+}
+
+
+-- !query
+table outer_gen_test
+|> aggregate explode_outer(id)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "PIPE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "expr" : "generatorouter(explode(id#x))"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 35,
+    "stopIndex" : 51,
+    "fragment" : "explode_outer(id)"
+  } ]
+}
+
+
+-- !query
+table outer_gen_test
+|> aggregate explode_outer(count(*)) group by author
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"count(1)\"",
+    "inputType" : "\"BIGINT\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"ARRAY\" or \"MAP\")",
+    "sqlExpr" : "\"explode(count(1))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 35,
+    "stopIndex" : 57,
+    "fragment" : "explode_outer(count(*))"
+  } ]
+}
 
 
 -- !query

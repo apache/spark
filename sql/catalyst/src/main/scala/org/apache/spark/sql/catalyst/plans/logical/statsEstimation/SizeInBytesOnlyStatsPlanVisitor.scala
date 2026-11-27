@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 
-import org.apache.spark.sql.catalyst.expressions.{AttributeMap, ExpressionSet}
-import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
+import org.apache.spark.sql.catalyst.expressions.AttributeMap
+import org.apache.spark.sql.catalyst.planning.ExtractAllEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 
@@ -94,10 +94,16 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
   override def visitOffset(p: Offset): Statistics = {
     val offset = p.offsetExpr.eval().asInstanceOf[Int]
     val childStats = p.child.stats
-    val rowCount: BigInt = childStats.rowCount.map(c => c - offset).map(_.max(0)).getOrElse(0)
-    Statistics(
-      sizeInBytes = EstimationUtils.getOutputSize(p.output, rowCount, childStats.attributeStats),
-      rowCount = Some(rowCount))
+    childStats.rowCount.map { childRowCount =>
+      val rowCount = (childRowCount - offset).max(0)
+      Statistics(
+        sizeInBytes = EstimationUtils.getOutputSize(p.output, rowCount, childStats.attributeStats),
+        rowCount = Some(rowCount))
+    }.getOrElse {
+      // Without the child's row count, the number of skipped rows is unknown. Assume the same
+      // number of rows as the child, which is an upper bound.
+      visitUnaryNode(p)
+    }
   }
 
   override def visitIntersect(p: Intersect): Statistics = {
@@ -110,14 +116,22 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
 
   override def visitJoin(p: Join): Statistics = {
     p.joinType match {
-      case LeftAnti | LeftSemi =>
-        // LeftSemi and LeftAnti won't ever be bigger than left
-        p.left.stats
+      case LeftExistence(_) | LeftSingle =>
+        // A left semi or anti join outputs each row of the left side at most once, so the left
+        // side's statistics bound it. An existence join outputs each row of the left side once,
+        // with a boolean column added, so they are exact for it, with the size scaled by the row
+        // widths. The scaling changes nothing for a left semi or anti join. A left single join
+        // also outputs each row of the left side once, with the columns of the right side added,
+        // as a second match fails the query.
+        val leftStats = p.left.stats
+        val sizeInBytes = leftStats.sizeInBytes * EstimationUtils.getSizePerRow(p.output) /
+          EstimationUtils.getSizePerRow(p.left.output)
+        leftStats.copy(sizeInBytes = sizeInBytes)
       case Inner | LeftOuter | RightOuter | FullOuter =>
         p match {
-          case ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _, left, right, _)
-              if left.distinctKeys.exists(_.subsetOf(ExpressionSet(leftKeys))) ||
-                right.distinctKeys.exists(_.subsetOf(ExpressionSet(rightKeys))) =>
+          case ExtractAllEquiJoinKeys(_, leftKeys, rightKeys, _, _, left, right, _)
+              if left.distinctKeys.exists(_.subsetOf(DistinctKeyVisitor.joinKeySet(leftKeys))) ||
+                right.distinctKeys.exists(_.subsetOf(DistinctKeyVisitor.joinKeySet(rightKeys))) =>
             // The sizeInBytes should be > 1 because sizeInBytes * 1 != sizeInBytes + 1.
             Statistics(sizeInBytes = p.children.map(_.stats.sizeInBytes).filter(_ > 1L).sum)
           case _ =>

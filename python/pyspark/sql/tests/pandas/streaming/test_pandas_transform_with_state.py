@@ -15,30 +15,49 @@
 # limitations under the License.
 #
 
-from abc import abstractmethod
-
 import json
 import os
-import time
 import tempfile
-from pyspark.sql.streaming import StatefulProcessor
-
+import time
 import unittest
+from abc import abstractmethod
 from typing import cast
 
 from pyspark import SparkConf
+from pyspark.sql import is_remote
 from pyspark.sql.functions import split
+from pyspark.sql.streaming import StatefulProcessor
+from pyspark.sql.tests.pandas.helper.helper_pandas_transform_with_state import (
+    AddFieldsProcessorFactory,
+    BasicProcessorFactory,
+    BasicProcessorNotNullableFactory,
+    ChunkCountProcessorFactory,
+    ChunkCountProcessorWithInitialStateFactory,
+    CompositeOutputProcessorFactory,
+    EventTimeStatefulProcessorFactory,
+    LargeValueStatefulProcessorFactory,
+    MapStateProcessorFactory,
+    MinEventTimeStatefulProcessorFactory,
+    ProcTimeStatefulProcessorFactory,
+    RemoveFieldsProcessorFactory,
+    ReorderedFieldsProcessorFactory,
+    SimpleStatefulProcessorFactory,
+    SimpleStatefulProcessorWithInitialStateFactory,
+    StatefulProcessorChainingOpsFactory,
+    StatefulProcessorCompositeTypeFactory,
+    UpcastProcessorFactory,
+)
 from pyspark.sql.types import (
-    StringType,
-    StructType,
-    StructField,
-    Row,
-    IntegerType,
-    TimestampType,
-    DecimalType,
     ArrayType,
-    MapType,
+    DecimalType,
     DoubleType,
+    IntegerType,
+    MapType,
+    Row,
+    StringType,
+    StructField,
+    StructType,
+    TimestampType,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import (
@@ -46,27 +65,6 @@ from pyspark.testing.utils import (
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
-)
-
-from pyspark.sql.tests.pandas.helper.helper_pandas_transform_with_state import (
-    SimpleStatefulProcessorWithInitialStateFactory,
-    EventTimeStatefulProcessorFactory,
-    ProcTimeStatefulProcessorFactory,
-    SimpleStatefulProcessorFactory,
-    StatefulProcessorChainingOpsFactory,
-    MapStateProcessorFactory,
-    LargeValueStatefulProcessorFactory,
-    BasicProcessorFactory,
-    BasicProcessorNotNullableFactory,
-    AddFieldsProcessorFactory,
-    RemoveFieldsProcessorFactory,
-    ReorderedFieldsProcessorFactory,
-    UpcastProcessorFactory,
-    MinEventTimeStatefulProcessorFactory,
-    StatefulProcessorCompositeTypeFactory,
-    ChunkCountProcessorFactory,
-    ChunkCountProcessorWithInitialStateFactory,
-    CompositeOutputProcessorFactory,
 )
 
 
@@ -725,10 +723,22 @@ class TransformWithStateTestsMixin:
                 timeMode="None",
             )
 
-        assert set(batch_result.sort("id").collect()) == {
-            Row(id="0", countAsString="2"),
-            Row(id="1", countAsString="2"),
-        }
+        with self.sql_conf({"spark.sql.adaptive.enabled": "false"}):
+            result = batch_result.sort("id")
+            assert set(result.collect()) == {
+                Row(id="0", countAsString="2"),
+                Row(id="1", countAsString="2"),
+            }
+            if not is_remote():
+                plan = result._jdf.queryExecution().executedPlan()
+                while not plan.metrics().contains("pythonDataSent"):
+                    self.assertEqual(plan.children().size(), 1)
+                    plan = plan.children().apply(0)
+                metrics = plan.metrics()
+                self.assertTrue(metrics.contains("numTotalStateRows"))
+                self.assertGreater(metrics.apply("pythonDataSent").value(), 0)
+                self.assertTrue(metrics.contains("pythonDataReadTime"))
+                self.assertEqual(metrics.apply("pythonNumTimingReports").value(), 0)
 
     def test_transform_with_state_batch_query_initial_state(self):
         data = [("0", 123), ("0", 46), ("1", 146), ("1", 346)]

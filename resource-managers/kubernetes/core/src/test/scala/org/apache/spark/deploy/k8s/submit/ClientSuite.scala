@@ -90,8 +90,10 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
       .endVolumeMount()
     .build()
 
-  private val KEY_TO_PATH =
-    new KeyToPath(SPARK_CONF_FILE_NAME, 420, SPARK_CONF_FILE_NAME)
+  private def keyToPath(key: String): KeyToPath =
+    new KeyToPathBuilder().withKey(key).withMode(420).withPath(key).build()
+
+  private val KEY_TO_PATH = keyToPath(SPARK_CONF_FILE_NAME)
 
   private def fullExpectedPod(keyToPaths: List[KeyToPath] = List(KEY_TO_PATH)) =
     new PodBuilder(BUILT_DRIVER_POD)
@@ -306,7 +308,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
 
     val (sparkConf: SparkConf, expectedConfFiles: Seq[String]) = testSetup
 
-    val expectedKeyToPaths = (expectedConfFiles.map(x => new KeyToPath(x, 420, x)).toList ++
+    val expectedKeyToPaths = (expectedConfFiles.map(keyToPath).toList ++
       List(KEY_TO_PATH)).sortBy(x => x.getKey)
 
     when(podsWithNamespace.resource(fullExpectedPod(expectedKeyToPaths)))
@@ -375,5 +377,85 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     assert(logAppender.loggingEvents.map(_.getMessage.getFormattedMessage).contains(
       s"Deployed Spark application $appName with application ID $appId " +
       s"and submission ID $sId into Kubernetes"))
+  }
+
+  test("SPARK-61808: A failed cleanup does not hide a failure applying pre resources") {
+    when(driverBuilder.buildFromFeatures(kconf, kubernetesClient))
+      .thenReturn(BUILT_KUBERNETES_SPEC_WITH_PRERES)
+    val failure = new RuntimeException("apply failed")
+    when(resourceList.serverSideApply()).thenThrow(failure)
+    when(resourceList.delete()).thenThrow(new RuntimeException("delete failed"))
+    val submissionClient = new Client(
+      kconf,
+      driverBuilder,
+      kubernetesClient,
+      loggingPodStatusWatcher)
+
+    val thrown = intercept[RuntimeException](submissionClient.run())
+    assert(thrown eq failure)
+    verify(resourceList).delete()
+  }
+
+  test("SPARK-61808: A failed cleanup does not hide a failure creating the driver pod") {
+    when(driverBuilder.buildFromFeatures(kconf, kubernetesClient))
+      .thenReturn(BUILT_KUBERNETES_SPEC_WITH_PRERES)
+    val failure = new RuntimeException("create failed")
+    when(namedPods.create()).thenThrow(failure)
+    when(resourceList.delete()).thenThrow(new RuntimeException("delete failed"))
+    val submissionClient = new Client(
+      kconf,
+      driverBuilder,
+      kubernetesClient,
+      loggingPodStatusWatcher)
+
+    val thrown = intercept[RuntimeException](submissionClient.run())
+    assert(thrown eq failure)
+    verify(resourceList).delete()
+  }
+
+  test("SPARK-61808: A failed cleanup does not hide a failure refreshing pre resources' " +
+    "owners or skip the next cleanup") {
+    when(driverBuilder.buildFromFeatures(kconf, kubernetesClient))
+      .thenReturn(BUILT_KUBERNETES_SPEC_WITH_PRERES)
+    val failure = new RuntimeException("owner refresh failed")
+    // The first apply creates the pre resources, and the second one refreshes their owners.
+    when(resourceList.serverSideApply())
+      .thenReturn(java.util.Collections.emptyList[HasMetadata]())
+      .thenThrow(failure)
+    when(podOperations.resource(podWithOwnerReference())).thenReturn(namedPods)
+    when(namedPods.delete()).thenThrow(new RuntimeException("pod delete failed"))
+    when(resourceList.delete()).thenThrow(new RuntimeException("delete failed"))
+    val submissionClient = new Client(
+      kconf,
+      driverBuilder,
+      kubernetesClient,
+      loggingPodStatusWatcher)
+
+    val thrown = intercept[RuntimeException](submissionClient.run())
+    assert(thrown eq failure)
+    verify(namedPods).delete()
+    // The pre resources are deleted even though deleting the driver pod failed.
+    verify(resourceList).delete()
+  }
+
+  test("SPARK-61808: A failed cleanup does not hide a failure applying the other resources") {
+    val failure = new RuntimeException("apply failed")
+    // run() applies the pre resources twice, to create them and to refresh their owners, before
+    // it applies the other resources.
+    when(resourceList.serverSideApply())
+      .thenReturn(java.util.Collections.emptyList[HasMetadata]())
+      .thenReturn(java.util.Collections.emptyList[HasMetadata]())
+      .thenThrow(failure)
+    when(podOperations.resource(podWithOwnerReference())).thenReturn(namedPods)
+    when(namedPods.delete()).thenThrow(new RuntimeException("pod delete failed"))
+    val submissionClient = new Client(
+      kconf,
+      driverBuilder,
+      kubernetesClient,
+      loggingPodStatusWatcher)
+
+    val thrown = intercept[RuntimeException](submissionClient.run())
+    assert(thrown eq failure)
+    verify(namedPods).delete()
   }
 }

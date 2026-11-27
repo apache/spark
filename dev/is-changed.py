@@ -17,17 +17,18 @@
 # limitations under the License.
 #
 
-import warnings
-import traceback
 import os
 import sys
+import traceback
+import warnings
 from argparse import ArgumentParser
+
+import sparktestsupport.modules as modules
 from sparktestsupport.utils import (
     determine_modules_for_files,
     determine_modules_to_test,
     identify_changed_files_from_git_commits,
 )
-import sparktestsupport.modules as modules
 
 
 def parse_opts():

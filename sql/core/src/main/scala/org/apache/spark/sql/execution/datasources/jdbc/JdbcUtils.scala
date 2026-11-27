@@ -188,6 +188,19 @@ object JdbcUtils extends Logging with SQLConfHelper {
     if (isTimestampNTZ) TimestampNTZNanosType(precision) else TimestampLTZNanosType(precision)
   }
 
+  // When nanosecond timestamps are requested (and the preview feature is enabled), a driver
+  // TIMESTAMP that reports a sub-microsecond fractional-second scale (7-9) is mapped to the
+  // nanosecond-capable type. Otherwise the historical microsecond mapping is preserved.
+  def resolveTimestampType(
+      isTimestampNTZ: Boolean, scale: Int, preferTimestampNanos: Boolean): DataType = {
+    if (preferTimestampNanos &&
+      scale >= TimestampNTZNanosType.MIN_PRECISION &&
+      scale <= TimestampNTZNanosType.MAX_PRECISION &&
+      conf.timestampNanosTypesEnabled) {
+      getTimestampNanosType(isTimestampNTZ, scale)
+    } else getTimestampType(isTimestampNTZ)
+  }
+
   /**
    * Maps a JDBC type to a Catalyst type.  This function is called only when
    * the JdbcDialect class corresponding to your database driver returns null.
@@ -201,14 +214,14 @@ object JdbcUtils extends Logging with SQLConfHelper {
       precision: Int,
       scale: Int,
       signed: Boolean,
-      isTimestampNTZ: Boolean,
-      preferTimestampNanos: Boolean = false): DataType = sqlType match {
+      options: JDBCOptions): DataType = sqlType match {
     case java.sql.Types.BIGINT => if (signed) LongType else DecimalType(20, 0)
     case java.sql.Types.BINARY => BinaryType
     case java.sql.Types.BIT => BooleanType // @see JdbcDialect for quirks
     case java.sql.Types.BLOB => BinaryType
     case java.sql.Types.BOOLEAN => BooleanType
-    case java.sql.Types.CHAR if conf.charVarcharAsString => StringType
+    case java.sql.Types.CHAR
+        if conf.charVarcharAsString && !conf.charVarcharFirstClassTypes => StringType
     case java.sql.Types.CHAR => CharType(precision)
     case java.sql.Types.CLOB => StringType
     case java.sql.Types.DATE => DateType
@@ -243,20 +256,13 @@ object JdbcUtils extends Logging with SQLConfHelper {
         val timePrecision = if (scale >= 0 && scale <= TimeType.MAX_PRECISION) scale
           else TimeType.DEFAULT_PRECISION
         TimeType(timePrecision)
-      } else getTimestampType(isTimestampNTZ)
+      } else getTimestampType(options.preferTimestampNTZ)
     case java.sql.Types.TIMESTAMP =>
-      // When nanosecond timestamps are requested (and the preview feature is enabled), a driver
-      // TIMESTAMP that reports a sub-microsecond fractional-second scale (7-9) is mapped to the
-      // nanosecond-capable type. Otherwise the historical microsecond mapping is preserved.
-      if (preferTimestampNanos &&
-        scale >= TimestampNTZNanosType.MIN_PRECISION &&
-        scale <= TimestampNTZNanosType.MAX_PRECISION &&
-        conf.timestampNanosTypesEnabled) {
-        getTimestampNanosType(isTimestampNTZ, scale)
-      } else getTimestampType(isTimestampNTZ)
+      resolveTimestampType(options.preferTimestampNTZ, scale, options.preferTimestampNanos)
     case java.sql.Types.TINYINT => IntegerType
     case java.sql.Types.VARBINARY => BinaryType
-    case java.sql.Types.VARCHAR if conf.charVarcharAsString => StringType
+    case java.sql.Types.VARCHAR
+        if conf.charVarcharAsString && !conf.charVarcharFirstClassTypes => StringType
     case java.sql.Types.VARCHAR => VarcharType(precision)
     case java.sql.Types.NULL => NullType
     case _ =>
@@ -281,9 +287,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
         conn.prepareStatement(options.prepareQuery + dialect.getSchemaQuery(options.tableOrQuery))
       try {
         statement.setQueryTimeout(options.queryTimeout)
-        Some(getSchema(conn, statement.executeQuery(), dialect,
-          isTimestampNTZ = options.preferTimestampNTZ,
-          preferTimestampNanos = options.preferTimestampNanos))
+        Some(getSchema(conn, statement.executeQuery(), dialect, options))
       } catch {
         case _: SQLException => None
       } finally {
@@ -297,8 +301,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
   /**
    * Takes a [[ResultSet]] and returns its Catalyst schema.
    *
+   * @param options The JDBC options, which control how column types are mapped.
    * @param alwaysNullable If true, all the columns are nullable.
-   * @param isTimestampNTZ If true, all timestamp columns are interpreted as TIMESTAMP_NTZ.
    * @return A [[StructType]] giving the Catalyst schema.
    * @throws SQLException if the schema contains an unsupported type.
    */
@@ -306,9 +310,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       conn: Connection,
       resultSet: ResultSet,
       dialect: JdbcDialect,
-      alwaysNullable: Boolean = false,
-      isTimestampNTZ: Boolean = false,
-      preferTimestampNanos: Boolean = false): StructType = {
+      options: JDBCOptions,
+      alwaysNullable: Boolean = false): StructType = {
     val rsmd = resultSet.getMetaData
     val ncols = rsmd.getColumnCount
     val fields = new Array[StructField](ncols)
@@ -347,16 +350,19 @@ object JdbcUtils extends Logging with SQLConfHelper {
         case _ =>
       }
       metadata.putBoolean("isSigned", isSigned)
-      metadata.putBoolean("isTimestampNTZ", isTimestampNTZ)
-      metadata.putBoolean("preferTimestampNanos", preferTimestampNanos)
+      metadata.putBoolean("isTimestampNTZ", options.preferTimestampNTZ)
+      metadata.putBoolean("preferTimestampNanos", options.preferTimestampNanos)
+      metadata.putBoolean(
+        JDBCOptions.JDBC_ZONELESS_TIMESTAMP_AS_NTZ, options.zonelessTimestampAsNTZ)
       metadata.putLong("scale", fieldScale)
       metadata.putString("jdbcClientType", typeName)
       dialect.updateExtraColumnMeta(conn, rsmd, i + 1, metadata)
 
       val columnType =
         dialect.getCatalystType(dataType, typeName, fieldSize, metadata).getOrElse(
-          getCatalystType(dataType, typeName, fieldSize, fieldScale, isSigned, isTimestampNTZ,
-            preferTimestampNanos))
+          getCatalystType(dataType, typeName, fieldSize, fieldScale, isSigned, options))
+      // Only an input to the dialect's type mapping, so keep it out of the schema.
+      metadata.remove(JDBCOptions.JDBC_ZONELESS_TIMESTAMP_AS_NTZ)
       fields(i) = StructField(columnName, columnType, nullable, metadata.build())
       i = i + 1
     }
@@ -368,18 +374,21 @@ object JdbcUtils extends Logging with SQLConfHelper {
    */
   def resultSetToRows(
       resultSet: ResultSet,
-      schema: StructType): Iterator[Row] = {
-    resultSetToRows(resultSet, schema, NoopDialect)
+      schema: StructType,
+      options: Option[JDBCOptions]): Iterator[Row] = {
+    resultSetToRows(resultSet, schema, NoopDialect, options)
   }
 
   def resultSetToRows(
       resultSet: ResultSet,
       schema: StructType,
-      dialect: JdbcDialect): Iterator[Row] = {
+      dialect: JdbcDialect,
+      options: Option[JDBCOptions]): Iterator[Row] = {
     val inputMetrics =
       Option(TaskContext.get()).map(_.taskMetrics().inputMetrics).getOrElse(new InputMetrics)
     val fromRow = ExpressionEncoder(schema).resolveAndBind().createDeserializer()
-    val internalRows = resultSetToSparkInternalRows(resultSet, dialect, schema, inputMetrics)
+    val internalRows = resultSetToSparkInternalRows(
+      resultSet, dialect, schema, inputMetrics, options = options)
     internalRows.map(fromRow)
   }
 
@@ -388,10 +397,11 @@ object JdbcUtils extends Logging with SQLConfHelper {
       dialect: JdbcDialect,
       schema: StructType,
       inputMetrics: InputMetrics,
-      fetchAndTransformToInternalRowsMetric: Option[SQLMetric] = None): Iterator[InternalRow] = {
+      fetchAndTransformToInternalRowsMetric: Option[SQLMetric] = None,
+      options: Option[JDBCOptions]): Iterator[InternalRow] = {
     new NextIterator[InternalRow] {
       private[this] val rs = resultSet
-      private[this] val getters: Array[JDBCValueGetter] = makeGetters(dialect, schema)
+      private[this] val getters: Array[JDBCValueGetter] = makeGetters(dialect, schema, options)
       private[this] val mutableRow =
         new SpecificInternalRow(schema.fields.map(x => x.dataType).toImmutableArraySeq)
 
@@ -444,15 +454,17 @@ object JdbcUtils extends Logging with SQLConfHelper {
    */
   private def makeGetters(
       dialect: JdbcDialect,
-      schema: StructType): Array[JDBCValueGetter] = {
+      schema: StructType,
+      options: Option[JDBCOptions]): Array[JDBCValueGetter] = {
     val replaced = CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema)
-    replaced.fields.map(sf => makeGetter(sf.dataType, dialect, sf.metadata))
+    replaced.fields.map(sf => makeGetter(sf.dataType, dialect, sf.metadata, options))
   }
 
   private def makeGetter(
       dt: DataType,
       dialect: JdbcDialect,
-      metadata: Metadata): JDBCValueGetter = dt match {
+      metadata: Metadata,
+      options: Option[JDBCOptions]): JDBCValueGetter = dt match {
     case BooleanType => JDBCValueGetter.BooleanGetter
     case DateType => JDBCValueGetter.DateGetter(dialect)
     case _: TimeType => JDBCValueGetter.TimeGetter
@@ -464,13 +476,15 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case LongType => JDBCValueGetter.LongGetter
     case ShortType => JDBCValueGetter.ShortGetter
     case ByteType => JDBCValueGetter.ByteGetter
-    case StringType if metadata.contains("rowid") => JDBCValueGetter.RowIdGetter
-    case StringType => JDBCValueGetter.StringGetter
+    case _: StringType if metadata.contains("rowid") => JDBCValueGetter.RowIdGetter
+    case _: StringType => JDBCValueGetter.StringGetter
     case TimestampType if metadata.contains("logical_time_type") =>
       JDBCValueGetter.LogicalTimeGetter
     case TimestampType => JDBCValueGetter.TimestampGetter(dialect)
     case TimestampNTZType if metadata.contains("logical_time_type") =>
       JDBCValueGetter.LogicalTimeNTZGetter(dialect)
+    case TimestampNTZType if options.exists(_.timestampNTZAsWallClock) =>
+      JDBCValueGetter.TimestampNTZWallClockGetter
     case TimestampNTZType => JDBCValueGetter.TimestampNTZGetter(dialect)
     case t: TimestampNTZNanosType => JDBCValueGetter.TimestampNTZNanosGetter(t.precision)
     case t: TimestampLTZNanosType => JDBCValueGetter.TimestampLTZNanosGetter(dialect, t.precision)
@@ -493,7 +507,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
   private def makeSetter(
       conn: Connection,
       dialect: JdbcDialect,
-      dataType: DataType): JDBCValueSetter = dataType match {
+      dataType: DataType,
+      options: JDBCOptions): JDBCValueSetter = dataType match {
     case IntegerType =>
       (stmt: PreparedStatement, row: Row, pos: Int) =>
         stmt.setInt(pos + 1, row.getInt(pos))
@@ -522,7 +537,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       (stmt: PreparedStatement, row: Row, pos: Int) =>
         stmt.setBoolean(pos + 1, row.getBoolean(pos))
 
-    case StringType =>
+    case _: StringType =>
       (stmt: PreparedStatement, row: Row, pos: Int) =>
         stmt.setString(pos + 1, row.getString(pos))
 
@@ -539,6 +554,9 @@ object JdbcUtils extends Logging with SQLConfHelper {
           stmt.setTimestamp(pos + 1, row.getAs[java.sql.Timestamp](pos))
       }
 
+    case TimestampNTZType if options.timestampNTZAsWallClock =>
+      (stmt: PreparedStatement, row: Row, pos: Int) =>
+        stmt.setObject(pos + 1, row.getAs[java.time.LocalDateTime](pos))
     case TimestampNTZType =>
       (stmt: PreparedStatement, row: Row, pos: Int) =>
         stmt.setTimestamp(pos + 1,
@@ -652,7 +670,57 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
     val outMetrics = TaskContext.get().taskMetrics().outputMetrics
 
-    val conn = dialect.createConnectionFactory(options)(-1)
+    def linkNextException(e: SQLException): Unit = {
+      val cause = e.getNextException
+      if (cause != null && e.getCause != cause) {
+        // If there is no cause already, set 'next exception' as cause. If cause is null,
+        // it *may* be because no cause was set yet
+        if (e.getCause == null) {
+          try {
+            e.initCause(cause)
+          } catch {
+            // Or it may be null because the cause *was* explicitly initialized, to *null*,
+            // in which case this fails. There is no other way to detect it.
+            // addSuppressed in this case as well.
+            case _: IllegalStateException => e.addSuppressed(cause)
+          }
+        } else {
+          e.addSuppressed(cause)
+        }
+      }
+    }
+
+    def classifyWriteException(e: SQLException): Nothing = {
+      linkNextException(e)
+      // Closing the connection on task cancellation can cause a SQLException. Do not
+      // report that cancellation side effect as a JDBC write failure.
+      if (TaskContext.get().isInterrupted() || e.isInstanceOf[SparkThrowable]) {
+        throw e
+      }
+      val parameters = Map("url" -> options.getRedactUrl(), "tableName" -> table)
+      val classified = dialect.classifyException(
+        e,
+        condition = "FAILED_JDBC.WRITE",
+        messageParameters = parameters,
+        description = s"Write rows to the table $table.",
+        isRuntime = true)
+      // The default legacy classifier does not know about write errors. Preserve the
+      // original SQLException for dialects that have not opted into condition-based errors.
+      if (classified.getCondition == "FAILED_JDBC.UNCLASSIFIED") {
+        throw e
+      }
+      throw classified
+    }
+
+    def withWriteException[T](f: => T): T = {
+      try {
+        f
+      } catch {
+        case e: SQLException => classifyWriteException(e)
+      }
+    }
+
+    val conn = withWriteException { dialect.createConnectionFactory(options)(-1) }
 
     // Close JDBC connection so blocked native reads (e.g. executeBatch) fail instead of
     // ignoring Thread.interrupt(). Listener registered after opening the connection; we don't need
@@ -704,33 +772,63 @@ object JdbcUtils extends Logging with SQLConfHelper {
     }
     val supportsTransactions = finalIsolationLevel != Connection.TRANSACTION_NONE
     var totalRowCount = 0L
-    try {
-      if (supportsTransactions) {
-        conn.setAutoCommit(false) // Everything in the same db transaction.
-        conn.setTransactionIsolation(finalIsolationLevel)
+    def sourceHasNext: Boolean = {
+      try {
+        iterator.hasNext
+      } catch {
+        case e: SQLException =>
+          linkNextException(e)
+          throw e
       }
-      val stmt = conn.prepareStatement(insertStmt)
-      val setters = rddSchema.fields.map(f => makeSetter(conn, dialect, f.dataType))
-      val nullTypes = rddSchema.fields.map(f => getJdbcType(f.dataType, dialect).jdbcNullType)
+    }
+
+    def sourceNext(): Row = {
+      try {
+        iterator.next()
+      } catch {
+        case e: SQLException =>
+          linkNextException(e)
+          throw e
+      }
+    }
+
+    try {
+      withWriteException {
+        if (supportsTransactions) {
+          conn.setAutoCommit(false) // Everything in the same db transaction.
+          conn.setTransactionIsolation(finalIsolationLevel)
+        }
+      }
+      val stmt = withWriteException { conn.prepareStatement(insertStmt) }
+      val setters = withWriteException {
+        rddSchema.fields.map(f => makeSetter(conn, dialect, f.dataType, options))
+      }
+      val nullTypes = withWriteException {
+        rddSchema.fields.map(f => getJdbcType(f.dataType, dialect).jdbcNullType)
+      }
       val numFields = rddSchema.fields.length
 
       try {
         var rowCount = 0
 
-        stmt.setQueryTimeout(options.queryTimeout)
+        withWriteException { stmt.setQueryTimeout(options.queryTimeout) }
 
-        while (iterator.hasNext) {
-          val row = iterator.next()
-          var i = 0
-          while (i < numFields) {
-            if (row.isNullAt(i)) {
-              stmt.setNull(i + 1, nullTypes(i))
-            } else {
-              setters(i).apply(stmt, row, i)
+        while (sourceHasNext) {
+          val row = sourceNext()
+          try {
+            var i = 0
+            while (i < numFields) {
+              if (row.isNullAt(i)) {
+                stmt.setNull(i + 1, nullTypes(i))
+              } else {
+                setters(i).apply(stmt, row, i)
+              }
+              i = i + 1
             }
-            i = i + 1
+            stmt.addBatch()
+          } catch {
+            case e: SQLException => classifyWriteException(e)
           }
-          stmt.addBatch()
           rowCount += 1
           totalRowCount += 1
           if (rowCount % batchSize == 0) {
@@ -738,45 +836,28 @@ object JdbcUtils extends Logging with SQLConfHelper {
             // opening the connection in this method) closes conn to unblock. JDBC 4.0 section 9.6:
             // methods on a closed Connection throw SQLException (expected for major drivers).
             // Mid-batch kill may drop the in-flight batch; still better than hanging forever.
-            stmt.executeBatch()
+            withWriteException { stmt.executeBatch() }
             rowCount = 0
           }
         }
         if (rowCount > 0) {
-          stmt.executeBatch()
+          withWriteException { stmt.executeBatch() }
         }
       } finally {
-        stmt.close()
+        // Cleanup must not replace a binding/batch failure or abort a pending commit.
+        try {
+          stmt.close()
+        } catch {
+          case NonFatal(e) => logWarning("Exception closing JDBC statement", e)
+        }
       }
       if (supportsTransactions) {
-        conn.commit()
+        withWriteException { conn.commit() }
       }
       committed = true
-    } catch {
-      case e: SQLException =>
-        val cause = e.getNextException
-        if (cause != null && e.getCause != cause) {
-          // If there is no cause already, set 'next exception' as cause. If cause is null,
-          // it *may* be because no cause was set yet
-          if (e.getCause == null) {
-            try {
-              e.initCause(cause)
-            } catch {
-              // Or it may be null because the cause *was* explicitly initialized, to *null*,
-              // in which case this fails. There is no other way to detect it.
-              // addSuppressed in this case as well.
-              case _: IllegalStateException => e.addSuppressed(cause)
-            }
-          } else {
-            e.addSuppressed(cause)
-          }
-        }
-        throw e
     } finally {
       if (!committed) {
-        // The stage must fail.  We got here through an exception path, so
-        // let the exception through unless rollback() or close() want to
-        // tell the user about another problem.
+        // Preserve the failure that brought us here, even if cleanup fails.
         if (supportsTransactions) {
           // The connection may already be closed by the task interrupt listener; rollback
           // is best-effort in that case.
@@ -791,7 +872,11 @@ object JdbcUtils extends Logging with SQLConfHelper {
         } else {
           outMetrics.setRecordsWritten(totalRowCount)
         }
-        conn.close()
+        try {
+          conn.close()
+        } catch {
+          case NonFatal(e) => logWarning("Exception closing JDBC connection on task failure", e)
+        }
       } else {
         outMetrics.setRecordsWritten(totalRowCount)
 
@@ -1235,5 +1320,22 @@ object JdbcUtils extends Logging with SQLConfHelper {
     } finally {
       conn.close()
     }
+  }
+
+  private val scopedLegacyIntegralCastPushdown = new ThreadLocal[Option[Boolean]] {
+    override def initialValue: Option[Boolean] = None
+  }
+
+  // Whether pushed casts compile to the SQL Spark 4.4 sent. Inside
+  // `withLegacyIntegralCastPushdown`, the value passed there instead of the conf.
+  private[sql] def legacyIntegralCastPushdown: Boolean =
+    scopedLegacyIntegralCastPushdown.get.getOrElse(conf.legacyJdbcRoundIntegralCastPushdown)
+
+  // Tasks compile pushed predicates under the value pushdown used, so none drops out of the
+  // WHERE clause.
+  private[sql] def withLegacyIntegralCastPushdown[T](value: Boolean)(f: => T): T = {
+    val old = scopedLegacyIntegralCastPushdown.get
+    scopedLegacyIntegralCastPushdown.set(Some(value))
+    try f finally scopedLegacyIntegralCastPushdown.set(old)
   }
 }

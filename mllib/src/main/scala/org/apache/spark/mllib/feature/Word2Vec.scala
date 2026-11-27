@@ -22,7 +22,6 @@ import java.lang.{Iterable => JavaIterable}
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
-import com.google.common.collect.{Ordering => GuavaOrdering}
 import org.json4s.{DefaultFormats, Formats}
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
@@ -34,6 +33,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{ALPHA, COUNT, NUM_TRAIN_WORD, VOCAB_SIZE}
 import org.apache.spark.internal.config.Kryo.KRYO_SERIALIZER_MAX_BUFFER_SIZE
+import org.apache.spark.ml.feature.{Word2VecModel => NewWord2VecModel}
 import org.apache.spark.ml.linalg.BLAS
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.{Loader, Saveable}
@@ -457,17 +457,23 @@ class Word2Vec extends Serializable with Logging {
       }.map { case (id, (vec, count)) =>
         BLAS.nativeBLAS.sscal(vectorSize, 1.0f / count, vec, 1)
         (id, vec)
-      }.collect()
-      var i = 0
-      while (i < synAgg.length) {
-        val index = synAgg(i)._1
-        if (index < vocabSize) {
-          Array.copy(synAgg(i)._2, 0, syn0Global, index * vectorSize, vectorSize)
-        } else {
-          Array.copy(synAgg(i)._2, 0, syn1Global, (index - vocabSize) * vectorSize, vectorSize)
-        }
-        i += 1
       }
+      val updateSyn = (_: Int, partitionSyn: Array[(Int, Array[Float])]) => {
+        var i = 0
+        while (i < partitionSyn.length) {
+          val (index, vec) = partitionSyn(i)
+          if (index < vocabSize) {
+            Array.copy(vec, 0, syn0Global, index * vectorSize, vectorSize)
+          } else {
+            Array.copy(vec, 0, syn1Global, (index - vocabSize) * vectorSize, vectorSize)
+          }
+          i += 1
+        }
+      }
+      sc.runJob(
+        synAgg,
+        (iter: Iterator[(Int, Array[Float])]) => iter.toArray,
+        updateSyn)
       bcSyn0Global.destroy()
       bcSyn1Global.destroy()
     }
@@ -501,18 +507,13 @@ class Word2VecModel private[spark] (
     private[spark] val wordIndex: Map[String, Int],
     private[spark] val wordVectors: Array[Float]) extends Serializable with Saveable {
 
-  private val numWords = wordIndex.size
+  private def numWords: Int = wordIndex.size
   // vectorSize: Dimension of each word's vector.
-  private val vectorSize = wordVectors.length / numWords
-
-  // wordList: Ordered list of words obtained from wordIndex.
-  private lazy val wordList: Array[String] = {
-    wordIndex.toSeq.sortBy(_._2).iterator.map(_._1).toArray
-  }
+  private def vectorSize: Int = wordVectors.length / numWords
 
   // wordVecInvNorms: Array of length numWords, each value being the inverse of
   //                  Euclidean norm of the wordVector.
-  private lazy val wordVecInvNorms: Array[Float] = {
+  @transient private lazy val wordVecInvNorms: Array[Float] = {
     val size = vectorSize
     Array.tabulate(numWords) { i =>
       val norm = BLAS.nativeBLAS.snrm2(size, wordVectors, i * size, 1)
@@ -565,7 +566,8 @@ class Word2VecModel private[spark] (
   @Since("1.1.0")
   def findSynonyms(word: String, num: Int): Array[(String, Double)] = {
     val vector = transform(word)
-    findSynonyms(vector.toArray, num, Some(word))
+    NewWord2VecModel.findSynonyms(
+      wordIndex, wordVectors, wordVecInvNorms, vector.toArray, num, Some(word))
   }
 
   /**
@@ -578,59 +580,8 @@ class Word2VecModel private[spark] (
    */
   @Since("1.1.0")
   def findSynonyms(vector: Vector, num: Int): Array[(String, Double)] = {
-    findSynonyms(vector.toArray, num, None)
-  }
-
-  /**
-   * Find synonyms of the vector representation of a word, rejecting
-   * words identical to the value of wordOpt, if one is supplied.
-   * @param vector vector representation of a word
-   * @param num number of synonyms to find
-   * @param wordOpt optionally, a word to reject from the results list
-   * @return array of (word, cosineSimilarity)
-   */
-  private[spark] def findSynonyms(
-      vector: Array[Double],
-      num: Int,
-      wordOpt: Option[String]): Array[(String, Double)] = {
-    require(num > 0, "Number of similar words should > 0")
-    val localVectorSize = vectorSize
-
-    val floatVec = vector.map(_.toFloat)
-    val vecNorm = BLAS.nativeBLAS.snrm2(localVectorSize, floatVec, 1)
-
-    val localWordList = wordList
-    val localNumWords = numWords
-    if (vecNorm == 0) {
-      Iterator.tabulate(num + 1)(i => (localWordList(i), 0.0))
-        .filterNot(t => wordOpt.contains(t._1))
-        .take(num)
-        .toArray
-    } else {
-      // Normalize input vector before BLAS.nativeBLAS.sgemv to avoid Inf value
-      BLAS.nativeBLAS.sscal(localVectorSize, 1 / vecNorm, floatVec, 0, 1)
-
-      val cosineVec = Array.ofDim[Float](localNumWords)
-      BLAS.nativeBLAS.sgemv("T", localVectorSize, localNumWords, 1.0F, wordVectors, localVectorSize,
-        floatVec, 1, 0.0F, cosineVec, 1)
-
-      val localWordVecInvNorms = wordVecInvNorms
-      var i = 0
-      while (i < cosineVec.length) { cosineVec(i) *= localWordVecInvNorms(i); i += 1 }
-
-      val idxOrd = new GuavaOrdering[Int] {
-        override def compare(left: Int, right: Int): Int = {
-          Ordering[Float].compare(cosineVec(left), cosineVec(right))
-        }
-      }
-
-      idxOrd.greatestOf(Iterator.range(0, localNumWords).asJava, num + 1)
-        .iterator.asScala
-        .map(i => (localWordList(i), cosineVec(i).toDouble))
-        .filterNot(t => wordOpt.contains(t._1))
-        .take(num)
-        .toArray
-    }
+    NewWord2VecModel.findSynonyms(
+      wordIndex, wordVectors, wordVecInvNorms, vector.toArray, num, None)
   }
 
   /**

@@ -287,14 +287,55 @@ class UserDefinedTypeSuite extends SharedSparkSession with ParquetTest
     assert(result.toSet === Set(FooWithDate(year, "FooFoo", 3), FooWithDate(year, "Foo", 1)))
   }
 
+  test("SPARK-59717: group by a UserDefinedType column backed by a primitive type") {
+    UDTRegistration.register(classOf[Year].getName, classOf[YearUDT].getName)
+
+    val y1 = Year.of(2024)
+    val y2 = Year.of(2025)
+    val df = Seq((y1, 1), (y2, 2), (y1, 3)).toDF("y", "v")
+    Seq("false", "true").foreach { vectorized =>
+      withSQLConf(
+        SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
+        SQLConf.ENABLE_VECTORIZED_HASH_MAP.key -> vectorized) {
+        checkAnswer(df.groupBy("y").agg(sum("v")), Row(y1, 4L) :: Row(y2, 2L) :: Nil)
+        checkAnswer(df.select("y").distinct(), Row(y1) :: Row(y2) :: Nil)
+      }
+    }
+  }
+
   test("Test unwrap_udt function") {
     val unwrappedFeatures = pointsRDD.select(unwrap_udt(col("features")))
       .rdd.map { (row: Row) => row.getAs[Seq[Double]](0).toArray }
     val unwrappedFeaturesArrays: Array[Array[Double]] = unwrappedFeatures.collect()
     assert(unwrappedFeaturesArrays.length === 2)
 
-    java.util.Arrays.equals(unwrappedFeaturesArrays(0), Array(0.1, 1.0))
-    java.util.Arrays.equals(unwrappedFeaturesArrays(1), Array(0.2, 2.0))
+    assert(Arrays.equals(unwrappedFeaturesArrays(0), Array(0.1, 1.0)))
+    assert(Arrays.equals(unwrappedFeaturesArrays(1), Array(0.2, 2.0)))
+  }
+
+  test("Test wrap_udt function") {
+    val udt = new TestUDT.MyDenseVectorUDT()
+    val df = Seq(Array(0.1, 1.0), Array(0.2, 2.0)).toDF("features")
+    val wrappedFeatures = df.select(wrap_udt(col("features"), udt).as("features"))
+
+    assert(wrappedFeatures.schema("features").dataType === udt)
+    checkAnswer(
+      wrappedFeatures,
+      Seq(
+        Row(new TestUDT.MyDenseVector(Array(0.1, 1.0))),
+        Row(new TestUDT.MyDenseVector(Array(0.2, 2.0)))))
+  }
+
+  test("Test unwrap_udt and wrap_udt round trip") {
+    val udt = new TestUDT.MyDenseVectorUDT()
+    val roundTrip = pointsRDD.select(wrap_udt(unwrap_udt(col("features")), udt).as("features"))
+
+    assert(roundTrip.schema("features").dataType === udt)
+    checkAnswer(
+      roundTrip,
+      Seq(
+        Row(new TestUDT.MyDenseVector(Array(0.1, 1.0))),
+        Row(new TestUDT.MyDenseVector(Array(0.2, 2.0)))))
   }
 
   test("SPARK-46289: UDT ordering") {

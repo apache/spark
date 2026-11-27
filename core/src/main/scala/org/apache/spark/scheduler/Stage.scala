@@ -80,9 +80,11 @@ private[scheduler] abstract class Stage(
   private[scheduler] var isChecksumMismatched: Boolean = false
 
   /**
-   * The maximum of task attempt id where checksum mismatches are detected.
+   * The maximum stage attempt ID whose checksum mismatch entered rollback handling, or -1 if
+   * none. Attempt 0 can also detect checksum mismatches, e.g. when a recreated stage recomputes
+   * partitions of an existing shuffle after its previous Stage was cleaned up.
    */
-  private[scheduler] var maxChecksumMismatchedId: Int = nextAttemptId
+  private[scheduler] var maxChecksumMismatchedId: Int = -1
 
   /**
    * The max attempt id we should ignore results for this stage, indicating there are ancestor
@@ -91,6 +93,12 @@ private[scheduler] abstract class Stage(
    * by ignoring the task output from previous attempts which might consume inconsistent data
    */
   private[scheduler] var maxAttemptIdToIgnore: Option[Int] = None
+
+  /**
+   * The latest failed barrier attempt. Results from this and older attempts must be ignored.
+   * Keep this separate from maxAttemptIdToIgnore, which also deduplicates rollback cleanup.
+   */
+  private[scheduler] var latestFailedBarrierAttemptId: Option[Int] = None
 
   val name: String = callSite.shortForm
   val details: String = callSite.longForm

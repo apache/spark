@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.parser.SqlBaseParser
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
-import org.apache.spark.sql.catalyst.util.DateTimeConstants
+import org.apache.spark.sql.catalyst.util.{DateTimeConstants, WriteDistributionAndOrdering}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors}
 import org.apache.spark.sql.execution.command._
@@ -123,6 +123,13 @@ class SparkSqlParser extends AbstractSqlParser {
   override def splitStatements(sqlText: String): SqlStatementSplitResult =
     SqlStatementSplitter.split(sqlText, SparkSqlParser.substituteVariablesForValidation)
 
+  /** Split statements while retaining their positions in the original SQL text. */
+  private[sql] def splitStatementsWithPositions(
+      sqlText: String): PositionedSqlStatementSplitResult =
+    SqlStatementSplitter.splitWithPositions(
+      sqlText,
+      SparkSqlParser.substituteVariablesForValidation)
+
   /**
    * Internal parse method that handles both parameter substitution and regular parsing.
    *
@@ -140,29 +147,33 @@ class SparkSqlParser extends AbstractSqlParser {
     val variableSubstituted = substitutor.substitute(command)
 
     // Step 2: Apply parameter substitution if a parameter context is provided.
-    val (paramSubstituted, positionMapper, hasParameters) = parameterContext match {
-      case Some(context) =>
-        // Check if the context actually contains parameters
-        val contextHasParams = context match {
-          case NamedParameterContext(params) => params.nonEmpty
-          case PositionalParameterContext(params) => params.nonEmpty
-          case HybridParameterContext(args, _) => args.nonEmpty
-        }
-        if (SQLConf.get.legacyParameterSubstitutionConstantsOnly) {
-          // Legacy mode: Parameters are detected but substitution is deferred to analysis phase.
-          // Only set hasParameters if the context actually contains parameters.
-          (variableSubstituted, PositionMapper.identity(variableSubstituted), contextHasParams)
-        } else {
-          // Modern mode: Perform parameter substitution during parsing.
-          val (substituted, mapper) =
-            ParameterHandler.substituteParameters(variableSubstituted, context)
-          // Only set hasParameters if the context actually contains parameters.
-          (substituted, mapper, contextHasParams)
-        }
-      case None =>
-        // No parameter context provided; skip parameter substitution.
-        (variableSubstituted, PositionMapper.identity(variableSubstituted), false)
-    }
+    val (paramSubstituted, positionMapper, hasParameters, withOptionalReferences) =
+      parameterContext match {
+        case Some(context) =>
+          // Check if the context actually contains parameters
+          val contextHasParams = context match {
+            case NamedParameterContext(params) => params.nonEmpty
+            case PositionalParameterContext(params) => params.nonEmpty
+            case HybridParameterContext(args, _) => args.nonEmpty
+          }
+          if (SQLConf.get.legacyParameterSubstitutionConstantsOnly) {
+            // Legacy mode: Parameters are detected but substitution is deferred to analysis phase.
+            // Only set hasParameters if the context actually contains parameters.
+            (variableSubstituted, PositionMapper.identity(variableSubstituted), contextHasParams,
+              false)
+          } else {
+            // Modern mode: Perform parameter substitution during parsing.
+            val substitution =
+              ParameterHandler.substituteParameters(variableSubstituted, context)
+            // Only set hasParameters if the context actually contains parameters. The substituted
+            // text is parsed with the optional references that the substitution parsed it with.
+            (substitution.sqlText, substitution.positionMapper, contextHasParams,
+              substitution.parsedWithOptionalReferences)
+          }
+        case None =>
+          // No parameter context provided; skip parameter substitution.
+          (variableSubstituted, PositionMapper.identity(variableSubstituted), false, false)
+      }
 
     // Step 3: Set up the origin with SQL text and position mapper to enable
     // parameter-aware error reporting.
@@ -173,7 +184,7 @@ class SparkSqlParser extends AbstractSqlParser {
       currentOrigin.copy(
         sqlText = Some(paramSubstituted),
         startIndex = Some(0),
-        stopIndex = Some(paramSubstituted.length - 1),
+        stopIndex = Some(paramSubstituted.codePointCount(0, paramSubstituted.length) - 1),
         positionMapper = Some(positionMapper)
       )
     } else {
@@ -184,7 +195,7 @@ class SparkSqlParser extends AbstractSqlParser {
     // Parse with the origin containing position mapper.
     // CurrentOrigin.withOrigin automatically restores the previous origin.
     CurrentOrigin.withOrigin(originToUse) {
-      super.parse(paramSubstituted)(toResult)
+      super.parse(paramSubstituted, withOptionalReferences)(toResult)
     }
   }
 }
@@ -577,6 +588,10 @@ class SparkSqlAstBuilder extends AstBuilder {
     }
   }
 
+  private def hasWriteClauses(ctx: CreateTableClausesContext): Boolean = {
+    !ctx.writeDistributionSpec.isEmpty || !ctx.writeOrderingSpec.isEmpty
+  }
+
   /**
    * Create a table, returning a [[CreateTable]] logical plan.
    *
@@ -599,6 +614,11 @@ class SparkSqlAstBuilder extends AstBuilder {
         // Unlike CREATE TEMPORARY VIEW USING, CREATE TEMPORARY TABLE USING does not support
         // IF NOT EXISTS. Users are not allowed to replace the existing temp table.
         invalidStatement("CREATE TEMPORARY TABLE IF NOT EXISTS", ctx)
+      }
+
+      if (hasWriteClauses(ctx.createTableClauses())) {
+        // A temp view cannot record a write distribution or ordering.
+        invalidStatement(s"CREATE TEMPORARY TABLE ... ${WriteDistributionAndOrdering.CLAUSES}", ctx)
       }
 
       val (_, _, _, _, options, location, _, _, _, _) =
@@ -840,7 +860,7 @@ class SparkSqlAstBuilder extends AstBuilder {
         throw QueryParsingErrors.defineTempViewWithIfNotExistsError(ctx)
       }
 
-      withIdentClause(ctx.identifierReference(), Seq(qPlan), (ident, otherPlans) => {
+      val plan = withIdentClause(ctx.identifierReference(), Seq(qPlan), (ident, otherPlans) => {
         val viewName = normalizeTempViewIdentifier(ident, ctx)
         val tableIdentifier = TableIdentifier(viewName)
 
@@ -856,6 +876,11 @@ class SparkSqlAstBuilder extends AstBuilder {
           ctx.REPLACE != null,
           viewType = viewType)
       })
+      // With an IDENTIFIER clause, the view command is built only after the analysis of the query.
+      if (!plan.isInstanceOf[DefinesView]) {
+        plan.setTagValue(DefinesView.BUILDER_TAG, ())
+      }
+      plan
     }
   }
 
@@ -1278,7 +1303,6 @@ class SparkSqlAstBuilder extends AstBuilder {
       recordReader: StringLitContext,
       schemaLess: Boolean): ScriptInputOutputSchema = {
     if (recordWriter != null || recordReader != null) {
-      // TODO: what does this message mean?
       throw QueryParsingErrors.useDefinedRecordReaderOrWriterClassesError(ctx)
     }
 
@@ -1372,8 +1396,11 @@ class SparkSqlAstBuilder extends AstBuilder {
 
     val path = Option(ctx.path).map(x => string(visitStringLit(x))).getOrElse("")
 
-    if (!(path.isEmpty ^ storage.locationUri.isEmpty)) {
+    if (path.nonEmpty && storage.locationUri.nonEmpty) {
       throw QueryParsingErrors.directoryPathAndOptionsPathBothSpecifiedError(ctx)
+    }
+    if (path.isEmpty && storage.locationUri.isEmpty) {
+      throw QueryParsingErrors.directoryPathMissingError(ctx)
     }
 
     if (!path.isEmpty) {
@@ -1654,8 +1681,8 @@ class SparkSqlAstBuilder extends AstBuilder {
         clusterBySpec.map(_.asTransform)
 
     // Because the createTableClauses grammar is reused for pipeline datasets but pipeline
-    // datasets don't support bucketing, options, storage location, or Hive SerDe, validate they
-    // are not set.
+    // datasets don't support bucketing, options, storage location, Hive SerDe, or a write
+    // distribution and ordering, validate they are not set.
     if (bucketSpec.isDefined) {
       throw operationNotAllowed(s"Bucketing is not supported for CREATE $syntaxTypeErrorStr " +
         "statements. Please remove any bucket spec specified in the statement.", ctx)
@@ -1676,6 +1703,10 @@ class SparkSqlAstBuilder extends AstBuilder {
       throw operationNotAllowed(s"Specifying location is not supported for CREATE " +
         s"$syntaxTypeErrorStr statements. The storage location for a pipeline dataset is " +
         "managed by the pipeline itself.", ctx)
+    }
+    if (hasWriteClauses(ctx.createTableClauses())) {
+      invalidStatement(
+        s"CREATE $syntaxTypeErrorStr ... ${WriteDistributionAndOrdering.CLAUSES}", ctx)
     }
 
     val spec = TableSpec(
@@ -1730,7 +1761,10 @@ class SparkSqlAstBuilder extends AstBuilder {
           excludeColumns = params.excludeColumns,
           storedAsScdType = params.storedAsScdType,
           trackHistoryColumns = params.trackHistoryColumns,
-          trackHistoryExceptColumns = params.trackHistoryExceptColumns
+          trackHistoryExceptColumns = params.trackHistoryExceptColumns,
+          ignoreNullUpdates = params.ignoreNullUpdates,
+          ignoreNullUpdatesColumns = params.ignoreNullUpdatesColumns,
+          ignoreNullUpdatesExceptColumns = params.ignoreNullUpdatesExceptColumns
         )
       } else {
         Option(ctx.query) match {

@@ -14,13 +14,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Union, TYPE_CHECKING
+from typing import TYPE_CHECKING, Union
 
 from pyspark.errors import PySparkTypeError
 from pyspark.sql import functions as pysparkfuncs
 from pyspark.sql.column import Column
-from pyspark.sql.connect.functions.builtin import _to_col, _invoke_function_over_columns
-from pyspark.sql.connect.functions.builtin import lit, _invoke_function
+from pyspark.sql.connect.functions.builtin import (
+    _invoke_function,
+    _invoke_function_over_columns,
+    _to_col,
+    lit,
+)
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import ColumnOrName
@@ -76,11 +80,12 @@ hours.__doc__ = pysparkfuncs.partitioning.hours.__doc__
 
 
 def _test() -> None:
-    import sys
-    import os
     import doctest
-    from pyspark.sql import SparkSession as PySparkSession
+    import os
+    import sys
+
     import pyspark.sql.connect.functions.partitioning
+    from pyspark.sql import SparkSession as PySparkSession
 
     globs = pyspark.sql.connect.functions.partitioning.__dict__.copy()
 

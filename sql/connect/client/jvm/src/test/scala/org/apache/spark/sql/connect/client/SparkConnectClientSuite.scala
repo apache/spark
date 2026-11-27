@@ -32,12 +32,15 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.concurrent.Futures.timeout
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SparkException, SparkThrowable}
+import org.apache.spark.{QueryContext, QueryContextType, SparkException, SparkRuntimeException, SparkThrowable, SparkUpgradeException}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, AnalyzePlanRequest, AnalyzePlanResponse, ArtifactStatusesRequest, ArtifactStatusesResponse, ExecutePlanRequest, ExecutePlanResponse, Relation, SparkConnectServiceGrpc, SQL}
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException, TempTableAlreadyExistsException}
 import org.apache.spark.sql.connect.SparkSession
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 import org.apache.spark.sql.connect.test.ConnectFunSuite
+import org.apache.spark.sql.streaming.StreamingQueryException
 
 class SparkConnectClientSuite extends ConnectFunSuite {
 
@@ -191,10 +194,9 @@ class SparkConnectClientSuite extends ConnectFunSuite {
     assert(client.userId == "abc123")
   }
 
-  // Use 0 to start the server at a random port
-  private def testClientConnection(serverPort: Int = 0)(
-      clientBuilder: Int => SparkConnectClient): Unit = {
-    startDummyServer(serverPort)
+  // Starts the server at a random port and connects the client built for that port to it.
+  private def testClientConnection(clientBuilder: Int => SparkConnectClient): Unit = {
+    startDummyServer(0)
     client = clientBuilder(server.getPort)
     val request = AnalyzePlanRequest
       .newBuilder()
@@ -224,11 +226,11 @@ class SparkConnectClientSuite extends ConnectFunSuite {
   }
 
   test("Test connection") {
-    testClientConnection() { testPort => SparkConnectClient.builder().port(testPort).build() }
+    testClientConnection { testPort => SparkConnectClient.builder().port(testPort).build() }
   }
 
   test("Test connection string") {
-    testClientConnection() { testPort =>
+    testClientConnection { testPort =>
       SparkConnectClient.builder().connectionString(s"sc://localhost:$testPort").build()
     }
   }
@@ -394,6 +396,142 @@ class SparkConnectClientSuite extends ConnectFunSuite {
     }
   }
 
+  // The errorFactory entries that rebuild a server error from this client's error definitions.
+  // StreamingQueryException and SparkException always keep the server's message.
+  private val renderingErrorFactory = GrpcExceptionConverter.errorFactory.filter {
+    case (name, _) =>
+      name != classOf[StreamingQueryException].getName && name != classOf[SparkException].getName
+  }
+
+  private def isInstanceOf(error: Throwable, className: String): Boolean =
+    Iterator
+      .iterate[Class[_]](error.getClass)(_.getSuperclass)
+      .takeWhile(_ != null)
+      .exists(_.getName == className)
+
+  // Entries whose exception type carries no query context.
+  private val withoutQueryContext = Set(
+    classOf[NamespaceAlreadyExistsException],
+    classOf[TableAlreadyExistsException],
+    classOf[TempTableAlreadyExistsException],
+    classOf[NoSuchDatabaseException],
+    classOf[NoSuchNamespaceException],
+    classOf[NoSuchTableException],
+    classOf[UnsupportedOperationException],
+    classOf[SparkUpgradeException]).map(_.getName)
+
+  // Entries that keep the cause rebuilt from the server's error chain when the client renders the
+  // error. Each entry handles the cause the same way when the client cannot render the error, so
+  // the DateTimeException and NoSuchNamespaceException entries drop it in both cases, although
+  // their exception types can carry a cause.
+  private val withCause = Set(
+    classOf[AnalysisException].getName,
+    classOf[TableAlreadyExistsException].getName,
+    classOf[TempTableAlreadyExistsException].getName,
+    classOf[NoSuchDatabaseException].getName,
+    classOf[NoSuchTableException].getName,
+    classOf[IllegalArgumentException].getName,
+    classOf[SparkRuntimeException].getName,
+    classOf[SparkUpgradeException].getName)
+
+  test("Server errors the client cannot render keep the server's message") {
+    val sqlContext = new QueryContext {
+      override def contextType(): QueryContextType = QueryContextType.SQL
+      override def objectType(): String = ""
+      override def objectName(): String = ""
+      override def startIndex(): Int = 0
+      override def stopIndex(): Int = 5
+      override def fragment(): String = "SELECT"
+      override def callSite(): String = ""
+      override def summary(): String = "== SQL (line 1, position 1) ==\nSELECT\n^^^^^^\n"
+    }
+    // (condition, message parameters, query context, server SQLSTATE, expected SQLSTATE)
+    val cases = Seq(
+      // A subcondition the client lacks. The server's SQLSTATE differs from the 42000 the
+      // client would derive from the main condition, and wins.
+      (
+        "INVALID_SQL_SYNTAX.SUBCONDITION_NOT_DEFINED_BY_CLIENT",
+        Map("statement" -> "SELECT"),
+        Array(sqlContext),
+        Some("42601"),
+        "42601"),
+      // The same without a server SQLSTATE, as for a server condition that defines none: the
+      // client falls back to the main condition's SQLSTATE.
+      (
+        "INVALID_SQL_SYNTAX.SUBCONDITION_NOT_DEFINED_BY_CLIENT",
+        Map("statement" -> "SELECT"),
+        Array.empty[QueryContext],
+        None,
+        "42000"),
+      // A main condition the client lacks, without a server SQLSTATE.
+      (
+        "CONDITION_NOT_DEFINED_BY_CLIENT",
+        Map.empty[String, String],
+        Array(sqlContext),
+        None,
+        "XXKCM"),
+      // A condition the client defines, but whose template uses a parameter the server did not
+      // send, as when the template gained a placeholder in the client's version.
+      ("DUPLICATE_KEY", Map("unrelated" -> "x"), Array.empty[QueryContext], None, "23505"),
+      // A condition the client defines, with a parameter its template does not use, as when the
+      // server's template gained a placeholder. Rendering rejects unused parameters in tests.
+      (
+        "DUPLICATE_KEY",
+        Map("keyColumn" -> "`abc`", "parameterNotDefinedByClient" -> "x"),
+        Array.empty[QueryContext],
+        None,
+        "23505"))
+    for ((name, constructor) <- renderingErrorFactory) {
+      cases.foreach {
+        case (errorClass, messageParameters, queryContext, serverSqlState, expectedSqlState) =>
+          withClue(s"$name, $errorClass, $serverSqlState: ") {
+            val serverMessage =
+              s"[$errorClass] Server message. SQLSTATE: $expectedSqlState" +
+                queryContext.map("\n" + _.summary()).mkString
+            val serverCause = new RuntimeException("Server cause")
+            val error = constructor(
+              GrpcExceptionConverter.ErrorParams(
+                message = serverMessage,
+                cause = Some(serverCause),
+                errorClass = Some(errorClass),
+                messageParameters = messageParameters,
+                queryContext = queryContext,
+                sqlState = serverSqlState)).asInstanceOf[Throwable with SparkThrowable]
+            assert(isInstanceOf(error, name))
+            assert(error.getMessage == serverMessage)
+            assert(error.getCondition == errorClass)
+            assert(error.getSqlState == expectedSqlState)
+            assert(error.getMessageParameters.asScala == messageParameters)
+            val expectedContext =
+              if (withoutQueryContext.contains(name)) Seq.empty else queryContext.toSeq
+            assert(error.getQueryContext.toSeq == expectedContext)
+            val expectedCause = if (withCause.contains(name)) serverCause else null
+            assert(error.getCause eq expectedCause)
+          }
+      }
+    }
+  }
+
+  test("Server errors the client can render are rendered from its own definitions") {
+    for ((name, constructor) <- renderingErrorFactory) {
+      withClue(name) {
+        val error = constructor(
+          GrpcExceptionConverter.ErrorParams(
+            message = "Server message",
+            cause = None,
+            errorClass = Some("DUPLICATE_KEY"),
+            messageParameters = Map("keyColumn" -> "`abc`"),
+            queryContext = Array.empty,
+            sqlState = None)).asInstanceOf[Throwable with SparkThrowable]
+        assert(isInstanceOf(error, name))
+        assert(error.getMessage.contains("[DUPLICATE_KEY] Found duplicate keys `abc`."))
+        assert(!error.getMessage.contains("Server message"))
+        assert(error.getCondition == "DUPLICATE_KEY")
+        assert(error.getSqlState == "23505")
+      }
+    }
+  }
+
   private case class TestPackURI(
       connectionString: String,
       isCorrect: Boolean,
@@ -404,7 +542,10 @@ class SparkConnectClientSuite extends ConnectFunSuite {
     TestPackURI(
       "sc://localhost/",
       isCorrect = true,
-      client => testClientConnection(ConnectCommon.CONNECT_GRPC_BINDING_PORT)(_ => client)),
+      client => {
+        assert(client.configuration.host == "localhost")
+        assert(client.configuration.port == ConnectCommon.CONNECT_GRPC_BINDING_PORT)
+      }),
     TestPackURI(
       "sc://localhost:1234/",
       isCorrect = true,
@@ -1428,11 +1569,17 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
   private val sparkConfigs = mutable.Map.empty[String, String]
 
   var errorToThrowOnExecute: Option[Throwable] = None
+  var errorToThrowOnAnalyze: Option[Throwable] = None
+  var serverCapabilities: Seq[String] = Nil
 
   private var errorToThrowOnConfig: Map[String, Throwable] = Map.empty
 
   private[sql] def setErrorToThrowOnConfig(key: String, error: Throwable): Unit = synchronized {
     errorToThrowOnConfig = errorToThrowOnConfig + (key -> error)
+  }
+
+  private[sql] def setSparkConfig(key: String, value: String): Unit = synchronized {
+    sparkConfigs.put(key, value)
   }
 
   private[sql] def getAndClearLatestInputPlan(): proto.Plan = synchronized {
@@ -1501,6 +1648,11 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
   override def analyzePlan(
       request: AnalyzePlanRequest,
       responseObserver: StreamObserver[AnalyzePlanResponse]): Unit = {
+    errorToThrowOnAnalyze.foreach { error =>
+      errorToThrowOnAnalyze = None
+      responseObserver.onError(error)
+      return
+    }
     // Reply with a dummy response using the same client ID
     val requestSessionId = request.getSessionId
     synchronized {
@@ -1520,11 +1672,17 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
         case _ => inputPlan = null
       }
     }
-    val response = AnalyzePlanResponse
+    val responseBuilder = AnalyzePlanResponse
       .newBuilder()
       .setSessionId(requestSessionId)
-      .build()
-    responseObserver.onNext(response)
+    if (request.hasSparkVersion) {
+      responseBuilder.setSparkVersion(
+        proto.AnalyzePlanResponse.SparkVersion
+          .newBuilder()
+          .setVersion("test-version")
+          .addAllCapabilities(serverCapabilities.asJava))
+    }
+    responseObserver.onNext(responseBuilder.build())
     responseObserver.onCompleted()
   }
 

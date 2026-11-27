@@ -165,6 +165,29 @@ private[spark] object History {
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("1m")
 
+  val EVENT_LOG_MAX_LINE_LENGTH_LIMIT: Int = 512 * 1024 * 1024
+
+  val EVENT_LOG_MAX_LINE_LENGTH =
+    ConfigBuilder("spark.history.fs.eventLog.maxLineLength")
+      .doc("Maximum UTF-8 byte length of a single event log line during replay, excluding " +
+        "the line ending. Longer lines are skipped with a warning, bounding the " +
+        "memory replay can use when an event log is corrupt or unexpectedly large. Buffer " +
+        "growth, UTF-16 storage and JSON parsing can require several times this limit in heap " +
+        "space. Buffer capacity grows in steps: reducing 256m to 200m or 150m may not reduce " +
+        "the retained buffer; use 128m to reach a smaller capacity. Values at or below 0, " +
+        s"or above $EVENT_LOG_MAX_LINE_LENGTH_LIMIT, use the maximum supported limit of " +
+        s"$EVENT_LOG_MAX_LINE_LENGTH_LIMIT bytes (512 MiB). This cap avoids JVM array-size " +
+        "limits but does not guarantee sufficient heap space. If a longer line is in the " +
+        "event log files to compact, compaction of the rolling event log files of that " +
+        "application is skipped until the limit is increased and a new event log file is " +
+        "rolled. " +
+        "Introduced in 4.3.0; also available in 3.5.10, 4.0.5, 4.1.4 and 4.2.1; and in " +
+        "all versions after 4.3.0.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("256m")
+
   private[spark] val EVENT_LOG_ROLLING_MAX_FILES_TO_RETAIN =
     ConfigBuilder("spark.history.fs.eventLog.rolling.maxFilesToRetain")
       .doc("The maximum number of event log files which will be retained as non-compacted. " +
@@ -224,7 +247,7 @@ private[spark] object History {
     .version("1.0.1")
     .doc("Specifies whether ACLs should be checked to authorize users viewing the applications " +
       "in the history server. If enabled, access control checks are performed regardless of " +
-      "what the individual applications had set for spark.ui.acls.enable. The application owner " +
+      "what the individual applications had set for spark.acls.enable. The application owner " +
       "will always have authorization to view their own application and any users specified via " +
       "spark.ui.view.acls and groups specified via spark.ui.view.acls.groups when the " +
       "application was run will also have authorization to view that application. If disabled, " +

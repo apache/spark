@@ -15,10 +15,10 @@
 # limitations under the License.
 #
 
-from types import CodeType
-from typing import Any, Optional, List, Iterator, Tuple, Type, TYPE_CHECKING, Callable
 import inspect
 import warnings
+from types import CodeType
+from typing import TYPE_CHECKING, Any, Callable, Iterator, List, Optional, Tuple, Type
 
 if TYPE_CHECKING:
     has_memory_profiler: bool

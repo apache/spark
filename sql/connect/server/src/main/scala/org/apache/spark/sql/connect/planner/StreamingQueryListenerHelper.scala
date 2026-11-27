@@ -26,6 +26,7 @@ import org.apache.spark.internal.LogKeys.FUNCTION_NAME
 import org.apache.spark.sql.connect.IllegalStateErrors
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.service.{SessionHolder, SparkConnectService}
+import org.apache.spark.sql.execution.python.PythonWorkerEnvironment
 import org.apache.spark.sql.streaming.StreamingQueryListener
 
 /**
@@ -47,7 +48,9 @@ class PythonStreamingQueryListener(listener: SimplePythonFunction, sessionHolder
     listener,
     connectUrl,
     sessionHolder.sessionId,
-    "pyspark.sql.connect.streaming.worker.listener_worker")
+    "pyspark.sql.connect.streaming.worker.listener_worker",
+    // The worker lives as long as the listener, so it keeps the values held when it was added.
+    PythonWorkerEnvironment.readValidated(sessionHolder.session.sessionState.conf))
 
   val (dataOut, dataIn) = runner.init()
 

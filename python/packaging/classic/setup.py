@@ -16,16 +16,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import importlib.util
+import ctypes
 import glob
+import importlib.util
 import os
 import sys
-import ctypes
+from dataclasses import dataclass
+from pathlib import Path
+from shutil import copyfile, copytree, rmtree
+
 from setuptools import setup
 from setuptools.command.install import install
-from shutil import copyfile, copytree, rmtree
-from pathlib import Path
-from dataclasses import dataclass
 
 if (
     # When we package, the parent directory 'classic' dir
@@ -172,7 +173,7 @@ if in_spark:
 _minimum_pandas_version = "2.2.0"
 _minimum_numpy_version = "1.23.2"
 _minimum_pyarrow_version = "18.0.0"
-_minimum_grpc_version = "1.76.0"
+_minimum_grpc_version = "1.84.1"
 _minimum_googleapis_common_protos_version = "1.71.0"
 _minimum_pyyaml_version = "3.11"
 _minimum_zstandard_version = "0.25.0"
@@ -273,6 +274,7 @@ try:
             "pyspark",
             "pyspark.core",
             "pyspark.cloudpickle",
+            "pyspark.eval_handlers",
             "pyspark.messages",
             "pyspark.messages.socket",
             "pyspark.mllib",

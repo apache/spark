@@ -14,44 +14,45 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
 import difflib
+import unittest
 from itertools import zip_longest
 
-from pyspark.errors import QueryContextType
+import pyspark.sql.functions as F
 from pyspark.errors import (
     AnalysisException,
+    IllegalArgumentException,
     ParseException,
     PySparkAssertionError,
-    PySparkValueError,
-    IllegalArgumentException,
-    SparkUpgradeException,
     PySparkTypeError,
+    PySparkValueError,
+    QueryContextType,
+    SparkUpgradeException,
 )
+from pyspark.sql import Row
+from pyspark.sql.functions import from_unixtime, to_date, unix_timestamp
+from pyspark.sql.types import (
+    ArrayType,
+    BooleanType,
+    DecimalType,
+    DoubleType,
+    FloatType,
+    IntegerType,
+    LongType,
+    MapType,
+    StringType,
+    StructField,
+    StructType,
+    TimestampNTZNanosType,
+)
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import (
+    _context_diff,
     assertDataFrameEqual,
     assertSchemaEqual,
-    _context_diff,
     have_numpy,
     have_pandas,
     have_pyarrow,
-)
-from pyspark.testing.sqlutils import ReusedSQLTestCase
-from pyspark.sql import Row
-import pyspark.sql.functions as F
-from pyspark.sql.functions import to_date, unix_timestamp, from_unixtime
-from pyspark.sql.types import (
-    DecimalType,
-    StringType,
-    ArrayType,
-    LongType,
-    StructType,
-    MapType,
-    FloatType,
-    DoubleType,
-    StructField,
-    IntegerType,
-    BooleanType,
 )
 
 
@@ -757,8 +758,8 @@ class UtilsTestsMixin:
         "no pandas or numpy or pyarrow dependency",
     )
     def test_assert_equal_exact_pandas_df(self):
-        import pandas as pd
         import numpy as np
+        import pandas as pd
 
         df1 = pd.DataFrame(
             data=np.array([(1, 2, 3), (4, 5, 6), (7, 8, 9)]), columns=["a", "b", "c"]
@@ -775,8 +776,8 @@ class UtilsTestsMixin:
         "no pandas or numpy or pyarrow dependency",
     )
     def test_assert_approx_equal_pandas_df(self):
-        import pandas as pd
         import numpy as np
+        import pandas as pd
 
         # test that asserts close enough equality for pandas df
         df1 = pd.DataFrame(
@@ -794,8 +795,8 @@ class UtilsTestsMixin:
         "no pandas or numpy or pyarrow dependency",
     )
     def test_assert_approx_equal_fail_exact_pandas_df(self):
-        import pandas as pd
         import numpy as np
+        import pandas as pd
 
         # test that asserts close enough equality for pandas df
         df1 = pd.DataFrame(
@@ -838,8 +839,8 @@ class UtilsTestsMixin:
         "no pandas or numpy or pyarrow dependency",
     )
     def test_assert_unequal_pandas_df(self):
-        import pandas as pd
         import numpy as np
+        import pandas as pd
 
         df1 = pd.DataFrame(
             data=np.array([(1, 2, 3), (4, 5, 6), (6, 5, 4)]), columns=["a", "b", "c"]
@@ -881,9 +882,10 @@ class UtilsTestsMixin:
         "no pandas or numpy or pyarrow dependency",
     )
     def test_assert_type_error_pandas_df(self):
-        import pyspark.pandas as ps
-        import pandas as pd
         import numpy as np
+        import pandas as pd
+
+        import pyspark.pandas as ps
 
         df1 = ps.DataFrame(data=[10, 20, 30], columns=["Numbers"])
         df2 = pd.DataFrame(
@@ -949,8 +951,9 @@ class UtilsTestsMixin:
 
     @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
     def test_assert_error_pandas_pyspark_df(self):
-        import pyspark.pandas as ps
         import pandas as pd
+
+        import pyspark.pandas as ps
 
         df1 = ps.DataFrame(data=[10, 20, 30], columns=["Numbers"])
         df2 = self.spark.createDataFrame([(10,), (11,), (13,)], ["Numbers"])
@@ -1869,6 +1872,58 @@ class UtilsTestsMixin:
         # This should fail
         with self.assertRaises(PySparkAssertionError):
             assertSchemaEqual(s1, s2)
+
+    def test_assert_schema_equal_with_timestamp_nanos_types(self):
+        """Test assertSchemaEqual with nanosecond timestamp types of different precision
+        (SPARK-57462): the precision must be compared even under ignoreNullable, like decimal."""
+        s1 = StructType([StructField("ts", TimestampNTZNanosType(9), True)])
+        # Same precision - should pass, including with the ignoreNullable default.
+        assertSchemaEqual(s1, StructType([StructField("ts", TimestampNTZNanosType(9), False)]))
+        # Different precision - should fail rather than be treated as equal.
+        with self.assertRaises(PySparkAssertionError):
+            assertSchemaEqual(s1, StructType([StructField("ts", TimestampNTZNanosType(7), True)]))
+
+
+class NonFiniteComparisonTests(unittest.TestCase):
+    def test_unequal_special_values(self):
+        nan, inf = float("nan"), float("inf")
+        for left, right in [
+            (nan, 1.0),
+            (nan, inf),
+            (nan, -inf),
+            (1.0, inf),
+            (1.0, -inf),
+            (inf, -inf),
+        ]:
+            for actual, expected in [(left, right), (right, left)]:
+                for ordered in [False, True]:
+                    for rtol, atol in [(1e-5, 1e-8), (0.0, 0.0)]:
+                        with self.subTest(actual=actual, expected=expected, ordered=ordered):
+                            with self.assertRaises(PySparkAssertionError) as error:
+                                assertDataFrameEqual(
+                                    [Row(value=actual)],
+                                    [Row(value=expected)],
+                                    checkRowOrder=ordered,
+                                    rtol=rtol,
+                                    atol=atol,
+                                )
+                            self.assertEqual(error.exception.getCondition(), "DIFFERENT_ROWS")
+
+    def test_equal_special_values_and_finite_tolerance(self):
+        for value in [float("nan"), float("inf"), float("-inf")]:
+            assertDataFrameEqual([Row(value=value)], [Row(value=value)])
+        assertDataFrameEqual([Row(value=1.001)], [Row(value=1.0)], rtol=0.01)
+        with self.assertRaises(PySparkAssertionError):
+            assertDataFrameEqual([Row(value=1.1)], [Row(value=1.0)], rtol=0.01)
+
+    def test_nested_special_values(self):
+        for wrap in [
+            lambda value: Row(nested=Row(value=value)),
+            lambda value: Row(items=[value]),
+            lambda value: Row(mapping={"key": value}),
+        ]:
+            with self.assertRaises(PySparkAssertionError):
+                assertDataFrameEqual([wrap(float("nan"))], [wrap(1.0)])
 
 
 class UtilsTests(UtilsTestsMixin, ReusedSQLTestCase):

@@ -106,6 +106,88 @@ public class RetryingBlockTransferorSuite {
   }
 
   @Test
+  public void testParentSuccessCallbackThrows() throws IOException, InterruptedException {
+    BlockFetchingListener listener = mock(BlockFetchingListener.class);
+    OutOfMemoryError error = new OutOfMemoryError("test: success callback failed");
+    doThrow(error).when(listener).onBlockTransferSuccess("b0", block0);
+
+    TransportConf conf = new TransportConf("shuffle", new MapConfigProvider(configMap));
+    BlockTransferStarter fetchStarter = mock(BlockTransferStarter.class);
+    doAnswer(invocation -> {
+      BlockFetchingListener retryListener = (BlockFetchingListener) invocation.getArguments()[1];
+      // The success callback throws, so the transport layer fails every block from this chunk
+      // onwards (OneForOneBlockFetcher.ChunkCallback.onFailure), including b0 itself.
+      Throwable thrown =
+        assertThrows(OutOfMemoryError.class, () -> retryListener.onBlockFetchSuccess("b0", block0));
+      retryListener.onBlockFetchFailure("b0", thrown);
+      retryListener.onBlockFetchFailure("b1", thrown);
+      return null;
+    }).when(fetchStarter).createAndStart(any(), any());
+
+    new RetryingBlockTransferor(conf, fetchStarter, new String[] {"b0", "b1"}, listener).start();
+
+    // b0 must still reach the parent listener as a failure exactly once; otherwise its caller
+    // waits forever for it.
+    verify(listener).onBlockTransferSuccess("b0", block0);
+    verify(listener, times(1)).onBlockTransferFailure("b0", error);
+    verify(listener).onBlockTransferFailure("b1", error);
+    verify(listener, atLeastOnce()).getTransferType();
+    verifyNoMoreInteractions(listener);
+  }
+
+  @Test
+  public void testParentSuccessAndFailureCallbacksThrow()
+      throws IOException, InterruptedException {
+    BlockFetchingListener listener = mock(BlockFetchingListener.class);
+    OutOfMemoryError error = new OutOfMemoryError("test: success callback failed");
+    RuntimeException failureError = new RuntimeException("test: failure callback failed");
+    doThrow(error).when(listener).onBlockTransferSuccess("b0", block0);
+    doThrow(failureError).when(listener).onBlockTransferFailure("b0", error);
+
+    TransportConf conf = new TransportConf("shuffle", new MapConfigProvider(configMap));
+    BlockTransferStarter fetchStarter = mock(BlockTransferStarter.class);
+    Throwable[] thrown = new Throwable[1];
+    doAnswer(invocation -> {
+      BlockFetchingListener retryListener = (BlockFetchingListener) invocation.getArguments()[1];
+      thrown[0] = assertThrows(Throwable.class,
+        () -> retryListener.onBlockFetchSuccess("b0", block0));
+      return null;
+    }).when(fetchStarter).createAndStart(any(), any());
+
+    new RetryingBlockTransferor(conf, fetchStarter, new String[] {"b0"}, listener).start();
+
+    // The success-callback error is the one rethrown, and it carries the failure-callback error.
+    assertSame(error, thrown[0]);
+    assertArrayEquals(new Throwable[] {failureError}, error.getSuppressed());
+    verify(listener).onBlockTransferFailure("b0", error);
+  }
+
+  @Test
+  public void testParentFailureCallbackRethrowsSuccessCallbackError()
+      throws IOException, InterruptedException {
+    BlockFetchingListener listener = mock(BlockFetchingListener.class);
+    OutOfMemoryError error = new OutOfMemoryError("test: success callback failed");
+    doThrow(error).when(listener).onBlockTransferSuccess("b0", block0);
+    doThrow(error).when(listener).onBlockTransferFailure("b0", error);
+
+    TransportConf conf = new TransportConf("shuffle", new MapConfigProvider(configMap));
+    BlockTransferStarter fetchStarter = mock(BlockTransferStarter.class);
+    Throwable[] thrown = new Throwable[1];
+    doAnswer(invocation -> {
+      BlockFetchingListener retryListener = (BlockFetchingListener) invocation.getArguments()[1];
+      thrown[0] = assertThrows(Throwable.class,
+        () -> retryListener.onBlockFetchSuccess("b0", block0));
+      return null;
+    }).when(fetchStarter).createAndStart(any(), any());
+
+    new RetryingBlockTransferor(conf, fetchStarter, new String[] {"b0"}, listener).start();
+
+    // A throwable cannot suppress itself, so the error is rethrown as it is.
+    assertSame(error, thrown[0]);
+    assertEquals(0, error.getSuppressed().length);
+  }
+
+  @Test
   public void testSingleIOExceptionOnFirst() throws IOException, InterruptedException {
     BlockFetchingListener listener = mock(BlockFetchingListener.class);
 

@@ -16,10 +16,10 @@
 #
 
 # $example on$
-from pyspark.mllib.recommendation import ALS, Rating
-from pyspark.mllib.evaluation import RegressionMetrics
 # $example off$
 from pyspark import SparkContext
+from pyspark.mllib.evaluation import RegressionMetrics
+from pyspark.mllib.recommendation import ALS, Rating
 
 if __name__ == "__main__":
     sc = SparkContext(appName="Ranking Metrics Example")

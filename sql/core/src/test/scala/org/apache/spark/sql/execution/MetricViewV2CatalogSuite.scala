@@ -27,6 +27,7 @@ import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog,
 import org.apache.spark.sql.metricview.serde.{AssetSource, Column, Constants, DimensionExpression, MeasureExpression, MetricView, MetricViewFactory, SQLSource}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.Metadata
+import org.apache.spark.tags.DataSourceV2Test
 
 /**
  * Tests that exercise [[org.apache.spark.sql.metricview.logical.CreateMetricView]] on a
@@ -39,6 +40,7 @@ import org.apache.spark.sql.types.Metadata
  * minimal [[RelationCatalog]] so the same instance can also host the source table referenced by
  * the metric view's YAML.
  */
+@DataSourceV2Test
 class MetricViewV2CatalogSuite extends SharedSparkSession {
 
   import testImplicits._
@@ -184,7 +186,7 @@ class MetricViewV2CatalogSuite extends SharedSparkSession {
 
       // SQL configs and current catalog/namespace are first-class typed fields on View, no
       // longer encoded into properties for V2 catalogs.
-      assert(info.sqlConfigs().size > 0,
+      assert(!info.sqlConfigs().isEmpty,
         s"Expected at least one captured SQL config; got ${info.sqlConfigs()}")
       assert(info.currentCatalog() ===
         spark.sessionState.catalogManager.currentCatalog.name())
@@ -749,7 +751,7 @@ class MetricViewV2CatalogSuite extends SharedSparkSession {
         select = metricViewColumns)
       val yaml = createMetricView(fullMetricViewName, mv)
 
-      // DESCRIBE TABLE EXTENDED resolves the ident through `Analyzer.lookupTableOrView`,
+      // DESCRIBE TABLE EXTENDED resolves the ident through `RelationResolution.lookupTableOrView`,
       // which calls `RelationCatalog.loadRelation` once and gets back a
       // `DelegatingTable(View)`. The analyzer wraps it as a `ResolvedPersistentView` and
       // `DataSourceV2Strategy` routes through SPARK-56655's `DescribeV2ViewExec`, which

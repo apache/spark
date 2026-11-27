@@ -36,14 +36,14 @@ import numpy as np
 import pandas as pd
 from pandas.api.extensions import no_default
 
+import pyspark.pandas as ps
 from pyspark._globals import _NoValue, _NoValueType
 from pyspark.loose_version import LooseVersion
+from pyspark.pandas.typedef.typehints import SeriesType, is_str_dtype
 from pyspark.pandas.utils import ansi_mode_context, is_ansi_mode_enabled
-from pyspark.pandas.typedef.typehints import is_str_dtype, SeriesType
-from pyspark.sql.types import StringType, BinaryType, ArrayType, LongType, MapType
 from pyspark.sql import functions as F
 from pyspark.sql.functions import pandas_udf
-import pyspark.pandas as ps
+from pyspark.sql.types import ArrayType, BinaryType, LongType, MapType, StringType
 
 FuncT = TypeVar("FuncT", bound=Callable[..., Any])
 
@@ -2408,11 +2408,12 @@ class StringMethods:
 
 
 def _test() -> None:
-    import os
     import doctest
+    import os
     import sys
-    from pyspark.sql import SparkSession
+
     import pyspark.pandas.strings
+    from pyspark.sql import SparkSession
 
     os.chdir(os.environ["SPARK_HOME"])
 

@@ -21,24 +21,23 @@ import tempfile
 import time
 
 from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
 from pyspark.sql.types import (
-    StructType,
-    StructField,
-    LongType,
-    StringType,
-    IntegerType,
     ArrayType,
+    IntegerType,
+    LongType,
     MapType,
     Row,
+    StringType,
+    StructField,
+    StructType,
 )
+from pyspark.testing.connectutils import should_test_connect
 from pyspark.testing.objects import (
-    PythonOnlyUDT,
     ExamplePoint,
     PythonOnlyPoint,
+    PythonOnlyUDT,
 )
-
-from pyspark.testing.connectutils import should_test_connect
-from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
 
 if should_test_connect:
     from pyspark.sql.connect.readwriter import DataFrameWriterV2
@@ -390,7 +389,8 @@ class SparkConnectReadWriterTests(SparkConnectSQLTestCase):
     def test_writeTo_operations(self):
         # SPARK-42002: Implement DataFrameWriterV2
         import datetime
-        from pyspark.sql.connect.functions import col, years, months, days, hours, bucket
+
+        from pyspark.sql.connect.functions import bucket, col, days, hours, months, years
 
         df = self.connect.createDataFrame(
             [(1, datetime.datetime(2000, 1, 1), "foo")], ("id", "ts", "value")

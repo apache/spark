@@ -15,13 +15,13 @@
 # limitations under the License.
 #
 from threading import RLock
-from typing import overload, Dict, Union, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, Optional, Union, overload
 
 from pyspark.resource.requests import (
+    ExecutorResourceRequest,
+    ExecutorResourceRequests,
     TaskResourceRequest,
     TaskResourceRequests,
-    ExecutorResourceRequests,
-    ExecutorResourceRequest,
 )
 
 if TYPE_CHECKING:
@@ -322,6 +322,7 @@ class ResourceProfileBuilder:
 def _test() -> None:
     import doctest
     import sys
+
     from pyspark import SparkContext
 
     globs = globals().copy()

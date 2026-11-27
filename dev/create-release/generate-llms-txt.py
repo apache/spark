@@ -18,8 +18,8 @@
 #
 # This script generates llms.txt file for Apache Spark documentation
 
-import sys
 import argparse
+import sys
 from pathlib import Path
 
 

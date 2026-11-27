@@ -19,17 +19,21 @@ package org.apache.spark.sql.execution.python
 
 import java.io.{File, FileWriter}
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.api.python.PythonException
 import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, Row}
-import org.apache.spark.sql.execution.FilterExec
+import org.apache.spark.sql.connector.write.RequiresDistributionAndOrdering
+import org.apache.spark.sql.execution.{FilterExec, LimitExec, QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.DataSourceManager
-import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation}
+import org.apache.spark.sql.execution.datasources.v2.{AppendDataExec, BatchScanExec, DataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.datasources.v2.python.PythonScan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.util.Utils
 
 abstract class PythonDataSourceSuiteBase
@@ -305,6 +309,280 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
       )
 
       checkAnswer(df, Seq(Row(1, 0), Row(1, 1)))
+    }
+  }
+
+  test("data source reader with limit pushdown") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource, DataSourceReader, InputPartition
+         |
+         |class SimpleDataSourceReader(DataSourceReader):
+         |    def __init__(self):
+         |        self.limit = None
+         |
+         |    def pushLimit(self, limit):
+         |        self.limit = limit
+         |        return True
+         |
+         |    def partitions(self):
+         |        # A pushed limit lets the reader plan a single partition.
+         |        assert self.limit == 2, self.limit
+         |        return [InputPartition(0)]
+         |
+         |    def read(self, partition):
+         |        for i in range(self.limit):
+         |            yield (i,)
+         |
+         |class SimpleDataSource(DataSource):
+         |    def schema(self):
+         |        return "id int"
+         |
+         |    def reader(self, schema):
+         |        return SimpleDataSourceReader()
+         |""".stripMargin
+    val schema = StructType.fromDDL("id INT")
+    val dataSource =
+      createUserDefinedPythonDataSource(name = dataSourceName, pythonScript = dataSourceScript)
+    withSQLConf(SQLConf.PYTHON_LIMIT_PUSHDOWN_ENABLED.key -> "true") {
+      spark.dataSource.registerPython(dataSourceName, dataSource)
+      val df = spark.read.format(dataSourceName).schema(schema).load().limit(2)
+      val plan = df.queryExecution.executedPlan
+
+      collectFirst(plan) {
+        case s: BatchScanExec if s.scan.isInstanceOf[PythonScan] =>
+          val p = s.scan.asInstanceOf[PythonScan]
+          assert(p.getMetaData().get("PushedLimit").contains("LIMIT 2"))
+      }.getOrElse(
+        fail(s"PythonScan not found in the plan. Actual plan:\n$plan")
+      )
+
+      // Spark keeps its own limit: a Python data source is not trusted to honor the pushed limit.
+      assert(collectFirst(plan) { case l: LimitExec => l }.isDefined,
+        s"A limit operator should be retained. Actual plan:\n$plan")
+
+      checkAnswer(df, Seq(Row(0), Row(1)))
+    }
+  }
+
+  test("data source reader limit pushdown not supported by the reader") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource, DataSourceReader
+         |
+         |class SimpleDataSourceReader(DataSourceReader):
+         |    def pushLimit(self, limit):
+         |        return False
+         |
+         |    def read(self, partition):
+         |        yield (0,)
+         |        yield (1,)
+         |        yield (2,)
+         |
+         |class SimpleDataSource(DataSource):
+         |    def schema(self):
+         |        return "id int"
+         |
+         |    def reader(self, schema):
+         |        return SimpleDataSourceReader()
+         |""".stripMargin
+    val schema = StructType.fromDDL("id INT")
+    val dataSource =
+      createUserDefinedPythonDataSource(name = dataSourceName, pythonScript = dataSourceScript)
+    withSQLConf(SQLConf.PYTHON_LIMIT_PUSHDOWN_ENABLED.key -> "true") {
+      spark.dataSource.registerPython(dataSourceName, dataSource)
+      val df = spark.read.format(dataSourceName).schema(schema).load().limit(2)
+      val plan = df.queryExecution.executedPlan
+
+      collectFirst(plan) {
+        case s: BatchScanExec if s.scan.isInstanceOf[PythonScan] =>
+          val p = s.scan.asInstanceOf[PythonScan]
+          assert(!p.getMetaData().contains("PushedLimit"))
+      }.getOrElse(
+        fail(s"PythonScan not found in the plan. Actual plan:\n$plan")
+      )
+
+      checkAnswer(df, Seq(Row(0), Row(1)))
+    }
+  }
+
+  test("limit pushdown is not used for top-N (orderBy then limit)") {
+    assume(shouldTestPandasUDFs)
+    // A LIMIT after an ORDER BY is a top-N: the limit cannot be pushed to the scan, because
+    // pushing it before the sort would drop rows the sort needs. The reader must not see it.
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource, DataSourceReader, InputPartition
+         |
+         |class SimpleDataSourceReader(DataSourceReader):
+         |    def pushLimit(self, limit):
+         |        raise AssertionError("pushLimit must not be called for a top-N query")
+         |
+         |    def partitions(self):
+         |        return [InputPartition(0)]
+         |
+         |    def read(self, partition):
+         |        yield from [(2,), (1,), (3,)]
+         |
+         |class SimpleDataSource(DataSource):
+         |    def schema(self):
+         |        return "id int"
+         |
+         |    def reader(self, schema):
+         |        return SimpleDataSourceReader()
+         |""".stripMargin
+    val schema = StructType.fromDDL("id INT")
+    val dataSource =
+      createUserDefinedPythonDataSource(name = dataSourceName, pythonScript = dataSourceScript)
+    withSQLConf(SQLConf.PYTHON_LIMIT_PUSHDOWN_ENABLED.key -> "true") {
+      spark.dataSource.registerPython(dataSourceName, dataSource)
+      val df = spark.read.format(dataSourceName).schema(schema).load().orderBy("id").limit(2)
+      val plan = df.queryExecution.executedPlan
+
+      collectFirst(plan) {
+        case s: BatchScanExec if s.scan.isInstanceOf[PythonScan] =>
+          val p = s.scan.asInstanceOf[PythonScan]
+          assert(!p.getMetaData().contains("PushedLimit"))
+      }.getOrElse(
+        fail(s"PythonScan not found in the plan. Actual plan:\n$plan")
+      )
+
+      checkAnswer(df, Seq(Row(1), Row(2)))
+    }
+  }
+
+  test("no limit is pushed for a filter-only query with both pushdowns enabled") {
+    assume(shouldTestPandasUDFs)
+    // The filter-pushdown worker also handles limit pushdown, but a query without a LIMIT sends
+    // the -1 no-limit sentinel, so `pushLimit` must not be called even when the reader implements
+    // it and limit pushdown is enabled.
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource, DataSourceReader, InputPartition
+         |
+         |class SimpleDataSourceReader(DataSourceReader):
+         |    def pushFilters(self, filters):
+         |        # Reject the filter so Spark re-applies it; this test is only about the limit.
+         |        return filters
+         |
+         |    def pushLimit(self, limit):
+         |        raise AssertionError("pushLimit must not be called when the query has no limit")
+         |
+         |    def partitions(self):
+         |        return [InputPartition(0)]
+         |
+         |    def read(self, partition):
+         |        yield from [(1,), (2,)]
+         |
+         |class SimpleDataSource(DataSource):
+         |    def schema(self):
+         |        return "id int"
+         |
+         |    def reader(self, schema):
+         |        return SimpleDataSourceReader()
+         |""".stripMargin
+    val schema = StructType.fromDDL("id INT")
+    val dataSource =
+      createUserDefinedPythonDataSource(name = dataSourceName, pythonScript = dataSourceScript)
+    withSQLConf(
+      SQLConf.PYTHON_FILTER_PUSHDOWN_ENABLED.key -> "true",
+      SQLConf.PYTHON_LIMIT_PUSHDOWN_ENABLED.key -> "true") {
+      spark.dataSource.registerPython(dataSourceName, dataSource)
+      val df = spark.read.format(dataSourceName).schema(schema).load().filter("id = 1")
+      val plan = df.queryExecution.executedPlan
+
+      collectFirst(plan) {
+        case s: BatchScanExec if s.scan.isInstanceOf[PythonScan] =>
+          val p = s.scan.asInstanceOf[PythonScan]
+          assert(!p.getMetaData().contains("PushedLimit"))
+      }.getOrElse(
+        fail(s"PythonScan not found in the plan. Actual plan:\n$plan")
+      )
+
+      checkAnswer(df, Seq(Row(1)))
+    }
+  }
+
+  test("limit pushdown does not leak into a reused base scan") {
+    assume(shouldTestPandasUDFs)
+    // A base DataFrame and its `.limit(n)` share the same Python data source instance. The read
+    // function produced while pushing the limit must stay scoped to the limited scan and not
+    // leak into the base scan, which would make the base DataFrame read too few rows.
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource, DataSourceReader, InputPartition
+         |
+         |class SimpleDataSourceReader(DataSourceReader):
+         |    def pushLimit(self, limit):
+         |        self._limit = limit
+         |        return True
+         |
+         |    def partitions(self):
+         |        return [InputPartition(0)]
+         |
+         |    def read(self, partition):
+         |        n = getattr(self, "_limit", 10)
+         |        for i in range(n):
+         |            yield (i,)
+         |
+         |class SimpleDataSource(DataSource):
+         |    def schema(self):
+         |        return "id int"
+         |
+         |    def reader(self, schema):
+         |        return SimpleDataSourceReader()
+         |""".stripMargin
+    val schema = StructType.fromDDL("id INT")
+    val dataSource =
+      createUserDefinedPythonDataSource(name = dataSourceName, pythonScript = dataSourceScript)
+    withSQLConf(SQLConf.PYTHON_LIMIT_PUSHDOWN_ENABLED.key -> "true") {
+      spark.dataSource.registerPython(dataSourceName, dataSource)
+      val df = spark.read.format(dataSourceName).schema(schema).load()
+      checkAnswer(df.limit(2), Seq(Row(0), Row(1)))
+      checkAnswer(df, (0 until 10).map(Row(_)))
+    }
+  }
+
+  test("filter pushdown does not leak into a reused base scan") {
+    assume(shouldTestPandasUDFs)
+    // Same as above for filter pushdown: the read function bound to the pushed filters must not
+    // leak into the base scan, which would make the base DataFrame return only filtered rows.
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource, DataSourceReader, InputPartition
+         |
+         |class SimpleDataSourceReader(DataSourceReader):
+         |    def pushFilters(self, filters):
+         |        self._filtered = True
+         |        return []
+         |
+         |    def partitions(self):
+         |        return [InputPartition(0)]
+         |
+         |    def read(self, partition):
+         |        if getattr(self, "_filtered", False):
+         |            yield (1,)
+         |        else:
+         |            for i in range(10):
+         |                yield (i,)
+         |
+         |class SimpleDataSource(DataSource):
+         |    def schema(self):
+         |        return "id int"
+         |
+         |    def reader(self, schema):
+         |        return SimpleDataSourceReader()
+         |""".stripMargin
+    val schema = StructType.fromDDL("id INT")
+    val dataSource =
+      createUserDefinedPythonDataSource(name = dataSourceName, pythonScript = dataSourceScript)
+    withSQLConf(SQLConf.PYTHON_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      spark.dataSource.registerPython(dataSourceName, dataSource)
+      val df = spark.read.format(dataSourceName).schema(schema).load()
+      checkAnswer(df.filter("id = 1"), Seq(Row(1)))
+      checkAnswer(df, (0 until 10).map(Row(_)))
     }
   }
 
@@ -654,27 +932,13 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
     val df = spark.read.format(dataSourceName).load()
 
     val statusStore = spark.sharedState.statusStore
-    val oldCount = statusStore.executionsList().size
-
-    df.collect()
-
-    // Wait until the new execution is started and being tracked.
-    while (statusStore.executionsCount() < oldCount) {
-      Thread.sleep(100)
-    }
-
-    // Wait for listener to finish computing the metrics for the execution.
-    while (statusStore.executionsList().isEmpty ||
-      statusStore.executionsList().last.metricValues == null) {
-      Thread.sleep(100)
-    }
+    val execId = runAndWaitForExecution(df.collect())
 
     val executedPlan = df.queryExecution.executedPlan.collectFirst {
       case p: BatchScanExec => p
     }
     assert(executedPlan.isDefined)
 
-    val execId = statusStore.executionsList().last.executionId
     val metrics = statusStore.executionMetrics(execId)
     val pythonDataSent = executedPlan.get.metrics("pythonDataSent")
     val pythonDataReceived = executedPlan.get.metrics("pythonDataReceived")
@@ -728,6 +992,139 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
         df.write.format(dataSourceName).mode("append").save(path)
         val df2 = spark.read.json(path)
         checkAnswer(df, df2)
+      }
+    }
+  }
+
+  private def writeRequirementsDataSourceScript(requirements: String): String =
+    s"""
+       |import json
+       |import os
+       |from pyspark import TaskContext
+       |from pyspark.sql.datasource import (
+       |    ClusteredDistribution,
+       |    DataSource,
+       |    DataSourceWriter,
+       |    SortDirection,
+       |    SortOrder,
+       |    WriterCommitMessage,
+       |)
+       |
+       |class SimpleDataSourceWriter(DataSourceWriter):
+       |    def __init__(self, options):
+       |        self.options = options
+       |
+       |$requirements
+       |
+       |    def write(self, iterator):
+       |        path = self.options.get("path")
+       |        assert path is not None
+       |        output = os.path.join(path, f"{TaskContext.get().partitionId()}.json")
+       |        with open(output, "w") as file:
+       |            for row in iterator:
+       |                file.write(json.dumps(row.asDict()) + "\\n")
+       |        return WriterCommitMessage()
+       |
+       |class SimpleDataSource(DataSource):
+       |    def writer(self, schema, overwrite):
+       |        return SimpleDataSourceWriter(self.options)
+       |""".stripMargin
+
+  /** Runs `f` and returns the executed plans of the queries it ran. */
+  private def executedPlans(f: => Unit): Seq[SparkPlan] = {
+    val plans = ArrayBuffer.empty[SparkPlan]
+    val listener = new QueryExecutionListener {
+      override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit =
+        plans += qe.executedPlan
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+    }
+    spark.listenerManager.register(listener)
+    try {
+      f
+      sparkContext.listenerBus.waitUntilEmpty()
+    } finally {
+      spark.listenerManager.unregister(listener)
+    }
+    plans.toSeq
+  }
+
+  /** Runs `check` with the write requirements config unset, then with it set to false. */
+  private def withWriteRequirementsDisabled(check: => Unit): Unit = {
+    assert(!spark.conf.contains(SQLConf.PYTHON_WRITE_DISTRIBUTION_AND_ORDERING_ENABLED.key))
+    check
+    withSQLConf(SQLConf.PYTHON_WRITE_DISTRIBUTION_AND_ORDERING_ENABLED.key -> "false") {
+      check
+    }
+  }
+
+  test("SPARK-61646: write required distribution and ordering") {
+    assume(shouldTestPandasUDFs)
+    val dataSource = createUserDefinedPythonDataSource(
+      dataSourceName,
+      writeRequirementsDataSourceScript(
+        """    def requiredDistribution(self):
+          |        return ClusteredDistribution(clustering=(("id",),))
+          |
+          |    def requiredOrdering(self):
+          |        return [SortOrder(("id",), SortDirection.DESCENDING)]""".stripMargin))
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+
+    withSQLConf(
+      SQLConf.PYTHON_WRITE_DISTRIBUTION_AND_ORDERING_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withTempDir { dir =>
+        val df = spark.range(0, 10, 1, 3).toDF("id")
+        val plans = executedPlans {
+          df.write.format(dataSourceName).mode("append").save(dir.getAbsolutePath)
+        }.map(_.toString)
+        // The required distribution becomes an exchange and the ordering a sort.
+        assert(plans.exists(p => p.contains("Exchange hashpartitioning(id") &&
+          p.contains("Sort [id") && p.contains("DESC NULLS LAST")),
+          s"expected a hash exchange and a sort in:\n${plans.mkString("\n")}")
+        // The data still round-trips correctly.
+        checkAnswer(spark.read.json(dir.getAbsolutePath), df)
+      }
+    }
+  }
+
+  test("SPARK-61646: write requirements are not requested when disabled") {
+    assume(shouldTestPandasUDFs)
+    val dataSource = createUserDefinedPythonDataSource(
+      dataSourceName, writeRequirementsDataSourceScript(""))
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+
+    withWriteRequirementsDisabled {
+      withTempDir { dir =>
+        val df = spark.range(0, 10, 1, 3).toDF("id")
+        val writes = executedPlans {
+          df.write.format(dataSourceName).mode("append").save(dir.getAbsolutePath)
+        }.flatMap(_.collect { case a: AppendDataExec => a.write })
+        // The planner's requirement handling is skipped entirely, not just given no requirements.
+        assert(writes.nonEmpty)
+        assert(writes.forall(!_.isInstanceOf[RequiresDistributionAndOrdering]), writes)
+        checkAnswer(spark.read.json(dir.getAbsolutePath), df)
+      }
+    }
+  }
+
+  test("SPARK-61646: write requirement methods fail the write when disabled") {
+    assume(shouldTestPandasUDFs)
+    // `requiredDistribution` raises, so the expected error shows it was never called.
+    val dataSource = createUserDefinedPythonDataSource(
+      dataSourceName,
+      writeRequirementsDataSourceScript(
+        """    def requiredDistribution(self):
+          |        raise AssertionError("should not be called")""".stripMargin))
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+
+    withWriteRequirementsDisabled {
+      withTempDir { dir =>
+        val error = intercept[AnalysisException] {
+          spark.range(10).write.format(dataSourceName).mode("append").save(dir.getAbsolutePath)
+        }
+        assert(error.getMessage.contains("DATA_SOURCE_WRITE_REQUIREMENTS_DISABLED"))
+        assert(error.getMessage.contains("implements requiredDistribution()"))
+        assert(dir.listFiles().isEmpty)
       }
     }
   }

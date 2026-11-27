@@ -20,6 +20,8 @@ package org.apache.spark.unsafe.map;
 import javax.annotation.Nullable;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.Iterator;
 import java.util.LinkedList;
 
@@ -68,6 +70,34 @@ import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterSpillWriter;
  */
 public final class BytesToBytesMap extends MemoryConsumer {
 
+  /**
+   * Hashes and compares keys whose semantics cannot be determined from their raw bytes.
+   * Implementations must assign the same hash code to equal keys, and byte-identical keys must
+   * compare equal.
+   */
+  public interface KeyOperations {
+    int hash(Object base, long offset, int length);
+
+    boolean equals(
+      Object leftBase,
+      long leftOffset,
+      int leftLength,
+      Object rightBase,
+      long rightOffset,
+      int rightLength);
+  }
+
+  /**
+   * Creates independent key operations for a single {@link Location}, allowing each instance to
+   * reuse mutable state. All instances must implement the same key semantics. Maps configured
+   * with this factory must use the key-operations lookup methods exclusively. Callers may invoke
+   * {@link #create()} concurrently, so factory implementations must be thread-safe.
+   */
+  @FunctionalInterface
+  public interface KeyOperationsFactory {
+    KeyOperations create();
+  }
+
   private static final SparkLogger logger = SparkLoggerFactory.getLogger(BytesToBytesMap.class);
 
   private static final HashMapGrowthStrategy growthStrategy = HashMapGrowthStrategy.DOUBLING;
@@ -75,9 +105,9 @@ public final class BytesToBytesMap extends MemoryConsumer {
   private final TaskMemoryManager taskMemoryManager;
 
   /**
-   * A linked list for tracking all allocated data pages so that we can free all of our memory.
+   * A deque for tracking all allocated data pages so that we can free all of our memory.
    */
-  private final LinkedList<MemoryBlock> dataPages = new LinkedList<>();
+  private final Deque<MemoryBlock> dataPages = new ArrayDeque<>();
 
   /**
    * The data page that will be used to store keys and values for new hashtable entries. When this
@@ -120,6 +150,16 @@ public final class BytesToBytesMap extends MemoryConsumer {
   // full base addresses in the page table for off-heap mode so that we can reconstruct the full
   // absolute memory addresses.
 
+  private enum MapState {
+    READY,
+    RESET_FAILED,
+    DESTRUCTIVE,
+    FREED
+  }
+
+  /** The lifecycle state that controls whether array-dependent operations are legal. */
+  private MapState state = MapState.READY;
+
   /**
    * Whether or not the longArray can grow. We will not insert more elements if it's false.
    */
@@ -127,11 +167,40 @@ public final class BytesToBytesMap extends MemoryConsumer {
 
   private final double loadFactor;
 
+  @Nullable private final KeyOperationsFactory keyOperationsFactory;
+
   /**
-   * The size of the data pages that hold key and value data. Map entries cannot span multiple
-   * pages, so this limits the maximum entry size.
+   * The maximum size of the regular data pages that hold key and value data. A map with a smaller
+   * initial page size grows its pages up to this size. Map entries cannot span multiple pages, so
+   * a record larger than a page gets a page of its own size.
    */
   private final long pageSizeBytes;
+
+  /**
+   * The size of the first data page plus {@link #pageHeaderBytes}, at most {@link #pageSizeBytes}.
+   */
+  private final long initialPageSizeBytes;
+
+  /**
+   * The bytes that each growing data page leaves for the header of an on-heap page, see
+   * {@link TaskMemoryManager#growingPageHeaderBytes}. 0 if the data pages do not grow.
+   */
+  private final long pageHeaderBytes;
+
+  /**
+   * The size of the next data page plus {@link #pageHeaderBytes} while the map grows. It starts at
+   * {@link #initialPageSizeBytes} and doubles with every new page, up to {@link #pageSizeBytes}
+   * plus {@link #pageHeaderBytes}.
+   */
+  private long nextPageSizeBytes;
+
+  /**
+   * The total size requested for the data pages so far, plus {@link #pageHeaderBytes} for each
+   * of them. While it is below {@link #pageSizeBytes} plus {@link #pageHeaderBytes}, a new page is
+   * at most what is left to reach it, so the growing pages add up to exactly one page before the
+   * pages of {@link #pageSizeBytes} begin.
+   */
+  private long requestedDataPagesBytes;
 
   /**
    * Number of keys defined in the map.
@@ -180,11 +249,50 @@ public final class BytesToBytesMap extends MemoryConsumer {
       int initialCapacity,
       double loadFactor,
       long pageSizeBytes) {
+    this(
+      taskMemoryManager,
+      blockManager,
+      serializerManager,
+      initialCapacity,
+      loadFactor,
+      pageSizeBytes,
+      null);
+  }
+
+  public BytesToBytesMap(
+      TaskMemoryManager taskMemoryManager,
+      BlockManager blockManager,
+      SerializerManager serializerManager,
+      int initialCapacity,
+      double loadFactor,
+      long pageSizeBytes,
+      @Nullable KeyOperationsFactory keyOperationsFactory) {
+    this(
+      taskMemoryManager,
+      blockManager,
+      serializerManager,
+      initialCapacity,
+      loadFactor,
+      pageSizeBytes,
+      pageSizeBytes,
+      keyOperationsFactory);
+  }
+
+  private BytesToBytesMap(
+      TaskMemoryManager taskMemoryManager,
+      BlockManager blockManager,
+      SerializerManager serializerManager,
+      int initialCapacity,
+      double loadFactor,
+      long pageSizeBytes,
+      long initialPageSizeBytes,
+      @Nullable KeyOperationsFactory keyOperationsFactory) {
     super(taskMemoryManager, pageSizeBytes, taskMemoryManager.getTungstenMemoryMode());
     this.taskMemoryManager = taskMemoryManager;
     this.blockManager = blockManager;
     this.serializerManager = serializerManager;
     this.loadFactor = loadFactor;
+    this.keyOperationsFactory = keyOperationsFactory;
     this.loc = new Location();
     this.pageSizeBytes = pageSizeBytes;
     if (initialCapacity <= 0) {
@@ -198,14 +306,31 @@ public final class BytesToBytesMap extends MemoryConsumer {
       throw new IllegalArgumentException("Page size " + pageSizeBytes + " cannot exceed " +
         TaskMemoryManager.MAXIMUM_PAGE_SIZE_BYTES);
     }
+    if (initialPageSizeBytes <= 0) {
+      throw new IllegalArgumentException("Initial page size must be greater than 0");
+    }
+    this.initialPageSizeBytes = Math.min(initialPageSizeBytes, pageSizeBytes);
+    this.pageHeaderBytes = this.initialPageSizeBytes < pageSizeBytes ?
+      TaskMemoryManager.growingPageHeaderBytes(pageSizeBytes) : 0;
+    this.nextPageSizeBytes = this.initialPageSizeBytes;
     this.initialCapacity = initialCapacity;
     allocate(initialCapacity);
   }
 
+  /**
+   * Creates a map whose first data page has `initialPageSizeBytes` (at most `pageSizeBytes`), and
+   * whose later pages double in size until they add up to `pageSizeBytes`. The last of them is cut
+   * to what is left, and all pages after them have `pageSizeBytes`. A map holding little data then
+   * does not reserve a full page. A record larger than the next page gets a page of its size.
+   * If `pageSizeBytes` leaves room for the header of an on-heap page, each growing page leaves the
+   * same room, and the sizes above include it (see
+   * {@link TaskMemoryManager#growingPageHeaderBytes}).
+   */
   public BytesToBytesMap(
       TaskMemoryManager taskMemoryManager,
       int initialCapacity,
-      long pageSizeBytes) {
+      long pageSizeBytes,
+      long initialPageSizeBytes) {
     this(
       taskMemoryManager,
       SparkEnv.get() != null ? SparkEnv.get().blockManager() :  null,
@@ -213,7 +338,32 @@ public final class BytesToBytesMap extends MemoryConsumer {
       initialCapacity,
       // In order to re-use the longArray for sorting, the load factor cannot be larger than 0.5.
       0.5,
-      pageSizeBytes);
+      pageSizeBytes,
+      initialPageSizeBytes,
+      null);
+  }
+
+  public BytesToBytesMap(
+      TaskMemoryManager taskMemoryManager,
+      int initialCapacity,
+      long pageSizeBytes) {
+    this(taskMemoryManager, initialCapacity, pageSizeBytes, null);
+  }
+
+  public BytesToBytesMap(
+      TaskMemoryManager taskMemoryManager,
+      int initialCapacity,
+      long pageSizeBytes,
+      @Nullable KeyOperationsFactory keyOperationsFactory) {
+    this(
+      taskMemoryManager,
+      SparkEnv.get() != null ? SparkEnv.get().blockManager() :  null,
+      SparkEnv.get() != null ? SparkEnv.get().serializerManager() :  null,
+      initialCapacity,
+      // In order to re-use the longArray for sorting, the load factor cannot be larger than 0.5.
+      0.5,
+      pageSizeBytes,
+      keyOperationsFactory);
   }
 
   /**
@@ -241,17 +391,24 @@ public final class BytesToBytesMap extends MemoryConsumer {
     private boolean destructive = false;
     private UnsafeSorterSpillReader reader = null;
 
+    // Used only for non-destructive iteration to walk the data pages in order (a deque has no
+    // random access). The destructive path instead consumes pages from the head of `dataPages`.
+    private Iterator<MemoryBlock> pageIterator = null;
+
     private MapIterator(int numRecords, Location loc, boolean destructive) {
       this.numRecords = numRecords;
       this.loc = loc;
       this.destructive = destructive;
       if (destructive) {
+        state = MapState.DESTRUCTIVE;
         destructiveIterator = this;
         // longArray will not be used anymore if destructive is true, release it now.
         if (longArray != null) {
           freeArray(longArray);
           longArray = null;
         }
+      } else {
+        pageIterator = dataPages.iterator();
       }
     }
 
@@ -265,14 +422,19 @@ public final class BytesToBytesMap extends MemoryConsumer {
 
       try {
         synchronized (this) {
-          int nextIdx = dataPages.indexOf(currentPage) + 1;
-          if (destructive && currentPage != null) {
-            dataPages.remove(currentPage);
-            pageToFree = currentPage;
-            nextIdx--;
+          final MemoryBlock nextPage;
+          if (destructive) {
+            if (currentPage != null) {
+              assert(dataPages.peekFirst() == currentPage);
+              dataPages.removeFirst();
+              pageToFree = currentPage;
+            }
+            nextPage = dataPages.peekFirst();
+          } else {
+            nextPage = pageIterator.hasNext() ? pageIterator.next() : null;
           }
-          if (dataPages.size() > nextIdx) {
-            currentPage = dataPages.get(nextIdx);
+          if (nextPage != null) {
+            currentPage = nextPage;
             pageBaseObject = currentPage.getBaseObject();
             offsetInPage = currentPage.getBaseOffset();
             recordsInPage = UnsafeAlignedOffset.getSize(pageBaseObject, offsetInPage);
@@ -355,7 +517,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
 
       long released = 0L;
       while (dataPages.size() > 0) {
-        MemoryBlock block = dataPages.getLast();
+        MemoryBlock block = dataPages.peekLast();
         // The currentPage is used, cannot be released
         if (block == currentPage) {
           break;
@@ -377,7 +539,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
         writer.close();
         spillWriters.add(writer);
 
-        dataPages.removeLast();
+        dataPages.pollLast();
         released += block.size();
         freePage(block);
 
@@ -408,8 +570,12 @@ public final class BytesToBytesMap extends MemoryConsumer {
    *
    * The returned iterator is thread-safe. However if the map is modified while iterating over it,
    * the behavior of the returned iterator is undefined.
+   *
+   * @throws IllegalStateException if a reset failed, destructive iteration has begun, or the map
+   * has been freed
    */
   public MapIterator iterator() {
+    ensureReady();
     return new MapIterator(numValues, new Location(), false);
   }
 
@@ -422,8 +588,12 @@ public final class BytesToBytesMap extends MemoryConsumer {
    *
    * The returned iterator is thread-safe. However if the map is modified while iterating over it,
    * the behavior of the returned iterator is undefined.
+   *
+   * @throws IllegalStateException if a reset failed, destructive iteration has begun, or the map
+   * has been freed
    */
   public MapIterator destructiveIterator() {
+    ensureReady();
     updatePeakMemoryUsed();
     return new MapIterator(numValues, new Location(), true);
   }
@@ -476,8 +646,12 @@ public final class BytesToBytesMap extends MemoryConsumer {
    *
    * The returned iterator is NOT thread-safe. If the map is modified while iterating over it,
    * the behavior of the returned iterator is undefined.
+   *
+   * @throws IllegalStateException if a reset failed, destructive iteration has begun, or the map
+   * has been freed
    */
   public MapIteratorWithKeyIndex iteratorWithKeyIndex() {
+    ensureReady();
     return new MapIteratorWithKeyIndex();
   }
 
@@ -485,8 +659,12 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * The maximum number of allowed keys index.
    *
    * The value of allowed keys index is in the range of [0, maxNumKeysIndex - 1].
+   *
+   * @throws IllegalStateException if a reset failed, destructive iteration has begun, or the map
+   * has been freed
    */
   public int maxNumKeysIndex() {
+    ensureReady();
     return (int) (longArray.size() / 2);
   }
 
@@ -496,10 +674,12 @@ public final class BytesToBytesMap extends MemoryConsumer {
    *
    * This function always returns the same {@link Location} instance to avoid object allocation.
    * This function is not thread-safe.
+   *
+   * @throws IllegalStateException if a reset failed, destructive iteration has begun, or the map
+   * has been freed
    */
   public Location lookup(Object keyBase, long keyOffset, int keyLength) {
-    safeLookup(keyBase, keyOffset, keyLength, loc,
-      Murmur3_x86_32.hashUnsafeWords(keyBase, keyOffset, keyLength, 42));
+    safeLookup(keyBase, keyOffset, keyLength, loc);
     return loc;
   }
 
@@ -507,21 +687,66 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * Looks up a key, and return a {@link Location} handle that can be used to test existence
    * and read/write values.
    *
+   * The provided hash is ignored when this map has configured key operations.
+   *
    * This function always returns the same {@link Location} instance to avoid object allocation.
    * This function is not thread-safe.
+   *
+   * @throws IllegalStateException if a reset failed, destructive iteration has begun, or the map
+   * has been freed
    */
   public Location lookup(Object keyBase, long keyOffset, int keyLength, int hash) {
     safeLookup(keyBase, keyOffset, keyLength, loc, hash);
     return loc;
   }
 
+  private void ensureReady() {
+    if (state != MapState.READY) {
+      throw new IllegalStateException("BytesToBytesMap is not usable in state " + state);
+    }
+  }
+
   /**
-   * Looks up a key, and saves the result in provided `loc`.
+   * Looks up a key and saves the result in the provided `loc`.
    *
-   * This is a thread-safe version of `lookup`, could be used by multiple threads.
+   * This is a thread-safe version of `lookup`, provided that each thread supplies its own
+   * {@link Location}. This guarantee excludes probe statistics, which may be inaccurate under
+   * concurrent lookup. The map must not be modified concurrently.
+   *
+   * @throws IllegalStateException if a reset failed, destructive iteration has begun, or the map
+   * has been freed
+   */
+  public void safeLookup(Object keyBase, long keyOffset, int keyLength, Location loc) {
+    if (keyOperationsFactory == null) {
+      safeLookup(
+        keyBase,
+        keyOffset,
+        keyLength,
+        loc,
+        Murmur3_x86_32.hashUnsafeWords(keyBase, keyOffset, keyLength, 42));
+    } else {
+      ensureReady();
+      safeLookupWithKeyOperations(keyBase, keyOffset, keyLength, loc);
+    }
+  }
+
+  /**
+   * Looks up a key with a precomputed hash and saves the result in the provided `loc`.
+   *
+   * The provided hash is ignored when this map has configured key operations. Each thread must
+   * supply its own {@link Location}. Probe statistics may be inaccurate under concurrent lookup,
+   * and the map must not be modified concurrently.
+   *
+   * @throws IllegalStateException if a reset failed, destructive iteration has begun, or the map
+   * has been freed
    */
   public void safeLookup(Object keyBase, long keyOffset, int keyLength, Location loc, int hash) {
+    ensureReady();
     assert(longArray != null);
+    if (keyOperationsFactory != null) {
+      safeLookupWithKeyOperations(keyBase, keyOffset, keyLength, loc);
+      return;
+    }
 
     numKeyLookups++;
 
@@ -557,19 +782,62 @@ public final class BytesToBytesMap extends MemoryConsumer {
     }
   }
 
-  /**
-   * Handle returned by {@link BytesToBytesMap#lookup(Object, long, int)} function.
-   */
+  private void safeLookupWithKeyOperations(
+      Object keyBase, long keyOffset, int keyLength, Location loc) {
+    assert(longArray != null);
+    assert(keyOperationsFactory != null);
+
+    final KeyOperations keyOperations = loc.getKeyOperations();
+    assert(keyOperations != null);
+    final int hash = keyOperations.hash(keyBase, keyOffset, keyLength);
+
+    numKeyLookups++;
+
+    int pos = hash & mask;
+    int step = 1;
+    while (true) {
+      numProbes++;
+      if (longArray.get(pos * 2) == 0) {
+        // This is a new key.
+        loc.with(pos, hash, false);
+        return;
+      } else {
+        long stored = longArray.get(pos * 2 + 1);
+        if ((int) (stored) == hash) {
+          // Full hash code matches. Let's compare the keys for equality.
+          loc.with(pos, hash, true);
+          if (loc.getKeyLength() == keyLength &&
+              ByteArrayMethods.arrayEquals(
+                keyBase,
+                keyOffset,
+                loc.getKeyBase(),
+                loc.getKeyOffset(),
+                keyLength)) {
+            return;
+          }
+          if (keyOperations.equals(
+              keyBase,
+              keyOffset,
+              keyLength,
+              loc.getKeyBase(),
+              loc.getKeyOffset(),
+              loc.getKeyLength())) {
+            return;
+          }
+        }
+      }
+      pos = (pos + step) & mask;
+      step++;
+    }
+  }
+
+  /** Handle returned by this map's lookup methods. */
   public final class Location {
     /** An index into the hash map's Long array */
     private int pos;
     /** True if this location points to a position where a key is defined, false otherwise */
     private boolean isDefined;
-    /**
-     * The hashcode of the most recent key passed to
-     * {@link BytesToBytesMap#lookup(Object, long, int, int)}. Caching this hashcode here allows us
-     * to avoid re-hashing the key when storing a value for that key.
-     */
+    /** The hash code used by the most recent lookup. */
     private int keyHashcode;
     private Object baseObject;  // the base object for key and value
     private long keyOffset;
@@ -577,10 +845,20 @@ public final class BytesToBytesMap extends MemoryConsumer {
     private long valueOffset;
     private int valueLength;
 
+    @Nullable private KeyOperations keyOperations;
+
     /**
      * Memory page containing the record. Only set if created by {@link BytesToBytesMap#iterator()}.
      */
     @Nullable private MemoryBlock memoryPage;
+
+    @Nullable
+    private KeyOperations getKeyOperations() {
+      if (keyOperations == null && keyOperationsFactory != null) {
+        keyOperations = keyOperationsFactory.create();
+      }
+      return keyOperations;
+    }
 
     private void updateAddressesAndSizes(long fullKeyAddress) {
       updateAddressesAndSizes(
@@ -723,10 +1001,10 @@ public final class BytesToBytesMap extends MemoryConsumer {
 
     /**
      * Append a new value for the key. This method could be called multiple times for a given key.
-     * The return value indicates whether the put succeeded or whether it failed because additional
-     * memory could not be acquired.
+     * The return value indicates whether the put succeeded or whether it failed because the map
+     * reached its capacity or additional memory could not be acquired.
      * <p>
-     * It is only valid to call this method immediately after calling `lookup()` using the same key.
+     * It is only valid to call this method immediately after looking up the same key.
      * </p>
      * <p>
      * The key and value must be word-aligned (that is, their sizes must be a multiple of 8).
@@ -750,10 +1028,13 @@ public final class BytesToBytesMap extends MemoryConsumer {
      * Unspecified behavior if the key is not defined.
      * </p>
      *
-     * @return true if the put() was successful and false if the put() failed because memory could
-     *         not be acquired.
+     * @return true if the put() was successful and false if the map reached its capacity or memory
+     *         could not be acquired.
+     * @throws IllegalStateException if a reset failed, destructive iteration has begun, or the map
+     * has been freed
      */
     public boolean append(Object kbase, long koff, int klen, Object vbase, long voff, int vlen) {
+      ensureReady();
       assert (klen % 8 == 0);
       assert (vlen % 8 == 0);
       assert (longArray != null);
@@ -836,18 +1117,25 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * @return whether there is enough space to allocate the new page.
    */
   private boolean acquireNewPage(long required) {
+    final long remainingGrowthBytes = pageSizeBytes + pageHeaderBytes - requestedDataPagesBytes;
+    final long size = Math.max(
+      remainingGrowthBytes > 0 ?
+        Math.min(nextPageSizeBytes, remainingGrowthBytes) - pageHeaderBytes : pageSizeBytes,
+      required);
     final MemoryBlock page;
     try {
-      page = allocatePage(required);
+      page = allocatePage(size, required);
     } catch (SparkOutOfMemoryError e) {
       return false;
     }
     // Retaining exact-fit minimum-retry pages would consume one page-table slot per map entry.
-    if (required < pageSizeBytes && page.size() == required &&
+    if (required < size && page.size() == required &&
         isPageAllocationFromMinimumRetry(page)) {
       freePage(page);
       return false;
     }
+    requestedDataPagesBytes += size + pageHeaderBytes;
+    nextPageSizeBytes = Math.min(pageSizeBytes + pageHeaderBytes, nextPageSizeBytes * 2);
     currentPage = page;
     dataPages.add(currentPage);
     UnsafeAlignedOffset.putSize(currentPage.getBaseObject(), currentPage.getBaseOffset(), 0);
@@ -885,17 +1173,17 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * as well as the hash map array itself.
    *
    * This method is idempotent and can be called multiple times.
+   * After this method is called, the map cannot be reused.
    */
   public void free() {
+    state = MapState.FREED;
     updatePeakMemoryUsed();
     if (longArray != null) {
       freeArray(longArray);
       longArray = null;
     }
-    Iterator<MemoryBlock> dataPagesIterator = dataPages.iterator();
-    while (dataPagesIterator.hasNext()) {
-      MemoryBlock dataPage = dataPagesIterator.next();
-      dataPagesIterator.remove();
+    while (!dataPages.isEmpty()) {
+      MemoryBlock dataPage = dataPages.removeFirst();
       freePage(dataPage);
     }
     assert(dataPages.isEmpty());
@@ -947,6 +1235,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
 
   /**
    * Returns the average number of probes per key lookup.
+   *
+   * This statistic may be inaccurate if lookups are performed concurrently.
    */
   public double getAvgHashProbesPerKey() {
     return (1.0 * numProbes) / numKeyLookups;
@@ -958,30 +1248,51 @@ public final class BytesToBytesMap extends MemoryConsumer {
   }
 
   /**
-   * Returns the underline long[] of longArray.
+   * Returns the underlying long array.
+   *
+   * @throws IllegalStateException if a reset failed, destructive iteration has begun, or the map
+   * has been freed
    */
   public LongArray getArray() {
+    ensureReady();
     assert(longArray != null);
     return longArray;
   }
 
   /**
-   * Reset this map to initialized state.
+   * Resets this map to initialized state. If the replacement pointer array cannot be allocated,
+   * the map remains empty but cannot be used until a later call to this method succeeds. A
+   * successful retry only restores the map itself; callers are responsible for ensuring that any
+   * state kept outside the map, such as spilled data, remains valid.
+   *
+   * @throws SparkOutOfMemoryError if the replacement pointer array cannot be allocated
+   * @throws IllegalStateException if the map has been freed or destructive iteration has begun
    */
   public void reset() {
+    if (state == MapState.FREED || state == MapState.DESTRUCTIVE) {
+      throw new IllegalStateException("BytesToBytesMap cannot be reset in state " + state);
+    }
+    state = MapState.RESET_FAILED;
     updatePeakMemoryUsed();
+    // Put the map into its empty state before allocating so that a failed allocation cannot leave
+    // stale page state. A caller may retry reset(), but cannot use the map until reset succeeds.
     numKeys = 0;
     numValues = 0;
-    freeArray(longArray);
+    canGrowArray = true;
+    currentPage = null;
+    pageCursor = 0;
+    nextPageSizeBytes = initialPageSizeBytes;
+    requestedDataPagesBytes = 0;
+    if (longArray != null) {
+      freeArray(longArray);
+    }
     longArray = null;
     while (dataPages.size() > 0) {
       MemoryBlock dataPage = dataPages.removeLast();
       freePage(dataPage);
     }
     allocate(initialCapacity);
-    canGrowArray = true;
-    currentPage = null;
-    pageCursor = 0;
+    state = MapState.READY;
   }
 
   /**

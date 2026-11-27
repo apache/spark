@@ -19,7 +19,7 @@
 A collections of builtin avro functions
 """
 
-from typing import Dict, Optional, TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Dict, Optional, cast
 
 from pyspark.errors import PySparkTypeError
 from pyspark.sql.column import Column
@@ -60,6 +60,20 @@ def from_avro(
     Avro is built-in but external data source module since Spark 2.4. Please deploy the
     application as per the deployment section of "Apache Avro Data Source Guide".
 
+    CHAR/VARCHAR come from the ``spark.sql.catalyst.type`` property on Avro
+    string fields, and for map keys from ``spark.sql.catalyst.mapKey.type``
+    on the Avro map schema (both written by Spark's Avro writer). Assignment
+    is accepted when types are first-class
+    (``spark.sql.charVarchar.standardSemantics.enabled`` or
+    ``spark.sql.preserveCharVarcharTypeInfo``). STRING values are then assigned.
+    Overflow is a malformed record: FAILFAST fails with
+    ``EXCEED_LIMIT_LENGTH`` as the cause; PERMISSIVE returns a struct with every
+    field NULL (NULL for a non-struct schema). When CHAR/VARCHAR are not
+    first-class, CHAR/VARCHAR in the Avro schema are read as STRING without
+    padding or length checks. ENUM symbols are not assigned. Map-key length
+    checks require ``spark.sql.charVarchar.standardSemantics.enabled`` and do
+    not pad or trim.
+
     Examples
     --------
     >>> from pyspark.sql import Row
@@ -78,6 +92,7 @@ def from_avro(
     [Row(value=Row(avro=Row(age=2, name='Alice')))]
     """
     from py4j.java_gateway import JVMView
+
     from pyspark.sql.classic.column import _to_java_column
 
     if not isinstance(data, (Column, str)):
@@ -133,6 +148,9 @@ def to_avro(data: "ColumnOrName", jsonFormatSchema: str = "") -> Column:
     Avro is built-in but external data source module since Spark 2.4. Please deploy the
     application as per the deployment section of "Apache Avro Data Source Guide".
 
+    ``to_avro`` serializes the current string content. It does not pad CHAR values
+    or trim VARCHAR values.
+
     Examples
     --------
     >>> from pyspark.sql import Row
@@ -148,6 +166,7 @@ def to_avro(data: "ColumnOrName", jsonFormatSchema: str = "") -> Column:
     [Row(suite=b'\\x02\\x00')]
     """
     from py4j.java_gateway import JVMView
+
     from pyspark.sql.classic.column import _to_java_column
 
     if not isinstance(data, (Column, str)):
@@ -184,6 +203,7 @@ def to_avro(data: "ColumnOrName", jsonFormatSchema: str = "") -> Column:
 def _test() -> None:
     import os
     import sys
+
     from pyspark.testing.sqlutils import search_jar
 
     avro_jar = search_jar("connector/avro", "spark-avro", "spark-avro")
@@ -191,8 +211,8 @@ def _test() -> None:
         print(
             "Skipping all Avro Python tests as the optional Avro project was "
             "not compiled into a JAR. To run these tests, "
-            "you need to build Spark with 'build/sbt -Pavro package' or "
-            "'build/mvn -Pavro package' before running this test."
+            "you need to build Spark with 'build/sbt package' or "
+            "'build/mvn package' before running this test."
         )
         sys.exit(0)
     else:
@@ -201,8 +221,9 @@ def _test() -> None:
         os.environ["PYSPARK_SUBMIT_ARGS"] = " ".join([jars_args, existing_args])
 
     import doctest
-    from pyspark.sql import SparkSession
+
     import pyspark.sql.avro.functions
+    from pyspark.sql import SparkSession
 
     globs = pyspark.sql.avro.functions.__dict__.copy()
     spark = (

@@ -21,19 +21,18 @@ Python package for feature in MLlib.
 
 import sys
 import warnings
-from typing import Dict, Hashable, Iterable, List, Optional, Tuple, Union, overload, TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, Hashable, Iterable, List, Optional, Tuple, Union, overload
 
+from py4j.java_collections import JavaMap
 from py4j.protocol import Py4JJavaError
 
 from pyspark import since
-from pyspark.core.rdd import RDD
-from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
-from pyspark.mllib.linalg import Vectors, _convert_to_vector
-from pyspark.mllib.util import JavaLoader, JavaSaveable
 from pyspark.core.context import SparkContext
-from pyspark.mllib.linalg import Vector
+from pyspark.core.rdd import RDD
+from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc
+from pyspark.mllib.linalg import Vector, Vectors, _convert_to_vector
 from pyspark.mllib.regression import LabeledPoint
-from py4j.java_collections import JavaMap
+from pyspark.mllib.util import JavaLoader, JavaSaveable
 
 if TYPE_CHECKING:
     from pyspark.mllib._typing import VectorLike
@@ -1052,6 +1051,7 @@ class ElementwiseProduct(VectorTransformer):
 
 def _test() -> None:
     import doctest
+
     from pyspark.sql import SparkSession
 
     globs = globals().copy()

@@ -37,7 +37,7 @@ object NormalizeCTEIds extends Rule[LogicalPlan] {
       curId: AtomicLong,
       cteIdToNewId: mutable.Map[Long, Long]): LogicalPlan = {
     plan transformDownWithSubqueries {
-      case ctas @ CacheTableAsSelect(_, plan, _, _, _, _, _) =>
+      case ctas @ CacheTableAsSelect(_, plan, _, _, _, _, _, _) =>
         ctas.copy(plan = applyInternal(plan, curId, cteIdToNewId))
 
       case withCTE @ WithCTE(plan, cteDefs) =>

@@ -32,7 +32,9 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.tags.DataSourceV2Test
 
+@DataSourceV2Test
 class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
 
   private val targetLoadOption = "targetLoadOption"
@@ -173,6 +175,30 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
         Row(2, 200, "software"),
         Row(3, 300, "hr"),
         Row(4, 400, "finance")))
+  }
+
+  test("SQL INSERT INTO with function-valued IDENTIFIER and transactional checks") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }""")
+
+    val baseTargetLoadCount = catalog.loadTableCalls.count {
+      case (context, _) => !context.writePrivileges().isEmpty
+    }
+    val (txn, txnTables) = executeTransaction {
+      sql(s"INSERT INTO IDENTIFIER(lower('$tableNameAsString')) $targetOptionsClause " +
+        "VALUES (2, 200, 'software')")
+    }
+
+    assert(txn.currentState === Committed)
+    assert(txn.isClosed)
+    assert(txnTables.isEmpty)
+    assert(catalog.loadTableCalls.count {
+      case (context, _) => !context.writePrivileges().isEmpty
+    } === baseTargetLoadCount)
+    assertTargetLoadAndWriteOptions(txn, java.util.Set.of(TableWritePrivilege.INSERT))
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(Row(1, 100, "hr"), Row(2, 200, "software")))
   }
 
   for (isDynamic <- Seq(false, true))

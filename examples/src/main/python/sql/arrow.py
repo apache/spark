@@ -24,9 +24,9 @@ Run with:
 # NOTE that this file is imported in tutorials in PySpark documentation.
 # The code blocks are referred to via `$example on/off$` markers, included in the
 # docs with the `literalinclude` directive's `:start-after:`/`:end-before:` options.
-import pandas as pd
 from typing import Iterator
 
+import pandas as pd
 from pyspark.sql import SparkSession
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 
@@ -36,8 +36,8 @@ require_minimum_pyarrow_version()
 
 def dataframe_to_from_arrow_table_example(spark: SparkSession) -> None:
     # $example on:dataframe_to_from_arrow_table$
-    import pyarrow as pa
     import numpy as np
+    import pyarrow as pa
 
     # Create a PyArrow Table
     table = pa.table([pa.array(np.random.rand(100)) for i in range(3)], names=["a", "b", "c"])
@@ -79,7 +79,6 @@ def dataframe_with_arrow_example(spark: SparkSession) -> None:
 def ser_to_frame_pandas_udf_example(spark: SparkSession) -> None:
     # $example on:ser_to_frame_pandas_udf$
     import pandas as pd
-
     from pyspark.sql.functions import pandas_udf
 
     @pandas_udf("col1 string, col2 long")  # type: ignore[call-overload]
@@ -109,7 +108,6 @@ def ser_to_frame_pandas_udf_example(spark: SparkSession) -> None:
 def ser_to_ser_pandas_udf_example(spark: SparkSession) -> None:
     # $example on:ser_to_ser_pandas_udf$
     import pandas as pd
-
     from pyspark.sql.functions import col, pandas_udf
     from pyspark.sql.types import LongType
 
@@ -147,7 +145,6 @@ def iter_ser_to_iter_ser_pandas_udf_example(spark: SparkSession) -> None:
     from typing import Iterator
 
     import pandas as pd
-
     from pyspark.sql.functions import pandas_udf
 
     pdf = pd.DataFrame([1, 2, 3], columns=["x"])
@@ -175,7 +172,6 @@ def iter_sers_to_iter_ser_pandas_udf_example(spark: SparkSession) -> None:
     from typing import Iterator, Tuple
 
     import pandas as pd
-
     from pyspark.sql.functions import pandas_udf
 
     pdf = pd.DataFrame([1, 2, 3], columns=["x"])
@@ -202,9 +198,8 @@ def iter_sers_to_iter_ser_pandas_udf_example(spark: SparkSession) -> None:
 def ser_to_scalar_pandas_udf_example(spark: SparkSession) -> None:
     # $example on:ser_to_scalar_pandas_udf$
     import pandas as pd
-
-    from pyspark.sql.functions import pandas_udf
     from pyspark.sql import Window
+    from pyspark.sql.functions import pandas_udf
 
     df = spark.createDataFrame(
         [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],

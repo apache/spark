@@ -22,6 +22,7 @@ import scala.math.BigDecimal.RoundingMode
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, EmptyRow, Expression}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.types.{DecimalType, _}
 
 object EstimationUtils {
@@ -85,8 +86,23 @@ object EstimationUtils {
       attributeStats: AttributeMap[ColumnStat],
       rowCount: BigInt): Seq[(Attribute, ColumnStat)] = {
     expressions.collect {
-      case alias @ Alias(attr: Attribute, _) if attributeStats.contains(attr) =>
+      // A cast to a STRING of the same collation keeps the value and the column's statistics,
+      // e.g. the cast that a union with a STRING adds to a first-class VARCHAR column.
+      case alias @ Alias(WithoutCastToPlainString(attr: Attribute), _)
+          if attributeStats.contains(attr) =>
         alias.toAttribute -> attributeStats(attr)
+      // A scan wraps each CHAR column in read-side padding, or under standard CHAR/VARCHAR
+      // semantics each CHAR and VARCHAR column in a read-side check. ANALYZE TABLE reads the table
+      // through them as well, so the statistics already describe the values they return.
+      // Statistics collected otherwise (with padding off, or reported by a connector) can describe
+      // shorter values, and more distinct ones: the padding and the checks can make values equal
+      // that differ only in trailing spaces. The distinct count is kept as is, and the VARCHAR
+      // check never makes a value longer.
+      case alias @ Alias(WithoutCastToPlainString(
+          CharVarcharUtils.ReadSidePaddingOrCheck(attr: Attribute, n, padsToLength)), _)
+          if attributeStats.contains(attr) =>
+        val stat = attributeStats(attr)
+        alias.toAttribute -> (if (padsToLength) padToCharLength(stat, n) else stat)
       case alias @ Alias(expr: Expression, _) if expr.foldable && expr.deterministic =>
         val value = expr.eval(EmptyRow)
         val size = expr.dataType.defaultSize
@@ -99,6 +115,25 @@ object EstimationUtils {
     }
   }
 
+  /**
+   * Raises the lengths of a column to the length N of the CHAR its non-null values are padded to.
+   * A distinct count of 0 means no non-null values, so there is nothing to pad (ANALYZE then stores
+   * the type's default size as the lengths). The distinct count is left as is. It is too high only
+   * when stored values differ just in trailing spaces, which the padding makes equal.
+   */
+  private def padToCharLength(stat: ColumnStat, n: Int): ColumnStat = {
+    if (stat.distinctCount.contains(BigInt(0))) {
+      stat
+    } else {
+      stat.copy(avgLen = stat.avgLen.map(_.max(n)), maxLen = stat.maxLen.map(_.max(n)))
+    }
+  }
+
+  private object WithoutCastToPlainString {
+    def unapply(e: Expression): Some[Expression] =
+      Some(CharVarcharUtils.stripCastToPlainString(e))
+  }
+
   def getSizePerRow(
       attributes: Seq[Attribute],
       attrStats: AttributeMap[ColumnStat] = AttributeMap(Nil)): BigInt = {
@@ -107,7 +142,7 @@ object EstimationUtils {
     8 + attributes.map { attr =>
       if (attrStats.get(attr).map(_.avgLen.isDefined).getOrElse(false)) {
         attr.dataType match {
-          case StringType =>
+          case _: StringType =>
             // UTF8String: base + offset + numBytes
             attrStats(attr).avgLen.get + 8 + 4
           case _ =>
@@ -129,22 +164,38 @@ object EstimationUtils {
   }
 
   /**
+   * Whether a column of this type can be estimated with an equi-height histogram: the types
+   * whose values [[toDouble]] converts. A DSv2 connector can report a histogram for any type.
+   */
+  def canEstimateWithHistogram(dataType: DataType): Boolean = canConvertToDouble(dataType)
+
+  /**
+   * Whether [[toDouble]] and [[fromDouble]] convert values of this type. The min/max of other
+   * types, e.g. nanosecond timestamps, give no numeric value range, even when they are known.
+   */
+  def canConvertToDouble(dataType: DataType): Boolean = dataType match {
+    case _: NumericType | DateType | TimestampType | TimestampNTZType | _: TimeType |
+         _: AnsiIntervalType | BooleanType => true
+    case _ => false
+  }
+
+  /**
    * For simplicity we use Double to unify operations for data types whose min/max values can be
    * represented as numbers, e.g. Boolean can be represented as 0 (false) or 1 (true).
    * The two methods below are the contract of conversion.
    */
   def toDouble(value: Any, dataType: DataType): Double = {
     dataType match {
-      case _: NumericType | DateType | TimestampType => value.toString.toDouble
       case BooleanType => if (value.asInstanceOf[Boolean]) 1 else 0
+      case _ if canConvertToDouble(dataType) => value.toString.toDouble
     }
   }
 
   def fromDouble(double: Double, dataType: DataType): Any = {
     dataType match {
       case BooleanType => double.toInt == 1
-      case DateType => double.toInt
-      case TimestampType => double.toLong
+      case DateType | _: YearMonthIntervalType => double.toInt
+      case TimestampType | TimestampNTZType | _: TimeType | _: DayTimeIntervalType => double.toLong
       case ByteType => double.toByte
       case ShortType => double.toShort
       case IntegerType => double.toInt

@@ -89,7 +89,7 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
             </li>
             <li><strong>Submit Date:</strong> {UIUtils.formatDate(app.submitDate)}</li>
             <li><strong>Duration:</strong> {UIUtils.formatDuration(app.duration)}</li>
-            <li><strong>State:</strong> {app.state}</li>
+            <li><strong>State:</strong> {app.stateText}</li>
             {
               if (!app.isFinished) {
                 if (app.desc.appUiUrl.isBlank()) {

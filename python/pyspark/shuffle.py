@@ -15,36 +15,37 @@
 # limitations under the License.
 #
 
-import os
-import platform
-import shutil
-import warnings
 import gc
+import heapq
 import itertools
 import operator
+import os
+import platform
 import random
+import shutil
 import sys
-import heapq
+import tempfile
+import warnings
 from typing import (
+    IO,
+    TYPE_CHECKING,
     Any,
     Callable,
     Generic,
     Hashable,
-    IO,
     Iterable,
     Iterator,
     Optional,
-    TYPE_CHECKING,
     TypeVar,
     Union,
 )
 
 from pyspark.serializers import (
+    AutoBatchedSerializer,
     BatchedSerializer,
+    CompressedSerializer,
     CPickleSerializer,
     FlattenedValuesSerializer,
-    CompressedSerializer,
-    AutoBatchedSerializer,
     Serializer,
 )
 from pyspark.util import fail_on_stopiteration
@@ -96,13 +97,35 @@ def get_used_memory() -> int:
         return 0
 
 
+# Per-process spill roots, keyed by configured local dir. mkdtemp gives each process a
+# unique owner-only (0700) root, so concurrent runs sharing a local dir cannot collide
+# on or pick up each other's spill files.
+_spill_dir_roots: dict[str, str] = {}
+_spill_dir_roots_pid = 0
+
+
+def _get_spill_dir_root(d: str) -> str:
+    global _spill_dir_roots_pid
+    pid = os.getpid()
+    if _spill_dir_roots_pid != pid:
+        # A forked child must not reuse the parent's roots.
+        _spill_dir_roots.clear()
+        _spill_dir_roots_pid = pid
+    root = _spill_dir_roots.get(d)
+    if root is None or not os.path.isdir(root):
+        os.makedirs(d, exist_ok=True)
+        root = tempfile.mkdtemp(prefix="spark-python-spill-", dir=d)
+        _spill_dir_roots[d] = root
+    return root
+
+
 def _get_local_dirs(sub: str) -> list[str]:
-    """Get all the directories"""
+    """Get all the directories, rooted in a unique per-process spill directory."""
     path = os.environ.get("SPARK_LOCAL_DIRS", "/tmp")
     dirs = path.split(",")
     if len(dirs) > 1:
         random.shuffle(dirs)
-    return [os.path.join(d, "python", str(os.getpid()), sub) for d in dirs]
+    return [os.path.join(_get_spill_dir_root(d), sub) for d in dirs]
 
 
 # global stats
@@ -338,7 +361,7 @@ class ExternalMerger(Merger, Generic[K, V, C]):
         global MemoryBytesSpilled, DiskBytesSpilled
         path = self._get_spill_dir(self.spills)
         if not os.path.exists(path):
-            os.makedirs(path)
+            os.makedirs(path, mode=0o700)
 
         used_memory = get_used_memory()
         if not self.pdata:
@@ -492,7 +515,7 @@ class ExternalSorter(Generic[V]):
         """Choose one directory for spill by number n"""
         d = self.local_dirs[n % len(self.local_dirs)]
         if not os.path.exists(d):
-            os.makedirs(d)
+            os.makedirs(d, mode=0o700)
         return os.path.join(d, str(n))
 
     def _next_limit(self) -> float:
@@ -636,7 +659,7 @@ class ExternalList(Iterable[V]):
         dirs = _get_local_dirs("objects")
         d = dirs[id(self) % len(dirs)]
         if not os.path.exists(d):
-            os.makedirs(d)
+            os.makedirs(d, mode=0o700)
         p = os.path.join(d, str(id(self)))
         self._file = open(p, "w+b", 65536)
         self._ser = BatchedSerializer(CompressedSerializer(CPickleSerializer()), 1024)
@@ -783,7 +806,7 @@ class ExternalGroupBy(ExternalMerger[K, V, "SizedIterable[V]"]):
         global MemoryBytesSpilled, DiskBytesSpilled
         path = self._get_spill_dir(self.spills)
         if not os.path.exists(path):
-            os.makedirs(path)
+            os.makedirs(path, mode=0o700)
 
         used_memory = get_used_memory()
         if not self.pdata:

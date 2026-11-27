@@ -576,10 +576,11 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       // default is 2 * 2 = 4 threads. A value of 0 disables the thread pool (sequential mode).
       val numThreads = storeConf.fileChecksumThreadPoolSize
       if (numThreads < ChecksumCheckpointFileManager.DEFAULT_THREAD_POOL_SIZE) {
-        logWarning(s"fileChecksumThreadPoolSize for the state store file checksum thread pool " +
-          s"is set to $numThreads, which is below the recommended default of " +
-          s"${ChecksumCheckpointFileManager.DEFAULT_THREAD_POOL_SIZE}. " +
-          "This may have performance impact.")
+        logWarning(log"fileChecksumThreadPoolSize for the state store file checksum thread pool " +
+          log"is set to ${MDC(LogKeys.THREAD_POOL_SIZE, numThreads)}, which is below the " +
+          log"recommended default of ${MDC(LogKeys.DEFAULT_VALUE,
+            ChecksumCheckpointFileManager.DEFAULT_THREAD_POOL_SIZE)}. " +
+          log"This may have performance impact.")
       }
       new ChecksumCheckpointFileManager(
         mgr,
@@ -691,7 +692,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     }
 
     if (numberOfVersionsToRetainInMemory <= 0) {
-      if (loadedMaps.size() > 0) loadedMaps.clear()
+      if (!loadedMaps.isEmpty) loadedMaps.clear()
       return
     }
 

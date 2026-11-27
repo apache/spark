@@ -1297,7 +1297,7 @@ Project [spark_catalog.default.foo9n(a#x) AS spark_catalog.default.foo9n(array(1
 SELECT foo9n(from_json('[1, 2, 3]', 'array<int>'))
 -- !query analysis
 Project [spark_catalog.default.foo9n(a#x) AS spark_catalog.default.foo9n(from_json([1, 2, 3]))#x]
-+- Project [cast(from_json(ArrayType(IntegerType,true), [1, 2, 3], Some(America/Los_Angeles), false) as array<int>) AS a#x]
++- Project [cast(from_json(ArrayType(IntegerType,true), [1, 2, 3], Some(America/Los_Angeles), false, false) as array<int>) AS a#x]
    +- OneRowRelation
 
 
@@ -1319,7 +1319,7 @@ Project [spark_catalog.default.foo9o(a#x) AS spark_catalog.default.foo9o(map(hel
 SELECT foo9o(from_json('{"hello":1, "world":2}', 'map<string,int>'))
 -- !query analysis
 Project [spark_catalog.default.foo9o(a#x) AS spark_catalog.default.foo9o(entries)#x]
-+- Project [cast(from_json(MapType(StringType,IntegerType,true), {"hello":1, "world":2}, Some(America/Los_Angeles), false) as map<string,int>) AS a#x]
++- Project [cast(from_json(MapType(StringType,IntegerType,true), {"hello":1, "world":2}, Some(America/Los_Angeles), false, false) as map<string,int>) AS a#x]
    +- OneRowRelation
 
 
@@ -1341,7 +1341,7 @@ Project [spark_catalog.default.foo9p(a#x) AS spark_catalog.default.foo9p(struct(
 SELECT foo9p(from_json('{1:"hello"}', 'struct<a1:int, a2:string>'))
 -- !query analysis
 Project [spark_catalog.default.foo9p(a#x) AS spark_catalog.default.foo9p(from_json({1:"hello"}))#x]
-+- Project [cast(from_json(StructField(a1,IntegerType,true), StructField(a2,StringType,true), {1:"hello"}, Some(America/Los_Angeles), false) as struct<a1:int,a2:string>) AS a#x]
++- Project [cast(from_json(StructField(a1,IntegerType,true), StructField(a2,StringType,true), {1:"hello"}, Some(America/Los_Angeles), false, false) as struct<a1:int,a2:string>) AS a#x]
    +- OneRowRelation
 
 
@@ -1371,7 +1371,7 @@ Project [spark_catalog.default.foo9q(a#x) AS spark_catalog.default.foo9q(array(n
 SELECT foo9q(from_json('[{1:"hello"}, {2:"world"}]', 'array<struct<a1:int,a2:string>>'))
 -- !query analysis
 Project [spark_catalog.default.foo9q(a#x) AS spark_catalog.default.foo9q(from_json([{1:"hello"}, {2:"world"}]))#x]
-+- Project [cast(from_json(ArrayType(StructType(StructField(a1,IntegerType,true),StructField(a2,StringType,true)),true), [{1:"hello"}, {2:"world"}], Some(America/Los_Angeles), false) as array<struct<a1:int,a2:string>>) AS a#x]
++- Project [cast(from_json(ArrayType(StructType(StructField(a1,IntegerType,true),StructField(a2,StringType,true)),true), [{1:"hello"}, {2:"world"}], Some(America/Los_Angeles), false, false) as array<struct<a1:int,a2:string>>) AS a#x]
    +- OneRowRelation
 
 
@@ -1393,7 +1393,7 @@ Project [spark_catalog.default.foo9r(a#x) AS spark_catalog.default.foo9r(array(m
 SELECT foo9r(from_json('[{"hello":1}, {"world":2}]', 'array<map<string,int>>'))
 -- !query analysis
 Project [spark_catalog.default.foo9r(a#x) AS spark_catalog.default.foo9r(from_json([{"hello":1}, {"world":2}]))#x]
-+- Project [cast(from_json(ArrayType(MapType(StringType,IntegerType,true),true), [{"hello":1}, {"world":2}], Some(America/Los_Angeles), false) as array<map<string,int>>) AS a#x]
++- Project [cast(from_json(ArrayType(MapType(StringType,IntegerType,true),true), [{"hello":1}, {"world":2}], Some(America/Los_Angeles), false, false) as array<map<string,int>>) AS a#x]
    +- OneRowRelation
 
 
@@ -2967,6 +2967,90 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+CREATE TEMPORARY FUNCTION foo3_1h(x INT) RETURNS INT RETURN x + 1
+-- !query analysis
+CreateSQLFunctionCommand foo3_1h, x INT, INT, x + 1, false, true, false, false
+
+
+-- !query
+SELECT * FROM t1 JOIN t2 ON foo3_1h(t1.c1) = t2.c2
+-- !query analysis
+Project [c1#x, c2#x, c1#x, c2#x]
++- Join Inner, (foo3_1h(x#x) = c2#x)
+   :- SubqueryAlias spark_catalog.default.t1
+   :  +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+   :     +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+   :        +- LocalRelation [col1#x, col2#x]
+   +- SubqueryAlias spark_catalog.default.t2
+      +- View (`spark_catalog`.`default`.`t2`, [c1#x, c2#x])
+         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+DROP TEMPORARY FUNCTION foo3_1h
+-- !query analysis
+DropFunctionCommand foo3_1h, false, true
+
+
+-- !query
+SELECT * FROM t1 LEFT OUTER JOIN t2 ON foo3_1b(t1.c2) = t2.c2
+-- !query analysis
+Project [c1#x, c2#x, c1#x, c2#x]
++- Join LeftOuter, (spark_catalog.default.foo3_1b(x#x) = c2#x)
+   :- SubqueryAlias spark_catalog.default.t1
+   :  +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+   :     +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+   :        +- LocalRelation [col1#x, col2#x]
+   +- SubqueryAlias spark_catalog.default.t2
+      +- View (`spark_catalog`.`default`.`t2`, [c1#x, c2#x])
+         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT * FROM t1 LEFT SEMI JOIN t2 ON foo3_1a(t1.c1, t2.c2) >= 2
+-- !query analysis
+Project [c1#x, c2#x]
++- Join LeftSemi, (spark_catalog.default.foo3_1a(a#x, b#x) >= cast(2 as double))
+   :- SubqueryAlias spark_catalog.default.t1
+   :  +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+   :     +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+   :        +- LocalRelation [col1#x, col2#x]
+   +- SubqueryAlias spark_catalog.default.t2
+      +- View (`spark_catalog`.`default`.`t2`, [c1#x, c2#x])
+         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+CREATE FUNCTION foo3_1i(x INT, y INT DEFAULT 1) RETURNS INT RETURN x + y
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo3_1i, x INT, y INT DEFAULT 1, INT, x + y, false, false, false, false
+
+
+-- !query
+SELECT * FROM t1 JOIN t2 ON foo3_1i(t1.c2) = t2.c2
+-- !query analysis
+Project [c1#x, c2#x, c1#x, c2#x]
++- Join Inner, (spark_catalog.default.foo3_1i(x#x, y#x) = c2#x)
+   :- SubqueryAlias spark_catalog.default.t1
+   :  +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+   :     +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+   :        +- LocalRelation [col1#x, col2#x]
+   +- SubqueryAlias spark_catalog.default.t2
+      +- View (`spark_catalog`.`default`.`t2`, [c1#x, c2#x])
+         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+DROP FUNCTION foo3_1i
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_1i, false, false
+
+
+-- !query
 SELECT * FROM t1 ORDER BY foo3_1b(c1)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
@@ -3504,6 +3588,50 @@ Project [spark_catalog.default.foo3_2e1(occurrences#x, instance_start_time#x) AS
 
 
 -- !query
+CREATE FUNCTION foo3_2e2(x INT) RETURNS INT RETURN
+WITH t AS (SELECT c1, SUM(c2) AS s FROM t2 WHERE c1 = x GROUP BY c1)
+SELECT s FROM t
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo3_2e2, x INT, INT, WITH t AS (SELECT c1, SUM(c2) AS s FROM t2 WHERE c1 = x GROUP BY c1)
+SELECT s FROM t, false, false, false, false
+
+
+-- !query
+SET spark.sql.optimizer.scalarSubqueryUseSingleJoin=false
+-- !query analysis
+SetCommand (spark.sql.optimizer.scalarSubqueryUseSingleJoin,Some(false))
+
+
+-- !query
+SELECT c1, foo3_2e2(c1) FROM t1
+-- !query analysis
+Project [c1#x, spark_catalog.default.foo3_2e2(x#x) AS spark_catalog.default.foo3_2e2(c1)#x]
+:  +- WithCTE
+:     :- CTERelationDef xxxx, false
+:     :  +- SubqueryAlias t
+:     :     +- Aggregate [c1#x], [c1#x, sum(c2#x) AS s#xL]
+:     :        +- Filter (c1#x = outer(x#x))
+:     :           +- SubqueryAlias spark_catalog.default.t2
+:     :              +- View (`spark_catalog`.`default`.`t2`, [c1#x, c2#x])
+:     :                 +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+:     :                    +- LocalRelation [col1#x, col2#x]
+:     +- Project [s#xL]
+:        +- SubqueryAlias t
+:           +- CTERelationRef xxxx, true, [c1#x, s#xL], false, false
++- Project [c1#x, c2#x, cast(c1#x as int) AS x#x]
+   +- SubqueryAlias spark_catalog.default.t1
+      +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+RESET spark.sql.optimizer.scalarSubqueryUseSingleJoin
+-- !query analysis
+ResetCommand spark.sql.optimizer.scalarSubqueryUseSingleJoin
+
+
+-- !query
 SET spark.sql.ansi.enabled=true
 -- !query analysis
 SetCommand (spark.sql.ansi.enabled,Some(true))
@@ -3957,6 +4085,219 @@ org.apache.spark.sql.AnalysisException
     "tempObjName" : "`t`"
   }
 }
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE foo3_5_col STRING DEFAULT 'a'
+-- !query analysis
+CreateVariable default(cast(a as string), sql=''a''), true
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.foo3_5_col
+
+
+-- !query
+CREATE FUNCTION foo3_5d(x INT) RETURNS INT RETURN x + length(foo3_5_col)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
+  "messageParameters" : {
+    "obj" : "FUNCTION",
+    "objName" : "`default`.`foo3_5d`",
+    "tempObj" : "VARIABLE",
+    "tempObjName" : "`foo3_5_col`"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo3_5d(x INT) RETURNS INT
+RETURN (SELECT IDENTIFIER(foo3_5_col) FROM VALUES (1) AS T(a))
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
+  "messageParameters" : {
+    "obj" : "FUNCTION",
+    "objName" : "`default`.`foo3_5d`",
+    "tempObj" : "VARIABLE",
+    "tempObjName" : "`foo3_5_col`"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo3_5d(x INT) RETURNS TABLE (a INT)
+RETURN SELECT IDENTIFIER(foo3_5_col) AS a FROM VALUES (1) AS T(a)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
+  "messageParameters" : {
+    "obj" : "FUNCTION",
+    "objName" : "`default`.`foo3_5d`",
+    "tempObj" : "VARIABLE",
+    "tempObjName" : "`foo3_5_col`"
+  }
+}
+
+
+-- !query
+CREATE TEMPORARY FUNCTION foo3_5e(x INT) RETURNS INT
+RETURN (SELECT IDENTIFIER(foo3_5_col) FROM VALUES (1) AS T(a))
+-- !query analysis
+CreateSQLFunctionCommand foo3_5e, x INT, INT, (SELECT IDENTIFIER(foo3_5_col) FROM VALUES (1) AS T(a)), false, true, false, false
+
+
+-- !query
+SELECT foo3_5e(0)
+-- !query analysis
+Project [foo3_5e(x#x) AS foo3_5e(0)#x]
+:  +- Project [a#x]
+:     +- SubqueryAlias T
+:        +- LocalRelation [a#x]
++- Project [cast(0 as int) AS x#x]
+   +- OneRowRelation
+
+
+-- !query
+DROP TEMPORARY FUNCTION foo3_5e
+-- !query analysis
+DropFunctionCommand foo3_5e, false, true
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE foo3_5_tbl STRING DEFAULT 't1'
+-- !query analysis
+CreateVariable default(cast(t1 as string), sql=''t1''), true
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.foo3_5_tbl
+
+
+-- !query
+CREATE FUNCTION foo3_5d(x INT) RETURNS TABLE (c1 INT)
+RETURN SELECT c1 FROM IDENTIFIER(foo3_5_tbl)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
+  "messageParameters" : {
+    "obj" : "FUNCTION",
+    "objName" : "`default`.`foo3_5d`",
+    "tempObj" : "VARIABLE",
+    "tempObjName" : "`foo3_5_tbl`"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo3_5d(x INT) RETURNS INT
+RETURN (SELECT IDENTIFIER(session.foo3_5_col) FROM VALUES (1) AS T(a))
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
+  "messageParameters" : {
+    "obj" : "FUNCTION",
+    "objName" : "`default`.`foo3_5d`",
+    "tempObj" : "VARIABLE",
+    "tempObjName" : "`session`.`foo3_5_col`"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION foo3_5d(x INT) RETURNS TABLE (c INT)
+RETURN SELECT IDENTIFIER(foo3_5_col) AS c FROM IDENTIFIER(foo3_5_tbl) AS T(a, b)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
+  "sqlState" : "42K0F",
+  "messageParameters" : {
+    "obj" : "FUNCTION",
+    "objName" : "`default`.`foo3_5d`",
+    "tempObj" : "VARIABLE",
+    "tempObjName" : "`foo3_5_tbl`"
+  }
+}
+
+
+-- !query
+SET spark.sql.legacy.allowSessionVariableInPersistedView=true
+-- !query analysis
+SetCommand (spark.sql.legacy.allowSessionVariableInPersistedView,Some(true))
+
+
+-- !query
+CREATE FUNCTION foo3_5f(x INT) RETURNS INT
+RETURN (SELECT IDENTIFIER(foo3_5_col) FROM VALUES (1) AS T(a))
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo3_5f, x INT, INT, (SELECT IDENTIFIER(foo3_5_col) FROM VALUES (1) AS T(a)), false, false, false, false
+
+
+-- !query
+SELECT foo3_5f(0)
+-- !query analysis
+Project [spark_catalog.default.foo3_5f(x#x) AS spark_catalog.default.foo3_5f(0)#x]
+:  +- Project [a#x]
+:     +- SubqueryAlias T
+:        +- LocalRelation [a#x]
++- Project [cast(0 as int) AS x#x]
+   +- OneRowRelation
+
+
+-- !query
+SET spark.sql.legacy.allowSessionVariableInPersistedView=false
+-- !query analysis
+SetCommand (spark.sql.legacy.allowSessionVariableInPersistedView,Some(false))
+
+
+-- !query
+CREATE FUNCTION foo3_5g(x INT) RETURNS INT RETURN foo3_5f(x) + 1
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo3_5g, x INT, INT, foo3_5f(x) + 1, false, false, false, false
+
+
+-- !query
+SELECT foo3_5g(0)
+-- !query analysis
+Project [spark_catalog.default.foo3_5g(x#x) AS spark_catalog.default.foo3_5g(0)#x]
+:  +- Project [a#x]
+:     +- SubqueryAlias T
+:        +- LocalRelation [a#x]
++- Project [x#x, cast(x#x as int) AS x#x]
+   +- Project [cast(0 as int) AS x#x]
+      +- OneRowRelation
+
+
+-- !query
+DROP FUNCTION foo3_5g
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_5g, false, false
+
+
+-- !query
+DROP FUNCTION foo3_5f
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_5f, false, false
+
+
+-- !query
+DROP TEMPORARY VARIABLE foo3_5_tbl
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.foo3_5_tbl
+
+
+-- !query
+DROP TEMPORARY VARIABLE foo3_5_col
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.foo3_5_col
 
 
 -- !query
@@ -5136,6 +5477,12 @@ DropFunctionCommand spark_catalog.default.foo3_2d2, true, false
 DROP FUNCTION IF EXISTS foo3_2e1
 -- !query analysis
 DropFunctionCommand spark_catalog.default.foo3_2e1, true, false
+
+
+-- !query
+DROP FUNCTION IF EXISTS foo3_2e2
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_2e2, true, false
 
 
 -- !query

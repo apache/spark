@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.execution
 
-import scala.collection.mutable
-
 import org.apache.spark.sql.catalyst.expressions.{AttributeSet, Expression, ExpressionSet}
 import org.apache.spark.sql.catalyst.plans.{AliasAwareOutputExpression, AliasAwareQueryOutputOrdering}
 import org.apache.spark.sql.catalyst.plans.physical.{KeyedPartitioning, Partitioning, PartitioningCollection, UnknownPartitioning}
@@ -29,22 +27,29 @@ import org.apache.spark.sql.catalyst.trees.MultiTransform
  */
 trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
   with AliasAwareOutputExpression {
-  final override def outputPartitioning: Partitioning = {
+  // A `lazy val` because the planner asks a node for its partitioning many times, and this body
+  // projects every partitioning expression through the output aliases, and for a
+  // `KeyedPartitioning` child also builds an `ExpressionSet` per key position and cross-products
+  // the per-position alternatives. Read no live config here, or memoizing would freeze it.
+  @transient final override lazy val outputPartitioning: Partitioning = {
+    val childPartitioning = child.outputPartitioning
     val (keyedPartitionings, otherPartitionings) =
-      PartitioningCollection.flatten(child.outputPartitioning)
+      PartitioningCollection.flatten(childPartitioning)
         .partition(_.isInstanceOf[KeyedPartitioning])
 
-    val projectedKPs =
+    val (aliasKPs, constantKPs) =
       projectKeyedPartitionings(keyedPartitionings.map(_.asInstanceOf[KeyedPartitioning]))
-    val projectedOthers = projectOtherPartitionings(otherPartitionings)
+    val (aliasOthers, constantOthers) = projectOtherPartitionings(otherPartitionings)
 
     // Materialize into a strict collection. The projected partitionings are lazy `LazyList`s
     // (needed so `take` can short-circuit); storing an unforced `LazyList` in the returned
     // `PartitioningCollection` lets each plan node re-wrap the child's lazy list, and across a
     // deep projection chain that nesting overflows the stack when the partitioning is later
-    // serialized or deeply traversed.
-    (projectedKPs ++ projectedOthers).take(aliasCandidateLimit).toList match {
-      case Seq() => UnknownPartitioning(child.outputPartitioning.numPartitions)
+    // serialized or deeply traversed. Emit all alias spellings across both keyed and non-keyed
+    // partitionings before any constant spelling so later members are not crowded out.
+    (aliasKPs #::: aliasOthers #::: constantKPs #::: constantOthers)
+      .take(aliasCandidateLimit).toList match {
+      case Seq() => UnknownPartitioning(childPartitioning.numPartitions)
       case Seq(p) => p
       case ps => PartitioningCollection.fromPartitionings(ps)
     }
@@ -53,14 +58,15 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
   /**
    * Projects non-[[KeyedPartitioning]] partitionings through the current node's output expressions.
    *
-   * With aliases, each partitioning expression is substituted with all possible alias combinations;
+   * With aliases, each partitioning expression is substituted with all possible alias combinations
+   * first, followed by constant-preserving spellings for expressions that keep a foldable leaf;
    * without aliases, partitionings whose expressions reference attributes outside the output are
    * dropped.
    */
   private def projectOtherPartitionings(
-      partitionings: Seq[Partitioning]): LazyList[Partitioning] = {
+      partitionings: Seq[Partitioning]): (LazyList[Partitioning], LazyList[Partitioning]) = {
     if (hasAlias) {
-      partitionings.to(LazyList).flatMap {
+      val projected = partitionings.to(LazyList).map {
         case e: Expression =>
           // We need unique partitionings but if the input partitioning is
           // `HashPartitioning(Seq(id + id))` and we have `id -> a` and `id -> b` aliases then after
@@ -68,19 +74,19 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
           // `HashPartitioning(Seq(a + a))`, `HashPartitioning(Seq(a + b))`,
           // `HashPartitioning(Seq(b + a))`, `HashPartitioning(Seq(b + b))`, but
           // `HashPartitioning(Seq(a + b))` is the same as `HashPartitioning(Seq(b + a))`.
-          val partitioningSet = mutable.Set.empty[Expression]
-          projectExpression(e)
-            .filter(e => partitioningSet.add(e.canonicalized))
-            .asInstanceOf[LazyList[Partitioning]]
-        case o => LazyList(o)
+          projectExpressions(Seq(e))
+        case o => (LazyList(o), LazyList.empty)
       }
+      (projected.flatMap(_._1).asInstanceOf[LazyList[Partitioning]],
+        projected.flatMap(_._2).asInstanceOf[LazyList[Partitioning]])
     } else {
       // Filter valid partitionings (only reference output attributes of the current plan node)
       val outputSet = AttributeSet(outputExpressions.map(_.toAttribute))
-      partitionings.to(LazyList).filter {
+      val valid = partitionings.to(LazyList).filter {
         case e: Expression => e.references.subsetOf(outputSet)
         case _ => true
       }
+      (valid, LazyList.empty)
     }
   }
 
@@ -92,67 +98,92 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
    * Positions with at least one alternative are projectable; their count determines the maximum
    * achievable granularity. Positions that cannot be expressed in the output are dropped.
    *
-   * The resulting [[KeyedPartitioning]]s are the cross-product of the per-position alternatives
-   * restricted to the projectable positions. All share the same `partitionKeys` object (projected
-   * to the same subset of positions), preserving the invariant required by
-   * [[PartitioningCollection]].
+   * The resulting [[KeyedPartitioning]]s are returned as `(aliasKPs, constantKPs)`. All share the
+   * same `KeyLayout` object (projected to the same subset of positions), preserving the invariant
+   * required by [[PartitioningCollection]].
    */
   private def projectKeyedPartitionings(
-      kps: Seq[KeyedPartitioning]): LazyList[KeyedPartitioning] = {
-    if (kps.isEmpty) return LazyList.empty
-    // All input KPs share the same `partitionKeys` reference and matching arity by the
-    // [[PartitioningCollection]] invariant (the only producer of multi-KP inputs here).
+      kps: Seq[KeyedPartitioning]): (LazyList[KeyedPartitioning], LazyList[KeyedPartitioning]) = {
+    if (kps.isEmpty) return (LazyList.empty, LazyList.empty)
+    // All input KPs have matching arity by the [[PartitioningCollection]] invariant (the only
+    // producer of multi-KP inputs here).
     val numPositions = kps.head.expressions.length
 
-    val alternativesPerPosition: IndexedSeq[LazyList[Expression]] =
+    val (alternativesPerPosition, constantAlternatives) =
       if (hasAlias) {
         // For each position, gather unique expressions across all KPs (ExpressionSet deduplicates
         // semantically equal expressions, e.g. the same join-key column shared by both KP sides)
         // and project each through the output aliases.
-        (0 until numPositions).map { i =>
-          val seen = mutable.Set.empty[Expression]
-          ExpressionSet(kps.map(_.expressions(i))).to(LazyList).flatMap { expr =>
-            projectExpression(expr).filter(e => seen.add(e.canonicalized))
-          }
+        val projectedPerPos = (0 until numPositions).map { i =>
+          val exprs = ExpressionSet(kps.map(_.expressions(i))).to(LazyList)
+          (exprs, projectExpressions(exprs))
         }
+        val aliasAlts = projectedPerPos.map(_._2._1)
+        val constAlts = if (hasFoldableAlias) {
+          projectedPerPos.map { case (exprsAtPos, (_, constants)) =>
+            if (constants.isEmpty) {
+              LazyList.empty
+            } else {
+              constants #::: projectExpressions(exprsAtPos.filterNot(keepsFoldable))._1
+            }
+          }
+        } else {
+          IndexedSeq.empty
+        }
+        (aliasAlts, constAlts)
       } else {
         // No aliases: filter out non-projectable expressions first, then deduplicate.
         val outputSet = AttributeSet(outputExpressions.map(_.toAttribute))
-        (0 until numPositions).map { i =>
+        val validAlts = (0 until numPositions).map { i =>
           ExpressionSet(kps.collect {
             case kp if kp.expressions(i).references.subsetOf(outputSet) => kp.expressions(i)
           }).to(LazyList)
         }
+        (validAlts, IndexedSeq.empty)
       }
 
     // Non-empty positions define the maximum achievable granularity.
     val projectablePositions =
       (0 until numPositions).filter(i => alternativesPerPosition(i).nonEmpty)
 
-    if (projectablePositions.isEmpty) return LazyList.empty
+    if (projectablePositions.isEmpty) return (LazyList.empty, LazyList.empty)
 
-    // All input KPs share the same partitionKeys by invariant; use the first as the key source.
-    val keySource = kps.head
-    val sharedKeys =
-      if (projectablePositions.length == numPositions) keySource.partitionKeys
-      else keySource.projectKeys(projectablePositions)._2
+    // Dropping a key position coarsens the declared set, which an unknown-keyed claim cannot
+    // survive. The members share one layout, so the head answers for the marker.
+    if (projectablePositions.length < numPositions && kps.head.mayContainUnknownPartitionKeys) {
+      return (LazyList.empty, LazyList.empty)
+    }
 
-    val isGrouped = sharedKeys.distinct.size == sharedKeys.size
-    // A KP is narrowed if this node drops positions, or if the input KPs were already narrowed
-    // (i.e. came from a finer-grained partitioning). The flag must be sticky: a subsequent
-    // PartitioningPreservingUnaryExecNode that passes all positions through would otherwise
-    // recompute isNarrowed=false, silently dropping the protection.
-    val isNarrowed = projectablePositions.length < numPositions || keySource.isNarrowed
+    // All input KPs share one layout by invariant, so the first one projects it for every
+    // combination below. Only the expressions differ, and the marker rides the copies unchanged:
+    // the guard above turned away the one shape that could not, a narrowing projection of a marked
+    // collection.
+    val projected = kps.head.project(projectablePositions)
 
-    // Cross-product the per-position alternatives to produce all concrete KPs.
-    // Note: generateCartesianProduct expects thunks () => Seq[T], but wrapping LazyLists in thunks
-    // here is not strictly necessary since they are already lazy -- we do it only to match the API.
-    // No deduplication is needed here: per-position alternatives are already canonically distinct,
-    // so all cross-product combinations are distinct by construction.
-    MultiTransform.generateCartesianProduct(
-      projectablePositions.map(i => () => alternativesPerPosition(i)))
-      .map(projectedExprs =>
-        new KeyedPartitioning(projectedExprs, sharedKeys, isGrouped, isNarrowed))
+    // Cross-product the per-position alternatives to produce all concrete KPs. Keep master's
+    // alias-projected combinations first. In the constant pass, positions with matched foldable
+    // leaves emit their constant spellings before non-foldable alternatives from other members,
+    // and only combinations keeping at least one foldable leaf are kept so the two passes stay
+    // disjoint.
+    val aliasSpelling = projectablePositions.map(alternativesPerPosition)
+    val aliasKPs = MultiTransform.generateCartesianProduct(aliasSpelling.map(a => () => a))
+      .map(projectedExprs => projected.copy(expressions = projectedExprs))
+    val constantKPs = if (constantAlternatives.nonEmpty) {
+      val activeConstants = projectablePositions.map(constantAlternatives)
+      if (activeConstants.exists(_.nonEmpty)) {
+        val constantInputs = aliasSpelling.zip(activeConstants).map {
+          case (alias, constant) => if (constant.isEmpty) alias else constant
+        }
+        MultiTransform.generateCartesianProduct(constantInputs.map(a => () => a))
+          .filter(_.exists(keepsFoldable))
+          .map(projectedExprs => projected.copy(expressions = projectedExprs))
+      } else {
+        LazyList.empty
+      }
+    } else {
+      LazyList.empty
+    }
+    (aliasKPs, constantKPs)
   }
 }
 
