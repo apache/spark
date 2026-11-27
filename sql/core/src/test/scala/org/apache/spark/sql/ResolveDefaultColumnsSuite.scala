@@ -19,10 +19,12 @@ package org.apache.spark.sql
 
 import java.util.concurrent.atomic.AtomicInteger
 
+import scala.util.Try
+
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TableOutputResolver
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Between, Expression, LeafExpression, Literal, NullIf}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Between, Divide, Expression, LeafExpression, Literal, NullIf, Rand, TypeOf}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
@@ -432,8 +434,9 @@ class ResolveDefaultColumnsSuite extends SharedSparkSession {
   }
 
   test("SPARK-60029: a default using NULLIF or BETWEEN is constant") {
-    // NULLIF and BETWEEN build a `With`, which is not foldable.
-    withSQLConf("spark.sql.catalog.testcat" -> classOf[InMemoryTableCatalog].getName) {
+    // NULLIF and BETWEEN build a `With`, which is not foldable. The conf pins that form.
+    withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "false",
+        "spark.sql.catalog.testcat" -> classOf[InMemoryTableCatalog].getName) {
       Seq("t" -> "parquet", "testcat.ns.t" -> "foo").foreach { case (t, provider) =>
         withTable(t) {
           sql(s"CREATE TABLE $t (id INT, a INT DEFAULT nullif(1, 3), " +
@@ -447,11 +450,18 @@ class ResolveDefaultColumnsSuite extends SharedSparkSession {
             Seq(Row(1, 1, true, 2), Row(2, 2, true, 2), Row(3, 2, true, 2)))
         }
       }
+      // A connector may store an existence default that is not folded yet.
+      val field = StructField("c", IntegerType, metadata = new MetadataBuilder()
+        .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "nullif(1, 3)")
+        .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "nullif(1, 3)")
+        .build())
+      assert(ResolveDefaultColumns.getExistenceDefaultValue(field) == 1)
     }
   }
 
   test("SPARK-60029: UPDATE and MERGE set a default using NULLIF or BETWEEN") {
-    withSQLConf(
+    // The conf pins the `With` form of NULLIF and BETWEEN.
+    withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "false",
         "spark.sql.catalog.cat" -> classOf[InMemoryRowLevelOperationTableCatalog].getName) {
       withTable("cat.ns.t") {
         sql("CREATE TABLE cat.ns.t (id INT, a INT DEFAULT nullif(1, 3), " +
@@ -465,23 +475,59 @@ class ResolveDefaultColumnsSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-60029: a default using NULLIF or BETWEEN evaluates its input once") {
-    // Each NULLIF reads the level below twice, in the comparison and as the result, and so does
-    // BETWEEN. Copying the definitions instead would evaluate `input` 2^11 times.
+  /**
+   * Analyzes, as a default read from column metadata, the expression that `build` makes over a
+   * foldable integer counting its evaluations, and returns the result and the count.
+   */
+  private def analyzeCounting(dataType: DataType)(
+      build: Expression => Expression): (Try[Expression], Int) = {
     val evaluations = new AtomicInteger()
-    val nested = (3 to 12).foldLeft[Expression](CountingIntLiteral(2, evaluations)) {
-      (e, i) => new NullIf(e, Literal(i))
-    }
-    val field = StructField("b", BooleanType, metadata = new MetadataBuilder()
-      .putExpression(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "nested",
-        Some(Between(nested, Literal(1), Literal(3))))
+    val field = StructField("c", dataType, metadata = new MetadataBuilder()
+      .putExpression(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "default",
+        Some(build(CountingIntLiteral(2, evaluations))))
       .build())
-    assert(ResolveDefaultColumns.analyze(field, "INSERT") == Literal(true))
-    assert(evaluations.get == 1)
+    (Try(ResolveDefaultColumns.analyze(field, "INSERT")), evaluations.get)
+  }
+
+  test("SPARK-60029: a default using NULLIF or BETWEEN evaluates its input at most once") {
+    // The conf pins the `With` form of NULLIF and BETWEEN, which they build when it is false.
+    withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "false") {
+      // Each NULLIF reads the level below twice, in the comparison and as the result, and so does
+      // BETWEEN. Copying the definitions instead would evaluate the counted leaf 2^11 times.
+      val (nested, nestedCount) = analyzeCounting(BooleanType) { leaf =>
+        val nullIfs = (3 to 12).foldLeft(leaf)((e, i) => new NullIf(e, Literal(i)))
+        Between(nullIfs, Literal(1), Literal(3))
+      }
+      assert(nested.get == Literal(true))
+      assert(nestedCount == 1)
+      // A default whose comparison reads `rand()` or fails to evaluate is rejected, and the leaf
+      // is evaluated once on the way.
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        Seq[Expression => Expression](
+          leaf => new NullIf(leaf, Rand(Literal(0L))),
+          leaf => new NullIf(leaf, Divide(Literal(1), Literal(0)))).foreach { build =>
+          val (rejected, rejectedCount) = analyzeCounting(IntegerType)(build)
+          checkError(
+            exception = intercept[AnalysisException](rejected.get),
+            condition = "INVALID_DEFAULT_VALUE.NOT_CONSTANT",
+            parameters = Map("statement" -> "INSERT", "colName" -> "`c`",
+              "defaultValue" -> "default"))
+          assert(rejectedCount == 1)
+        }
+      }
+      // `typeof` reads only the type of its argument, so the leaf is not evaluated.
+      val (typeName, typeNameCount) =
+        analyzeCounting(StringType)(leaf => TypeOf(new NullIf(leaf, Literal(3))))
+      assert(typeName.get == Literal("int"))
+      assert(typeNameCount == 0)
+    }
   }
 
   test("SPARK-60029: a default using NULLIF that does not fold is rejected") {
-    withSQLConf("spark.sql.catalog.testcat" -> classOf[InMemoryTableCatalog].getName) {
+    // The conf pins the `With` form of NULLIF, which leaves `1 / 0` in a conditional branch.
+    withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "false",
+        "spark.sql.catalog.testcat" -> classOf[InMemoryTableCatalog].getName) {
+      // DDL rejects a nondeterministic default before it is folded.
       Seq("t" -> "parquet", "testcat.ns.t" -> "foo").foreach { case (t, provider) =>
         withTable(t) {
           checkError(
@@ -494,26 +540,27 @@ class ResolveDefaultColumnsSuite extends SharedSparkSession {
               "defaultValue" -> "nullif(rand(), 0.5)"))
         }
       }
-    }
-    // A default read from a catalog is checked only by `analyze`.
-    val field = StructField("c", DoubleType, metadata = new MetadataBuilder()
-      .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "nullif(rand(), 0.5)")
-      .build())
-    checkError(
-      exception = intercept[AnalysisException](ResolveDefaultColumns.analyze(field, "INSERT")),
-      condition = "INVALID_DEFAULT_VALUE.NOT_CONSTANT",
-      parameters = Map("statement" -> "INSERT", "colName" -> "`c`",
-        "defaultValue" -> "nullif(rand(), 0.5)"))
-    // A `With` that fails to fold is left in place, so the default is rejected as before.
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      withTable("t") {
-        checkError(
-          exception = intercept[AnalysisException] {
-            sql("CREATE TABLE t (id INT, c INT DEFAULT nullif(1, 1 / 0)) USING parquet")
-          },
-          condition = "INVALID_DEFAULT_VALUE.NOT_CONSTANT",
-          parameters = Map("statement" -> "CREATE TABLE", "colName" -> "`c`",
-            "defaultValue" -> "nullif(1, 1 / 0)"))
+      // A default read from a catalog is checked only by `analyze`.
+      val field = StructField("c", DoubleType, metadata = new MetadataBuilder()
+        .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY,
+          "nullif(rand(), 0.5)")
+        .build())
+      checkError(
+        exception = intercept[AnalysisException](ResolveDefaultColumns.analyze(field, "INSERT")),
+        condition = "INVALID_DEFAULT_VALUE.NOT_CONSTANT",
+        parameters = Map("statement" -> "INSERT", "colName" -> "`c`",
+          "defaultValue" -> "nullif(rand(), 0.5)"))
+      // A `With` that fails to fold is left in place, so the default is rejected as before.
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        withTable("t") {
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql("CREATE TABLE t (id INT, c INT DEFAULT nullif(1, 1 / 0)) USING parquet")
+            },
+            condition = "INVALID_DEFAULT_VALUE.NOT_CONSTANT",
+            parameters = Map("statement" -> "CREATE TABLE", "colName" -> "`c`",
+              "defaultValue" -> "nullif(1, 1 / 0)"))
+        }
       }
     }
   }

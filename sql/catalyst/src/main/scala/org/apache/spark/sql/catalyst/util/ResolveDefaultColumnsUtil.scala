@@ -618,23 +618,36 @@ object ResolveDefaultColumns extends QueryErrorsBase
     ConstantFolding(DefaultColumnOptimizer.FinishAnalysis(plan).mapExpressions(foldWiths))
 
   /**
-   * `e` with each `With` that evaluates to a constant replaced by its value. Each definition is
-   * evaluated once, as `With.eval` does, and the value is substituted at its references, so no
-   * definition is copied. A `With` that does not fold, or fails to, is left to `ConstantFolding`.
+   * `e` with each `With` folded as far as its definitions allow. Each foldable definition is
+   * evaluated, and replaced by its value if that succeeds, so no definition is copied. When every
+   * definition has a value, the values are substituted at the references, and a child that is then
+   * foldable is evaluated to a literal. Whatever does not fold, or fails to evaluate, is left to
+   * `ConstantFolding`.
    */
-  private def foldWiths(e: Expression): Expression =
-    e.transformUpWithPruning(_.containsPattern(WITH_EXPRESSION)) {
-      case w: With if w.defs.forall(_.child.foldable) =>
-        try {
-          val values = w.defs.map(d => d.id -> evalToLiteral(d.child)).toMap
-          val child = w.child.transformWithPruning(_.containsPattern(COMMON_EXPR_REF)) {
-            case ref: CommonExpressionRef if values.contains(ref.id) => values(ref.id)
-          }
-          if (child.foldable) evalToLiteral(child) else w
-        } catch {
-          case NonFatal(_) => w
-        }
+  private def foldWiths(e: Expression): Expression = e match {
+    // `ConstantFolding` evaluates a foldable expression whole, and `typeof` reads only the type of
+    // its argument, so a `With` under a foldable expression is left to it.
+    case _ if e.foldable || !e.containsPattern(WITH_EXPRESSION) => e
+    case w: With => foldWith(w.mapChildren(foldWiths).asInstanceOf[With])
+    case _ => e.mapChildren(foldWiths)
+  }
+
+  private def foldWith(w: With): Expression = {
+    val defs = w.defs.map {
+      case d if d.child.foldable && !d.child.isInstanceOf[ExprLiteral] =>
+        Try(evalToLiteral(d.child)).map(v => d.withNewChildren(Seq(v))).getOrElse(d)
+      case d => d
     }
+    val values = defs.collect { case CommonExpressionDef(v: ExprLiteral, id) => id -> v }.toMap
+    val folded = if (values.size < defs.length) None else {
+      val child = w.child.transformWithPruning(_.containsPattern(COMMON_EXPR_REF)) {
+        case ref: CommonExpressionRef if values.contains(ref.id) => values(ref.id)
+      }
+      if (child.foldable) Try(evalToLiteral(child)).toOption else None
+    }
+    // `withNewChildren` rebuilds the references of a definition whose nullability changed.
+    folded.getOrElse(w.withNewChildren(w.child +: defs))
+  }
 
   private def evalToLiteral(e: Expression): ExprLiteral =
     ExprLiteral.create(e.freshCopyIfContainsStatefulExpression().eval(EmptyRow), e.dataType)
