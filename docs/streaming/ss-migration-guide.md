@@ -27,9 +27,10 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
 
 - Since Spark 4.5, a stream-stream join no longer matches rows whose equality key is NULL, as in
   batch joins: an inner or left semi join drops such a row, and an outer join outputs it at once,
-  padded with NULLs. This also applies to queries restarted from existing checkpoints, so a query
-  whose earlier output contained such matches returns different rows after the upgrade. Null-safe
-  equality (`<=>`) still matches NULL keys.
+  padded with NULLs, when it comes from a side the join preserves, and drops it otherwise. This
+  also applies to queries restarted from existing checkpoints, so a query whose earlier output
+  contained such matches returns different rows after the upgrade. Null-safe equality (`<=>`)
+  still matches NULL keys.
 
 ## Upgrading from Structured Streaming 4.3 to 4.4
 

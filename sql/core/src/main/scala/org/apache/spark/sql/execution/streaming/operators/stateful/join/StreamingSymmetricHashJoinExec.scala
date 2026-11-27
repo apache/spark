@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.streaming.operators.stateful.join
 
 import java.util.concurrent.TimeUnit.NANOSECONDS
 
+import scala.util.Try
+
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
@@ -40,7 +42,7 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.join.Symmetri
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.types.{NullType, StructType, TimestampType}
+import org.apache.spark.sql.types.{StructType, TimestampType}
 import org.apache.spark.util.{CompletionIterator, SerializableConfiguration}
 
 
@@ -730,14 +732,17 @@ case class StreamingSymmetricHashJoinExec(
 
     private[this] val keyGenerator = UnsafeProjection.create(joinKeys, inputAttributes)
 
-    // `<=>` over NULL-typed operands becomes the keys coalesce(e, NULL) and isnull(e), whose
-    // coalesce is NULL on every row of both inputs, so it does not make a row unmatchable.
+    // `<=>` becomes the keys coalesce(e, default) and isnull(e). When the default of e's type
+    // is NULL, as for NullType or a user-defined type stored as NullType, that coalesce is NULL
+    // on every row of both inputs, so it does not make a row unmatchable.
     private[this] val nullCheckedOrdinals = joinKeys.indices.filterNot { i =>
       joinKeys(i) match {
-        case Coalesce(Seq(e, Literal(null, NullType))) => joinKeys.lift(i + 1).exists {
-          case IsNull(c) => c.semanticEquals(e)
-          case _ => false
-        }
+        case Coalesce(Seq(e, default @ Literal(null, _)))
+            if Try(Literal.default(e.dataType)).toOption.contains(default) =>
+          joinKeys.lift(i + 1).exists {
+            case IsNull(c) => c.semanticEquals(e)
+            case _ => false
+          }
         case _ => false
       }
     }
@@ -906,11 +911,11 @@ case class StreamingSymmetricHashJoinExec(
         val key = if (preJoinFilter(thisRow)) keyGenerator(thisRow) else null
         // A row whose join key has a NULL can never match, as in a batch join, and eviction by a
         // NULL watermarked key may never reach it, so it is handled as a row that fails the pre
-        // join filter. Null-safe equality compares keys that are not NULL, except for NULL-typed
-        // operands, whose keys `hasNullKey` leaves out.
-        // TODO: Rows with a NULL watermarked key that a checkpoint already holds are not drained:
-        //   state formats V1 to V3 never evict them, and V4 never evicts a NULL timestamp key
-        //   filed at timestamp 0 after the first batch on the input whose watermark is that key.
+        // join filter. Null-safe equality compares keys that are not NULL, except for operands
+        // whose type's default is NULL, whose coalesce keys `hasNullKey` leaves out.
+        // TODO: Rows with a NULL watermarked key that a checkpoint already holds are not drained
+        //   on state formats V1 to V3, which never evict them. V4 evicts them in the first batch
+        //   of each run, whose eviction scan starts at the beginning of its timestamp index.
         if (key != null && !hasNullKey(key)) {
           // If the join type is Left Semi and this is the right side, we can remove the matched
           // row from the other (left) side's state, since the row won't be produced anymore for

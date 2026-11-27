@@ -33,6 +33,7 @@ import org.scalatest.{BeforeAndAfter, Tag}
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Row, SparkSession}
+import org.apache.spark.sql.TestingUDT.NullUDT
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.plans.{LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
@@ -2616,21 +2617,25 @@ abstract class StreamingOuterJoinBase extends StreamingJoinSuite {
 
   // As in a batch join, a row whose join key has a NULL never matches, so an outer join outputs
   // it at once, padded with NULLs, and it is not stored. Null-safe equality still matches NULLs,
-  // also on NULL-typed columns, whose rewritten keys are NULL on every row.
+  // also on columns whose type's default is NULL, whose rewritten keys are NULL on every row.
   for {
     (operator, nullsMatch) <- Seq(("=", false), ("<=>", true))
-    nullTyped <- Seq(false, true)
+    (nullTypedKey, nullTypedColumn) <- Seq(
+      ("", None),
+      (" next to a null-safe key on NULL-typed columns", Some(lit(null))),
+      (" next to a null-safe key on columns of a user-defined type stored as NullType",
+        Some(lit(null).cast(new NullUDT()))))
   } {
-    val nullTypedKey = if (nullTyped) " next to a null-safe key on NULL-typed columns" else ""
     test(s"SPARK-61382: full outer join on nullable keys compared by $operator$nullTypedKey") {
       val leftInput = MemoryStream[(Int, Int)]
       val rightInput = MemoryStream[(Int, Int)]
       val (left, right) = (nullableKeyed(leftInput, "l"), nullableKeyed(rightInput, "r"))
-      val joined = (if (nullTyped) {
-          left.withColumn("ln", lit(null)).join(right.withColumn("rn", lit(null)),
-            expr(s"lk $operator rk AND ln <=> rn AND $timeRange"), "full_outer")
-        } else {
-          left.join(right, expr(s"lk $operator rk AND $timeRange"), "full_outer")
+      val joined = (nullTypedColumn match {
+          case Some(c) =>
+            left.withColumn("ln", c).join(right.withColumn("rn", c),
+              expr(s"lk $operator rk AND ln <=> rn AND $timeRange"), "full_outer")
+          case None =>
+            left.join(right, expr(s"lk $operator rk AND $timeRange"), "full_outer")
         }).select($"lk", $"lt".cast("long"), $"rk", $"rt".cast("long"))
       val nullRows = if (nullsMatch) {
         Seq(Row(null, 5L, null, 6L))
