@@ -1840,10 +1840,42 @@ abstract class BaseSubqueryExec extends SparkPlan {
      * excluded from the main plan.
      */
     if (!printNodeId) {
+      val output = SparkPlan.subqueryPlanString(append)
+      // Expand each shared subquery body once, while keeping every wrapper visible.
+      val first = if (children.nonEmpty) {
+        Option(output.subqueries.get(child)) match {
+          case None =>
+            output.subqueries.put(child, this)
+            None
+          case existing => existing
+        }
+      } else {
+        None
+      }
+      if (first.isDefined) {
+        append("   " * indent)
+        if (depth > 0) {
+          val iter = lastChildren.iterator()
+          (0 until lastChildren.size() - 1).foreach { _ =>
+            append(if (iter.next()) "   " else ":  ")
+          }
+          append(if (lastChildren.get(lastChildren.size() - 1)) "+- " else ":- ")
+        }
+        val label = if (verbose) {
+          verboseString(maxFields)
+        } else if (printOutputColumns) {
+          nodeWithOutputColumnsString(maxFields)
+        } else {
+          simpleString(maxFields)
+        }
+        append(s"$label " +
+          s"[Shared subquery plan, first shown at subquery id=#${first.get.id}]\n")
+        return
+      }
       super.generateTreeString(
         depth,
         lastChildren,
-        append,
+        output,
         verbose,
         "",
         false,

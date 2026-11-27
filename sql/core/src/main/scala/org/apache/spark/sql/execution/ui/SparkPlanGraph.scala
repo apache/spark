@@ -113,15 +113,239 @@ object SparkPlanGraph {
     }
   }
 
-  /**
-   * Build a SparkPlanGraph from the root of a SparkPlan tree.
-   */
+  private val DppVersion = "spark.sql.dpp.planInfo.version"
+  private val DppId = "spark.sql.dpp.planInfo.id"
+  private val DppRef = "spark.sql.dpp.planInfo.ref"
+  private val DppReferenceName = "DPPSharedPlanReference"
+
+  private sealed trait DppDisplayTarget
+  private final case class DppVisibleNode(node: SparkPlanGraphNode) extends DppDisplayTarget
+  private final case class DppTargetAlias(id: String) extends DppDisplayTarget
+  private sealed trait DppMaterializationState
+  private case object DppBuilding extends DppMaterializationState
+  private final case class DppReady(target: DppDisplayTarget) extends DppMaterializationState
+  private final case class DppLegacyGraphEntry(
+      planInfo: SparkPlanInfo, node: SparkPlanGraphNode)
+
+  private def invalidDpp(message: String): Nothing = {
+    throw new IllegalStateException(s"Invalid DPP SparkPlanInfo: $message")
+  }
+
+  private def indexDppDetails(root: SparkPlanInfo): Option[Map[String, SparkPlanInfo]] = {
+    lazy val details = mutable.HashMap[String, SparkPlanInfo]()
+    var hasProtocol = false
+    val visited = new java.util.IdentityHashMap[SparkPlanInfo, java.lang.Boolean]()
+    def index(plan: SparkPlanInfo): Unit = {
+      if (visited.put(plan, true) == null) {
+        val metadata = plan.metadata
+        if (metadata.contains(DppVersion) || metadata.contains(DppId) ||
+            metadata.contains(DppRef) || plan.nodeName == DppReferenceName) {
+          hasProtocol = true
+          if (!metadata.get(DppVersion).contains("1")) {
+            invalidDpp("missing or unsupported version")
+          }
+          (metadata.get(DppId), metadata.get(DppRef)) match {
+            case (Some(id), None) if id.nonEmpty && plan.nodeName != DppReferenceName =>
+              details.get(id).foreach { other =>
+                if (!(other eq plan)) invalidDpp(s"conflicting detail ID $id")
+              }
+              details(id) = plan
+            case (None, Some(ref)) if ref.nonEmpty && plan.nodeName == DppReferenceName &&
+                plan.children.isEmpty && plan.metrics.isEmpty &&
+                metadata.keySet == Set(DppVersion, DppRef) =>
+            case _ => invalidDpp("malformed detail or reference")
+          }
+        }
+        plan.children.foreach(index)
+      }
+    }
+    index(root)
+    // Reference-only graphs still need validation; graphs without markers use the legacy path.
+    if (!hasProtocol) return None
+    // Check the resolved graph as well as the physical tree. A reference is always a leaf in
+    // the latter, but must not hide a cycle in the former.
+    val active = new java.util.IdentityHashMap[SparkPlanInfo, java.lang.Boolean]()
+    val done = new java.util.IdentityHashMap[SparkPlanInfo, java.lang.Boolean]()
+    def validate(plan: SparkPlanInfo): Unit = {
+      if (!done.containsKey(plan)) {
+        if (active.put(plan, true) != null) invalidDpp("cyclic reference graph")
+        plan.metadata.get(DppRef) match {
+          case Some(id) => validate(details.getOrElse(id, invalidDpp(s"missing detail ID $id")))
+          case _ => plan.children.foreach(validate)
+        }
+        active.remove(plan)
+        done.put(plan, true)
+      }
+    }
+    validate(root)
+    Some(details.toMap)
+  }
+
+  private final class DppGraphBuildContext(
+      index: Option[Map[String, SparkPlanInfo]],
+      val edges: mutable.ArrayBuffer[SparkPlanGraphEdge],
+      materialize: (SparkPlanInfo, SparkPlanGraphCluster, DppGraphBuildContext) =>
+        DppDisplayTarget) {
+    val enabled: Boolean = index.isDefined
+    private val details = index.getOrElse(Map.empty)
+    // Share the graph-building algorithm, but allocate reference state only for protocol graphs.
+    lazy val targets = mutable.HashMap[String, DppDisplayTarget]()
+    lazy val pending = mutable.ArrayBuffer[(DppDisplayTarget, SparkPlanGraphNode)]()
+    private lazy val states = mutable.HashMap[String, DppMaterializationState]()
+    private lazy val referenceOwners = mutable.HashMap[String, SparkPlanGraphCluster]()
+    private lazy val resolving = mutable.HashSet[String]()
+    private lazy val nodeTargets =
+      new java.util.IdentityHashMap[SparkPlanInfo, DppDisplayTarget]()
+    private lazy val equivalent = new java.util.IdentityHashMap[SparkPlanInfo,
+      java.util.IdentityHashMap[SparkPlanInfo, java.lang.Boolean]]()
+
+    private def resolve(plan: SparkPlanInfo): SparkPlanInfo = {
+      plan.metadata.get(DppRef).map { id =>
+        details.getOrElse(id, invalidDpp(s"missing detail ID $id"))
+      }.getOrElse(plan)
+    }
+
+    def legacyHash(plan: SparkPlanInfo): Int = {
+      if (enabled) resolve(plan).simpleString.hashCode else plan.hashCode()
+    }
+
+    def legacyEquivalent(left: SparkPlanInfo, right: SparkPlanInfo): Boolean = {
+      if (!enabled) return left == right
+      val l = resolve(left)
+      val r = resolve(right)
+      var row = equivalent.get(l)
+      if (row == null) {
+        row = new java.util.IdentityHashMap[SparkPlanInfo, java.lang.Boolean]()
+        equivalent.put(l, row)
+      }
+      val cached = row.get(r)
+      if (cached != null) return cached.booleanValue()
+      val result = l.nodeName == r.nodeName && l.simpleString == r.simpleString &&
+        l.children.length == r.children.length &&
+        l.children.zip(r.children).forall { case (a, b) => legacyEquivalent(a, b) }
+      row.put(r, result)
+      result
+    }
+
+    def rememberReferenceOwner(id: String, subgraph: SparkPlanGraphCluster): Unit = {
+      if (!referenceOwners.contains(id)) referenceOwners(id) = subgraph
+    }
+
+    def ensureDetailTarget(id: String): DppDisplayTarget = {
+      if (!resolving.add(id)) invalidDpp(s"cyclic display alias $id")
+      try {
+        val target = states.get(id) match {
+          case Some(DppReady(ready)) => ready
+          case Some(DppBuilding) => invalidDpp(s"reentrant detail construction $id")
+          case None =>
+            val detail = details.getOrElse(id, invalidDpp(s"missing detail ID $id"))
+            materialize(detail, referenceOwners.getOrElse(id, null), this)
+            states.get(id) match {
+              case Some(DppReady(ready)) => ready
+              case _ => invalidDpp(s"incomplete detail construction $id")
+            }
+        }
+        target match {
+          case alias: DppTargetAlias => ensureDetailTarget(alias.id)
+          case visible => visible
+        }
+      } finally {
+        resolving.remove(id)
+      }
+    }
+
+    def buildOrReuseDetail(
+        planInfo: SparkPlanInfo,
+        parent: SparkPlanGraphNode)(build: => DppDisplayTarget): DppDisplayTarget = {
+      if (!enabled) return build
+      planInfo.metadata.get(DppId) match {
+        case None => build
+        case Some(id) => states.get(id) match {
+          case Some(DppReady(target)) =>
+            if (parent != null) pending += ((target, parent))
+            target
+          case Some(DppBuilding) => invalidDpp(s"reentrant detail construction $id")
+          case None =>
+            states(id) = DppBuilding
+            val target = build
+            states(id) = DppReady(target)
+            target
+        }
+      }
+    }
+
+    def bind(plan: SparkPlanInfo, target: DppDisplayTarget): DppDisplayTarget = {
+      if (!enabled) return target
+      val existing = Option(nodeTargets.get(plan)).collect { case v: DppVisibleNode => v }
+        .orElse(plan.metadata.get(DppId).flatMap(targets.get).collect {
+          case v: DppVisibleNode => v
+        })
+      val selected = existing.getOrElse(target)
+      nodeTargets.put(plan, selected)
+      plan.metadata.get(DppId).foreach { id => targets(id) = selected }
+      selected
+    }
+
+    def bindEquivalentDetails(current: SparkPlanInfo, existing: SparkPlanInfo): Unit = {
+      if (!enabled) return
+      val seen = new java.util.IdentityHashMap[SparkPlanInfo,
+        java.util.IdentityHashMap[SparkPlanInfo, java.lang.Boolean]]()
+      def bindPair(left: SparkPlanInfo, right: SparkPlanInfo): Unit = {
+        val l = resolve(left)
+        val r = resolve(right)
+        var row = seen.get(l)
+        if (row == null) {
+          row = new java.util.IdentityHashMap[SparkPlanInfo, java.lang.Boolean]()
+          seen.put(l, row)
+        }
+        if (row.put(r, true) == null) {
+          r.metadata.get(DppId).foreach(ensureDetailTarget)
+          val target = Option(nodeTargets.get(r)).getOrElse(
+            invalidDpp(s"missing visible representative for ${r.nodeName}"))
+          val bound = bind(l, target)
+          l.children.zip(r.children).foreach { case (a, b) => bindPair(a, b) }
+          l.metadata.get(DppId).foreach { id => states(id) = DppReady(bound) }
+        }
+      }
+      bindPair(current, existing)
+    }
+  }
+
+  private final class DppComparablePlanInfo(
+      val planInfo: SparkPlanInfo, val context: DppGraphBuildContext) {
+    override def hashCode(): Int = context.legacyHash(planInfo)
+    override def equals(other: Any): Boolean = other match {
+      case that: DppComparablePlanInfo =>
+        (context eq that.context) && context.legacyEquivalent(planInfo, that.planInfo)
+      case _ => false
+    }
+  }
+
+  private def resolveDppReferenceEdges(context: DppGraphBuildContext): Unit = {
+    def visible(target: DppDisplayTarget): SparkPlanGraphNode = target match {
+      case DppVisibleNode(node) => node
+      case DppTargetAlias(id) => visible(context.ensureDetailTarget(id))
+    }
+    context.targets.keys.toVector.foreach(context.ensureDetailTarget)
+    var index = 0
+    while (index < context.pending.length) {
+      val (target, parent) = context.pending(index)
+      context.edges += SparkPlanGraphEdge(visible(target).id, parent.id)
+      index += 1
+    }
+  }
+
+  /** Build a SparkPlanGraph from the root of a SparkPlan tree. */
   def apply(planInfo: SparkPlanInfo): SparkPlanGraph = {
     val nodeIdGenerator = new AtomicLong(0)
     val nodes = mutable.ArrayBuffer[SparkPlanGraphNode]()
     val edges = mutable.ArrayBuffer[SparkPlanGraphEdge]()
-    val exchanges = mutable.HashMap[SparkPlanInfo, SparkPlanGraphNode]()
-    buildSparkPlanGraphNode(planInfo, nodeIdGenerator, nodes, edges, null, null, exchanges)
+    val exchanges = mutable.HashMap[DppComparablePlanInfo, DppLegacyGraphEntry]()
+    val dpp = new DppGraphBuildContext(indexDppDetails(planInfo), edges,
+      (detail, owner, context) => buildSparkPlanGraphNode(
+        detail, nodeIdGenerator, nodes, edges, null, owner, exchanges, context))
+    buildSparkPlanGraphNode(planInfo, nodeIdGenerator, nodes, edges, null, null, exchanges, dpp)
+    if (dpp.enabled) resolveDppReferenceEdges(dpp)
     new SparkPlanGraph(nodes.toSeq, edges.toSeq)
   }
 
@@ -132,80 +356,83 @@ object SparkPlanGraph {
       edges: mutable.ArrayBuffer[SparkPlanGraphEdge],
       parent: SparkPlanGraphNode,
       subgraph: SparkPlanGraphCluster,
-      exchanges: mutable.HashMap[SparkPlanInfo, SparkPlanGraphNode]): Unit = {
-    planInfo.nodeName match {
-      case name if name.startsWith("WholeStageCodegen") =>
+      exchanges: mutable.HashMap[DppComparablePlanInfo, DppLegacyGraphEntry],
+      dpp: DppGraphBuildContext): DppDisplayTarget = {
+    if (planInfo.nodeName == "Subquery" && subgraph != null) {
+      return buildSparkPlanGraphNode(
+        planInfo, nodeIdGenerator, nodes, edges, parent, null, exchanges, dpp)
+    }
+    def buildUnmaterialized(): DppDisplayTarget = {
+      def build(child: SparkPlanInfo, cluster: SparkPlanGraphCluster): DppDisplayTarget = {
+        buildSparkPlanGraphNode(child, nodeIdGenerator, nodes, edges, parent, cluster,
+          exchanges, dpp)
+      }
+      def reused(plan: SparkPlanInfo): Option[DppDisplayTarget] = {
+        exchanges.get(new DppComparablePlanInfo(plan, dpp)).map { entry =>
+          dpp.bindEquivalentDetails(plan, entry.planInfo)
+          if (parent != null) {
+            val edge = SparkPlanGraphEdge(entry.node.id, parent.id)
+            if (dpp.enabled || planInfo.nodeName != "Subquery" || !edges.contains(edge)) {
+              edges += edge
+            }
+          }
+          DppVisibleNode(entry.node)
+        }
+      }
+      def buildVisible(): DppDisplayTarget = {
         val metrics = planInfo.metrics.map { metric =>
           SQLPlanMetric(metric.name, metric.accumulatorId, metric.metricType)
         }
-
-        val cluster = new SparkPlanGraphCluster(
-          nodeIdGenerator.getAndIncrement(),
-          planInfo.nodeName,
-          planInfo.simpleString,
-          mutable.ArrayBuffer[SparkPlanGraphNode](),
-          metrics)
-        nodes += cluster
-
-        buildSparkPlanGraphNode(
-          planInfo.children.head, nodeIdGenerator, nodes, edges, parent, cluster, exchanges)
-      case "InputAdapter" =>
-        buildSparkPlanGraphNode(
-          planInfo.children.head, nodeIdGenerator, nodes, edges, parent, null, exchanges)
-      case "BroadcastQueryStage" | "ShuffleQueryStage" =>
-        if (exchanges.contains(planInfo.children.head)) {
-          // Point to the re-used exchange
-          val node = exchanges(planInfo.children.head)
-          edges += SparkPlanGraphEdge(node.id, parent.id)
-        } else {
-          buildSparkPlanGraphNode(
-            planInfo.children.head, nodeIdGenerator, nodes, edges, parent, null, exchanges)
-        }
-      case "TableCacheQueryStage" | "ResultQueryStage" =>
-        buildSparkPlanGraphNode(
-          planInfo.children.head, nodeIdGenerator, nodes, edges, parent, null, exchanges)
-      case "Subquery" if subgraph != null =>
-        // Subquery should not be included in WholeStageCodegen
-        buildSparkPlanGraphNode(planInfo, nodeIdGenerator, nodes, edges, parent, null, exchanges)
-      case "Subquery" if exchanges.contains(planInfo) =>
-        val node = exchanges(planInfo)
-        val newEdge = SparkPlanGraphEdge(node.id, parent.id)
-        if (!edges.contains(newEdge)) {
-          // Point to the re-used subquery
-          edges += newEdge
-        }
-      case "ReusedSubquery" =>
-        // Re-used subquery might appear before the original subquery, so skip this node and let
-        // the previous `case` make sure the re-used and the original point to the same node.
-        buildSparkPlanGraphNode(
-          planInfo.children.head, nodeIdGenerator, nodes, edges, parent, subgraph, exchanges)
-      case "ReusedExchange" if exchanges.contains(planInfo.children.head) =>
-        // Point to the re-used exchange
-        val node = exchanges(planInfo.children.head)
-        edges += SparkPlanGraphEdge(node.id, parent.id)
-      case name =>
-        val metrics = planInfo.metrics.map { metric =>
-          SQLPlanMetric(metric.name, metric.accumulatorId, metric.metricType)
-        }
-        val node = new SparkPlanGraphNode(
-          nodeIdGenerator.getAndIncrement(), planInfo.nodeName,
+        val node = new SparkPlanGraphNode(nodeIdGenerator.getAndIncrement(), planInfo.nodeName,
           planInfo.simpleString, metrics)
-        if (subgraph == null) {
-          nodes += node
-        } else {
-          subgraph.nodes += node
+        if (subgraph == null) nodes += node else subgraph.nodes += node
+        if (planInfo.nodeName.contains("Exchange") || planInfo.nodeName == "Subquery") {
+          exchanges += new DppComparablePlanInfo(planInfo, dpp) ->
+            DppLegacyGraphEntry(planInfo, node)
         }
-        if (name.contains("Exchange") || name == "Subquery") {
-          exchanges += planInfo -> node
+        // Register before descending so descendants skipped by legacy reuse can bind aliases.
+        dpp.bind(planInfo, DppVisibleNode(node))
+        if (parent != null) edges += SparkPlanGraphEdge(node.id, parent.id)
+        planInfo.children.foreach { child =>
+          buildSparkPlanGraphNode(
+            child, nodeIdGenerator, nodes, edges, node, subgraph, exchanges, dpp)
         }
-
-        if (parent != null) {
-          edges += SparkPlanGraphEdge(node.id, parent.id)
-        }
-        planInfo.children.foreach(
-          buildSparkPlanGraphNode(_, nodeIdGenerator, nodes, edges, node, subgraph, exchanges))
+        DppVisibleNode(node)
+      }
+      val target = planInfo.nodeName match {
+        case DppReferenceName =>
+          val id = planInfo.metadata(DppRef)
+          dpp.rememberReferenceOwner(id, subgraph)
+          val alias = DppTargetAlias(id)
+          if (parent != null) dpp.pending += ((alias, parent))
+          alias
+        case name if name.startsWith("WholeStageCodegen") =>
+          val metrics = planInfo.metrics.map { metric =>
+            SQLPlanMetric(metric.name, metric.accumulatorId, metric.metricType)
+          }
+          val cluster = new SparkPlanGraphCluster(
+            nodeIdGenerator.getAndIncrement(), planInfo.nodeName, planInfo.simpleString,
+            mutable.ArrayBuffer[SparkPlanGraphNode](), metrics)
+          nodes += cluster
+          build(planInfo.children.head, cluster)
+        case "InputAdapter" => build(planInfo.children.head, null)
+        case "BroadcastQueryStage" | "ShuffleQueryStage" =>
+          reused(planInfo.children.head).getOrElse(build(planInfo.children.head, null))
+        case "TableCacheQueryStage" | "ResultQueryStage" =>
+          build(planInfo.children.head, null)
+        case "Subquery" => reused(planInfo).getOrElse(buildVisible())
+        case "ReusedSubquery" => build(planInfo.children.head, subgraph)
+        case "ReusedExchange" =>
+          reused(planInfo.children.head).getOrElse(buildVisible())
+        case _ => buildVisible()
+      }
+      dpp.bind(planInfo, target)
+    }
+    dpp.buildOrReuseDetail(planInfo, parent) {
+      buildUnmaterialized()
     }
   }
+
 }
 
 /**

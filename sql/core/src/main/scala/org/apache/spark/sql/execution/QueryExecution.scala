@@ -46,7 +46,7 @@ import org.apache.spark.sql.execution.SQLExecution.EXECUTION_ROOT_ID_KEY
 import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, AdaptiveSparkPlanExec, InsertAdaptiveSparkPlan, QueryStageExec}
 import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
 import org.apache.spark.sql.execution.datasources.v2.{TransactionalExec, V2TableRefreshUtil}
-import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
+import org.apache.spark.sql.execution.dynamicpruning.{DynamicPruningSubqueryCache, PlanDynamicPruningFilters}
 import org.apache.spark.sql.execution.exchange.{EnablePipelinedShuffle, EnsureRequirements, PipelinedShuffleEligibility, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.ChoosePerPartitionRuntimeFilters
 import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
@@ -831,6 +831,16 @@ object QueryExecution {
       sparkSession: SparkSession,
       adaptiveExecutionRule: Option[InsertAdaptiveSparkPlan] = None,
       subquery: Boolean): Seq[Rule[SparkPlan]] = {
+    val dppCache = adaptiveExecutionRule.map(_.adaptiveExecutionContext.dynamicPruningSubqueryCache)
+      .getOrElse(new DynamicPruningSubqueryCache(sparkSession))
+    preparations(sparkSession, adaptiveExecutionRule, subquery, dppCache)
+  }
+
+  private def preparations(
+      sparkSession: SparkSession,
+      adaptiveExecutionRule: Option[InsertAdaptiveSparkPlan],
+      subquery: Boolean,
+      dppCache: DynamicPruningSubqueryCache): Seq[Rule[SparkPlan]] = {
     // Read once here so that both union barriers below, and the codegen gate they stamp for, answer
     // from the same values however long preparation takes.
     val unionConf = UnionConfSnapshot(sparkSession.sessionState.conf)
@@ -843,8 +853,8 @@ object QueryExecution {
       // Must run before `EnsureRequirements`, which then plans the query without the semi joins
       // this rule drops.
       ChoosePerPartitionRuntimeFilters(ensureRequirements, unionConf),
-      PlanDynamicPruningFilters(sparkSession),
-      PlanSubqueries(sparkSession),
+      PlanDynamicPruningFilters(sparkSession, dppCache),
+      PlanSubqueries(sparkSession, dppCache),
       RemoveRedundantProjects,
       // Must run before `EnsureRequirements`, which asks a `UnionExec` what it reports: it
       // records the conf that answer depends on, so the following `StampUnionDecisions` freezes the
@@ -940,7 +950,14 @@ object QueryExecution {
    * Prepare the [[SparkPlan]] for execution.
    */
   def prepareExecutedPlan(spark: SparkSession, plan: SparkPlan): SparkPlan = {
-    prepareForExecution(preparations(spark, subquery = true), plan)
+    prepareExecutedPlan(spark, plan, new DynamicPruningSubqueryCache(spark))
+  }
+
+  private[execution] def prepareExecutedPlan(
+      spark: SparkSession,
+      plan: SparkPlan,
+      dppCache: DynamicPruningSubqueryCache): SparkPlan = {
+    prepareForExecution(preparations(spark, None, subquery = true, dppCache = dppCache), plan)
   }
 
   /**
@@ -948,8 +965,15 @@ object QueryExecution {
    * [[SparkPlan]] for execution.
    */
   def prepareExecutedPlan(spark: SparkSession, plan: LogicalPlan): SparkPlan = {
+    prepareExecutedPlan(spark, plan, new DynamicPruningSubqueryCache(spark))
+  }
+
+  private[execution] def prepareExecutedPlan(
+      spark: SparkSession,
+      plan: LogicalPlan,
+      dppCache: DynamicPruningSubqueryCache): SparkPlan = {
     val sparkPlan = createSparkPlan(spark.sessionState.planner, plan.clone())
-    prepareExecutedPlan(spark, sparkPlan)
+    prepareExecutedPlan(spark, sparkPlan, dppCache)
   }
 
   /**

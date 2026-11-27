@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.plans.Inner
-import org.apache.spark.sql.catalyst.plans.physical.RoundRobinPartitioning
+import java.util.concurrent.{Callable, CountDownLatch, Executors, TimeUnit}
+
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, ExprId, IsNotNull, NamedExpression}
+import org.apache.spark.sql.catalyst.plans.{Inner, QueryPlan}
+import org.apache.spark.sql.catalyst.plans.physical.{RoundRobinPartitioning, SinglePartition}
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.adaptive.{AQEPropagateEmptyRelation, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
+import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, AdaptiveSparkPlanExec, AQEPropagateEmptyRelation, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite, ShuffleQueryStageExec}
 import org.apache.spark.sql.execution.datasources.SaveIntoDataSourceCommand
 import org.apache.spark.sql.execution.exchange.{ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
@@ -91,6 +94,420 @@ trait ExplainSuiteHelper extends SharedSparkSession {
 
 class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite {
   import testImplicits._
+
+  private def explainLeaf(): LocalTableScanExec = {
+    LocalTableScanExec(Seq(AttributeReference("k", IntegerType)()), Nil, None)
+  }
+
+  private def explainHost(child: SparkPlan, subquery: BaseSubqueryExec): ProjectExec = {
+    ProjectExec(Seq(Alias(ScalarSubquery(subquery, NamedExpression.newExprId), "s")()), child)
+  }
+
+  private def renderWithStats(
+      plan: SparkPlan,
+      observe: String => Unit = _ => ()): (String, ExplainUtils.ExplainTraversalStats) = {
+    val text = new StringBuilder
+    val stats = ExplainUtils.processPlanWithStats[SparkPlan](plan, s => {
+      observe(s)
+      text.append(s)
+    })
+    (text.toString, stats)
+  }
+
+  private def operatorId(plan: SparkPlan): Option[Int] = {
+    val ids = ExplainUtils.localIdMap.get()
+    if (ids.containsKey(plan)) Some(ids.get(plan)) else None
+  }
+
+  private def codegenId(plan: SparkPlan): Option[Int] = {
+    val ids = QueryPlan.localCodegenIdMap.get()
+    if (ids != null && ids.containsKey(plan)) Some(ids.get(plan)) else None
+  }
+
+  private def assertExplainStateRestored(nodes: Seq[SparkPlan]): Unit = {
+    // The fixture explicitly lists its objects; do not use ExplainUtils' traversal to check itself.
+    nodes.foreach { node =>
+      assert(operatorId(node).isEmpty, node.nodeName)
+      assert(codegenId(node).isEmpty, node.nodeName)
+    }
+  }
+
+  private def explainDiamond(): (SparkPlan, Seq[SparkPlan]) = {
+    val mainLeaf = explainLeaf()
+    val innerLeaf = explainLeaf()
+    val inner = SubqueryExec("inner", innerLeaf)
+    val bodyLeaf = explainLeaf()
+    val body = explainHost(bodyLeaf, inner)
+    val shared = SubqueryExec("outer", body)
+    val expression = ScalarSubquery(shared, NamedExpression.newExprId)
+    val left = ProjectExec(Seq(Alias(expression, "a")(), Alias(expression, "b")()), mainLeaf)
+    val right = ProjectExec(Seq(
+      Alias(ScalarSubquery(shared, NamedExpression.newExprId), "c")(),
+      mainLeaf.output.head), mainLeaf)
+    val root = UnionExec(Seq(left, right))
+    (root, Seq(root, left, right, mainLeaf, shared, body, bodyLeaf, inner, innerLeaf))
+  }
+
+  test("SPARK-48486: shared dependencies retain every host and expand each body once") {
+    val (root, nodes) = explainDiamond()
+    var observedIds = Seq.empty[Int]
+    var expectedHeadings = Seq.empty[String]
+    val (text, stats) = renderWithStats(root, _ => {
+      if (observedIds.isEmpty) {
+        observedIds = nodes.flatMap(operatorId)
+        val hosts = Seq(nodes(1), nodes(5), nodes(1), nodes(2))
+        expectedHeadings = hosts.zipWithIndex.map { case (host, index) =>
+          val expression = host.expressions.head.collectFirst { case e: ScalarSubquery => e }.get
+          s"Subquery:${index + 1} Hosting operator id = ${ExplainUtils.getOpId(host)} " +
+            s"Hosting Expression = $expression"
+        }
+      }
+    })
+    assert(stats == ExplainUtils.ExplainTraversalStats(9, 9, 9, 2, 4))
+    assert(observedIds.sorted == (1 to 7)) // The two BaseSubqueryExec wrappers are skipped.
+    assert(text.split("\n").filter(_.startsWith("Subquery:")).toSeq == expectedHeadings)
+    val details = "(?m)^\\(([0-9]+)\\)".r.findAllMatchIn(text).map(_.group(1).toInt).toSeq
+    assert(details.sorted == (1 to 7))
+    val bodies = text.split("(?m)(?=^Subquery:[0-9]+ Hosting operator)").drop(1)
+      .map(_.split("\n", 2)(1).trim)
+    assert(bodies(0).startsWith("Project"))
+    assert(bodies(1).startsWith("LocalTableScan"))
+    assert(bodies.drop(2).toSeq == Seq.fill(2)(
+      "Shared subquery plan, first shown in Subquery:1"))
+    assert("Shared subquery plan, first shown in Subquery:1".r.findAllIn(text).size == 2)
+    assert(!text.contains("Hosting operator id = unknown"))
+    assertExplainStateRestored(nodes)
+  }
+
+  test("SPARK-48486: management traversals scale with unique dependency objects") {
+    Seq(1, 2, 4, 8, 16).foreach { depth =>
+      var body: SparkPlan = explainLeaf()
+      val nodes = scala.collection.mutable.ArrayBuffer[SparkPlan](body)
+      (1 to depth).foreach { level =>
+        val left = SubqueryExec(s"left$level", body)
+        val right = SubqueryExec(s"right$level", body)
+        val leaf = explainLeaf()
+        val host = ProjectExec(Seq(
+          Alias(ScalarSubquery(left, NamedExpression.newExprId), "l")(),
+          Alias(ScalarSubquery(right, NamedExpression.newExprId), "r")()), leaf)
+        nodes ++= Seq(left, right, leaf, host)
+        body = host
+      }
+      val (text, stats) = renderWithStats(body)
+      val count = 4 * depth + 1
+      assert(stats == ExplainUtils.ExplainTraversalStats(
+        count, count, count, depth, 2 * depth))
+      assert("Shared subquery plan".r.findAllIn(text).size == depth)
+      assertExplainStateRestored(nodes.toSeq)
+    }
+  }
+
+  test("SPARK-48486: equal plans with different identities have distinct bodies and ids") {
+    val first = explainLeaf()
+    val second = first.copy()
+    assert(first == second && !first.eq(second))
+    val a = SubqueryExec("a", first)
+    val b = SubqueryExec("b", second)
+    val main = explainLeaf()
+    val left = explainHost(main, a)
+    val right = explainHost(main, b)
+    val root = UnionExec(Seq(left, right))
+    var distinctIds = false
+    val (text, stats) = renderWithStats(root, _ => {
+      distinctIds = operatorId(first).get !=
+        operatorId(second).get
+    })
+    assert(distinctIds)
+    assert(stats == ExplainUtils.ExplainTraversalStats(8, 8, 8, 2, 2))
+    assert(!text.contains("Shared subquery plan"))
+    assertExplainStateRestored(Seq(root, left, right, main, a, b, first, second))
+  }
+
+  test("SPARK-48486: AQE and QueryStage views retain traversal and state boundaries") {
+    Seq("same", "equal", "different").foreach { mode =>
+      val leaf = explainLeaf()
+      val key = explainLeaf()
+      val sub = SubqueryExec("current", key)
+      val host = explainHost(leaf, sub)
+      val exchange = ShuffleExchangeExec(SinglePartition, host)
+      val stage = ShuffleQueryStageExec(0, exchange, exchange.canonicalized)
+      val oldLeaf = explainLeaf()
+      val oldKey = explainLeaf()
+      val oldSub = SubqueryExec("initialOnly", oldKey)
+      val oldHost = explainHost(oldLeaf, oldSub)
+      val initial: SparkPlan = mode match {
+        case "same" => stage
+        case "equal" => stage.copy()
+        case _ => oldHost
+      }
+      val aqe = AdaptiveSparkPlanExec(initial,
+        AdaptiveExecutionContext(spark, spark.range(1).queryExecution), Nil, isSubquery = true)
+      assert(aqe.initialPlan.eq(initial))
+      val field = classOf[AdaptiveSparkPlanExec].getDeclaredField("currentPhysicalPlan")
+      field.setAccessible(true)
+      field.set(aqe, stage)
+      assert(aqe.executedPlan.eq(stage))
+      initial.setTagValue(QueryPlan.CODEGEN_ID_TAG, 99)
+      var orderedIds = false
+      val (text, stats) = renderWithStats(aqe, _ => {
+        val order = Seq(leaf, host, exchange, stage, aqe)
+          .map(plan => operatorId(plan).get)
+        orderedIds = order.sliding(2).forall(pair => pair.head < pair.last)
+        if (mode == "different") {
+          assert(operatorId(stage).get <
+            operatorId(oldLeaf).get)
+        } else if (mode == "equal") {
+          assert(operatorId(initial).isEmpty)
+        }
+      })
+      assert(orderedIds)
+      val expected = mode match {
+        case "same" | "equal" => ExplainUtils.ExplainTraversalStats(7, 7, 7, 1, 1)
+        case _ => ExplainUtils.ExplainTraversalStats(10, 7, 10, 1, 1)
+      }
+      assert(stats == expected, mode)
+      assert(text.contains("ShuffleQueryStage"))
+      assert("Hosting operator id".r.findAllIn(text).size == 1)
+      assert(!text.contains("Hosting Expression = Subquery initialOnly"))
+      val reachable = Seq(aqe, stage, exchange, host, leaf, sub, key, initial) ++
+        (if (mode == "different") Seq(oldHost, oldLeaf, oldSub, oldKey) else Nil)
+      assertExplainStateRestored(reachable)
+      assert(initial.getTagValue(QueryPlan.CODEGEN_ID_TAG).contains(99))
+    }
+  }
+
+  test("SPARK-48486: reused dependencies preserve heading-only and exchange references") {
+    val body = explainLeaf()
+    val original = SubqueryExec("original", body)
+    val reused = ReusedSubqueryExec(original)
+    val main = explainLeaf()
+    val hosts = Seq(reused, original, original).map(explainHost(main, _))
+    val root = UnionExec(hosts)
+    val (text, stats) = renderWithStats(root)
+    assert(stats == ExplainUtils.ExplainTraversalStats(8, 8, 8, 1, 3))
+    assert(text.contains("Shared subquery plan, first shown in Subquery:2"))
+    assert(!text.contains("Shared subquery plan, first shown in Subquery:1"))
+    val tree = root.treeString
+    assert(tree.contains(s"Shared subquery plan, first shown at subquery id=#${original.id}"))
+    val reusedLines = tree.linesIterator.filter(_.contains("ReusedSubquery")).toSeq
+    assert(reusedLines.nonEmpty && reusedLines.forall(!_.contains("Shared subquery plan")), tree)
+    val (onlyReuse, onlyStats) = renderWithStats(hosts.head)
+    assert(onlyStats.renderedSubqueryPlans == 0)
+    assert(onlyStats.hostReferences == 1)
+    assert(!onlyReuse.contains("Shared subquery plan"))
+    val exchange = ShuffleExchangeExec(SinglePartition, body)
+    val reusedExchange = ReusedExchangeExec(exchange.output, exchange)
+    val exchangeRoot = UnionExec(Seq(reusedExchange, exchange))
+    val (exchangeText, exchangeStats) = renderWithStats(exchangeRoot)
+    assert(exchangeText.contains("[Reuses operator id: 3]"))
+    assert(exchangeStats == ExplainUtils.ExplainTraversalStats(4, 4, 4, 0, 0))
+    assertExplainStateRestored(Seq(root, body, original, reused, main) ++ hosts ++
+      Seq(exchangeRoot, exchange, reusedExchange))
+  }
+
+  test("SPARK-48486: transparent subquery roots use object identity for body references") {
+    Seq[SparkPlan => SparkPlan](
+      p => WholeStageCodegenExec(p)(7),
+      p => InputAdapter(p),
+      p => WholeStageCodegenExec(InputAdapter(p))(7)).foreach { wrap =>
+      val body = explainLeaf()
+      val transparent = wrap(body)
+      val sub = SubqueryExec("wrapped", transparent)
+      val main = explainLeaf()
+      val hosts = Seq(explainHost(main, sub), explainHost(main, sub))
+      val root = UnionExec(hosts)
+      val wrappers = transparent +: transparent.children.filterNot(_.eq(body))
+      val nodes = Seq(root, main, sub, body) ++ hosts ++ wrappers
+      var noWrapperIds = false
+      var bodyId = 0
+      val (text, stats) = renderWithStats(root, _ => {
+        noWrapperIds = wrappers.forall(operatorId(_).isEmpty)
+        bodyId = operatorId(body).get
+      })
+      assert(noWrapperIds)
+      assert(bodyId > 0)
+      assert(text.contains(s"LocalTableScan ($bodyId)"))
+      assert(s"(?m)^\\($bodyId\\) LocalTableScan".r.findAllIn(text).size == 1)
+      assert(!text.contains("unknown"))
+      assert(stats == ExplainUtils.ExplainTraversalStats(
+        nodes.size, nodes.size, nodes.size, 1, 2))
+      assert("Shared subquery plan, first shown in Subquery:1".r.findAllIn(text).size == 1)
+      assertExplainStateRestored(nodes)
+    }
+  }
+
+  test("SPARK-48486: whole-stage codegen keeps its original path-dependent assignments") {
+    val leaf = explainLeaf()
+    val one = WholeStageCodegenExec(leaf)(1)
+    val two = WholeStageCodegenExec(leaf)(2)
+    val adapter = InputAdapter(explainLeaf())
+    val root = UnionExec(Seq(one, two, adapter))
+    var observed = false
+    val (_, stats) = renderWithStats(root, _ => {
+      assert(codegenId(leaf).contains(2))
+      assert(codegenId(adapter.child).isEmpty)
+      assert(operatorId(one).isEmpty)
+      assert(operatorId(two).isEmpty)
+      observed = true
+    })
+    assert(observed)
+    assert(stats == ExplainUtils.ExplainTraversalStats(6, 6, 6, 0, 0))
+    assertExplainStateRestored(Seq(root, one, two, leaf, adapter, adapter.child))
+  }
+
+  test("SPARK-48486: concurrent formatted explains retain codegen ids") {
+    val leaf = explainLeaf()
+    val root = WholeStageCodegenExec(leaf)(17)
+    val entered = new CountDownLatch(1)
+    val release = new CountDownLatch(1)
+    val executor = Executors.newSingleThreadExecutor()
+    val first = executor.submit(new Callable[String] {
+      override def call(): String = {
+        var paused = false
+        renderWithStats(root, _ => {
+          if (!paused) {
+            paused = true
+            entered.countDown()
+            assert(release.await(30, TimeUnit.SECONDS))
+          }
+        })._1
+      }
+    })
+    try {
+      assert(entered.await(30, TimeUnit.SECONDS))
+      val second = renderWithStats(root)._1
+      release.countDown()
+      val firstText = first.get(30, TimeUnit.SECONDS)
+      assert(second.contains("[codegen id : 17]"), second)
+      assert(firstText == second, s"First explain:\n$firstText\nSecond explain:\n$second")
+      val previous = QueryPlan.localCodegenIdMap.get()
+      var nested = false
+      val outer = renderWithStats(root, _ => {
+        if (!nested) {
+          nested = true
+          val outerIds = QueryPlan.localCodegenIdMap.get()
+          assert(renderWithStats(root)._1.contains("[codegen id : 17]"))
+          assert(QueryPlan.localCodegenIdMap.get() eq outerIds)
+        }
+      })._1
+      assert(outer.contains("[codegen id : 17]"), outer)
+      assert(QueryPlan.localCodegenIdMap.get() eq previous)
+    } finally {
+      release.countDown()
+      executor.shutdownNow()
+    }
+  }
+
+  test("SPARK-48486: AQE initial tree references a subquery shown in the current tree") {
+    val subquery = SubqueryExec("shared", explainLeaf())
+    val initial = explainHost(explainLeaf(), subquery)
+    val current = FilterExec(IsNotNull(initial.output.head), initial)
+    val aqe = AdaptiveSparkPlanExec(initial,
+      AdaptiveExecutionContext(spark, spark.range(1).queryExecution), Nil, isSubquery = true)
+    val field = classOf[AdaptiveSparkPlanExec].getDeclaredField("currentPhysicalPlan")
+    field.setAccessible(true)
+    field.set(aqe, current)
+
+    val tree = aqe.treeString
+    val initialStart = tree.indexOf("== Initial Plan ==")
+    assert(tree.contains("== Current Plan ==") && initialStart > 0, tree)
+    val currentText = tree.substring(0, initialStart)
+    val initialText = tree.substring(initialStart)
+    val reference = s"Shared subquery plan, first shown at subquery id=#${subquery.id}"
+    assert(currentText.contains(s"[id=#${subquery.id}]") && !currentText.contains(reference), tree)
+    assert(initialText.contains(reference), tree)
+  }
+
+  test("SPARK-48486: append failures restore explain state and allow deterministic retry") {
+    Seq("main", "detail", "heading", "reference").foreach { location =>
+      val (current, currentNodes) = explainDiamond()
+      val currentWrapper = WholeStageCodegenExec(current)(17)
+      val currentAdapter = InputAdapter(currentWrapper)
+      val exchange = ShuffleExchangeExec(SinglePartition, currentAdapter)
+      val stage = ShuffleQueryStageExec(0, exchange, exchange.canonicalized)
+      val oldLeaf = explainLeaf()
+      val oldKey = explainLeaf()
+      val oldSub = SubqueryExec("initialOnly", oldKey)
+      val initialHost = explainHost(oldLeaf, oldSub)
+      val initialAdapter = InputAdapter(initialHost)
+      val initial = WholeStageCodegenExec(initialAdapter)(18)
+      val root = AdaptiveSparkPlanExec(initial,
+        AdaptiveExecutionContext(spark, spark.range(1).queryExecution), Nil, isSubquery = true)
+      assert(root.initialPlan.eq(initial))
+      val field = classOf[AdaptiveSparkPlanExec].getDeclaredField("currentPhysicalPlan")
+      field.setAccessible(true)
+      field.set(root, stage)
+      val nodes = currentNodes ++ Seq(root, stage, exchange, currentWrapper, currentAdapter,
+        initial, initialAdapter, initialHost, oldLeaf, oldSub, oldKey)
+      val expected = renderWithStats(root)
+      // This body is only reachable via the initial view, never via subquery search.
+      oldKey.setTagValue(QueryPlan.CODEGEN_ID_TAG, 654)
+      val failure = new IllegalStateException(location)
+      val thrown = intercept[IllegalStateException] {
+        renderWithStats(root, s => {
+          assert(codegenId(current).contains(17))
+          val shouldFail = location match {
+            case "main" => s.startsWith("AdaptiveSparkPlan")
+            case "detail" => s.startsWith("\n(1)")
+            case "heading" => s.startsWith("Subquery:1 Hosting")
+            case "reference" => s.startsWith("Shared subquery plan")
+          }
+          if (shouldFail) throw failure
+        })
+      }
+      assert(thrown.eq(failure))
+      assertExplainStateRestored(nodes)
+      assert(renderWithStats(root) == expected)
+      assertExplainStateRestored(nodes)
+      assert(oldKey.getTagValue(QueryPlan.CODEGEN_ID_TAG).contains(654))
+    }
+  }
+
+  test("SPARK-48486: optimized-out exchange state is restored after an append failure") {
+    val leaf = explainLeaf()
+    val codegen = WholeStageCodegenExec(leaf)(17)
+    val exchange = ShuffleExchangeExec(SinglePartition, codegen)
+    val reused = ReusedExchangeExec(exchange.output, exchange)
+    val previousIds = ExplainUtils.localIdMap.get()
+    val previousCodegenIds = QueryPlan.localCodegenIdMap.get()
+    val failure = new IllegalStateException("optimized-out exchange")
+    val thrown = intercept[IllegalStateException] {
+      renderWithStats(reused, _ => {
+        if (codegenId(leaf).contains(17)) throw failure
+      })
+    }
+    assert(thrown eq failure)
+    assert(ExplainUtils.localIdMap.get() eq previousIds)
+    assert(QueryPlan.localCodegenIdMap.get() eq previousCodegenIds)
+    assertExplainStateRestored(Seq(reused, exchange, codegen, leaf))
+    assert(renderWithStats(reused)._1.contains("Adaptively Optimized Out Exchanges"))
+  }
+
+  test("SPARK-48486: ordinary formatted output matches the pre-change baseline") {
+    val k = AttributeReference("k", IntegerType, nullable = true)(ExprId(42), Seq.empty)
+    val leaf = LocalTableScanExec(Seq(k), Nil, None)
+    val root = ProjectExec(Seq(k), FilterExec(IsNotNull(k), leaf))
+    val (text, stats) = renderWithStats(root)
+    assert(text == """Project (3)
+      |+- Filter (2)
+      |   +- LocalTableScan (1)
+      |
+      |
+      |(1) LocalTableScan
+      |Output [1]: [k#42]
+      |Arguments: <empty>, [k#42]
+      |
+      |(2) Filter
+      |Input [1]: [k#42]
+      |Condition : isnotnull(k#42)
+      |
+      |(3) Project
+      |Output [1]: [k#42]
+      |Input [1]: [k#42]
+      |""".stripMargin)
+    assert(stats == ExplainUtils.ExplainTraversalStats(3, 3, 3, 0, 0))
+    assertExplainStateRestored(Seq(root, root.child, leaf))
+  }
 
   test("SPARK-23034 show rdd names in RDD scan nodes (Dataset)") {
     val rddWithName = spark.sparkContext.parallelize(Row(1, "abc") :: Nil).setName("testRdd")

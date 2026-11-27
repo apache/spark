@@ -34,7 +34,9 @@ import org.apache.spark.sql.internal.SQLConf
  * results of broadcast. For joins that are not planned as broadcast hash joins we keep
  * the fallback mechanism with subquery duplicate.
 */
-case class PlanDynamicPruningFilters(sparkSession: SparkSession) extends Rule[SparkPlan] {
+case class PlanDynamicPruningFilters(
+    sparkSession: SparkSession,
+    dppCache: DynamicPruningSubqueryCache) extends Rule[SparkPlan] {
 
   override def conf: SQLConf = sparkSession.sessionState.conf
 
@@ -57,9 +59,11 @@ case class PlanDynamicPruningFilters(sparkSession: SparkSession) extends Rule[Sp
       return None
     }
 
-    val sparkPlan = QueryExecution.createSparkPlan(
-      sparkSession.sessionState.planner, buildPlan)
-    val requiredMode = broadcastMode(buildKeys, sparkPlan.output)
+    val planned = dppCache.planQuery(buildPlan) {
+      QueryExecution.createSparkPlan(sparkSession.sessionState.planner, buildPlan.clone())
+    }
+    val keys = planned.bindKeys(buildPlan, buildKeys)
+    val requiredMode = broadcastMode(keys, planned.output)
     val canReuseExchange = plan.exists {
       case join: BroadcastHashJoinExec =>
         val (candidateKeys, candidatePlan) = join.buildSide match {
@@ -67,7 +71,7 @@ case class PlanDynamicPruningFilters(sparkSession: SparkSession) extends Rule[Sp
           case BuildRight => (join.rightKeys, join.right)
         }
         // Preserve existing direct reuse; only a projected domain requires the exact hash mode.
-        candidatePlan.sameResult(sparkPlan) &&
+        candidatePlan.canonicalized == planned.comparisonPlan &&
           (projection.isEmpty ||
             (!join.isNullAwareAntiJoin &&
               broadcastMode(candidateKeys, candidatePlan.output) == requiredMode))
@@ -75,16 +79,22 @@ case class PlanDynamicPruningFilters(sparkSession: SparkSession) extends Rule[Sp
     }
 
     if (canReuseExchange) {
-      val executedPlan = QueryExecution.prepareExecutedPlan(sparkSession, sparkPlan)
-      val exchange = BroadcastExchangeExec(
-        broadcastMode(buildKeys, executedPlan.output), executedPlan)
-      Some(projection match {
-        case Some(valueProjection) =>
-          ProjectedBroadcastValueSubqueryExec(
-            name, valueProjection.valueExpression, exchange)
-        case None =>
-          SubqueryBroadcastExec(name, indices, buildKeys, exchange)
-      })
+      val values = dppCache.prepareBroadcast(
+          buildPlan, buildKeys, indices, projection.map(_.valueExpression)) {
+        val sparkPlan = planned.takeInput().getOrElse {
+          QueryExecution.createSparkPlan(sparkSession.sessionState.planner, planned.query.clone())
+        }
+        val executedPlan = QueryExecution.prepareExecutedPlan(sparkSession, sparkPlan, dppCache)
+        val exchange = BroadcastExchangeExec(broadcastMode(keys, executedPlan.output), executedPlan)
+        projection match {
+          case Some(valueProjection) =>
+            val value = planned.bindKeys(buildPlan, Seq(valueProjection.valueExpression)).head
+            ProjectedBroadcastValueSubqueryExec(name, value, exchange)
+          case None =>
+            SubqueryBroadcastExec(name, indices, keys, exchange)
+        }
+      }
+      Some(values)
     } else {
       None
     }
@@ -126,10 +136,18 @@ case class PlanDynamicPruningFilters(sparkSession: SparkSession) extends Rule[Sp
             val aggregate =
               DynamicPruningSubquery.planDistinctBuildKeys(buildPlan, buildKeys,
                 broadcastKeyIndices)
-            val sparkPlan = QueryExecution.prepareExecutedPlan(sparkSession, aggregate)
-            val values = SubqueryExec(name, sparkPlan)
+            val values = dppCache.prepareIndependentQuery(aggregate, adaptive = false) {
+              val sparkPlan = QueryExecution.prepareExecutedPlan(sparkSession, aggregate, dppCache)
+              SubqueryExec(name, sparkPlan)
+            }
             DynamicPruningExpression(InSubqueryExec(value, values, exprId))
         }
     }
+  }
+}
+
+object PlanDynamicPruningFilters {
+  def apply(sparkSession: SparkSession): PlanDynamicPruningFilters = {
+    new PlanDynamicPruningFilters(sparkSession, new DynamicPruningSubqueryCache(sparkSession))
   }
 }

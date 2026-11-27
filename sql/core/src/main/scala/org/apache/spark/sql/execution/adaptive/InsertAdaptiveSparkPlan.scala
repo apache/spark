@@ -140,18 +140,26 @@ case class InsertAdaptiveSparkPlan(
    * The returned subquery map holds executed plan, then the [[PlanAdaptiveSubqueries]] can take
    * them and create a new subquery.
    */
-  private def buildSubqueryMap(plan: SparkPlan): Map[Long, SparkPlan] = {
-    val subqueryMap = mutable.HashMap.empty[Long, SparkPlan]
+  private def buildSubqueryMap(plan: SparkPlan): Map[Long, (LogicalPlan, SparkPlan)] = {
+    val subqueryMap = mutable.HashMap.empty[Long, (LogicalPlan, SparkPlan)]
     if (!plan.containsAnyPattern(PlanAdaptiveSubqueries.patterns: _*)) {
       return subqueryMap.toMap
     }
     plan.foreach(_.expressions.filter(_.containsPattern(PLAN_EXPRESSION)).foreach(_.foreach {
-      case e @ (_: expressions.ScalarSubquery | _: ListQuery | _: DynamicPruningSubquery) =>
+      case dpp: DynamicPruningSubquery if !subqueryMap.contains(dpp.exprId.id) =>
+        val compiled = adaptiveExecutionContext.dynamicPruningSubqueryCache.compileAdaptiveQuery(
+            dpp.buildQuery, dpp.buildKeys, dpp.broadcastKeyIndices, dpp.onlyInBroadcast) {
+          val executedPlan = compileSubquery(dpp.buildQuery)
+          verifyAdaptivePlan(executedPlan, dpp.buildQuery)
+          executedPlan
+        }
+        subqueryMap.put(dpp.exprId.id, (compiled.query, compiled.plan))
+      case e @ (_: expressions.ScalarSubquery | _: ListQuery) =>
         val subquery = e.asInstanceOf[SubqueryExpression]
         if (!subqueryMap.contains(subquery.exprId.id)) {
           val executedPlan = compileSubquery(subquery.plan)
           verifyAdaptivePlan(executedPlan, subquery.plan)
-          subqueryMap.put(subquery.exprId.id, executedPlan)
+          subqueryMap.put(subquery.exprId.id, (subquery.plan, executedPlan))
         }
       case _ =>
     }))

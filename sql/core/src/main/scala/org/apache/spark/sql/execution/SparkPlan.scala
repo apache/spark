@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 
 import java.io.{DataInputStream, DataOutputStream}
 import java.nio.ByteBuffer
+import java.util.IdentityHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
@@ -55,6 +56,19 @@ object SparkPlan {
 
   /** Register a new SparkPlan, returning its SparkPlan ID */
   private[execution] def newPlanId(): Int = nextPlanId.getAndIncrement()
+
+  // Carry per-render subquery identities through AQE's current and initial plans.
+  private[execution] class SubqueryPlanString(append: String => Unit) extends (String => Unit) {
+    val subqueries = new IdentityHashMap[SparkPlan, BaseSubqueryExec]()
+    override def apply(s: String): Unit = append(s)
+  }
+
+  private[execution] def subqueryPlanString(append: String => Unit): SubqueryPlanString = {
+    append match {
+      case output: SubqueryPlanString => output
+      case _ => new SubqueryPlanString(append)
+    }
+  }
 }
 
 /**
@@ -76,6 +90,21 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 
   val id: Int = SparkPlan.newPlanId()
+
+  override def generateTreeString(
+      depth: Int,
+      lastChildren: java.util.ArrayList[Boolean],
+      append: String => Unit,
+      verbose: Boolean,
+      prefix: String = "",
+      addSuffix: Boolean = false,
+      maxFields: Int,
+      printNodeId: Boolean,
+      printOutputColumns: Boolean,
+      indent: Int = 0): Unit = {
+    super.generateTreeString(depth, lastChildren, SparkPlan.subqueryPlanString(append),
+      verbose, prefix, addSuffix, maxFields, printNodeId, printOutputColumns, indent)
+  }
 
   /**
    * Return true if this stage of the plan supports row-based execution. A plan

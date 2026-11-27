@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.util.StringConcat
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
- * Tests for [[ExplainUtils.processPlan]]: operator ID assignment, WholeStageCodegen tag
+ * Tests for [[ExplainUtils.processPlan]]: operator ID assignment, WholeStageCodegen ID
  * propagation, thread-local lifecycle, and subquery handling.
  */
 class ExplainUtilsSuite extends QueryTest with SharedSparkSession {
@@ -46,15 +46,17 @@ class ExplainUtilsSuite extends QueryTest with SharedSparkSession {
     assert(ids == ids.distinct, s"processPlan operator IDs should be unique: $ids")
   }
 
-  test("processPlan tags a WholeStageCodegenExec child with its codegen stage id") {
+  test("processPlan displays a WholeStageCodegenExec child's codegen stage id") {
     // Build the plan directly so the assertion does not depend on the planner producing a
-    // WholeStageCodegenExec for any particular query. processPlan should stamp the child of a
-    // WholeStageCodegenExec with CODEGEN_ID_TAG carrying that node's codegenStageId.
+    // WholeStageCodegenExec for any particular query.
     val child = RangeExec(Range(0, 10, 1, 1))
     val plan = WholeStageCodegenExec(child)(codegenStageId = 7)
-    ExplainUtils.processPlan[SparkPlan](plan, _ => ())
-    assert(child.getTagValue(QueryPlan.CODEGEN_ID_TAG).contains(7),
-      "processPlan should tag a WholeStageCodegenExec child with its codegenStageId")
+    child.setTagValue(QueryPlan.CODEGEN_ID_TAG, 99)
+    assert(child.verboseStringWithOperatorId().contains("[codegen id : 99]"))
+    val output = explainOutput(plan)
+    assert(output.contains("[codegen id : 7]"), output)
+    assert(!output.contains("[codegen id : 99]"), output)
+    assert(child.getTagValue(QueryPlan.CODEGEN_ID_TAG).contains(99))
   }
 
   test("processPlan restores localIdMap to its prior value after completion") {

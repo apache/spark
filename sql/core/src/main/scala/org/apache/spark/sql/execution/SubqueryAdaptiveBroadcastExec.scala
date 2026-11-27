@@ -44,6 +44,10 @@ case class SubqueryAdaptiveBroadcastExec(
 
   override protected def otherCopyArgs: Seq[AnyRef] = Seq(broadcastValueProjection)
 
+  // The physical child is printed separately; omit the planning-only logical build plan.
+  override def stringArgs: Iterator[Any] =
+    Iterator(name, indices, onlyInBroadcast, buildKeys, s"[id=#$id]")
+
   protected override def doExecute(): RDD[InternalRow] = {
     throw QueryExecutionErrors.executeCodePathUnsupportedError("SubqueryAdaptiveBroadcastExec")
   }

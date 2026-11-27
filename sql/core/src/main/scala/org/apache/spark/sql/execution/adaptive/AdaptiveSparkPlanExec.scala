@@ -46,6 +46,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec._
 import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanLike
+import org.apache.spark.sql.execution.dynamicpruning.DynamicPruningSubqueryCache
 import org.apache.spark.sql.execution.exchange._
 import org.apache.spark.sql.execution.joins.ChoosePerPartitionRuntimeFilters
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLAdaptiveSQLMetricUpdates, SQLPlanMetric}
@@ -749,10 +750,11 @@ case class AdaptiveSparkPlanExec(
       printNodeId: Boolean,
       printOutputColumns: Boolean,
       indent: Int = 0): Unit = {
+    val output = SparkPlan.subqueryPlanString(append)
     super.generateTreeString(
       depth,
       lastChildren,
-      append,
+      output,
       verbose,
       prefix,
       addSuffix,
@@ -765,7 +767,7 @@ case class AdaptiveSparkPlanExec(
       currentPhysicalPlan.generateTreeString(
         depth + 1,
         lastChildren,
-        append,
+        output,
         verbose,
         prefix = "",
         addSuffix = false,
@@ -779,7 +781,7 @@ case class AdaptiveSparkPlanExec(
         if (isFinalPlan) "Final Plan" else "Current Plan",
         currentPhysicalPlan,
         depth,
-        append,
+        output,
         verbose,
         maxFields,
         printNodeId,
@@ -788,7 +790,7 @@ case class AdaptiveSparkPlanExec(
         "Initial Plan",
         initialPlan,
         depth,
-        append,
+        output,
         verbose,
         maxFields,
         printNodeId,
@@ -1306,6 +1308,9 @@ object AdaptiveSparkPlanExec {
  * The execution context shared between the main query and all sub-queries.
  */
 case class AdaptiveExecutionContext(session: SparkSession, qe: QueryExecution) {
+  private[execution] val dynamicPruningSubqueryCache =
+    new DynamicPruningSubqueryCache(session)
+
   /**
    * Whether the query contains an adaptive subquery. Derived from the pre-preparation physical
    * plan, which still carries the subquery expressions, so it does not depend on `apply` running
