@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.metric.{SQLShuffleReadMetricsReporter, SQLShuffleWriteMetricsReporter}
 import org.apache.spark.sql.execution.python.HybridRowQueue
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.collection.Utils
 
 /**
@@ -44,8 +45,17 @@ trait LimitExec extends UnaryExecNode {
  *
  * This operator will be used when a logical `Limit` and/or `Offset` operation is the final operator
  * in an logical plan, which happens when the user is collecting results back to the driver.
+ *
+ * @param childMayBeOrdered false if the partitions of `child` are known to carry no order across
+ *                          them, so that the executor-side gather does not need to keep it. Only
+ *                          used with `spark.sql.execution.collectLimit.orderedGather.enabled`. Set
+ *                          by `SpecialLimits`. Defaults to true, which is always correct.
  */
-case class CollectLimitExec(limit: Int = -1, child: SparkPlan, offset: Int = 0) extends LimitExec {
+case class CollectLimitExec(
+    limit: Int = -1,
+    child: SparkPlan,
+    offset: Int = 0,
+    childMayBeOrdered: Boolean = true) extends LimitExec {
   assert(limit >= 0 || (limit == -1 && offset > 0))
 
   override def output: Seq[Attribute] = child.output
@@ -66,7 +76,14 @@ case class CollectLimitExec(limit: Int = -1, child: SparkPlan, offset: Int = 0) 
     SQLShuffleWriteMetricsReporter.createShuffleWriteMetrics(sparkContext)
   private lazy val readMetrics =
     SQLShuffleReadMetricsReporter.createShuffleReadMetrics(sparkContext)
-  override lazy val metrics = readMetrics ++ writeMetrics
+  private lazy val orderedGatherMetrics = OrderedGatherMetrics(sparkContext)
+  override lazy val metrics = readMetrics ++ writeMetrics ++
+    (if (orderedGatherEnabled) orderedGatherMetrics.toMap else Map.empty)
+
+  /** Whether the gather returns the child partitions in partition index order. */
+  private def orderedGatherEnabled: Boolean =
+    childMayBeOrdered && conf.getConf(SQLConf.COLLECT_LIMIT_ORDERED_GATHER_ENABLED)
+
   protected override def doExecute(): RDD[InternalRow] = {
     val childRDD = child.execute()
     if (childRDD.getNumPartitions == 0 || limit == 0) {
@@ -80,7 +97,7 @@ case class CollectLimitExec(limit: Int = -1, child: SparkPlan, offset: Int = 0) 
         } else {
           childRDD
         }
-        new ShuffledRowRDD(
+        val shuffled = new ShuffledRowRDD(
           ShuffleExchangeExec.prepareShuffleDependency(
             locallyLimited,
             child.output,
@@ -88,6 +105,22 @@ case class CollectLimitExec(limit: Int = -1, child: SparkPlan, offset: Int = 0) 
             serializer,
             writeMetrics),
           readMetrics)
+        // The shuffle returns the map outputs in the order they arrive. Return the child partitions
+        // in partition index order instead, so that LIMIT and OFFSET apply to the same rows as
+        // `executeCollect`. This matters when the child is sorted, at any LIMIT: only a LIMIT or
+        // OFFSET over a sort, or over a projection of a sort, is planned as a top-K sort, and only
+        // below `topKSortFallbackThreshold`. So a sorted child with an OFFSET and no LIMIT, or
+        // with, for example, an `explode` or a Python UDF between the sort and the LIMIT, is
+        // gathered here. Skipped when the planner knows that the child's partitions carry no order
+        // (`childMayBeOrdered`).
+        // TODO: `GlobalLimitExec` (a LIMIT that is not the root of the plan) still gathers in
+        // arrival order, and relies on the best-effort `InsertSortForLimitAndOffset`. It is not
+        // covered by the ordered gather yet.
+        if (orderedGatherEnabled) {
+          shuffled.enableOrderedGather(
+            OrderedGatherOptions(conf, childRDD.getNumPartitions, limit), orderedGatherMetrics)
+        }
+        shuffled
       }
       if (limit >= 0) {
         if (offset > 0) {
@@ -104,6 +137,9 @@ case class CollectLimitExec(limit: Int = -1, child: SparkPlan, offset: Int = 0) 
   override def stringArgs: Iterator[Any] = {
     super.stringArgs.zipWithIndex.filter {
       case (0, 2) => false
+      // Does not change which results are correct: when false, any rows are. Hidden to keep the
+      // explain output the same.
+      case (_, 3) => false
       case _ => true
     }.map(_._1)
   }
@@ -135,6 +171,10 @@ case class CollectTailExec(limit: Int, child: SparkPlan) extends LimitExec {
     if (childRDD.getNumPartitions == 0 || limit == 0) {
       new ParallelCollectionRDD(sparkContext, Seq.empty[InternalRow], 1, Map.empty)
     } else {
+      // TODO: like `CollectLimitExec`, this gather returns the child partitions in arrival order,
+      // so the last rows of a sorted child can be wrong. It is not covered by
+      // `spark.sql.execution.collectLimit.orderedGather.enabled`, and could use the ordered gather
+      // without a limit in a follow-up.
       val singlePartitionRDD = if (childRDD.getNumPartitions == 1) {
         childRDD
       } else {

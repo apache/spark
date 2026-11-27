@@ -197,7 +197,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
       checksumEnabled: Boolean = true,
       checksumAlgorithm: String = "ADLER32",
       shuffleMetrics: Option[ShuffleReadMetricsReporter] = None,
-      doBatchFetch: Boolean = false): ShuffleBlockFetcherIterator = {
+      doBatchFetch: Boolean = false,
+      orderRequestsByMapIndex: Boolean = false): ShuffleBlockFetcherIterator = {
     val tContext = taskContext.getOrElse(TaskContext.empty())
     new ShuffleBlockFetcherIterator(
       tContext,
@@ -223,7 +224,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
       checksumEnabled,
       checksumAlgorithm,
       shuffleMetrics.getOrElse(tContext.taskMetrics().createTempShuffleReadMetrics()),
-      doBatchFetch)
+      doBatchFetch,
+      orderRequestsByMapIndex)
   }
   // scalastyle:on argcount
 
@@ -450,6 +452,97 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
     assert(iterator.hasNext)
     iterator.next()
     assert(!iterator.hasNext)
+  }
+
+  /** The block of map output `mapIndex` in reduce partition 0. Its map id is `10 + mapIndex`. */
+  private def mapOutputBlock(mapIndex: Int): BlockId = ShuffleBlockId(0, 10 + mapIndex, 0)
+
+  /** Lists the blocks of the map outputs `mapIndexes`, each with the given size. */
+  private def mapOutputBlocks(size: Long, mapIndexes: Int*): Seq[(BlockId, Long, Int)] =
+    mapIndexes.map(mapIndex => (mapOutputBlock(mapIndex), size, mapIndex))
+
+  test("currentMapIndex reports the map index of each local and remote block") {
+    // Map outputs 0 and 1 are local, and 2 and 3 are remote.
+    val blockManager = createMockBlockManager()
+    Seq(0, 1).foreach { mapIndex =>
+      doReturn(createMockManagedBuffer())
+        .when(blockManager)
+        .getLocalBlockData(meq(mapOutputBlock(mapIndex)))
+    }
+    val remoteBmId = BlockManagerId("test-remote-client-1", "test-remote-host", 2)
+    configureMockTransfer(Seq(2, 3).map(i => mapOutputBlock(i) -> createMockManagedBuffer()).toMap)
+    val iterator = createShuffleBlockIteratorWithDefaults(
+      Map(
+        blockManager.blockManagerId -> mapOutputBlocks(1L, 0, 1),
+        remoteBmId -> mapOutputBlocks(1L, 2, 3)),
+      blockManager = Some(blockManager))
+
+    assert(iterator.currentMapIndex === -1)
+    val mapIndexes = iterator.map { case (blockId, inputStream) =>
+      inputStream.close()
+      assert(blockId === mapOutputBlock(iterator.currentMapIndex))
+      iterator.currentMapIndex
+    }.toList
+    assert(mapIndexes.sorted === Seq(0, 1, 2, 3))
+  }
+
+  test("orderRequestsByMapIndex sends the remote requests in map index order") {
+    // Two remote hosts hold alternating map outputs.
+    val numMaps = 6
+    configureMockTransfer(
+      (0 until numMaps).map(i => mapOutputBlock(i) -> createMockManagedBuffer()).toMap)
+    val remoteBmIds = Seq(
+      BlockManagerId("test-remote-client-1", "test-remote-host-1", 2),
+      BlockManagerId("test-remote-client-2", "test-remote-host-2", 2))
+    val iterator = createShuffleBlockIteratorWithDefaults(
+      remoteBmIds.zipWithIndex.map { case (bmId, host) =>
+        bmId -> mapOutputBlocks(1L, host until numMaps by 2: _*)
+      }.toMap,
+      // A target request size of 1 byte puts each block in its own request.
+      maxBytesInFlight = 5L,
+      orderRequestsByMapIndex = true)
+
+    // The mocked transfer returns the blocks of each request as soon as the request is sent, so
+    // the blocks come back in the order the requests were sent.
+    val mapIndexes = iterator.map { case (_, inputStream) =>
+      inputStream.close()
+      iterator.currentMapIndex
+    }.toList
+    assert(mapIndexes === (0 until numMaps))
+    verifyFetchBlocksInvocationCount(numMaps)
+  }
+
+  test("orderRequestsByMapIndex reports the map index of a block fetched again after corruption") {
+    val remoteBmId = BlockManagerId("test-remote-client-1", "test-remote-host", 2)
+    var numFetches = 0
+    answerFetchBlocks { invocation =>
+      val blockIds = invocation.getArgument[Array[String]](3)
+      val listener = invocation.getArgument[BlockFetchingListener](4)
+      numFetches += 1
+      blockIds.foreach { blockId =>
+        // The first fetch of map output 1 is corrupt, so it is fetched again.
+        val buffer = if (numFetches == 1 && BlockId(blockId) == mapOutputBlock(1)) {
+          mockCorruptBuffer()
+        } else {
+          createMockManagedBuffer()
+        }
+        listener.onBlockFetchSuccess(blockId, buffer)
+      }
+    }
+    val iterator = createShuffleBlockIteratorWithDefaults(
+      Map(remoteBmId -> mapOutputBlocks(1L, 1, 2)),
+      // Wrapping the stream makes the iterator check it for corruption.
+      streamWrapperLimitSize = Some(100),
+      orderRequestsByMapIndex = true)
+
+    val mapIndexes = iterator.map { case (blockId, inputStream) =>
+      inputStream.close()
+      assert(blockId === mapOutputBlock(iterator.currentMapIndex))
+      iterator.currentMapIndex
+    }.toList
+    // Map output 1 is fetched again after map output 2 has arrived, so it comes back last.
+    assert(mapIndexes === Seq(2, 1))
+    verifyFetchBlocksInvocationCount(2)
   }
 
   test("fetch continuous blocks in batch successful 3 local + 4 host local + 2 remote reads") {
