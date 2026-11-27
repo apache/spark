@@ -107,7 +107,9 @@ The `spark-pipelines init` command, described below, makes it easy to generate a
 
 The `spark-pipelines` command line interface (CLI) is the primary way to manage a pipeline.
 
-`spark-pipelines` is built on top of `spark-submit`, meaning that it supports all cluster managers supported by `spark-submit`. It supports all `spark-submit` arguments except for `--class`.
+`spark-pipelines` is built on top of `spark-submit`. It supports all `spark-submit` arguments except for `--class`.
+
+`spark-pipelines run` and `spark-pipelines dry-run` require a Spark Connect server. Start one, for example with `sbin/start-connect-server.sh`, and pass its address with `--remote sc://host:port`; a server started on the same machine listens on `sc://localhost:15002` by default. Without a server address, the two commands exit with the error `PIPELINE_SPARK_CONNECT_SERVER_REQUIRED` before they start a session or write anything. `spark-pipelines init` only writes the project files and needs no server.
 
 ### `spark-pipelines init`
 
@@ -141,21 +143,21 @@ If no refresh options are specified, a default incremental update is performed. 
 
 ```bash
 # Basic run with default incremental update
-spark-pipelines run
+spark-pipelines run --remote sc://localhost:15002
 
 # Run with specific spec file
-spark-pipelines run --spec /path/to/my-pipeline.yaml
+spark-pipelines run --remote sc://localhost:15002 --spec /path/to/my-pipeline.yaml
 
 # Full refresh of specific datasets
-spark-pipelines run --full-refresh orders,customers
+spark-pipelines run --remote sc://localhost:15002 --full-refresh orders,customers
 
 # Full refresh of entire pipeline
-spark-pipelines run --full-refresh-all
+spark-pipelines run --remote sc://localhost:15002 --full-refresh-all
 
 # Run with custom Spark configuration
-spark-pipelines run --conf spark.sql.shuffle.partitions=200 --driver-memory 4g
+spark-pipelines run --remote sc://localhost:15002 --conf spark.sql.shuffle.partitions=200 --driver-memory 4g
 
-# Run on remote Spark Connect server
+# Run on a Spark Connect server on another host
 spark-pipelines run --remote sc://my-cluster:15002
 ```
 
@@ -568,7 +570,7 @@ By key: `id 1` was inserted as `alice`, then updated to `alicia` at version 2, a
 - The **target's format must support row-level operations.** Auto CDC maintains the target with MERGE, so the table must be backed by a connector implementing the DSv2 `SupportsRowLevelOperations` interface. A target that does not fails at startup with `AUTOCDC_TARGET_DOES_NOT_SUPPORT_MERGE`. Spark's built-in file formats, including Parquet, do **not** qualify; see [Choosing a Target Format](#choosing-a-target-format).
 - The **target must have exactly one input flow.** An Auto CDC flow cannot share a target with other flows; a target fed by more than one flow, one of which is Auto CDC, fails with `AUTOCDC_MULTIPLE_FLOWS_TO_TARGET`. This rules out the fan-in pattern shown in "Using Multiple Flows to Write to a Single Target" above.
 - The **source must be a streaming source** (read with `spark.readStream` in Python or `STREAM(...)` in SQL). CDC is an incremental operation over newly arriving change events.
-- The **catalog's metadata must survive between runs**, since each incremental run re-resolves the tables an earlier run created. This is a property of the connector, not of setting `spark.sql.catalog.*`. Spark's default session catalog keeps metadata only for the life of the session, so a second `spark-pipelines run` against it fails with `LOCATION_ALREADY_EXISTS`; use a catalog whose metastore persists.
+- The **catalog's metadata must survive between runs**, since each incremental run re-resolves the tables an earlier run created. This is a property of the connector, not of setting `spark.sql.catalog.*`. Run the pipeline against a Spark Connect server (`spark-pipelines run --remote sc://host:port`); the server decides which catalog is in use: its default session catalog, with `spark.sql.catalogImplementation` set to `in-memory`, keeps metadata only while the server runs, so after a server restart the tables are forgotten while their folders remain, and the next `spark-pipelines run` fails with `LOCATION_ALREADY_EXISTS`. Start the server with `--conf spark.sql.catalogImplementation=hive`, or with a connector catalog, to keep tables across runs; [Choosing a Target Format](#choosing-a-target-format) shows the server settings for a connector catalog.
 - The flow must specify **keys** (one or more columns that identify a row) and a **sequencing expression** (used to order events per key).
 
 The sequencing expression may be any SQL expression over the source columns, not just a bare column reference; sequencing by a struct such as `(commit_ts, seq_no)`, or by a cast, is fine. It must satisfy three constraints:
@@ -681,16 +683,17 @@ Spark's built-in file-based formats do not. Pointing an Auto CDC flow at a plain
 operations. AutoCDC requires a target backed by a connector that supports MERGE.
 ```
 
-Auto CDC needs a table provider that implements row-level operations, configured as a catalog in the pipeline. Lakehouse connectors such as Apache Iceberg are the usual choice; consult the connector's documentation for whether it implements the DSv2 row-level operation interfaces and how to register its catalog. Supporting the `MERGE INTO` SQL statement is not on its own sufficient: a connector can implement MERGE through its own planner extension without implementing the DSv2 interface Auto CDC requires. The catalog must also persist metadata across runs, per [Requirements](#requirements).
+Auto CDC needs a table provider that implements row-level operations, configured as a catalog on the Spark Connect server the pipeline runs against. Lakehouse connectors such as Apache Iceberg are the usual choice; consult the connector's documentation for whether it implements the DSv2 row-level operation interfaces and how to register its catalog. Supporting the `MERGE INTO` SQL statement is not on its own sufficient: a connector can implement MERGE through its own planner extension without implementing the DSv2 interface Auto CDC requires. The catalog must also persist metadata across runs, per [Requirements](#requirements).
 
-The examples below use a catalog named `lakehouse` to stand in for such a connector. Add the catalog to the generated `spark-pipeline.yml` - substituting the catalog name and connector class - without disturbing the `name`, `storage`, and `libraries` values `spark-pipelines init` already wrote:
+The examples below use a catalog named `lakehouse` to stand in for such a connector. The catalog belongs to the Spark Connect server, not to the pipeline, so the `spark-pipeline.yml` that `spark-pipelines init` writes, with its `name`, `storage`, and `libraries` values, needs no edit. Set `spark.sql.catalog.lakehouse=<your connector's catalog class>` on the server, either as a `--conf` on the `sbin/start-connect-server.sh` command or as a line in the server's `conf/spark-defaults.conf`:
 
-```yaml
-catalog: lakehouse
-database: cdc_demo
-configuration:
-  spark.sql.catalog.lakehouse: <your connector's catalog class>
+```bash
+./sbin/start-connect-server.sh \
+  --conf "spark.sql.catalog.lakehouse=<your connector's catalog class>" \
+  --conf spark.sql.defaultCatalog=lakehouse
 ```
+
+A table in a connector catalog takes the format its connector gives it, so choose a connector whose tables support row-level operations, such as Iceberg, because Auto CDC needs them. Tables that the session catalog creates without a format use `spark.sql.sources.default`, which is Parquet unless set, and Parquet does not support them. A pipeline whose spec names no catalog writes to the server's current catalog, so `spark.sql.defaultCatalog=lakehouse` puts the tables of the examples in the connector's catalog.
 
 ### End-to-End Example
 
@@ -705,7 +708,7 @@ spark-pipelines init --name cdc_demo
 cd cdc_demo
 ```
 
-`spark-pipelines init` seeds `transformations/` with `example_python_materialized_view.py` and `example_sql_materialized_view.sql`. Delete them so only the CDC datasets run, then edit `spark-pipeline.yml` to add the catalog as shown in [Choosing a Target Format](#choosing-a-target-format), and put the following in `transformations/customers_cdc.py`:
+`spark-pipelines init` seeds `transformations/` with `example_python_materialized_view.py` and `example_sql_materialized_view.sql`. Delete them so only the CDC datasets run, leave `spark-pipeline.yml` as generated, and put the following in `transformations/customers_cdc.py`:
 
 ```python
 from pyspark import pipelines as dp
@@ -752,10 +755,10 @@ cat > /tmp/cdc_demo/events/batch1.json <<'EOF'
 EOF
 ```
 
-Run the pipeline:
+Run the pipeline against the Spark Connect server from [Choosing a Target Format](#choosing-a-target-format), here on its default local address:
 
 ```bash
-spark-pipelines run
+spark-pipelines run --remote sc://localhost:15002
 ```
 
 `customers` now holds both rows, with the `op` column excluded:
@@ -779,7 +782,7 @@ EOF
 Run the pipeline again. Because `customers` is a streaming table, this run processes only the new file:
 
 ```bash
-spark-pipelines run
+spark-pipelines run --remote sc://localhost:15002
 ```
 
 | id | name   | version |
@@ -800,7 +803,7 @@ EOF
 Run once more:
 
 ```bash
-spark-pipelines run
+spark-pipelines run --remote sc://localhost:15002
 ```
 
 | id | name   | version |
@@ -964,7 +967,7 @@ With the default tracking, the same events produce three versions.
 Like the key set (see [Changing the Key Set](#changing-the-key-set)), the SCD type and the set of tracked columns are part of the flow's persisted state. Changing the SCD type across incremental runs fails with `AUTOCDC_INVALID_STATE.SCD_TYPE_DRIFT`, and changing the tracked columns fails with `AUTOCDC_INVALID_STATE.TRACK_HISTORY_DRIFT`. With the default tracking or `track_history_except_column_list`, the tracked columns follow the columns written to the target, so adding or removing a column there also changes them. To make either change, fully refresh the target table:
 
 ```bash
-spark-pipelines run --full-refresh customers
+spark-pipelines run --remote sc://localhost:15002 --full-refresh customers
 ```
 
 When columns were added to the target under the default tracking or `track_history_except_column_list`, the target keeps its history without a full refresh. The `AUTOCDC_INVALID_STATE.TRACK_HISTORY_DRIFT` error lists the recorded tracked columns; passing exactly those columns in `track_history_column_list` (or `TRACK HISTORY ON (...)`) matches the recorded state, and the added columns are not tracked.
@@ -1068,7 +1071,7 @@ dp.create_auto_cdc_flow(
 The set and types of `keys` are part of the flow's persisted state. Changing keys across incremental runs - renaming, swapping, adding, removing, or changing the type of a key column - is not supported: the run fails with `AUTOCDC_INVALID_STATE.KEY_SCHEMA_DRIFT`. To change the key set, [fully refresh](#spark-pipelines-run) the target table so it is recomputed from scratch:
 
 ```bash
-spark-pipelines run --full-refresh customers
+spark-pipelines run --remote sc://localhost:15002 --full-refresh customers
 ```
 
 ### Auto CDC Considerations

@@ -19,13 +19,14 @@
 Implementation of spark-pipelines CLI.
 
 Example usage:
-    $ bin/spark-pipelines run --spec /path/to/pipeline.yaml
+    $ bin/spark-pipelines run --remote sc://localhost:15002 --spec /path/to/pipeline.yaml
 """
 
 import argparse
 import glob
 import importlib.util
 import os
+import sys
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -283,6 +284,70 @@ def change_dir(path: Path) -> Generator[None, None, None]:
         os.chdir(prev)
 
 
+def connects_to_remote_server(configuration: Mapping[str, str]) -> bool:
+    """Returns whether the command was given a Spark Connect server to run against.
+
+    `spark-pipelines` hands its `--remote` argument to spark-submit, which passes it to this process
+    as the SPARK_REMOTE environment variable; without `--remote` the value is `local`, which names
+    no server. A spec may also name the server with `spark.remote` in its configuration.
+    """
+    url = configuration.get("spark.remote", os.environ.get("SPARK_REMOTE"))
+    return url is not None and url.startswith("sc://")
+
+
+def apply_configuration_to_remote_session(
+    spark: SparkSession, configuration: Mapping[str, str]
+) -> None:
+    """Sets the spec's configuration on the session of the Spark Connect server.
+
+    A static SQL setting or a core Spark setting in the spec cannot change a running server, which
+    keeps its own value and refuses the write. Those settings are reported once, with the server's
+    start command as the place for them, and the run goes on. Any other refusal is an error.
+    """
+    refused = []
+    for key, value in configuration.items():
+        if key == "spark.remote":
+            continue
+        try:
+            spark.conf.set(key, value)
+        except PySparkException as e:
+            if e.getCondition() not in ("CANNOT_MODIFY_STATIC_CONFIG", "CANNOT_MODIFY_CONFIG"):
+                raise
+            refused.append((key, value))
+    if refused:
+        lines = [
+            "The following settings of the pipeline spec cannot be applied to a running Spark "
+            "Connect server, which keeps its own values:"
+        ]
+        lines.extend(f"  {key}: {value}" for key, value in refused)
+        key, value = refused[0]
+        lines.append("Pass them to the command that starts the server instead, for example:")
+        lines.append(f"  sbin/start-connect-server.sh --conf {key}={value}")
+        print("\n".join(lines), file=sys.stderr)
+
+
+def warn_if_tables_are_not_kept(spark: SparkSession, catalog: Optional[str]) -> None:
+    """Prints a message when the catalog the pipeline writes to keeps its tables only while the
+    Spark Connect server runs.
+
+    That is the session catalog, `spark_catalog`, when the server's `spark.sql.catalogImplementation`
+    is `in-memory`. Both values are read from the server through the session.
+    """
+    if (catalog or spark.catalog.currentCatalog()) != "spark_catalog":
+        return
+    if spark.conf.get("spark.sql.catalogImplementation") != "in-memory":
+        return
+    print(
+        "The pipeline writes to the session catalog, spark_catalog, and the server keeps that "
+        "catalog's table metadata in memory (spark.sql.catalogImplementation is in-memory). The "
+        "tables this run creates are kept only while this Spark Connect server runs. To keep them "
+        "across server restarts, start the server with a catalog that keeps metadata, for example "
+        "with --conf spark.sql.catalogImplementation=hive, or with a connector catalog under "
+        "--conf spark.sql.catalog.<name>=<catalog class> and --conf spark.sql.defaultCatalog=<name>.",
+        file=sys.stderr,
+    )
+
+
 def run(
     spec_path: Path,
     full_refresh: Sequence[str],
@@ -292,10 +357,14 @@ def run(
 ) -> None:
     """Run the pipeline defined with the given spec.
 
+    A run needs a Spark Connect server; without one it fails before a session is created, so
+    no local Spark Connect server is started and no pipeline storage is written.
+
     :param spec_path: Path to the pipeline specification file.
     :param full_refresh: List of datasets to reset and recompute.
     :param full_refresh_all: Perform a full graph reset and recompute.
     :param refresh: List of datasets to update.
+    :param dry: Whether to only validate the graph, without reading or writing data.
     """
     # Validate conflicting arguments
     if full_refresh_all:
@@ -317,17 +386,28 @@ def run(
     log_with_curr_timestamp(f"Loading pipeline spec from {spec_path}...")
     spec = load_pipeline_spec(spec_path)
 
+    if not connects_to_remote_server(spec.configuration):
+        raise PySparkException(
+            errorClass="PIPELINE_SPARK_CONNECT_SERVER_REQUIRED", messageParameters={}
+        )
+
     log_with_curr_timestamp("Creating Spark session...")
     spark_builder = SparkSession.builder.config(
         "spark.sql.connect.serverStacktrace.enabled", "false"
     )
-    for key, value in spec.configuration.items():
-        spark_builder = spark_builder.config(key, value)
+    # The builder takes only the server's address from the spec. The rest of the spec's
+    # configuration is set once the session exists, so that the settings the server cannot apply
+    # are reported in one place.
+    if "spark.remote" in spec.configuration:
+        spark_builder = spark_builder.config("spark.remote", spec.configuration["spark.remote"])
 
     spark = spark_builder.getOrCreate()
     # Stop the session even if graph creation, registration, or the run itself fails, so a failure
     # after the session is created does not leak it.
     try:
+        apply_configuration_to_remote_session(spark, spec.configuration)
+        warn_if_tables_are_not_kept(spark, spec.catalog)
+
         log_with_curr_timestamp("Creating dataflow graph...")
         dataflow_graph_id = create_dataflow_graph(
             spark,

@@ -15,10 +15,17 @@
 # limitations under the License.
 #
 
+import io
+import os
+import subprocess
+import sys
 import tempfile
 import textwrap
 import unittest
+import warnings
+from contextlib import redirect_stderr
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 from pyspark.errors import PySparkException
 from pyspark.testing.connectutils import (
@@ -32,12 +39,15 @@ if should_test_connect and have_yaml:
     from pyspark.pipelines.cli import (
         LibrariesGlob,
         PipelineSpec,
+        apply_configuration_to_remote_session,
         change_dir,
+        connects_to_remote_server,
         find_pipeline_spec,
         load_pipeline_spec,
         register_definitions,
         run,
         unpack_pipeline_spec,
+        warn_if_tables_are_not_kept,
     )
     from pyspark.pipelines.tests.local_graph_element_registry import LocalGraphElementRegistry
 
@@ -441,6 +451,192 @@ class CLIUtilityTests(ReusedConnectTestCase):
             self.assertEqual(
                 context.exception.getCondition(), "CONFLICTING_PIPELINE_REFRESH_OPTIONS"
             )
+
+    SERVER_REQUIRED = "PIPELINE_SPARK_CONNECT_SERVER_REQUIRED"
+
+    def test_run_without_spark_connect_server_is_refused(self):
+        self.check_refused_without_spark_connect_server("run")
+
+    def test_dry_run_without_spark_connect_server_is_refused(self):
+        self.check_refused_without_spark_connect_server("dry-run")
+
+    def check_refused_without_spark_connect_server(self, command):
+        # SPARK-61826: without --remote the command has no Spark Connect server to run against. It
+        # exits with an error that names the argument, and leaves the project as it found it.
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = Path(temp_dir)
+            storage = project / "pipeline-storage"
+            (project / "spark-pipeline.yml").write_text(
+                textwrap.dedent(
+                    f"""
+                    name: refused
+                    storage: file://{storage}
+                    libraries:
+                      - glob:
+                          include: transformations/**
+                    """
+                )
+            )
+            (project / "transformations").mkdir()
+            (project / "transformations" / "one_row.sql").write_text(
+                "CREATE MATERIALIZED VIEW one_row AS SELECT 1 AS id"
+            )
+            files = sorted(project.rglob("*"))
+
+            result = subprocess.run(
+                [os.path.join(os.environ["SPARK_HOME"], "bin", "spark-pipelines"), command],
+                cwd=project,
+                env={"PYSPARK_PYTHON": sys.executable, **os.environ},
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+
+            self.assertNotEqual(result.returncode, 0, result.stdout)
+            self.assertIn(self.SERVER_REQUIRED, result.stdout)
+            self.assertIn("requires a Spark Connect server", result.stdout)
+            self.assertIn("--remote sc://host:port", result.stdout)
+            self.assertFalse(storage.exists())
+            # Under SPARK_TESTING the JVM that spark-pipelines starts logs to target/unit-tests.log
+            # in the current directory, so that one file is left out.
+            test_log = {project / "target", project / "target" / "unit-tests.log"}
+            written = [path for path in sorted(project.rglob("*")) if path not in test_log]
+            self.assertEqual(written, files)
+
+    def test_spark_connect_server_is_required_before_a_session_is_created(self):
+        # SPARK-61826: the refusal comes before the session, since creating a session without a
+        # server address is what starts a local server.
+        with tempfile.TemporaryDirectory() as temp_dir:
+            spec_path = Path(temp_dir) / "spark-pipeline.yaml"
+            spec_path.write_text('{"name": "test_pipeline", "storage": "storage_path"}')
+            for dry in [False, True]:
+                with (
+                    patch.dict(os.environ, {"SPARK_REMOTE": "local"}),
+                    patch("pyspark.pipelines.cli.SparkSession") as session,
+                    self.assertRaises(PySparkException) as context,
+                ):
+                    run(
+                        spec_path=spec_path,
+                        full_refresh=[],
+                        full_refresh_all=False,
+                        refresh=[],
+                        dry=dry,
+                    )
+                self.assertEqual(context.exception.getCondition(), self.SERVER_REQUIRED)
+                self.assertEqual(session.mock_calls, [])
+
+    IN_MEMORY_CATALOG_MESSAGE = "spark.sql.catalogImplementation is in-memory"
+    SERVER_ADVICE = "kept only while this Spark Connect server runs"
+
+    def test_in_memory_session_catalog_gets_message_once(self):
+        # SPARK-61826: the in-memory session catalog keeps tables only while the Spark Connect
+        # server runs, so a run that writes to it says so once, whether the spec names the catalog
+        # or not, and advises starting the server with a catalog that keeps metadata.
+        spark = self.session_with(
+            catalog_implementation="in-memory", current_catalog="spark_catalog"
+        )
+        for catalog in [None, "spark_catalog"]:
+            output = self.catalog_message(spark, catalog)
+            self.assertEqual(output.count(self.IN_MEMORY_CATALOG_MESSAGE), 1, output)
+            self.assertIn(self.SERVER_ADVICE, output)
+            self.assertIn("--conf spark.sql.catalogImplementation=hive", output)
+            self.assertIn("spark.sql.catalog.<name>", output)
+            self.assertIn("--conf spark.sql.defaultCatalog=<name>", output)
+
+    def test_in_memory_session_catalog_is_read_through_the_session(self):
+        # SPARK-61826: both values come from the server through the session. The test session
+        # connects to a server with the default catalog settings.
+        self.assertEqual(self.spark.conf.get("spark.sql.catalogImplementation"), "in-memory")
+        self.assertEqual(self.spark.catalog.currentCatalog(), "spark_catalog")
+        output = self.catalog_message(self.spark, None)
+        self.assertEqual(output.count(self.IN_MEMORY_CATALOG_MESSAGE), 1, output)
+        self.assertIn(self.SERVER_ADVICE, output)
+
+    def test_hive_session_catalog_gets_no_message(self):
+        # SPARK-61826: a Hive metastore keeps the session catalog's metadata across server restarts.
+        spark = self.session_with(catalog_implementation="hive", current_catalog="spark_catalog")
+        self.assertEqual(self.catalog_message(spark, None), "")
+        self.assertEqual(self.catalog_message(spark, "spark_catalog"), "")
+
+    def test_connector_catalog_gets_no_message(self):
+        # SPARK-61826: a connector catalog named in the spec, or current in the session, keeps its
+        # own metadata, so the session catalog's setting does not matter.
+        spark = self.session_with(
+            catalog_implementation="in-memory", current_catalog="spark_catalog"
+        )
+        self.assertEqual(self.catalog_message(spark, "lakehouse"), "")
+        spark = self.session_with(catalog_implementation="in-memory", current_catalog="lakehouse")
+        self.assertEqual(self.catalog_message(spark, None), "")
+
+    def session_with(self, catalog_implementation, current_catalog):
+        spark = Mock()
+        spark.conf.get.return_value = catalog_implementation
+        spark.catalog.currentCatalog.return_value = current_catalog
+        return spark
+
+    def catalog_message(self, spark, catalog):
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            warn_if_tables_are_not_kept(spark, catalog)
+        return stderr.getvalue()
+
+    def test_connects_to_remote_server(self):
+        # SPARK-61826: spark-pipelines hands --remote to this process as SPARK_REMOTE; without
+        # --remote the value is local, which names no server. A spec may also name the server with
+        # spark.remote.
+        environ = {key: value for key, value in os.environ.items() if key != "SPARK_REMOTE"}
+        with patch.dict(os.environ, environ, clear=True):
+            self.assertFalse(connects_to_remote_server({}))
+            self.assertTrue(connects_to_remote_server({"spark.remote": "sc://localhost:15002"}))
+        with patch.dict(os.environ, {"SPARK_REMOTE": "local"}):
+            self.assertFalse(connects_to_remote_server({}))
+            self.assertTrue(connects_to_remote_server({"spark.remote": "sc://localhost:15002"}))
+        with patch.dict(os.environ, {"SPARK_REMOTE": "sc://localhost:15002"}):
+            self.assertTrue(connects_to_remote_server({}))
+
+    STATIC_SETTING_MESSAGE = "cannot be applied to a running Spark Connect server"
+
+    def test_remote_server_keeps_its_static_settings(self):
+        # SPARK-61826: a server that is already running refuses a static setting from the spec. The
+        # run reports that once, in its own words rather than through the session builder's generic
+        # warning, applies the other settings and goes on.
+        configuration = {
+            "spark.sql.catalogImplementation": "hive",
+            "spark.sql.shuffle.partitions": "7",
+            "spark.sql.catalog.lakehouse": "org.example.LakehouseCatalog",
+        }
+        stderr = io.StringIO()
+        with warnings.catch_warnings(record=True) as caught, redirect_stderr(stderr):
+            warnings.simplefilter("always")
+            try:
+                apply_configuration_to_remote_session(self.spark, configuration)
+                self.assertEqual(self.spark.conf.get("spark.sql.shuffle.partitions"), "7")
+                self.assertEqual(
+                    self.spark.conf.get("spark.sql.catalog.lakehouse"),
+                    "org.example.LakehouseCatalog",
+                )
+                self.assertEqual(
+                    self.spark.conf.get("spark.sql.catalogImplementation"), "in-memory"
+                )
+            finally:
+                self.spark.conf.unset("spark.sql.shuffle.partitions")
+                self.spark.conf.unset("spark.sql.catalog.lakehouse")
+        self.assertEqual([str(w.message) for w in caught], [])
+        output = stderr.getvalue()
+        self.assertEqual(output.count(self.STATIC_SETTING_MESSAGE), 1, output)
+        self.assertIn("spark.sql.catalogImplementation: hive", output)
+        self.assertIn("--conf spark.sql.catalogImplementation=hive", output)
+        self.assertNotIn("spark.sql.shuffle.partitions", output)
+        self.assertNotIn("spark.sql.catalog.lakehouse", output)
+
+    def test_remote_server_rejects_other_settings_as_errors(self):
+        # SPARK-61826: only a setting the server owns is reported and skipped; any other refusal,
+        # such as a value the server does not accept, fails the run with the server's error.
+        with self.assertRaises(PySparkException) as context:
+            apply_configuration_to_remote_session(
+                self.spark, {"spark.sql.shuffle.partitions": "not a number"}
+            )
+        self.assertEqual(context.exception.getCondition(), "INVALID_CONF_VALUE.TYPE_MISMATCH")
 
     def test_parse_table_list_single_table(self):
         """Test parsing a single table name."""

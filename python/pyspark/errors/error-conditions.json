@@ -792,6 +792,11 @@
       "Alternatively set a pandas-on-spark option 'compute.fail_on_ansi_mode' to `False` to force it to work, although it can cause unexpected behavior."
     ]
   },
+  "PIPELINE_SPARK_CONNECT_SERVER_REQUIRED": {
+    "message": [
+      "spark-pipelines requires a Spark Connect server to run a pipeline, and none was given. Start a server, for example with `sbin/start-connect-server.sh`, and pass its address with `--remote sc://host:port`."
+    ]
+  },
   "PIPELINE_SPEC_DICT_KEY_NOT_STRING": {
     "message": [
       "For pipeline spec field `<field_name>`, key should be a string, got <key_type>."
