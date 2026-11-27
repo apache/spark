@@ -29,6 +29,7 @@ import os
 import pickle
 import platform
 import sys
+import sysconfig
 import threading
 import time
 import traceback
@@ -811,6 +812,40 @@ class ConfigResult:
 def _is_pyspark_source(filename: str) -> bool:
     """Check if the given filename is from the pyspark package."""
     return filename.startswith(PYSPARK_ROOT)
+
+
+# Packages that call into PySpark on behalf of user code when a notebook displays a cell
+# result. IPython 8 wraps its display formatters with the `decorator` package.
+_NOTEBOOK_DISPLAY_MODULES = ("IPython", "ipykernel", "decorator")
+
+# Directories of the Python standard library. Frames carry the path that modules were loaded
+# from, which may differ from the configured one when it goes through a symlink.
+_STDLIB_DIRS = tuple(
+    {os.path.join(os.path.dirname(os.__file__), ""), os.path.join(sysconfig.get_path("stdlib"), "")}
+)
+
+
+def _is_non_user_source(filename: str) -> bool:
+    """
+    Check if the given filename belongs to the Python standard library or to the notebook
+    display machinery, i.e. code that may call into PySpark but is not user application code.
+    """
+    for stdlib_dir in _STDLIB_DIRS:
+        if filename.startswith(stdlib_dir):
+            # Third-party packages may be installed under the standard library directory.
+            top_level = filename[len(stdlib_dir) :].split(os.sep, 1)[0]
+            return top_level not in ("site-packages", "dist-packages")
+    for name in _NOTEBOOK_DISPLAY_MODULES:
+        module_file = getattr(sys.modules.get(name), "__file__", None)
+        if module_file is None:
+            continue
+        if os.path.basename(module_file) == "__init__.py":
+            # A package: match every file under its directory.
+            if filename.startswith(os.path.dirname(module_file) + os.sep):
+                return True
+        elif filename == module_file:
+            return True
+    return False
 
 
 class SparkConnectClient(object):
@@ -1700,11 +1735,19 @@ class SparkConnectClient(object):
         Log an AnalyzePlan RPC together with its duration and the user code that triggered it.
         """
         stack_frames = cls._retrieve_stack_frames()
-        if stack_frames:
-            # The last frame is the user code line that called into PySpark, and its
-            # `function` is the PySpark API that was called (e.g. `columns`).
-            call_site = stack_frames[-1]
-            trigger = f"{call_site.function} at {call_site.file}:{call_site.linenum}"
+        # The `function` of the last frame is the PySpark API that was called (e.g. `columns`).
+        # The last frame itself is not always user code: `functools.cached_property` APIs
+        # (e.g. `isStreaming`) are reached through functools.py, a notebook displaying a
+        # DataFrame calls in through IPython, ipykernel or the decorator package, and the
+        # client's own threads start in threading.py. So take the file and line from the
+        # nearest frame that is not standard-library or notebook display code, and fall back
+        # to `unknown call site` when there is none.
+        user_frame = next(
+            (f for f in reversed(stack_frames) if not _is_non_user_source(f.file)), None
+        )
+        if user_frame is not None:
+            api = stack_frames[-1].function
+            trigger = f"{api} at {user_frame.file}:{user_frame.linenum}"
         else:
             trigger = "unknown call site"
         logger.info(

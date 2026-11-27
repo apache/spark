@@ -15,6 +15,14 @@
 # limitations under the License.
 #
 
+import contextlib
+import functools
+import importlib
+import inspect
+import os
+import textwrap
+import threading
+import time
 import unittest
 import uuid
 from collections.abc import Generator
@@ -23,6 +31,13 @@ from unittest import mock
 
 from pyspark.testing.connectutils import connect_requirement_message, should_test_connect
 from pyspark.testing.utils import eventually
+
+try:
+    import IPython  # noqa: F401
+
+    have_ipython = True
+except ImportError:
+    have_ipython = False
 
 if should_test_connect:
     import google.protobuf.any_pb2 as any_pb2
@@ -33,6 +48,9 @@ if should_test_connect:
     from google.rpc import status_pb2
     from google.rpc.error_details_pb2 import ErrorInfo
 
+    import pyspark
+    import pyspark.sql.connect
+    import pyspark.sql.connect.client.core as core
     import pyspark.sql.connect.proto as proto
     from pyspark.errors import PySparkRuntimeError
     from pyspark.errors.exceptions.connect import SparkConnectGrpcException
@@ -952,42 +970,126 @@ class SparkConnectClientTestCase(unittest.TestCase):
         client_disabled._analyze("schema", plan=proto.Plan())
         self.assertIsNone(mock_disabled.captured_timeout)
 
-    def _analyze_client(self, stub_cls=None):
+    def _analyze_client(self, stub_cls=None, retry_policy=None):
         client = SparkConnectClient(
-            "sc://foo/", use_reattachable_execute=False, retry_policy=dict(max_retries=0)
+            "sc://foo/",
+            use_reattachable_execute=False,
+            retry_policy=retry_policy or dict(max_retries=0),
         )
         client._stub = (stub_cls or MockService)(session_id=client._session_id)
         return client
 
+    @contextlib.contextmanager
+    def _info_logging(self):
+        """Enable the Spark Connect logger at INFO and capture its AnalyzePlan records."""
+        records = []
+        with (
+            mock.patch.object(connect_logger, "disabled", False),
+            self.assertLogs(connect_logger, level="INFO") as logs,
+        ):
+            yield records
+        records.extend(r for r in logs.records if r.getMessage().startswith("AnalyzePlan("))
+
+    @contextlib.contextmanager
+    def _fake_clock(self):
+        """
+        Replace the clock used to time AnalyzePlan calls with one that starts at a non-zero
+        reading and that only moves when `advance` is called. `Retrying` binds its own clock
+        at import time, so its backoff is not affected.
+        """
+        clock = dict(now=1000.0)
+
+        def advance(seconds):
+            clock["now"] += seconds
+
+        fake_time = mock.Mock(wraps=time, monotonic=lambda: clock["now"])
+        with mock.patch.object(core, "time", fake_time):
+            yield advance
+
+    @contextlib.contextmanager
+    def _user_code_in_this_file(self):
+        """
+        Narrow PYSPARK_ROOT to the pyspark.sql.connect package so that frames in this test
+        file count as user code for the real `_retrieve_stack_frames` helper.
+        """
+        with mock.patch.object(core, "PYSPARK_ROOT", os.path.dirname(pyspark.sql.connect.__file__)):
+            yield
+
+    @staticmethod
+    def _define_as_pyspark_source(source, name):
+        """
+        Compile `source` as if it lived in the pyspark.sql.connect package and return the
+        object called `name`, so that the real stack helper treats its frames as PySpark code.
+        """
+        filename = os.path.join(os.path.dirname(pyspark.sql.connect.__file__), "_fake_api.py")
+        namespace = {"functools": functools}
+        exec(compile(textwrap.dedent(source), filename, "exec"), namespace)
+        return namespace[name]
+
     def test_analyze_logs_duration_and_call_site(self):
-        client = self._analyze_client()
+        test = self
+
+        class StepMock(MockService):
+            def AnalyzePlan(self, req, metadata, timeout=None):
+                test.advance(0.25)
+                return super().AnalyzePlan(req, metadata, timeout=timeout)
+
+        client = self._analyze_client(StepMock)
         call_sites = [
             CallSite(function="main", file="/app/job.py", linenum=10),
             CallSite(function="columns", file="/app/job.py", linenum=57),
         ]
         with (
-            mock.patch.object(connect_logger, "disabled", False),
+            self._fake_clock() as self.advance,
             mock.patch.object(
                 SparkConnectClient, "_retrieve_stack_frames", return_value=call_sites
             ),
-            self.assertLogs(connect_logger, level="INFO") as logs,
+            self._info_logging() as records,
         ):
             client._analyze("schema", plan=proto.Plan())
-        self.assertEqual(len(logs.records), 1)
-        self.assertRegex(
-            logs.records[0].getMessage(),
-            r"^AnalyzePlan\(schema\) took \d+ ms, triggered by columns at /app/job.py:57$",
+        self.assertEqual(
+            [r.getMessage() for r in records],
+            ["AnalyzePlan(schema) took 250 ms, triggered by columns at /app/job.py:57"],
+        )
+
+    def test_analyze_logs_retried_call_once_with_total_duration(self):
+        test = self
+
+        class FlakyMock(MockService):
+            attempts = 0
+
+            def AnalyzePlan(self, req, metadata, timeout=None):
+                test.advance(0.25)
+                FlakyMock.attempts += 1
+                if FlakyMock.attempts == 1:
+                    raise TestException("unavailable", grpc.StatusCode.UNAVAILABLE)
+                return super().AnalyzePlan(req, metadata, timeout=timeout)
+
+        client = self._analyze_client(
+            FlakyMock,
+            retry_policy=dict(max_retries=1, initial_backoff=1, jitter=0, max_backoff=1),
+        )
+        with (
+            self._fake_clock() as self.advance,
+            mock.patch.object(SparkConnectClient, "_retrieve_stack_frames", return_value=[]),
+            self._info_logging() as records,
+        ):
+            client._analyze("schema", plan=proto.Plan())
+        self.assertEqual(FlakyMock.attempts, 2)
+        self.assertEqual(
+            [r.getMessage() for r in records],
+            ["AnalyzePlan(schema) took 500 ms, triggered by unknown call site"],
         )
 
     def test_analyze_logs_unknown_call_site(self):
         client = self._analyze_client()
         with (
-            mock.patch.object(connect_logger, "disabled", False),
             mock.patch.object(SparkConnectClient, "_retrieve_stack_frames", return_value=[]),
-            self.assertLogs(connect_logger, level="INFO") as logs,
+            self._info_logging() as records,
         ):
             client._analyze("semantic_hash", plan=proto.Plan())
-        self.assertIn("triggered by unknown call site", logs.records[0].getMessage())
+        self.assertEqual(len(records), 1)
+        self.assertIn("triggered by unknown call site", records[0].getMessage())
 
     def test_analyze_logs_failed_call(self):
         class FailingMock(MockService):
@@ -996,23 +1098,142 @@ class SparkConnectClientTestCase(unittest.TestCase):
 
         client = self._analyze_client(FailingMock)
         with (
-            mock.patch.object(connect_logger, "disabled", False),
             mock.patch.object(SparkConnectClient, "_retrieve_stack_frames", return_value=[]),
-            self.assertLogs(connect_logger, level="INFO") as logs,
+            self._info_logging() as records,
         ):
             with self.assertRaises(SparkConnectGrpcException):
                 client._analyze("schema", plan=proto.Plan())
-        self.assertTrue(any("AnalyzePlan(schema)" in r.getMessage() for r in logs.records))
+        self.assertEqual(len(records), 1)
+        self.assertTrue(records[0].getMessage().startswith("AnalyzePlan(schema) took "))
+
+    def test_analyze_logs_real_call_site(self):
+        client = self._analyze_client()
+        with self._user_code_in_this_file(), self._info_logging() as records:
+            expected_line = inspect.currentframe().f_lineno + 1
+            client._analyze("schema", plan=proto.Plan())
+        self.assertEqual(len(records), 1)
+        self.assertTrue(
+            records[0]
+            .getMessage()
+            .endswith(f"triggered by _analyze at {__file__}:{expected_line}"),
+            records[0].getMessage(),
+        )
+
+    def test_analyze_call_site_skips_cached_property_frames(self):
+        # A PySpark `functools.cached_property` such as `SparkSession.version` is reached
+        # through functools.py, which must not be reported as the call site.
+        FakeSession = self._define_as_pyspark_source(
+            """
+            class FakeSession:
+                def __init__(self, client):
+                    self._client = client
+
+                @functools.cached_property
+                def version(self):
+                    return self._client._analyze(method="spark_version")
+            """,
+            "FakeSession",
+        )
+        session = FakeSession(self._analyze_client())
+        with self._user_code_in_this_file(), self._info_logging() as records:
+            expected_line = inspect.currentframe().f_lineno + 1
+            session.version
+        self.assertEqual(len(records), 1)
+        self.assertTrue(
+            records[0].getMessage().endswith(f"triggered by version at {__file__}:{expected_line}"),
+            records[0].getMessage(),
+        )
+
+    def test_analyze_call_site_unknown_on_standard_library_thread(self):
+        # When every frame before PySpark is standard-library code, e.g. on a thread started
+        # by the client, no user code triggered the call.
+        client = self._analyze_client()
+        with self._user_code_in_this_file(), self._info_logging() as records:
+            thread = threading.Thread(
+                target=client._analyze, args=("schema",), kwargs=dict(plan=proto.Plan())
+            )
+            thread.start()
+            thread.join()
+        self.assertEqual(len(records), 1)
+        self.assertTrue(
+            records[0].getMessage().endswith("triggered by unknown call site"),
+            records[0].getMessage(),
+        )
+
+    @unittest.skipIf(not have_ipython, "IPython is not installed")
+    def test_analyze_call_site_skips_notebook_display_frames(self):
+        # A notebook cell that ends in a DataFrame is displayed through IPython's formatters
+        # (wrapped by the decorator package on IPython 8), which must not be reported as the
+        # call site.
+        from IPython.core.formatters import DisplayFormatter
+
+        FakeDataFrame = self._define_as_pyspark_source(
+            """
+            class FakeDataFrame:
+                def __init__(self, client):
+                    self._client = client
+
+                def __repr__(self):
+                    self._client._analyze(method="spark_version")
+                    return "FakeDataFrame"
+            """,
+            "FakeDataFrame",
+        )
+        client = self._analyze_client()
+        df = FakeDataFrame(client)
+        with (
+            self._user_code_in_this_file(),
+            self._info_logging() as records,
+        ):
+            expected_line = inspect.currentframe().f_lineno + 1
+            DisplayFormatter().format(df)
+        self.assertEqual(len(records), 1)
+        self.assertTrue(
+            records[0].getMessage().endswith(f"at {__file__}:{expected_line}"),
+            records[0].getMessage(),
+        )
+
+    def test_notebook_display_sources_are_not_user_code(self):
+        # IPython 8 wraps its display formatters with the decorator package, so its frames
+        # sit between the notebook cell and PySpark even when IPython 9 does not use it.
+        checked = 0
+        for name in ("IPython", "ipykernel", "decorator"):
+            try:
+                module = importlib.import_module(name)
+            except ImportError:
+                continue
+            self.assertTrue(core._is_non_user_source(module.__file__), name)
+            checked += 1
+        if checked == 0:
+            self.skipTest("No notebook display package is installed")
+        self.assertTrue(core._is_non_user_source(functools.__file__))
+        self.assertFalse(core._is_non_user_source("/app/my_job.py"))
 
     def test_analyze_does_not_capture_call_site_when_logging_disabled(self):
         client = self._analyze_client()
         with (
+            # The debug call stack extension calls `_retrieve_stack_frames` on its own.
+            mock.patch.dict(os.environ, {"SPARK_CONNECT_DEBUG_CLIENT_CALL_STACK": "false"}),
             mock.patch.object(connect_logger, "disabled", True),
             mock.patch.object(SparkConnectClient, "_retrieve_stack_frames") as retrieve,
             self.assertNoLogs(connect_logger, level="INFO"),
         ):
             client._analyze("schema", plan=proto.Plan())
         retrieve.assert_not_called()
+
+    def test_analyze_does_not_capture_call_site_when_logger_above_info(self):
+        # SPARK_CONNECT_LOG_LEVEL=WARN enables the logger, but not at INFO.
+        client = self._analyze_client()
+        with (
+            mock.patch.dict(os.environ, {"SPARK_CONNECT_DEBUG_CLIENT_CALL_STACK": "false"}),
+            mock.patch.object(connect_logger, "disabled", False),
+            mock.patch.object(SparkConnectClient, "_retrieve_stack_frames") as retrieve,
+            mock.patch.object(SparkConnectClient, "_log_analyze_call") as log_call,
+            self.assertNoLogs(connect_logger, level="WARNING"),
+        ):
+            client._analyze("schema", plan=proto.Plan())
+        retrieve.assert_not_called()
+        log_call.assert_not_called()
 
     def test_each_rpc_receives_configured_deadline(self):
         """Every RPC that accepts a deadline should forward it as timeout to the stub."""
