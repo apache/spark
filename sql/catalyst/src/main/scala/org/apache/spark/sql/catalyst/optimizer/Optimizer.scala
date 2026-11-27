@@ -465,10 +465,22 @@ abstract class Optimizer(catalogManager: CatalogManager)
             case _ => a.withNewChildren(Seq(optimizedInput))
           }
         }
+        // A grouped top Aggregate gets here only with a count-bug result computed before
+        // decorrelation (see PullupCorrelatedPredicates), and is otherwise optimized with the
+        // rest of the subquery. The rules that simplify such an Aggregate itself run before
+        // RewriteCorrelatedScalarSubquery moves it into the main plan, so apply them here.
+        val simplifiedAgg = if (group.nonEmpty && s.countBugResult.isDefined) {
+          Seq(EliminateDistinct, RemoveLiteralFromGroupExpressions,
+            RemoveRepetitionFromGroupExpressions).foldLeft(optimizedAgg: LogicalPlan) {
+            (p, rule) => rule(p)
+          }
+        } else {
+          optimizedAgg
+        }
         val newPlan = Project(projections,
-          if (predicates.nonEmpty) Filter(predicates.reduce(And), optimizedAgg) else optimizedAgg
+          if (predicates.nonEmpty) Filter(predicates.reduce(And), simplifiedAgg) else simplifiedAgg
         )
-        val needTopLevelProject = newPlan.output.zip(optimizedAgg.output).exists {
+        val needTopLevelProject = newPlan.output.zip(simplifiedAgg.output).exists {
           case (oldAttr, newAttr) => oldAttr.exprId != newAttr.exprId
         }
         s.withNewPlan(

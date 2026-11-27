@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, USER_DEFINE
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction => V2AggregateFunction}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, IntegerType, LongType, MapType, StringType}
+import org.apache.spark.sql.types.{DataType, DoubleType, FloatType, IntegerType, LongType, MapType, StringType}
 import org.apache.spark.util.ThreadUtils
 
 // A DeclarativeAggregate whose evaluate expression does not have its data type.
@@ -600,6 +600,39 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
       ThreadUtils.awaitResult(done, 30.seconds)
     } finally {
       executor.shutdownNow()
+    }
+  }
+
+  test("SPARK-60501: a correlation over an expression of an inner column whose values grouping " +
+      "can merge uses only the result of every outer row") {
+    // Decorrelation pulls the correlation up over the Aggregates, where it is evaluated over
+    // their grouping keys, and grouping merges -0.0 into 0.0, or strings that are equal under a
+    // collation that is not binary. A cast to a plain string tells the merged value from the
+    // others, so an outer row with matching rows can get no decorrelated row. Such a correlation
+    // is then taken as one under a domain join.
+    val isNullCount = count(Literal(1), Some($"s".isNull))
+    val stringOuter = LocalRelation($"o".string)
+    val lcase = LocalRelation(AttributeReference("t", StringType("UTF8_LCASE"))(), $"v".int)
+    Seq(testRelation2.where(Cast($"d", StringType) === $"o").groupBy()(max($"c").as("s")),
+        testRelation2.where(Cast(Cast($"d", FloatType), StringType) === $"o")
+          .groupBy()(max($"c").as("s")),
+        lcase.where(Cast($"t", StringType) === $"o").groupBy()(max($"v").as("s"))).foreach {
+      lower =>
+        assert(countBugResult(lower, outer = stringOuter) == Some("1"), lower)
+        assert(countBugResult(lower, Seq(isNullCount), outer = stringOuter).isEmpty, lower)
+        assert(countBugResult(lower, Seq(max($"s")), Seq($"s"), outer = stringOuter).isEmpty,
+          lower)
+    }
+    // Not for the column itself, for an expression over an outer column only, or over an inner
+    // column whose values grouping keeps apart.
+    val doubleOuter = LocalRelation($"o".double)
+    Seq(testRelation2.where($"d" === $"o") -> doubleOuter,
+        testRelation2.where($"d" <=> Cast($"o", DoubleType)) -> stringOuter,
+        testRelation2.where(Cast($"c", StringType) === $"o") -> stringOuter,
+        lcase.where($"t" === Cast($"o", StringType("UTF8_LCASE"))) -> stringOuter).foreach {
+      case (filtered, outer) =>
+        val lower = filtered.groupBy()(max(Literal(1)).as("s"))
+        assert(countBugResult(lower, Seq(isNullCount), outer = outer) == Some("1"), lower)
     }
   }
 

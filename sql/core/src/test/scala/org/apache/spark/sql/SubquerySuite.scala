@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Alias, CreateNamedStruct, EqualTo, EvalOnlyWhen,
   Expression, ExprId, GetStructField, GreaterThanOrEqual, Literal, NamedExpression, OuterReference,
   PlanExpression, Rand, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, GeneratePredicate}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftOuter, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LocalLimit, LogicalPlan, Project, Sort, Union}
@@ -4071,6 +4072,51 @@ class SubquerySuite extends SharedSparkSession
           checkAnswer(sql(s"SELECT (SELECT COUNT(*) FROM (SELECT MAX(b.v) FROM b " +
             s"WHERE b.k = $key)) FROM ($outer) o"), Seq(Row(1), Row(1), Row(1), Row(1)))
       }
+    }
+  }
+
+  test("SPARK-60501: a correlation through a cast of an inner column whose values grouping can " +
+      "merge keeps the results of before for a top aggregate that reads the row below") {
+    // Grouping merges -0.0 into 0.0, and the strings 'a' and 'A' under UTF8_LCASE, so a cast of
+    // the grouping key to a plain string can miss the outer row of the other value although it
+    // has matching rows. A top aggregate that reads the row below keeps the result of before
+    // there, 0 for the row with matching rows, as the uncorrelated form gives, and COUNT(*), the
+    // same for every outer row, gets the fix, also for x, which has no matching rows.
+    withTempView("bd", "bc", "o") {
+      sql("CREATE TEMP VIEW bd AS SELECT * FROM VALUES (CAST('-0.0' AS DOUBLE), 1) AS bd(d, v)")
+      sql("CREATE TEMP VIEW bc AS SELECT CAST(s AS STRING) COLLATE UTF8_LCASE c, v " +
+        "FROM VALUES ('a', 1), ('A', 2) AS t(s, v)")
+      sql("CREATE TEMP VIEW o AS SELECT * FROM VALUES ('-0.0'), ('A'), ('x') AS o(s)")
+      Seq("bd" -> "CAST(bd.d AS STRING)", "bc" -> "CAST(bc.c AS STRING)").foreach {
+        case (inner, key) =>
+          val matched = if (inner == "bd") "-0.0" else "A"
+          checkAnswer(sql(s"SELECT (SELECT COUNT(*) FILTER (WHERE m IS NULL) FROM " +
+            s"(SELECT MAX($inner.v) m FROM $inner WHERE $key = '$matched'))"), Row(0))
+          checkAnswer(sql(s"SELECT o.s, (SELECT COUNT(*) FILTER (WHERE m IS NULL) FROM " +
+            s"(SELECT MAX($inner.v) m FROM $inner WHERE $key = o.s)) FROM o " +
+            s"WHERE o.s = '$matched'"), Row(matched, 0))
+          checkAnswer(sql(s"SELECT o.s, (SELECT COUNT(*) FROM (SELECT MAX($inner.v) m " +
+            s"FROM $inner WHERE $key = o.s)) FROM o"),
+            Seq(Row("-0.0", 1), Row("A", 1), Row("x", 1)))
+      }
+    }
+  }
+
+  test("SPARK-60501: a grouped top aggregate with a computed result is simplified like others") {
+    // The top aggregate is kept for the count bug, and still loses a DISTINCT that does not
+    // change its result and repeated grouping keys.
+    withTempView("a", "b") {
+      sql("CREATE TEMP VIEW a AS SELECT * FROM VALUES (1), (2) AS a(k)")
+      sql("CREATE TEMP VIEW b AS SELECT * FROM VALUES (1, 100L), (1, 200L) AS b(k, v)")
+      val df = sql("SELECT a.k, (SELECT COLLECT_SET(DISTINCT m) FROM (SELECT MAX(b.v) m FROM b " +
+        "WHERE b.k = a.k) GROUP BY m, m) FROM a")
+      checkAnswer(df, Seq(Row(1, Seq(200L)), Row(2, Seq())))
+      val aggs = df.queryExecution.optimizedPlan.collect { case a: Aggregate => a }
+      assert(!aggs.exists(_.aggregateExpressions.exists(_.exists {
+        case ae: AggregateExpression => ae.isDistinct
+        case _ => false
+      })))
+      assert(aggs.forall(a => a.groupingExpressions.distinct.size == a.groupingExpressions.size))
     }
   }
 

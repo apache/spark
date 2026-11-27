@@ -1833,6 +1833,42 @@ Sort [a1#x ASC NULLS FIRST], true
 
 
 -- !query
+select o.s, ( select count(*) filter (where m is null)
+  from (select max(b.v) m from values (cast('-0.0' as double), 1) as b(d, v)
+    where cast(b.d as string) = o.s) ) c
+from values ('-0.0'), ('x') as o(s) order by 1
+-- !query analysis
+Sort [s#x ASC NULLS FIRST], true
++- Project [s#x, scalar-subquery#x [s#x] AS c#xL]
+   :  +- Aggregate [count(1) FILTER (WHERE isnull(m#x)) AS count(1) FILTER (WHERE (m IS NULL))#xL]
+   :     +- SubqueryAlias __auto_generated_subquery_name
+   :        +- Aggregate [max(v#x) AS m#x]
+   :           +- Filter (cast(d#x as string) = outer(s#x))
+   :              +- SubqueryAlias b
+   :                 +- LocalRelation [d#x, v#x]
+   +- SubqueryAlias o
+      +- LocalRelation [s#x]
+
+
+-- !query
+select o.s, ( select count(*)
+  from (select max(b.v) m from values (cast('-0.0' as double), 1) as b(d, v)
+    where cast(b.d as string) = o.s) ) c
+from values ('-0.0'), ('x') as o(s) order by 1
+-- !query analysis
+Sort [s#x ASC NULLS FIRST], true
++- Project [s#x, scalar-subquery#x [s#x] AS c#xL]
+   :  +- Aggregate [count(1) AS count(1)#xL]
+   :     +- SubqueryAlias __auto_generated_subquery_name
+   :        +- Aggregate [max(v#x) AS m#x]
+   :           +- Filter (cast(d#x as string) = outer(s#x))
+   :              +- SubqueryAlias b
+   :                 +- LocalRelation [d#x, v#x]
+   +- SubqueryAlias o
+      +- LocalRelation [s#x]
+
+
+-- !query
 select cast(o.d as string) d, ( select count(*) filter (where m is null)
   from (select max(b.v) m from values ('0.0', 1) as b(s, v) where b.s = cast(o.d as string)) ) c
 from values (cast('-0.0' as double)), (cast('0.0' as double)) as o(d) order by 1

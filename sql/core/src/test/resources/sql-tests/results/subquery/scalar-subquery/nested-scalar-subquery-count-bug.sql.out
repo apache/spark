@@ -918,6 +918,30 @@ struct<a1:int,a:double>
 
 
 -- !query
+select o.s, ( select count(*) filter (where m is null)
+  from (select max(b.v) m from values (cast('-0.0' as double), 1) as b(d, v)
+    where cast(b.d as string) = o.s) ) c
+from values ('-0.0'), ('x') as o(s) order by 1
+-- !query schema
+struct<s:string,c:bigint>
+-- !query output
+-0.0	0
+x	0
+
+
+-- !query
+select o.s, ( select count(*)
+  from (select max(b.v) m from values (cast('-0.0' as double), 1) as b(d, v)
+    where cast(b.d as string) = o.s) ) c
+from values ('-0.0'), ('x') as o(s) order by 1
+-- !query schema
+struct<s:string,c:bigint>
+-- !query output
+-0.0	1
+x	1
+
+
+-- !query
 select cast(o.d as string) d, ( select count(*) filter (where m is null)
   from (select max(b.v) m from values ('0.0', 1) as b(s, v) where b.s = cast(o.d as string)) ) c
 from values (cast('-0.0' as double)), (cast('0.0' as double)) as o(d) order by 1

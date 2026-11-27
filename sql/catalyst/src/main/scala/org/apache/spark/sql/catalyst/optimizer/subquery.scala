@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXISTS_SUBQUERY, IN_SUBQUERY, LATERAL_JOIN, LIST_SUBQUERY, PLAN_EXPRESSION, SCALAR_SUBQUERY, USER_DEFINED_AGGREGATION}
+import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION, OPTIMIZE_UNCORRELATED_IN_SUBQUERIES_IN_JOIN_CONDITION,
@@ -697,8 +698,30 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
           case agg: Aggregate => agg.aggregateExpressions.forall(_.references.isEmpty)
           case _ => false
         }
+        // A correlation condition that decorrelation pulls up is evaluated over the grouping keys
+        // of the decorrelated Aggregates. Grouping can merge values of some types into one, e.g.
+        // -0.0 into 0.0, or strings that are equal under a collation that is not binary. An
+        // expression over such an inner column other than the column itself, e.g. a cast to a
+        // plain string, can then tell the merged value from the values it stands for, so that an
+        // outer row with matching rows gets no decorrelated row, as where a domain join misses it.
+        // So the computed result is used there only where it is the result of every outer row,
+        // as under a domain join.
+        lazy val conditionOverMergedKeys = {
+          def mayMerge(dt: DataType): Boolean =
+            NormalizeFloatingNumbers.needNormalize(dt) || !UnsafeRowUtils.isBinaryStable(dt)
+          def readsMergedKey(e: Expression): Boolean =
+            e.references.exists(a => newPlan.outputSet.contains(a) && mayMerge(a.dataType))
+          def plainOrOuter(e: Expression): Boolean =
+            e.isInstanceOf[Attribute] || !readsMergedKey(e)
+          newCond.flatMap(splitConjunctivePredicates).exists {
+            case EqualTo(l, r) => !plainOrOuter(l) || !plainOrOuter(r)
+            case EqualNullSafe(l, r) => !plainOrOuter(l) || !plainOrOuter(r)
+            case other => readsMergedKey(other)
+          }
+        }
         val countBugResult = if (mayHaveCountBugOld.isEmpty && computedCountBugResult.isDefined &&
-            ((newPlan.exists(_.isInstanceOf[DomainJoin]) && !countBugResultForEveryRow) ||
+            (((newPlan.exists(_.isInstanceOf[DomainJoin]) || conditionOverMergedKeys) &&
+              !countBugResultForEveryRow) ||
               (groupedTop && computedCountBugResult.exists(_.value == null)))) {
           None
         } else {
