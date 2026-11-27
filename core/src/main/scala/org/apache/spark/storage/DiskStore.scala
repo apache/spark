@@ -27,12 +27,13 @@ import scala.collection.mutable.ListBuffer
 
 import com.google.common.io.Closeables
 import io.netty.channel.DefaultFileRegion
+import io.netty.handler.stream.ChunkedStream
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.network.buffer.ManagedBuffer
-import org.apache.spark.network.util.{AbstractFileRegion, JavaUtils}
+import org.apache.spark.network.util.{AbstractFileRegion, JavaUtils, LimitedInputStream}
 import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.array.ByteArrayMethods
@@ -49,6 +50,7 @@ private[spark] class DiskStore(
 
   private val minMemoryMapBytes = conf.get(config.STORAGE_MEMORY_MAP_THRESHOLD)
   private val maxMemoryMapBytes = conf.get(config.MEMORY_MAP_LIMIT_FOR_TESTS)
+  private val sslChunkSize = conf.get(config.Network.NETWORK_SSL_MAX_ENCRYPTED_BLOCK_SIZE).toInt
   private val blockSizes = new ConcurrentHashMap[BlockId, Long]()
 
   private val shuffleServiceFetchRddEnabled = conf.get(config.SHUFFLE_SERVICE_ENABLED) &&
@@ -125,7 +127,7 @@ private[spark] class DiskStore(
       new EncryptedBlockData(f, blockSize, conf, key)
 
     case _ =>
-      new DiskBlockData(minMemoryMapBytes, maxMemoryMapBytes, f, blockSize)
+      new DiskBlockData(minMemoryMapBytes, maxMemoryMapBytes, sslChunkSize, f, blockSize)
   }
 
   def remove(blockId: BlockId): Boolean = {
@@ -174,6 +176,7 @@ private[spark] class DiskStore(
 private class DiskBlockData(
     minMemoryMapBytes: Long,
     maxMemoryMapBytes: Long,
+    sslChunkSize: Int,
     file: File,
     blockSize: Long) extends BlockData {
 
@@ -192,7 +195,7 @@ private class DiskBlockData(
    * Please see `ManagedBuffer.convertToNettyForSsl()` for more details.
    */
   override def toNettyForSsl(): AnyRef =
-    toChunkedByteBuffer(ByteBuffer.allocate).toNettyForSsl
+    new ChunkedStream(new LimitedInputStream(new FileInputStream(file), blockSize), sslChunkSize)
 
   override def toChunkedByteBuffer(allocator: (Int) => ByteBuffer): ChunkedByteBuffer = {
     Utils.tryWithResource(open()) { channel =>
@@ -245,7 +248,8 @@ private[spark] class EncryptedBlockData(
   override def toNetty(): Object = new ReadableChannelFileRegion(open(), blockSize)
 
   override def toNettyForSsl(): AnyRef =
-    toChunkedByteBuffer(ByteBuffer.allocate).toNettyForSsl
+    new ChunkedStream(
+      toInputStream(), conf.get(config.Network.NETWORK_SSL_MAX_ENCRYPTED_BLOCK_SIZE).toInt)
 
   override def toChunkedByteBuffer(allocator: Int => ByteBuffer): ChunkedByteBuffer = {
     val source = open()

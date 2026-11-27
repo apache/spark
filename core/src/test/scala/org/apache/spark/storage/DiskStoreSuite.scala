@@ -17,11 +17,14 @@
 
 package org.apache.spark.storage
 
+import java.io.ByteArrayOutputStream
 import java.nio.{ByteBuffer, MappedByteBuffer}
 import java.nio.file.Files
 import java.util.{Arrays, Random}
 
+import io.netty.buffer.UnpooledByteBufAllocator
 import io.netty.channel.FileRegion
+import io.netty.handler.stream.ChunkedStream
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config
@@ -160,11 +163,31 @@ class DiskStoreSuite extends SparkFunSuite {
       "input stream" -> readViaInputStream _,
       "chunked byte buffer" -> readViaChunkedByteBuffer _,
       "nio byte buffer" -> readViaNioBuffer _,
-      "managed buffer" -> readViaManagedBuffer _
+      "managed buffer" -> readViaManagedBuffer _,
+      "netty for ssl" -> ((d: BlockData) => readViaNettyForSsl(d, 64 * 1024))
     ).foreach { case (name, fn) =>
       val readData = fn(blockData)
       assert(readData.length === blockData.size, s"Size of data read via $name did not match.")
       assert(Arrays.equals(testData, readData), s"Data read via $name did not match.")
+    }
+  }
+
+  test("SPARK-62331: toNettyForSsl streams disk blocks in chunks") {
+    val chunkSize = 16 * 1024
+    val testData = new Array[Byte](200 * 1024)
+    new Random().nextBytes(testData)
+
+    val conf = new SparkConf()
+      .set(config.Network.NETWORK_SSL_MAX_ENCRYPTED_BLOCK_SIZE, chunkSize.toLong)
+    val diskBlockManager = new DiskBlockManager(conf, deleteFilesOnStop = true, isDriver = false)
+    Seq(None, Some(CryptoStreamUtils.createKey(conf))).foreach { key =>
+      val diskStore = new DiskStore(conf, diskBlockManager, new SecurityManager(conf, key))
+      val blockId = BlockId("rdd_1_2")
+      diskStore.putBytes(blockId, new ChunkedByteBuffer(ByteBuffer.wrap(testData)))
+
+      val readData = readViaNettyForSsl(diskStore.getBytes(blockId), chunkSize)
+      assert(Arrays.equals(testData, readData), s"Data did not match (encrypted: ${key.isDefined})")
+      assert(diskStore.remove(blockId))
     }
   }
 
@@ -200,6 +223,27 @@ class DiskStoreSuite extends SparkFunSuite {
 
     byteChannel.close()
     byteChannel.getData
+  }
+
+  private def readViaNettyForSsl(data: BlockData, chunkSize: Int): Array[Byte] = {
+    val stream = data.toNettyForSsl().asInstanceOf[ChunkedStream]
+    val out = new ByteArrayOutputStream()
+    try {
+      while (!stream.isEndOfInput) {
+        val chunk = stream.readChunk(UnpooledByteBufAllocator.DEFAULT)
+        if (chunk != null) {
+          try {
+            assert(chunk.readableBytes() <= chunkSize)
+            chunk.readBytes(out, chunk.readableBytes())
+          } finally {
+            chunk.release()
+          }
+        }
+      }
+    } finally {
+      stream.close()
+    }
+    out.toByteArray
   }
 
 }

@@ -19,6 +19,8 @@ package org.apache.spark.internal.config
 
 import java.util.concurrent.TimeUnit
 
+import org.apache.spark.network.util.ByteUnit
+
 private[spark] object Network {
 
   private[spark] val NETWORK_CRYPTO_SASL_FALLBACK =
@@ -32,6 +34,12 @@ private[spark] object Network {
       .version("2.2.0")
       .booleanConf
       .createWithDefault(false)
+
+  private[spark] val NETWORK_SSL_MAX_ENCRYPTED_BLOCK_SIZE =
+    ConfigBuilder("spark.network.ssl.maxEncryptedBlockSize")
+      .version("4.0.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("64k")
 
   private[spark] val NETWORK_REMOTE_READ_NIO_BUFFER_CONVERSION =
     ConfigBuilder("spark.network.remoteReadNioBufferConversion")
