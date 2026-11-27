@@ -653,11 +653,13 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         // decorrelation groups it by the outer columns, so it returns no row for an outer row
         // without matching rows, and constructLeftJoins gives such a row the result of the top
         // Aggregate over no rows (see evalSubqueryOnZeroTups), e.g. 0 instead of 1 for COUNT(*)
-        // over a MAX. Where constructLeftJoins handles the count bug, the result for such a row
-        // is computed from the subquery before decorrelation instead, if possible (see
-        // evalSubqueryOnEmptyCorrelatedInput), and constructLeftJoins uses it. Otherwise, e.g.
-        // with a filter between the Aggregates, the subquery keeps the handling of before. So
-        // does every subquery with LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR.
+        // over a MAX. Where constructLeftJoins handles the count bug after DecorrelateInnerQuery,
+        // the result for such a row is computed from the subquery before decorrelation instead,
+        // if possible (see evalSubqueryOnEmptyCorrelatedInput), and constructLeftJoins uses it.
+        // Otherwise, e.g. with a filter between the Aggregates, the subquery keeps the handling of
+        // before. So does every subquery with
+        // LEGACY_SCALAR_SUBQUERY_NESTED_AGGREGATE_COUNT_BUG_BEHAVIOR or
+        // LEGACY_SCALAR_SUBQUERY_COUNT_BUG_HANDLING, or with DecorrelateInnerQuery disabled.
         // The result is kept when this rule runs again on the decorrelated subquery.
         val computedCountBugResult = if (mayHaveCountBugOld.isDefined) {
           countBugResultOld

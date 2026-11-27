@@ -418,7 +418,8 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
       val coalescedP = between.select(coalesce($"p", zero).as("q"))
       assert(countBugResult(coalescedP, Seq(count($"q"))) == Some("1"), f)
     }
-    // Nor with the legacy conf, or where the count bug is not handled at all.
+    // Nor with the legacy confs, or with DecorrelateInnerQuery disabled, where the subquery keeps
+    // the handling of before.
     asBefore {
       assert(countBugResult(correlated(max($"d"))).isEmpty)
       assert(countBugHandling(correlated(max($"d"))) == inConstructLeftJoins)
