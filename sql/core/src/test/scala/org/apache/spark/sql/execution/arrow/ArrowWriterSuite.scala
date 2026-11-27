@@ -1311,8 +1311,11 @@ class ArrowWriterSuite extends SparkFunSuite {
     val context = TaskContext.empty()
     try {
       intercept[IOException] {
-        ArrowWriterWrapper.createAndStartArrowWriter(new StructType().add("s", StringType),
-          "UTC", "ArrowWriterSuite", largeVarTypes = false, failingOut, context)
+        val input = new ArrowWriterWrapper.InputWriter(context)
+        input.withInputWrite {
+          input.createAndStartArrowWriter(new StructType().add("s", StringType),
+            "UTC", "ArrowWriterSuite", largeVarTypes = false, failingOut)
+        }
       }
     } finally {
       context.markTaskCompleted(None)
