@@ -27,8 +27,8 @@ import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Copy, Delete, Disc
 import org.apache.spark.sql.catalyst.trees.TreePattern.MERGE_INTO_TABLE
 import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{COPY_OPERATION, INSERT_OPERATION, OPERATION_COLUMN, UPDATE_OPERATION}
-import org.apache.spark.sql.connector.catalog.SupportsRowLevelOperations
-import org.apache.spark.sql.connector.write.{RowLevelOperationTable, SupportsDelta}
+import org.apache.spark.sql.connector.catalog.{SupportsRowLevelOperations, TableCapability}
+import org.apache.spark.sql.connector.write.{RowLevelOperationInfoImpl, RowLevelOperationTable, SupportsDelta}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.MERGE
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table}
@@ -57,6 +57,8 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
           checkNoGeneratedColumns(r, MERGE)
           validateMergeIntoConditions(m)
 
+          val (readRelation, writeRelation) = buildInsertOnlyRelations(r, cond)
+
           // NOT MATCHED conditions may only refer to columns in source so they can be pushed down
           val insertAction = removeMetadataAssignments(notMatchedActions).head
             .asInstanceOf[InsertAction]
@@ -69,18 +71,19 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
           }
 
           // there is only one NOT MATCHED action, use a left anti join to remove any matching rows
-          // and switch to using a regular append instead of a row-level MERGE operation
-          // only unmatched source rows that match the condition are appended to the table
-          val joinPlan = Join(filteredSource, r, LeftAnti, Some(cond), JoinHint.NONE)
+          // and append only unmatched source rows that satisfy the action condition;
+          // share the RowLevelOperationTable between scan and write so connectors can enforce
+          // MERGE isolation levels
+          val joinPlan = Join(filteredSource, readRelation, LeftAnti, Some(cond), JoinHint.NONE)
 
           val output = insertAction.assignments.map(_.value)
-          val outputColNames = r.output.map(_.name)
+          val outputColNames = dataAttrs(r).map(_.name)
           val projectList = output.zip(outputColNames).map { case (expr, name) =>
             Alias(expr, name)()
           }
           val project = Project(projectList, joinPlan)
 
-          InsertOnlyMerge(r, project)
+          InsertOnlyMerge(writeRelation, project, r)
 
         case _ =>
           m
@@ -95,10 +98,13 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
           checkNoGeneratedColumns(r, MERGE)
           validateMergeIntoConditions(m)
 
+          val (readRelation, writeRelation) = buildInsertOnlyRelations(r, cond)
+
           // there are only NOT MATCHED actions, use a left anti join to remove any matching rows
-          // and switch to using a regular append instead of a row-level MERGE operation
-          // only unmatched source rows that match action conditions are appended to the table
-          val joinPlan = Join(source, r, LeftAnti, Some(cond), JoinHint.NONE)
+          // and append only unmatched source rows that satisfy an action condition;
+          // share the RowLevelOperationTable between scan and write so connectors can enforce
+          // MERGE isolation levels
+          val joinPlan = Join(source, readRelation, LeftAnti, Some(cond), JoinHint.NONE)
 
           val notMatchedInstructions = removeMetadataAssignments(notMatchedActions).map {
             case InsertAction(cond, assignments) =>
@@ -122,7 +128,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
             output = generateExpandOutput(dataAttrs(r), outputs),
             joinPlan)
 
-          InsertOnlyMerge(r, mergeRows)
+          InsertOnlyMerge(writeRelation, mergeRows, r)
 
         case _ =>
           m
@@ -152,6 +158,32 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
         case _ =>
           m
       }
+  }
+
+  // aligns read and write relations for an insert-only MERGE, wrapping the target in a shared
+  // RowLevelOperationTable when the table opts in (and does not use the V1 batch-write fallback,
+  // which would re-optimize analyzedQuery and invoke newScanBuilder a second time)
+  private def buildInsertOnlyRelations(
+      relation: DataSourceV2Relation,
+      cond: Expression): (DataSourceV2Relation, DataSourceV2Relation) = {
+    val dataOutput = dataAttrs(relation)
+    relation.table match {
+      case tbl: SupportsRowLevelOperations
+          if !tbl.capabilities().contains(TableCapability.V1_BATCH_WRITE) =>
+        val info = RowLevelOperationInfoImpl(MERGE, relation.options)
+        val opBuilder = Option(tbl.newInsertOnlyMergeOperationBuilder(info))
+          .flatMap(opt => Option(opt.orElse(null)))
+        opBuilder.map { builder =>
+          val operationTable = RowLevelOperationTable(tbl, builder.build(), isInsertOnly = true)
+          val referencedMetadataAttrs = resolveReferencedMetadataAttrs(relation, Seq(cond))
+          val readRelation =
+            buildRelationWithAttrs(relation, operationTable, referencedMetadataAttrs)
+          val writeRelation = relation.copy(table = operationTable, output = dataOutput)
+          (readRelation, writeRelation)
+        }.getOrElse((relation, relation.copy(output = dataOutput)))
+      case _ =>
+        (relation, relation.copy(output = dataOutput))
+    }
   }
 
   // the aligned assignments of UPDATE and INSERT actions may include the metadata columns that

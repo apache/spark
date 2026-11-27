@@ -26,7 +26,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 /**
  * A logical representation of a data source DELETE, UPDATE, or MERGE operation that requires
- * rewriting data.
+ * rewriting data or coordinating an insert-only MERGE.
  *
  * @since 3.3.0
  */

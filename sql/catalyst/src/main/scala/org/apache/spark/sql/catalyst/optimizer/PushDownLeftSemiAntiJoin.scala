@@ -22,6 +22,8 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.LEFT_SEMI_OR_ANTI_JOIN
+import org.apache.spark.sql.connector.write.RowLevelOperationTable
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2RelationBase}
 
 /**
  * This rule is a variant of [[PushPredicateThroughNonJoin]] which can handle
@@ -61,10 +63,13 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
       }
 
     // LeftSemi/LeftAnti over Aggregate, only push down if join can be planned as broadcast join.
+    // Skip when rightOp still contains an unpushed DSv2 relation, since canPlanAsBroadcastHashJoin
+    // invokes computeStats() before V2ScanRelationPushDown has built the scan.
     case join @ Join(agg: Aggregate, rightOp, LeftSemiOrAnti(_), joinCond, _)
         if agg.aggregateExpressions.forall(_.deterministic) && agg.groupingExpressions.nonEmpty &&
           !agg.aggregateExpressions.exists(ScalarSubquery.hasCorrelatedScalarSubquery) &&
           canPushThroughCondition(agg.children, joinCond, rightOp) &&
+          !hasUnpushedV2Relation(rightOp) &&
           canPlanAsBroadcastHashJoin(join, conf) =>
       val aliasMap = getAliasMap(agg)
       val canPushDownPredicate = (predicate: Expression) => {
@@ -83,9 +88,12 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
       val partitionAttrs = AttributeSet(w.partitionSpec.flatMap(_.references)) ++ rightOp.outputSet
       pushDownJoin(join, _.references.subsetOf(partitionAttrs), _.reduce(And))
 
-    // LeftSemi/LeftAnti over Union
+    // LeftSemi/LeftAnti over Union.
+    // Do not clone a RowLevelOperationTable into multiple Union branches, which would invoke
+    // RowLevelOperation.newScanBuilder multiple times and break the 1:1 scan-to-write handoff.
     case Join(union: Union, rightOp, LeftSemiOrAnti(joinType), joinCond, hint)
-        if canPushThroughCondition(union.children, joinCond, rightOp) =>
+        if !hasRowLevelOperationTable(rightOp) &&
+          canPushThroughCondition(union.children, joinCond, rightOp) =>
       if (joinCond.isEmpty) {
         // Push down the Join below Union
         val newGrandChildren = union.children.map { Join(_, rightOp, joinType, joinCond, hint) }
@@ -108,6 +116,17 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
         if PushPredicateThroughNonJoin.canPushThrough(u) && u.expressions.forall(_.deterministic) =>
       val validAttrs = u.child.outputSet ++ rightOp.outputSet
       pushDownJoin(join, _.references.subsetOf(validAttrs), _.reduce(And))
+  }
+
+  private def hasUnpushedV2Relation(plan: LogicalPlan): Boolean = {
+    plan.exists(_.isInstanceOf[DataSourceV2RelationBase])
+  }
+
+  private def hasRowLevelOperationTable(plan: LogicalPlan): Boolean = {
+    plan.exists {
+      case r: DataSourceV2Relation => r.table.isInstanceOf[RowLevelOperationTable]
+      case _ => false
+    }
   }
 
   /**

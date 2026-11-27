@@ -81,6 +81,7 @@ class InMemoryRowLevelOperationTable private[catalog] (
   private final val PARTITION_COLUMN_REF = FieldReference(PartitionKeyColumn.name)
   private final val INDEX_COLUMN_REF = FieldReference(IndexColumn.name)
   private final val SUPPORTS_DELTAS = "supports-deltas"
+  private final val SUPPORTS_INSERT_ONLY_MERGE = "supports-insert-only-merge"
   private final val SPLIT_UPDATES = "split-updates"
   private final val NO_METADATA = "no-metadata"
   private final val USE_CATALYST_RUNTIME_FILTERING = "use-catalyst-runtime-filtering"
@@ -129,6 +130,30 @@ class InMemoryRowLevelOperationTable private[catalog] (
     copied.lastWriteInfo = lastWriteInfo
     copied.lastWriteLog = lastWriteLog
     copied
+  }
+
+  override def newInsertOnlyMergeOperationBuilder(
+      info: RowLevelOperationInfo): util.Optional[RowLevelOperationBuilder] = {
+    if (properties.getOrDefault(SUPPORTS_INSERT_ONLY_MERGE, "false") == "true") {
+      util.Optional.of(() => InsertOnlyMergeOperation(info.command, info.options))
+    } else {
+      util.Optional.empty()
+    }
+  }
+
+  case class InsertOnlyMergeOperation(command: Command, options: CaseInsensitiveStringMap)
+    extends RowLevelOperation with RowLevelOperationWithOptions {
+
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+      newRowLevelScanBuilder(options)(_ => ())
+    }
+
+    override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
+      lastWriteInfo = info
+      InMemoryRowLevelOperationTable.this.newWriteBuilder(info)
+    }
+
+    override def description(): String = "InMemoryInsertOnlyMergeOperation"
   }
 
   override def newRowLevelOperationBuilder(

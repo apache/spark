@@ -220,15 +220,24 @@ object AppendData {
  * Append data to an existing table as the result of an insert-only MERGE rewrite.
  *
  * Functionally equivalent to [[AppendData]] but distinguishes the row-level MERGE rewrite path.
+ *
+ * @param table a plan that references the target table (wrapped in a [[RowLevelOperationTable]]
+ *              when the target supports row-level operations)
+ * @param query a query with records to insert
+ * @param originalTable a plan for the original table for which the MERGE command was triggered
+ * @param write a logical write, if already constructed
+ * @param analyzedQuery the analyzed query, kept for the v1 batch-write fallback path
  */
 case class InsertOnlyMerge(
     table: NamedRelation,
     query: LogicalPlan,
+    originalTable: NamedRelation,
     write: Option[Write] = None,
     analyzedQuery: Option[LogicalPlan] = None) extends V2WriteCommand with TransactionalWrite {
   override val isByName: Boolean = false
   override val withSchemaEvolution: Boolean = false
   override val writePrivileges: Set[TableWritePrivilege] = Set(TableWritePrivilege.INSERT)
+  override def stringArgs: Iterator[Any] = Iterator(table, query, write)
   override def withNewQuery(newQuery: LogicalPlan): InsertOnlyMerge = copy(query = newQuery)
   override def withNewTable(newTable: NamedRelation): InsertOnlyMerge = copy(table = newTable)
   override def storeAnalyzedQuery(): Command = copy(analyzedQuery = Some(query))
@@ -402,7 +411,7 @@ case class ReplaceData(
 
   lazy val operation: RowLevelOperation = {
     EliminateSubqueryAliases(table) match {
-      case ExtractV2Table(RowLevelOperationTable(_, operation)) =>
+      case ExtractV2Table(RowLevelOperationTable(_, operation, _)) =>
         operation
       case _ =>
         throw new AnalysisException(
@@ -492,7 +501,7 @@ case class WriteDelta(
 
   lazy val operation: SupportsDelta = {
     EliminateSubqueryAliases(table) match {
-      case ExtractV2Table(RowLevelOperationTable(_, operation)) =>
+      case ExtractV2Table(RowLevelOperationTable(_, operation, _)) =>
         operation.asInstanceOf[SupportsDelta]
       case _ =>
         throw new AnalysisException(

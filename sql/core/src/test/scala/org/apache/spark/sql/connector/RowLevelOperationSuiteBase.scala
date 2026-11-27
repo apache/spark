@@ -141,6 +141,23 @@ abstract class RowLevelOperationSuiteBase
     append(schemaString, jsonData)
   }
 
+  protected def createAndInitTable(
+      schemaString: String,
+      jsonData: String,
+      additionalProps: Map[String, String]): Unit = {
+    val props = new java.util.HashMap[String, String](extraTableProps)
+    additionalProps.foreach { case (k, v) => props.put(k, v) }
+    val columns = CatalogV2Util.structTypeToV2Columns(StructType.fromDDL(schemaString))
+    val transforms = Array[Transform](identity(reference(Seq("dep"))))
+    val tableInfo = new TableInfo.Builder()
+      .withColumns(columns)
+      .withPartitions(transforms)
+      .withProperties(props)
+      .build()
+    catalog.createTable(ident, tableInfo)
+    append(schemaString, jsonData)
+  }
+
   protected def append(schemaString: String, jsonData: String): Unit = {
     withSQLConf(SQLConf.LEGACY_RESPECT_NULLABILITY_IN_TEXT_DATASET_CONVERSION.key -> "true") {
       val df = toDF(jsonData, schemaString)
@@ -170,7 +187,8 @@ abstract class RowLevelOperationSuiteBase
     val tables = withQueryExecutionsCaptured(spark)(func).flatMap { qe =>
       collectWithSubqueries(qe.executedPlan) {
         case BatchScanExec(_, _, _, _, table: TxnTable, _, _, _) => table
-        case BatchScanExec(_, _, _, _, RowLevelOperationTable(table: TxnTable, _), _, _, _) => table
+        case BatchScanExec(_, _, _, _, RowLevelOperationTable(table: TxnTable, _, _), _, _, _) =>
+          table
       }
     }
     (catalog.lastTransaction, indexByName(tables))
