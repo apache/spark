@@ -26,7 +26,7 @@ import org.apache.hadoop.hive.ql.io.sarg.SearchArgument.Builder
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgumentFactory.newBuilder
 import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable
 
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localDateTimeToMicros, localDateToDays, toJavaDate, toJavaTimestamp}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{fromJavaDate, instantToMicros, localDateTimeToMicros, localDateToDays, toJavaDate, toJavaTimestamp}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.orc.types.ops.OrcTypeOps
@@ -288,22 +288,24 @@ private[sql] object OrcFilters extends OrcFiltersBase {
     // NOTE: For all case branches dealing with leaf predicates below, the additional `startAnd()`
     // call is mandatory. ORC `SearchArgument` builder requires that all leaf predicates must be
     // wrapped by a "parent" predicate (`And`, `Or`, or `Not`).
-    // ORC takes a DATE as java.sql.Date, so a date that the hybrid Julian/Gregorian calendar
-    // skips (1582-10-05 to 1582-10-14) would be pushed down as 1582-10-15.
-    def isDateInCalendarGap(value: Any): Boolean = value match {
+    // ORC takes a DATE as java.sql.Date in the JVM time zone. A date that does not survive this
+    // conversion, such as a day that the hybrid Julian/Gregorian calendar or a time zone
+    // transition skips, would be pushed down as another date.
+    def isDateChangedByJavaConversion(value: Any): Boolean = value match {
       case d: LocalDate =>
-        d.isAfter(LocalDate.of(1582, 10, 4)) && d.isBefore(LocalDate.of(1582, 10, 15))
+        val days = localDateToDays(d)
+        fromJavaDate(toJavaDate(days)) != days
       case _ => false
     }
 
     expression match {
-      case EqualTo(_, v) if isDateInCalendarGap(v) => None
-      case EqualNullSafe(_, v) if isDateInCalendarGap(v) => None
-      case LessThan(_, v) if isDateInCalendarGap(v) => None
-      case LessThanOrEqual(_, v) if isDateInCalendarGap(v) => None
-      case GreaterThan(_, v) if isDateInCalendarGap(v) => None
-      case GreaterThanOrEqual(_, v) if isDateInCalendarGap(v) => None
-      case In(_, values) if values.exists(isDateInCalendarGap) => None
+      case EqualTo(_, v) if isDateChangedByJavaConversion(v) => None
+      case EqualNullSafe(_, v) if isDateChangedByJavaConversion(v) => None
+      case LessThan(_, v) if isDateChangedByJavaConversion(v) => None
+      case LessThanOrEqual(_, v) if isDateChangedByJavaConversion(v) => None
+      case GreaterThan(_, v) if isDateChangedByJavaConversion(v) => None
+      case GreaterThanOrEqual(_, v) if isDateChangedByJavaConversion(v) => None
+      case In(_, values) if values.exists(isDateChangedByJavaConversion) => None
 
       case EqualTo(name, value) if isTimestamp(name) =>
         val (lower, upper) = timestampRange(value)
