@@ -291,6 +291,21 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-62118: only share JSON paths with the same Unicode output setting") {
+    val escaped = GetJsonObject(jsonAttr, Literal("$.a"), combineUnicodeSurrogates = false)
+    val query = testRelation2.select(
+      escaped.as("escaped"),
+      GetJsonObject(jsonAttr, Literal("$.a"), combineUnicodeSurrogates = true).as("a"),
+      GetJsonObject(jsonAttr, Literal("$.b"), combineUnicodeSurrogates = true).as("b"))
+    val shared = MultiGetJsonObject(jsonAttr, Seq("$.a", "$.b"), combineUnicodeSurrogates = true)
+      .as("_shared_json_paths")
+    val expected = testRelation2.select(jsonAttr, shared).select(
+      escaped.as("escaped"),
+      GetStructField(shared.toAttribute, 0).as("a"),
+      GetStructField(shared.toAttribute, 1).as("b"))
+    comparePlans(Optimizer.execute(query.analyze), expected.analyze)
+  }
+
   test("SPARK-47670: shared get_json_object parsing is disabled by default") {
     assert(!new SQLConf().getJsonObjectSharedParsingEnabled)
     val query = testRelation2.select(
@@ -424,9 +439,9 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
           case (getStructField: GetStructField, 2) =>
             assert(getStructField.child.semanticEquals(sharedAttr))
             assert(getStructField.ordinal == 1)
-          case (GetJsonObject(_, Literal(path: UTF8String, StringType)), 1) =>
+          case (GetJsonObject(_, Literal(path: UTF8String, StringType), _), 1) =>
             assert(path.toString == "$.b")
-          case (GetJsonObject(_, Literal(path: UTF8String, StringType)), 3) =>
+          case (GetJsonObject(_, Literal(path: UTF8String, StringType), _), 3) =>
             assert(path.toString == "$[0].b")
           case (child, index) =>
             fail(s"Unexpected coalesce branch $index after sharing: $child")
@@ -472,7 +487,7 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
         }
 
         assert(projectList.exists {
-          case Alias(GetJsonObject(_, Literal(path: UTF8String, StringType)), "a") =>
+          case Alias(GetJsonObject(_, Literal(path: UTF8String, StringType), _), "a") =>
             path.toString == "$.a"
           case _ => false
         })
@@ -552,7 +567,7 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
     assert(shared.fallbackPaths == Seq("$.a", "$.c.d", "$.items[0].id", "$.e"))
 
     val remainingPaths = optimized.expressions.flatMap(_.collect {
-      case GetJsonObject(_, Literal(path: UTF8String, StringType)) => path.toString
+      case GetJsonObject(_, Literal(path: UTF8String, StringType), _) => path.toString
     })
     assert(legacyPaths.forall(remainingPaths.contains))
   }
@@ -573,7 +588,7 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
       .child.asInstanceOf[MultiGetJsonObject]
     assert(shared.fallbackPaths == Seq("$.a.b", "$.a.c", "$.d"))
     assert(optimized.expressions.exists(_.exists {
-      case GetJsonObject(_, Literal(path: UTF8String, StringType)) => path.toString == "$.a"
+      case GetJsonObject(_, Literal(path: UTF8String, StringType), _) => path.toString == "$.a"
       case _ => false
     }))
   }
@@ -594,7 +609,7 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
       .child.asInstanceOf[MultiGetJsonObject]
     assert(shared.fallbackPaths == Seq("$[0].a", "$[0].b", "$[1]"))
     assert(optimized.expressions.exists(_.exists {
-      case GetJsonObject(_, Literal(path: UTF8String, StringType)) => path.toString == "$[0]"
+      case GetJsonObject(_, Literal(path: UTF8String, StringType), _) => path.toString == "$[0]"
       case _ => false
     }))
   }

@@ -5158,6 +5158,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val JSON_COMBINE_UNICODE_SURROGATES_IN_UTF8 =
+    buildConf("spark.sql.json.combineUnicodeSurrogatesInUtf8.enabled")
+      .doc("When true, get_json_object, json_tuple, JSON_TABLE, and JSON_QUERY write " +
+        "supplementary Unicode characters directly in UTF-8 JSON output instead of " +
+        "escaping them as UTF-16 surrogate pairs. This includes JSON_QUERY scalar strings " +
+        "with KEEP QUOTES.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val JSON_EXPRESSION_OPTIMIZATION =
     buildConf("spark.sql.optimizer.enableJsonExpressionOptimization")
       .doc("Whether to optimize JSON expressions in SQL optimizer. It includes pruning " +
@@ -10876,6 +10887,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   override def sessionLocalTimeZone: String = getConf(SQLConf.SESSION_LOCAL_TIMEZONE)
 
   def jsonGeneratorIgnoreNullFields: Boolean = getConf(SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS)
+
+  def jsonCombineUnicodeSurrogatesInUtf8: Boolean =
+    getConf(SQLConf.JSON_COMBINE_UNICODE_SURROGATES_IN_UTF8)
 
   def jsonExpressionOptimization: Boolean = getConf(SQLConf.JSON_EXPRESSION_OPTIMIZATION)
 
