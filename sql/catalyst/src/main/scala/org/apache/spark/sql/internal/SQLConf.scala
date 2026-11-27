@@ -1093,6 +1093,17 @@ object SQLConf {
       .longConf
       .createWithDefault(67108864L)
 
+  val RUNTIME_BLOOM_FILTER_COMPOSITE_ENABLED =
+    buildConf("spark.sql.optimizer.runtime.bloomFilter.composite.enabled")
+      .doc("When true, a shuffle join on two or more equi-join keys that all come from the same " +
+        "scan on both sides also gets one Bloom filter over the hash of the whole key tuple, " +
+        "besides the Bloom filter on each key. It can prune key combinations that never occur " +
+        "together on the other side.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val RUNTIME_ROW_LEVEL_OPERATION_GROUP_FILTER_ENABLED =
     buildConf("spark.sql.optimizer.runtime.rowLevelOperationGroupFilter.enabled")
       .doc("Enables runtime filtering for group-based and delta-based row-level operations. " +
@@ -10185,6 +10196,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def runtimeBloomFilterPerPartitionEnabled: Boolean =
     getConf(RUNTIME_BLOOM_FILTER_PER_PARTITION_ENABLED)
+
+  def runtimeFilterCompositeBloomFilterEnabled: Boolean =
+    getConf(RUNTIME_BLOOM_FILTER_COMPOSITE_ENABLED)
 
   def runtimeFilterCreationSideThreshold: Long =
     getConf(RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD)
