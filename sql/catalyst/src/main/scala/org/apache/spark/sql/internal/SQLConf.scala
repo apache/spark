@@ -1293,16 +1293,9 @@ object SQLConf {
     buildConf("spark.sql.legacy.asOfJoin.keepBothUsingColumns")
       .internal()
       .doc("When true, a batch DataFrame AS-OF join on column names keeps the key column of " +
-        "both sides, as before Spark 4.4. When false, it returns one column per name, placed " +
-        "first, as SQL ASOF JOIN ... USING does. This affects DataFrame joins only, and is " +
-        "read when the DataFrame is built. A DataFrame AS-OF join with a streaming side always " +
-        "keeps the key column of both sides. A streaming query keeps the value it started with " +
-        "in its checkpoint, also in the session of foreachBatch, and a checkpoint written " +
-        "before this config reads true. Then a batch join in the query gets both key columns " +
-        "back for the state above it, unless a select or withColumn is between the join and " +
-        "the stateful operator, or a union, INTERSECT, EXCEPT or CTE is around the join. For " +
-        "a checkpoint with false, a DataFrame built with true changes the schema of the state, " +
-        "and the query fails to restart.")
+        "both sides, as before Spark 4.4, instead of one column per name. It affects DataFrame " +
+        "joins only, and is read when the DataFrame is built. A streaming query keeps the value " +
+        "of its checkpoint, and a checkpoint written before this config reads true.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf

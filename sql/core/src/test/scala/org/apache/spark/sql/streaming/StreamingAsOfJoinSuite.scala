@@ -346,6 +346,36 @@ class StreamingAsOfJoinSuite extends StreamTest {
     }
   }
 
+  // A positional rename written for the old output fails when the DataFrame is built, before
+  // the query starts, so the restart cannot help with it. Fails if a join with a streaming side
+  // stops taking the old names, if the batch join takes them without the legacy config, or if
+  // the query does not restart from the Spark 4.3.0 checkpoint with the config set.
+  test("positional toDF rename for the old output after a DataFrame ASOF join with using " +
+      "columns in a stream") {
+    val names = Seq("ts", "sym", "qty", "ts2", "sym2", "bid")
+    // A join with a streaming side keeps both key columns, so the old names fit.
+    assert(joinTradesWithQuotes(MemoryStream[(Int, String, Int)]).toDF(names: _*).columns.toSeq ==
+      names)
+    val e = intercept[AnalysisException] {
+      batchTradeWithQuote().toDF(names: _*)
+    }
+    assert(e.getCondition == "ASSIGNMENT_ARITY_MISMATCH")
+    withTempDir { checkpoint =>
+      copyCheckpoint(batchJoinInStreamCheckpoint, checkpoint)
+      val input = MemoryStream[Int]
+      input.addData(1, 2)
+      input.addData(1, 3)
+      val join = withSQLConf(keepBothUsingColumns -> "true") {
+        batchTradeWithQuote().toDF(names: _*)
+      }
+      testStream(dedupWithBatchJoin(input, join))(
+        StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+        AddData(input, 3, 4),
+        CheckNewAnswer(Row(4, 5, "A", 1, 2, "A", 100)),
+        StopStream)
+    }
+  }
+
   // Two chained batch joins on column names. The last restart, with a DataFrame where both joins
   // have both key columns themselves, needs a state where both have them. Fails if the start
   // gives both key columns back to only one of the joins.

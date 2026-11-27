@@ -79,6 +79,9 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   checkpoint of an earlier version, or one written with the config on. With a checkpoint that
   Spark 4.4 wrote with the config off, it changes the schema of the state. A restarted query keeps
   the value of the config from its checkpoint, also in the session of its `foreachBatch` function.
+  A positional rename with `toDF` that lists both key columns of a batch join fails with
+  `ASSIGNMENT_ARITY_MISMATCH` when the DataFrame is built, before the query starts. To fix it, set
+  the config before building the DataFrame, or list the columns of the new output.
 
 - Since Spark 4.4, a column derived from a typed Scala UDF with a primitive parameter is nullable
   when the input of the parameter can be null, as the UDF returns NULL for a NULL input.
