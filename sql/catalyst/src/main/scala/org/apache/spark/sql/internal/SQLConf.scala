@@ -1290,17 +1290,19 @@ object SQLConf {
       .createWithDefault(true)
 
   val LEGACY_DATAFRAME_AS_OF_JOIN_KEEP_BOTH_USING_COLUMNS =
-    buildConf("spark.sql.legacy.dataFrameAsOfJoin.keepBothUsingColumns")
+    buildConf("spark.sql.legacy.asOfJoin.keepBothUsingColumns")
       .internal()
       .doc("When true, a batch DataFrame AS-OF join on column names keeps the key column of " +
         "both sides, as before Spark 4.4. When false, it returns one column per name, placed " +
-        "first, as SQL ASOF JOIN ... USING does. A streaming DataFrame AS-OF join on column " +
-        "names always keeps the key column of both sides, so a query that restarts from an " +
-        "existing checkpoint keeps the schema of its state. A streaming query keeps the value " +
-        "it started with in its checkpoint, also for the state above the batch joins in it and " +
-        "in the session of foreachBatch. A checkpoint written before this config reads true. " +
-        "For a checkpoint with false, a DataFrame built with true changes the schema of the " +
-        "state, and the query fails to restart.")
+        "first, as SQL ASOF JOIN ... USING does. This affects DataFrame joins only, and is " +
+        "read when the DataFrame is built. A DataFrame AS-OF join with a streaming side always " +
+        "keeps the key column of both sides. A streaming query keeps the value it started with " +
+        "in its checkpoint, also in the session of foreachBatch, and a checkpoint written " +
+        "before this config reads true. Then a batch join in the query gets both key columns " +
+        "back for the state above it, unless a select or withColumn is between the join and " +
+        "the stateful operator, or a union, INTERSECT, EXCEPT or CTE is around the join. For " +
+        "a checkpoint with false, a DataFrame built with true changes the schema of the state, " +
+        "and the query fails to restart.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf

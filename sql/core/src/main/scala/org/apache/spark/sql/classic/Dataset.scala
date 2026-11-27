@@ -843,8 +843,12 @@ class Dataset[T] private[sql](
       tolerance: Column,
       allowExactMatches: Boolean,
       direction: String): DataFrame = {
-    // A streaming join keeps the key column of both sides, so the state of an existing query
-    // keeps its schema when it restarts from its checkpoint.
+    // A join with a streaming input keeps the key column of both sides, so the state of an
+    // existing query keeps its schema when it restarts from its checkpoint. This check sees only
+    // the inputs of this join. A batch join that a streaming query reads later, such as the
+    // static side of a stream-static join, gets one column per name here. When the query
+    // restarts from a checkpoint of an earlier version, it gives that join both key columns
+    // back, unless a select, withColumn, union, INTERSECT, EXCEPT or CTE is in the way.
     if (isStreaming || other.isStreaming || sparkSession.sessionState.conf.getConf(
         SQLConf.LEGACY_DATAFRAME_AS_OF_JOIN_KEEP_BOTH_USING_COLUMNS)) {
       val joinConditions = usingColumns.map { name =>
