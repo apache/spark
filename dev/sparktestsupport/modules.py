@@ -107,7 +107,6 @@ ignored_file_patterns = (
     "/dev/lint-scala",
     "/dev/mima",
     "/dev/reformat-python",
-    "/dev/sbt-checkstyle",
     "/dev/scalafmt",
     "/dev/scalastyle",
     "/dev/structured_logging_style.py",

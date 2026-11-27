@@ -30,7 +30,6 @@ import sbt._
 import sbt.Classpaths.publishOrSkip
 import sbt.Keys._
 import sbt.librarymanagement.{ VersionNumber, SemanticSelector }
-import com.etsy.sbt.checkstyle.CheckstylePlugin.autoImport._
 import com.github.sbt.junit.jupiter.sbt.JupiterPlugin.autoImport._
 import com.here.bom.Bom
 import com.simplytyped.Antlr4Plugin._
@@ -408,8 +407,7 @@ object SparkBuild extends PomBuild {
   /* Enable shared settings on all projects */
   (allProjects ++ optionallyEnabledProjects ++ assemblyProjects ++ copyJarsProjects ++ Seq(spark, tools))
     .foreach(enable(sharedSettings ++ DependencyOverrides.settings ++
-      ExcludedDependencies.settings ++ Checkstyle.settings ++
-      ExcludeShims.settings))
+      ExcludedDependencies.settings ++ ExcludeShims.settings))
 
   /* Enable tests settings for all projects except examples, assembly and tools */
   (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
@@ -1857,17 +1855,6 @@ object Unidoc {
         yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, connectJdbc,
         connectClient, connectShims, protobuf, profiler, udfWorkerProto, udfWorkerCore,
         udfWorkerGrpc),
-  )
-}
-
-object Checkstyle {
-  lazy val settings = Seq(
-    checkstyleSeverityLevel := CheckstyleSeverityLevel.Error,
-    (Compile / checkstyle / javaSource) := baseDirectory.value / "src/main/java",
-    (Test / checkstyle / javaSource) := baseDirectory.value / "src/test/java",
-    checkstyleConfigLocation := CheckstyleConfigLocation.File("dev/checkstyle.xml"),
-    checkstyleOutputFile := baseDirectory.value / "target/checkstyle-output.xml",
-    (Test / checkstyleOutputFile) := baseDirectory.value / "target/checkstyle-output.xml"
   )
 }
 

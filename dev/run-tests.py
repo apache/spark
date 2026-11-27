@@ -103,14 +103,6 @@ def run_scala_style_checks(extra_profiles):
     run_cmd([os.path.join(SPARK_HOME, "dev", "lint-scala"), profiles])
 
 
-def run_java_style_checks(build_profiles):
-    # The same profiles used for building are used to run Checkstyle by SBT as well because
-    # the previous build looks reused for Checkstyle and affecting Checkstyle. See SPARK-27130.
-    profiles = " ".join(build_profiles)
-    print("[info] Checking Java style using SBT with these profiles: ", profiles)
-    run_cmd([os.path.join(SPARK_HOME, "dev", "sbt-checkstyle"), profiles])
-
-
 def run_python_style_checks():
     run_cmd([os.path.join(SPARK_HOME, "dev", "lint-python")])
 
@@ -569,7 +561,6 @@ def main():
         with titled_block(f"Switching to Scala version: {scala_version}"):
             switch_scala_version(scala_version)
 
-    should_run_java_style_checks = False
     if not should_only_test_modules:
         # license checks
         with titled_block("Running Apache RAT checks"):
@@ -581,14 +572,6 @@ def main():
         ):
             with titled_block("Running Scala style checks"):
                 run_scala_style_checks(extra_profiles)
-        if not changed_files or any(
-            f.endswith(".java")
-            or f.endswith("checkstyle.xml")
-            or f.endswith("checkstyle-suppressions.xml")
-            for f in changed_files
-        ):
-            # Run SBT Checkstyle after the build to prevent a side-effect to the build.
-            should_run_java_style_checks = True
         if not changed_files or any(
             f.endswith("lint-python") or f.endswith("pyproject.toml") or f.endswith(".py")
             for f in changed_files
@@ -617,9 +600,6 @@ def main():
         if os.environ.get("SKIP_SCALA_BUILD", "false") != "true":
             with titled_block("Building Spark assembly"):
                 build_spark_assembly_sbt(extra_profiles)
-            if should_run_java_style_checks:
-                with titled_block("Running Java style checks"):
-                    run_java_style_checks(extra_profiles + modules.root.build_profile_flags)
             if not os.environ.get("SKIP_UNIDOC"):
                 with titled_block("Building Unidoc API Documentation"):
                     build_spark_unidoc_sbt(extra_profiles)
