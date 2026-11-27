@@ -32,7 +32,8 @@ import org.scalatest.{BeforeAndAfter, Tag}
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
-import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Row, SparkSession}
+import org.apache.spark.sql.TestingUDT.NullUDT
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.plans.{LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
@@ -2600,6 +2601,122 @@ abstract class StreamingOuterJoinBase extends StreamingJoinSuite {
           AssertOnQuery { q =>
             q.lastProgress.stateOperators.head.numRowsTotal == 1
           }): _*)
+      }
+    }
+  }
+
+  // A negative input is NULL.
+  private def nullIfNegative(name: String): Column = when(col(name) >= 0, col(name))
+
+  private def nullableKeyed(input: MemoryStream[(Int, Int)], side: String): DataFrame =
+    input.toDF().toDF("k", "t")
+      .select(nullIfNegative("k").as(s"${side}k"), timestamp_seconds($"t").as(s"${side}t"))
+      .withWatermark(s"${side}t", "10 seconds")
+
+  private val timeRange = "rt BETWEEN lt - INTERVAL 5 SECONDS AND lt + INTERVAL 5 SECONDS"
+
+  // As in a batch join, a row whose join key has a NULL never matches, so an outer join outputs
+  // it at once, padded with NULLs, and it is not stored. Null-safe equality still matches NULLs,
+  // also on columns whose type's default is NULL, whose rewritten keys are NULL on every row.
+  for {
+    (operator, nullsMatch) <- Seq(("=", false), ("<=>", true))
+    (nullTypedKey, nullTypedColumn) <- Seq(
+      ("", None),
+      (" next to a null-safe key on NULL-typed columns", Some(lit(null))),
+      (" next to a null-safe key on columns of a user-defined type stored as NullType",
+        Some(lit(null).cast(new NullUDT()))))
+  } {
+    test(s"SPARK-61382: full outer join on nullable keys compared by $operator$nullTypedKey") {
+      val leftInput = MemoryStream[(Int, Int)]
+      val rightInput = MemoryStream[(Int, Int)]
+      val (left, right) = (nullableKeyed(leftInput, "l"), nullableKeyed(rightInput, "r"))
+      val joined = (nullTypedColumn match {
+          case Some(c) =>
+            left.withColumn("ln", c).join(right.withColumn("rn", c),
+              expr(s"lk $operator rk AND ln <=> rn AND $timeRange"), "full_outer")
+          case None =>
+            left.join(right, expr(s"lk $operator rk AND $timeRange"), "full_outer")
+        }).select($"lk", $"lt".cast("long"), $"rk", $"rt".cast("long"))
+      val nullRows = if (nullsMatch) {
+        Seq(Row(null, 5L, null, 6L))
+      } else {
+        Seq(Row(null, 5L, null, null), Row(null, null, null, 6L))
+      }
+      withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
+        testStream(joined)(
+          MultiAddData(leftInput, (1, 5), (-1, 5))(rightInput, (1, 6), (-1, 6)),
+          CheckNewAnswer(Row(1, 5L, 1, 6L) +: nullRows: _*),
+          // Both inputs have a watermark, so the watermark moves to 90 seconds only once both
+          // reach time 100, and the next batch evicts the rows at 5 and 6 without output.
+          MultiAddData(leftInput, (2, 100))(rightInput, (3, 100)),
+          CheckNewAnswer(),
+          AddData(leftInput),
+          CheckNewAnswer(),
+          // Only the two rows at 100 remain in state.
+          AssertOnQuery { q =>
+            q.lastProgress.stateOperators.head.numRowsTotal == 2
+          })
+      }
+    }
+  }
+
+  // coalesce is not null intolerant, so the optimizer infers no IS NOT NULL filter on its inputs,
+  // and the NULL keys reach the join of every join type.
+  Seq("inner", "left_outer").foreach { joinType =>
+    test(s"SPARK-61382: $joinType join on coalesce keys with a time range") {
+      val leftInput = MemoryStream[(Int, Int, Int)]
+      val rightInput = MemoryStream[(Int, Int, Int)]
+      def keyed(input: MemoryStream[(Int, Int, Int)], side: String): DataFrame =
+        input.toDF().toDF("x", "y", "t")
+          .select(nullIfNegative("x").as(s"${side}x"), nullIfNegative("y").as(s"${side}y"),
+            timestamp_seconds($"t").as(s"${side}t"))
+          .withWatermark(s"${side}t", "10 seconds")
+      val joined = keyed(leftInput, "l").join(keyed(rightInput, "r"),
+          expr(s"coalesce(lx, ly) = coalesce(rx, ry) AND $timeRange"), joinType)
+        .select($"lx", $"ly", $"lt".cast("long"), $"rx", $"ry", $"rt".cast("long"))
+      val nullRows =
+        if (joinType == "left_outer") Seq(Row(null, null, 5L, null, null, null)) else Nil
+      withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
+        testStream(joined)(
+          MultiAddData(leftInput, (1, -1, 5), (-1, -1, 5))(rightInput, (-1, 1, 6), (-1, -1, 6)),
+          CheckNewAnswer(Row(1, null, 5L, null, 1, 6L) +: nullRows: _*),
+          // Only the two rows without a NULL key, one per input, are stored.
+          AssertOnQuery { q =>
+            q.lastProgress.stateOperators.head.numRowsTotal == 2
+          })
+      }
+    }
+  }
+
+  // The key column next to the watermarked one is NULL.
+  Seq("inner", "left_outer", "full_outer").foreach { joinType =>
+    test(s"SPARK-61382: $joinType join with a NULL key next to a watermarked key") {
+      val leftInput = MemoryStream[(Int, Int)]
+      val rightInput = MemoryStream[(Int, Int)]
+      val right = rightInput.toDF().toDF("k", "t")
+        .select(nullIfNegative("k").as("rk"), timestamp_seconds($"t").as("rt"))
+      val joined = nullableKeyed(leftInput, "l").join(right, expr("lk = rk AND lt = rt"), joinType)
+        .select($"lk", $"lt".cast("long"), $"rk", $"rt".cast("long"))
+      val nullRows = joinType match {
+        case "left_outer" => Seq(Row(null, 5L, null, null))
+        case "full_outer" => Seq(Row(null, 5L, null, null), Row(null, null, null, 5L))
+        case _ => Nil
+      }
+      // Without constraint propagation, no inferred IS NOT NULL filter removes the NULL keys
+      // before the join.
+      withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false",
+          SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
+        testStream(joined)(
+          MultiAddData(leftInput, (1, 5), (-1, 5))(rightInput, (1, 5), (-1, 5)),
+          CheckNewAnswer(Row(1, 5L, 1, 5L) +: nullRows: _*),
+          // Only the two rows without a NULL key, one per input, are stored.
+          AssertOnQuery { q =>
+            q.lastProgress.stateOperators.head.numRowsTotal == 2
+          },
+          AddData(leftInput, (2, 100)),
+          CheckNewAnswer(),
+          AddData(leftInput),
+          CheckNewAnswer())
       }
     }
   }
