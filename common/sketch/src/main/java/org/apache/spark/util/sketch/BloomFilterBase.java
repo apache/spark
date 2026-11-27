@@ -89,8 +89,8 @@ abstract class BloomFilterBase extends BloomFilter {
   }
 
   protected HiLoHash hashLongToIntPair(long item, int seed) {
-    // Here we first hash the input long element into 2 int hash values, h1 and h2, then produce n
-    // hash values by `h1 + i * h2` with 1 <= i <= numHashFunctions.
+    // Here we first hash the input long element into 2 int hash values, h1 and h2. Each version
+    // takes the bit positions of the item from them in `scatterHashAndSetAllBits`.
     // Note that `CountMinSketch` use a different strategy, it hash the input long element with
     // every i to produce n hash values.
     // TODO: the strategy of `CountMinSketch` looks more advanced, should we follow it here?

@@ -102,10 +102,10 @@ public class SparkBloomFilterSuite {
 
   private static Stream<Arguments> dataPointProvider() {
     // temporary workaround:
-    //   to reduce running time to acceptable levels, we test only one case,
+    //   to reduce running time to acceptable levels, we test only one case per version,
     //   with the default FPP and the default seed only.
-    return Stream.of(
-      Arguments.of(350_000_000L, 0.03, BloomFilterImplV2.DEFAULT_SEED)
+    return Stream.of(BloomFilter.Version.V2, BloomFilter.Version.V3).map(version ->
+      Arguments.of(version, 350_000_000L, 0.03, BloomFilterImplV2.DEFAULT_SEED)
     );
     // preferable minimum parameter space for tests:
     //   {1_000_000L, 1_000_000_000L}           for: long numItems
@@ -120,14 +120,16 @@ public class SparkBloomFilterSuite {
    * It checks the 100% accuracy of mightContain=true on all of the even items,
    * and measures the mightContain=true (false positive) rate on the not-inserted odd numbers.
    *
+   * @param version the version of the tested BloomFilter instance
    * @param numItems the number of items to be inserted
    * @param expectedFpp the expected fpp rate of the tested BloomFilter instance
    * @param deterministicSeed the deterministic seed to use to initialize
    *                          the primary BloomFilter instance.
    */
-  @ParameterizedTest(name = "testAccuracyEvenOdd.n{0}_fpp{1}_seed{2}")
+  @ParameterizedTest(name = "testAccuracyEvenOdd.{0}_n{1}_fpp{2}_seed{3}")
   @MethodSource("dataPointProvider")
   public void testAccuracyEvenOdd(
+    BloomFilter.Version version,
     long numItems,
     double expectedFpp,
     int deterministicSeed,
@@ -151,7 +153,7 @@ public class SparkBloomFilterSuite {
 
     BloomFilter bloomFilter =
       BloomFilter.create(
-        BloomFilter.Version.V2,
+        version,
         numItems,
         optimalNumOfBits,
         deterministicSeed
@@ -240,15 +242,17 @@ public class SparkBloomFilterSuite {
    * and the secondary reports non-insertion, the 'mightContain=true' from the primary
    * can only be a false positive.
    *
+   * @param version the version of the tested BloomFilter instance
    * @param numItems the number of items to be inserted
    * @param expectedFpp the expected fpp rate of the tested BloomFilter instance
    * @param deterministicSeed the deterministic seed to use to initialize
    *                          the primary BloomFilter instance. (The secondary will be
    *                          initialized with the constant seed of 0xCAFEBABE)
    */
-  @ParameterizedTest(name = "testAccuracyRandom.n{0}_fpp{1}_seed{2}")
+  @ParameterizedTest(name = "testAccuracyRandom.{0}_n{1}_fpp{2}_seed{3}")
   @MethodSource("dataPointProvider")
   public void testAccuracyRandomDistribution(
+    BloomFilter.Version version,
     long numItems,
     double expectedFpp,
     int deterministicSeed,
@@ -272,7 +276,7 @@ public class SparkBloomFilterSuite {
 
     BloomFilter bloomFilterPrimary =
       BloomFilter.create(
-        BloomFilter.Version.V2,
+        version,
         numItems,
         optimalNumOfBits,
         deterministicSeed
@@ -281,7 +285,7 @@ public class SparkBloomFilterSuite {
     // V1 ignores custom seed values, so the control filter must be at least V2
     BloomFilter bloomFilterSecondary =
       BloomFilter.create(
-        BloomFilter.Version.V2,
+        version,
         numItems,
         optimalNumOfBits,
         0xCAFEBABE

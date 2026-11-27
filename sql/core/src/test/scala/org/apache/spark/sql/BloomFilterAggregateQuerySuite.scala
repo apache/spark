@@ -310,6 +310,15 @@ class BloomFilterAggregateQuerySuite extends SharedSparkSession with AdaptiveSpa
       Row(false))
   }
 
+  test("Test that might_contain can take a constant value input (V3)") {
+    // A V3 bloom filter of the values 1 to 10.
+    val bloom =
+      "X'000000030000000D0000000000000003BCA1BEA6303CE97B9E04A02633051A3A396061BBE7689C56'"
+    checkAnswer(
+      spark.sql(s"SELECT might_contain($bloom, 5L), might_contain($bloom, 201L)"),
+      Row(true, false))
+  }
+
   // Whole-stage codegen, expression codegen alone, and no codegen at all.
   private val codegenModes = Seq(
     Seq(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true"),

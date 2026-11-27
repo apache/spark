@@ -21,6 +21,11 @@ import java.io.*;
 
 class BloomFilterImplV2 extends BloomFilterBase implements Serializable {
 
+  // The value Java computed before V3, so that V2 filters an earlier version serialized with Java
+  // serialization still read back.
+  @Serial
+  private static final long serialVersionUID = -7609404176825362195L;
+
   BloomFilterImplV2(int numHashFunctions, long numBits, int seed) {
     this(new BitArray(numBits), numHashFunctions, seed);
   }
@@ -29,22 +34,11 @@ class BloomFilterImplV2 extends BloomFilterBase implements Serializable {
     super(bits, numHashFunctions, seed);
   }
 
-  private BloomFilterImplV2() {}
+  BloomFilterImplV2() {}
 
-  @Override
-  public boolean equals(Object other) {
-    if (other == this) {
-      return true;
-    }
-
-    if (!(other instanceof BloomFilterImplV2 that)) {
-      return false;
-    }
-
-    return
-      this.numHashFunctions == that.numHashFunctions
-      && this.seed == that.seed
-      && this.bits.equals(that.bits);
+  /** The binary format version this class writes and reads. */
+  Version version() {
+    return Version.V2;
   }
 
   protected boolean scatterHashAndSetAllBits(HiLoHash inputHash) {
@@ -95,11 +89,13 @@ class BloomFilterImplV2 extends BloomFilterBase implements Serializable {
       throw new IncompatibleMergeException("Cannot merge null bloom filter");
     }
 
-    if (!(other instanceof BloomFilterImplV2 that)) {
+    // A V3 filter is a V2 one with other bit positions, so the classes must match.
+    if (other.getClass() != getClass()) {
       throw new IncompatibleMergeException(
         "Cannot merge bloom filter of class " + other.getClass().getName()
       );
     }
+    BloomFilterImplV2 that = (BloomFilterImplV2) other;
 
     if (this.bitSize() != that.bitSize()) {
       throw new IncompatibleMergeException("Cannot merge bloom filters with different bit size");
@@ -123,17 +119,17 @@ class BloomFilterImplV2 extends BloomFilterBase implements Serializable {
   public void writeTo(OutputStream out) throws IOException {
     DataOutputStream dos = new DataOutputStream(out);
 
-    dos.writeInt(Version.V2.getVersionNumber());
+    dos.writeInt(version().getVersionNumber());
     dos.writeInt(numHashFunctions);
     dos.writeInt(seed);
     bits.writeTo(dos);
   }
 
-  private void readFrom0(InputStream in) throws IOException {
+  void readFrom0(InputStream in) throws IOException {
     DataInputStream dis = new DataInputStream(in);
 
     int version = dis.readInt();
-    if (version != Version.V2.getVersionNumber()) {
+    if (version != version().getVersionNumber()) {
       throw new IOException("Unexpected Bloom filter version number (" + version + ")");
     }
 

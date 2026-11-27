@@ -69,7 +69,23 @@ public abstract class BloomFilter {
      *   <li>The words/longs (numWords * 64 bit)</li>
      * </ul>
      */
-    V2(2);
+    V2(2),
+
+    /**
+     * {@code BloomFilter} binary format version 3. V2 takes all the bit positions of an item from
+     * two 32-bit values modulo the number of bits. So a small V2 filter is far over a low expected
+     * false positive probability. V3 takes each position from its own mix of the item's 64-bit
+     * hash. By changing the bit pattern, it will become incompatible with V2 serializations.
+     * All values written in big-endian order:
+     * <ul>
+     *   <li>Version number, always 3 (32 bit)</li>
+     *   <li>Number of hash functions (32 bit)</li>
+     *   <li>Integer seed to initialize hash functions (32 bit) </li>
+     *   <li>Total number of words of the underlying bit array (32 bit)</li>
+     *   <li>The words/longs (numWords * 64 bit)</li>
+     * </ul>
+     */
+    V3(3);
 
     private final int versionNumber;
 
@@ -202,6 +218,7 @@ public abstract class BloomFilter {
     return switch (version) {
       case 1 -> BloomFilterImpl.readFrom(bin);
       case 2 -> BloomFilterImplV2.readFrom(bin);
+      case 3 -> BloomFilterImplV3.readFrom(bin);
       default -> throw new IllegalArgumentException("Unknown BloomFilter version: " + version);
     };
   }
@@ -286,11 +303,11 @@ public abstract class BloomFilter {
    * pick an optimal {@code numHashFunctions} which can minimize {@code fpp} for the bloom filter.
    */
   public static BloomFilter create(long expectedNumItems, long numBits) {
-    return create(Version.V2, expectedNumItems, numBits, BloomFilterImplV2.DEFAULT_SEED);
+    return create(expectedNumItems, numBits, BloomFilterBase.DEFAULT_SEED);
   }
 
   public static BloomFilter create(long expectedNumItems, long numBits, int seed) {
-    return create(Version.V2, expectedNumItems, numBits, seed);
+    return create(Version.V3, expectedNumItems, numBits, seed);
   }
 
   public static BloomFilter create(
@@ -312,6 +329,7 @@ public abstract class BloomFilter {
     return switch (version) {
       case V1 -> new BloomFilterImpl(numHashFunctions, numBits);
       case V2 -> new BloomFilterImplV2(numHashFunctions, numBits, seed);
+      case V3 -> new BloomFilterImplV3(numHashFunctions, numBits, seed);
     };
   }
 }
