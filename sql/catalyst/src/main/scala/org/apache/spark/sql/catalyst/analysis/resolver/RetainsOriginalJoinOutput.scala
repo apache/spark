@@ -171,12 +171,16 @@ trait RetainsOriginalJoinOutput {
     case _: SubqueryAlias =>
       plan
     case project: Project =>
-      val projectListByExpressionId = project.projectList.groupBy(_.exprId)
+      // Entries can share an expression ID under different names, as in `SELECT col1, COL1`, so
+      // each output expression takes the next unused entry with its ID.
+      val unusedProjectListByExpressionId = project.projectList.groupBy(_.exprId).map {
+        case (exprId, entries) => exprId -> entries.iterator
+      }
       val newProjectList = outputExpressions.map { outputExpression =>
-        projectListByExpressionId
-          .get(outputExpression.exprId)
-          .flatMap(_.headOption)
-          .getOrElse(outputExpression)
+        unusedProjectListByExpressionId.get(outputExpression.exprId) match {
+          case Some(unusedEntries) if unusedEntries.hasNext => unusedEntries.next()
+          case _ => outputExpression
+        }
       }
       if (newProjectList == project.projectList) {
         project
