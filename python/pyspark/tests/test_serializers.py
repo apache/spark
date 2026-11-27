@@ -20,7 +20,7 @@ import math
 import pickle
 import sys
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from pyspark import serializers
 from pyspark.serializers import (
@@ -241,6 +241,106 @@ class SerializersTest(unittest.TestCase):
                     ):
                         ser.dump_stream([payload], stream)
                     stream.write.assert_not_called()
+
+    def test_auto_batched_serializer_splits_oversized_frame(self):
+        # SPARK-49189: simulate a 2 GiB batch without allocating one.
+        inner = CPickleSerializer()
+        dumps = inner.dumps
+
+        def serialize(values):
+            if len(values) > 1:
+                payload = MagicMock()
+                payload.__len__.return_value = 1 << 31
+                return payload
+            return dumps(values)
+
+        with patch.object(inner, "dumps", side_effect=serialize) as serialize_mock:
+            ser = AutoBatchedSerializer(inner)
+            stream = io.BytesIO()
+            ser.dump_stream(iter([0, 1, 2]), stream)
+            self.assertEqual(
+                [call.args[0] for call in serialize_mock.call_args_list],
+                [[0], [1, 2], [1], [2]],
+            )
+            stream.seek(0)
+            self.assertEqual(list(ser.load_stream(stream)), [0, 1, 2])
+
+    def test_auto_batched_serializer_length_limit(self):
+        # SPARK-49189: pin the signed 32-bit boundary, including a single large record.
+        for length in [(1 << 31) - 1, 1 << 31, (1 << 31) + 1]:
+            with self.subTest(length=length):
+                inner = MagicMock()
+                payload = inner.dumps.return_value
+                payload.__len__.return_value = length
+                ser = AutoBatchedSerializer(inner)
+                stream = MagicMock()
+                if length < 1 << 31:
+                    ser.dump_stream([0], stream)
+                    self.assertEqual(stream.write.call_count, 2)
+                    header = io.BytesIO(stream.write.call_args_list[0].args[0])
+                    self.assertEqual(serializers.read_int(header), length)
+                    stream.write.assert_called_with(payload)
+                else:
+                    with self.assertRaisesRegex(ValueError, "larger than 2G"):
+                        ser.dump_stream([0], stream)
+                    stream.write.assert_not_called()
+                inner.dumps.assert_called_once_with([0])
+
+    def test_auto_batched_serializer_split_round_trip(self):
+        # SPARK-49189: exercise repeated splits with real heterogeneous pickle payloads.
+        values = [(i, "x" * (40 + i % 11 * 5)) for i in range(31)]
+        values[18] = values[17]
+        ser = AutoBatchedSerializer(CPickleSerializer(), bestSize=1 << 20)
+        stream = io.BytesIO()
+        with patch.object(AutoBatchedSerializer, "_MAX_FRAME_SIZE", 128, create=True):
+            ser.dump_stream(iter(values), stream)
+        stream.seek(0)
+        while stream.tell() < len(stream.getvalue()):
+            size = serializers.read_int(stream)
+            self.assertGreater(size, 0)
+            self.assertLessEqual(size, 128)
+            self.assertEqual(len(stream.read(size)), size)
+        stream.seek(0)
+        self.assertEqual(list(ser.load_stream(stream)), values)
+
+    def test_auto_batched_serializer_oversized_record_after_split(self):
+        # SPARK-49189: never write an invalid header for an unsplittable record.
+        inner = CPickleSerializer()
+        dumps = inner.dumps
+
+        def serialize(values):
+            if 2 in values:
+                payload = MagicMock()
+                payload.__len__.return_value = 1 << 31
+                return payload
+            return dumps(values)
+
+        ser = AutoBatchedSerializer(inner)
+        stream = io.BytesIO()
+        with patch.object(inner, "dumps", side_effect=serialize):
+            with self.assertRaisesRegex(ValueError, "larger than 2G"):
+                ser.dump_stream([0, 1, 2], stream)
+        stream.seek(0)
+        self.assertEqual(list(ser.load_stream(stream)), [0, 1])
+
+    def test_auto_batched_serializer_normal_batches(self):
+        # SPARK-49189: ordinary batches retain their existing bytes and growth behavior.
+        inner = CPickleSerializer()
+        values = list(range(31))
+        expected = io.BytesIO()
+        for start, end in [(0, 1), (1, 3), (3, 7), (7, 15), (15, 31)]:
+            inner.dump_stream([values[start:end]], expected)
+        stream = io.BytesIO()
+        AutoBatchedSerializer(inner).dump_stream(iter(values), stream)
+        self.assertEqual(stream.getvalue(), expected.getvalue())
+
+    def test_auto_batched_serializer_empty_input(self):
+        # SPARK-49189: an empty iterator does not serialize or write anything.
+        inner = MagicMock()
+        stream = MagicMock()
+        AutoBatchedSerializer(inner).dump_stream(iter([]), stream)
+        inner.dumps.assert_not_called()
+        stream.write.assert_not_called()
 
     def test_chunked_stream(self):
         original_bytes = bytearray(range(100))
