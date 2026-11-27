@@ -3669,7 +3669,7 @@
                   <arg>-deprecation</arg>
                   <arg>-feature</arg>
                   <arg>-release</arg>
-                  <arg>17</arg>
+                  <arg>${java.version}</arg>
                   <arg>-Wunused:imports</arg>
                   <arg>-source:3.3-migration</arg>
                 </args>
