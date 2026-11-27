@@ -83,6 +83,12 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
       }
     }
 
+    // MsSqlServer LIKE treats `[` as the start of a character class (`[a-c]`, `[^a]`), so it is
+    // escaped as well to be matched literally. A `]` without a preceding `[` is already literal.
+    override protected def escapeSpecialCharsForLikePattern(str: String): String = {
+      super.escapeSpecialCharsForLikePattern(str).replace("[", "\\[")
+    }
+
     override def dialectFunctionName(funcName: String): String = funcName match {
       case "VAR_POP" => "VARP"
       case "VAR_SAMP" => "VAR"

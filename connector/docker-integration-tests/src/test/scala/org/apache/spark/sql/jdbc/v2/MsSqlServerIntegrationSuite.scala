@@ -321,4 +321,22 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
       assert(grpRows === Set((false, 1L), (true, 1L)))
     }
   }
+
+  test("SQLServer pushdown of startswith/endswith/contains matches [ literally") {
+    val table = s"$catalogName.like_bracket"
+    withTable(table) {
+      sql(s"CREATE TABLE $table (id INT, s STRING)")
+      sql(s"INSERT INTO $table VALUES (1, 'a'), (2, 'b'), (3, 'x[a-c]y'), (4, '[b]'), (5, 'b]')")
+      def ids(predicate: String): Set[Int] = {
+        val df = sql(s"SELECT id FROM $table WHERE $predicate")
+        checkFilterPushed(df)
+        df.collect().map(_.getInt(0)).toSet
+      }
+      assert(ids("contains(s, '[a-c]')") === Set(3))
+      assert(ids("contains(s, '[b]')") === Set(4))
+      assert(ids("startswith(s, '[')") === Set(4))
+      assert(ids("endswith(s, '[a-c]y')") === Set(3))
+      assert(ids("contains(s, 'b]')") === Set(4, 5))
+    }
+  }
 }
