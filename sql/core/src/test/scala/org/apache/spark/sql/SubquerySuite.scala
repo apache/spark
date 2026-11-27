@@ -4102,21 +4102,25 @@ class SubquerySuite extends SharedSparkSession
     }
   }
 
-  test("SPARK-60501: a grouped top aggregate with a computed result is simplified like others") {
+  test("SPARK-60501: the top aggregate of a subquery with a computed result is simplified like " +
+      "others") {
     // The top aggregate is kept for the count bug, and still loses a DISTINCT that does not
-    // change its result and repeated grouping keys.
+    // change its result and repeated grouping keys, also where it has a GROUP BY.
     withTempView("a", "b") {
       sql("CREATE TEMP VIEW a AS SELECT * FROM VALUES (1), (2) AS a(k)")
       sql("CREATE TEMP VIEW b AS SELECT * FROM VALUES (1, 100L), (1, 200L) AS b(k, v)")
-      val df = sql("SELECT a.k, (SELECT COLLECT_SET(DISTINCT m) FROM (SELECT MAX(b.v) m FROM b " +
-        "WHERE b.k = a.k) GROUP BY m, m) FROM a")
-      checkAnswer(df, Seq(Row(1, Seq(200L)), Row(2, Seq())))
-      val aggs = df.queryExecution.optimizedPlan.collect { case a: Aggregate => a }
-      assert(!aggs.exists(_.aggregateExpressions.exists(_.exists {
-        case ae: AggregateExpression => ae.isDistinct
-        case _ => false
-      })))
-      assert(aggs.forall(a => a.groupingExpressions.distinct.size == a.groupingExpressions.size))
+      Seq(" GROUP BY m, m", "").foreach { groupBy =>
+        val df = sql("SELECT a.k, (SELECT COLLECT_SET(DISTINCT m) FROM (SELECT MAX(b.v) m " +
+          s"FROM b WHERE b.k = a.k)$groupBy) FROM a")
+        checkAnswer(df, Seq(Row(1, Seq(200L)), Row(2, Seq())))
+        val aggs = df.queryExecution.optimizedPlan.collect { case a: Aggregate => a }
+        assert(!aggs.exists(_.aggregateExpressions.exists(_.exists {
+          case ae: AggregateExpression => ae.isDistinct
+          case _ => false
+        })), groupBy)
+        assert(aggs.forall(a => a.groupingExpressions.distinct.size == a.groupingExpressions.size),
+          groupBy)
+      }
     }
   }
 

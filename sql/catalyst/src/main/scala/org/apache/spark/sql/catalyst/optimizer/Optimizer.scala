@@ -465,11 +465,12 @@ abstract class Optimizer(catalogManager: CatalogManager)
             case _ => a.withNewChildren(Seq(optimizedInput))
           }
         }
-        // A grouped top Aggregate gets here only with a count-bug result computed before
-        // decorrelation (see PullupCorrelatedPredicates), and is otherwise optimized with the
-        // rest of the subquery. The rules that simplify such an Aggregate itself run before
-        // RewriteCorrelatedScalarSubquery moves it into the main plan, so apply them here.
-        val simplifiedAgg = if (group.nonEmpty && s.countBugResult.isDefined) {
+        // A subquery with a count-bug result computed before decorrelation (see
+        // PullupCorrelatedPredicates) gets here also where its top Aggregate has grouping
+        // expressions, and such a top is otherwise optimized with the rest of the subquery. The
+        // rules that simplify an Aggregate itself run before RewriteCorrelatedScalarSubquery
+        // moves it into the main plan, so apply them here to the top of such a subquery.
+        val simplifiedAgg = if (s.countBugResult.isDefined) {
           Seq(EliminateDistinct, RemoveLiteralFromGroupExpressions,
             RemoveRepetitionFromGroupExpressions).foldLeft(optimizedAgg: LogicalPlan) {
             (p, rule) => rule(p)
