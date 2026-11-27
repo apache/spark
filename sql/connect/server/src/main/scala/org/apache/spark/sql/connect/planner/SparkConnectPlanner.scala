@@ -80,6 +80,7 @@ import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.GroupStateImpl.groupStateTimeoutFromString
 import org.apache.spark.sql.execution.streaming.runtime.StreamingQueryWrapper
 import org.apache.spark.sql.expressions.{Aggregator, ReduceAggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
+import org.apache.spark.sql.pipelines.graph.FlowAnalysis
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, StreamingQuery, StreamingQueryListener, StreamingQueryProgress, Trigger}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.{ArrowUtils, CaseInsensitiveStringMap}
@@ -144,7 +145,7 @@ class SparkConnectPlanner(
    */
   @DeveloperApi
   def transformRelation(rel: proto.Relation, cachePlan: Boolean): LogicalPlan = {
-    val plan = sessionHolder.usePlanCache(rel, cachePlan) { rel =>
+    val transformUncached: proto.Relation => LogicalPlan = { rel =>
       val plan = rel.getRelTypeCase match {
         // DataFrame API
         case proto.Relation.RelTypeCase.SHOW_STRING => transformShowString(rel.getShowString)
@@ -248,6 +249,12 @@ class SparkConnectPlanner(
       }
       plan
     }
+    val plan = pipelineReadResolver match {
+      // The reads of a pipeline flow's relation are resolved against the pipeline, so its plans
+      // neither come from nor go into the plan cache, which is shared by the session.
+      case Some(resolveReads) => resolveReads(transformUncached(rel))
+      case None => sessionHolder.usePlanCache(rel, cachePlan)(transformUncached)
+    }
 
     if (executeHolderOpt.isDefined) {
       plan.foreachWithSubqueriesAndPruning(_.containsPattern(TreePattern.COLLECT_METRICS)) {
@@ -271,19 +278,54 @@ class SparkConnectPlanner(
   private var deferSqlWithRefs = false
 
   /**
-   * Transforms the relation that a pipeline flow returns. Unlike [[transformRelation]],
-   * [[transformSqlWithRefs]] does not execute a valid SQL-with-references [[proto.WithRelations]]
-   * during this transformation: it parses the root SQL and binds each reference to its alias as a
-   * CTE relation. The flow analysis then resolves the pipeline datasets that the references read,
-   * and records them as inputs of the flow, as it does for a CTE in the SQL text.
+   * Resolves the reads of datasets in the plan of each relation that [[transformRelation]]
+   * transforms. Set only by [[transformPipelineFlowRelation]].
    */
-  private def transformPipelineFlowRelation(rel: proto.Relation): LogicalPlan = {
+  private var pipelineReadResolver: Option[LogicalPlan => LogicalPlan] = None
+
+  /**
+   * Transforms the relation that a pipeline flow returns, during the analysis of the flow. Unlike
+   * [[transformRelation]]:
+   *   - The reads of datasets in each transformed relation are resolved with `resolveReads`
+   *     before the relation is used to transform its parent. A transformation that analyzes its
+   *     input, such as `withColumns`, then analyzes it against the datasets of the pipeline, and
+   *     the flow analysis records them as inputs of the flow.
+   *   - [[transformSqlWithRefs]] does not execute a valid SQL-with-references
+   *     [[proto.WithRelations]]: it parses the root SQL and binds each reference to its alias as
+   *     a CTE relation, whose reads the flow analysis resolves as for a CTE in the SQL text.
+   */
+  private def transformPipelineFlowRelation(
+      rel: proto.Relation,
+      resolveReads: LogicalPlan => LogicalPlan): LogicalPlan = {
     deferSqlWithRefs = true
+    pipelineReadResolver = Some(resolveReads)
     try {
       transformRelation(rel)
     } finally {
       deferSqlWithRefs = false
+      pipelineReadResolver = None
     }
+  }
+
+  /**
+   * Returns `input`, the plan of the input of a transformation that runs a query over its input,
+   * or caches it, when it is transformed. Fails if a pipeline flow's relation is transformed and
+   * `input` reads a table of the pipeline: while the flow is analyzed, the table is a placeholder
+   * without data, so the query would compute its result, such as the values of a pivot or an
+   * inferred schema, from no data, and a cached input would outlive the analysis.
+   */
+  private def queriedInput(
+      input: LogicalPlan,
+      subCondition: String,
+      parameters: Map[String, String] = Map.empty): LogicalPlan = {
+    if (pipelineReadResolver.isDefined) {
+      FlowAnalysis.pipelineTableRead(input).foreach { table =>
+        throw new AnalysisException(
+          s"PIPELINE_DATASET_QUERIED_DURING_FLOW_ANALYSIS.$subCondition",
+          parameters + ("datasetIdentifier" -> table.quotedString))
+      }
+    }
+    input
   }
 
   private def transformRelationPlugin(extension: ProtoAny): LogicalPlan = {
@@ -365,7 +407,9 @@ class SparkConnectPlanner(
 
   private def transformShowString(rel: proto.ShowString): LogicalPlan = {
     val showString = Dataset
-      .ofRows(session, transformRelation(rel.getInput))
+      .ofRows(
+        session,
+        queriedInput(transformRelation(rel.getInput), "QUERY", Map("operation" -> "showString")))
       .showString(rel.getNumRows, rel.getTruncate, rel.getVertical)
     LocalRelation.fromProduct(
       output = AttributeReference("show_string", StringType, false)() :: Nil,
@@ -374,7 +418,9 @@ class SparkConnectPlanner(
 
   private def transformHtmlString(rel: proto.HtmlString): LogicalPlan = {
     val htmlString = Dataset
-      .ofRows(session, transformRelation(rel.getInput))
+      .ofRows(
+        session,
+        queriedInput(transformRelation(rel.getInput), "QUERY", Map("operation" -> "htmlString")))
       .htmlString(rel.getNumRows, rel.getTruncate)
     LocalRelation.fromProduct(
       output = AttributeReference("html_string", StringType, false)() :: Nil,
@@ -467,7 +513,8 @@ class SparkConnectPlanner(
    */
   private def transformSample(rel: proto.Sample): LogicalPlan = {
     val plan = if (rel.getDeterministicOrder) {
-      val input = Dataset.ofRows(session, transformRelation(rel.getInput))
+      val inputPlan = transformRelation(rel.getInput)
+      val input = Dataset.ofRows(session, inputPlan)
 
       // It is possible that the underlying dataframe doesn't guarantee the ordering of rows in its
       // constituent partitions each time a split is materialized which could result in
@@ -480,6 +527,8 @@ class SparkConnectPlanner(
       if (sortOrder.nonEmpty) {
         Sort(sortOrder, global = false, input.logicalPlan)
       } else {
+        // Without an orderable column, the input is cached to make its order deterministic.
+        queriedInput(inputPlan, "SAMPLE_WITHOUT_ORDERABLE_COLUMN")
         input.cache()
         input.logicalPlan
       }
@@ -614,7 +663,12 @@ class SparkConnectPlanner(
     val cols = rel.getColsList.asScala.toArray
     val probabilities = rel.getProbabilitiesList.asScala.map(_.doubleValue()).toArray
     val approxQuantile = Dataset
-      .ofRows(session, transformRelation(rel.getInput))
+      .ofRows(
+        session,
+        queriedInput(
+          transformRelation(rel.getInput),
+          "QUERY",
+          Map("operation" -> "approxQuantile")))
       .stat
       .approxQuantile(cols, probabilities, rel.getRelativeError)
     LocalRelation.fromProduct(
@@ -624,8 +678,11 @@ class SparkConnectPlanner(
   }
 
   private def transformStatCrosstab(rel: proto.StatCrosstab): LogicalPlan = {
+    // A crosstab pivots without values.
     Dataset
-      .ofRows(session, transformRelation(rel.getInput))
+      .ofRows(
+        session,
+        queriedInput(transformRelation(rel.getInput), "QUERY", Map("operation" -> "crosstab")))
       .stat
       .crosstab(rel.getCol1, rel.getCol2)
       .logicalPlan
@@ -1900,7 +1957,15 @@ class SparkConnectPlanner(
       reader
     }
     def ds: Dataset[String] = {
-      val input = transformRelation(rel.getInput)
+      val input = if (rel.hasSchema) {
+        transformRelation(rel.getInput)
+      } else {
+        // Without a schema, the schema is inferred from the input.
+        queriedInput(
+          transformRelation(rel.getInput),
+          "PARSE_WITHOUT_SCHEMA",
+          Map("format" -> rel.getFormat.name.stripPrefix("PARSE_FORMAT_")))
+      }
       val df = Dataset.ofRows(session, input)
       val fields = df.schema.fields
       if (fields.length != 1) {
@@ -2907,7 +2972,9 @@ class SparkConnectPlanner(
           rel.getPivot.getValuesList.asScala.toSeq.map(transformLiteral)
         } else {
           RelationalGroupedDataset
-            .collectPivotValues(Dataset.ofRows(session, logicalPlan), Column(pivotExpr))
+            .collectPivotValues(
+              Dataset.ofRows(session, queriedInput(logicalPlan, "PIVOT_WITHOUT_VALUES")),
+              Column(pivotExpr))
             .map(expressions.Literal.apply)
         }
         logical.Pivot(
@@ -3135,11 +3202,18 @@ class SparkConnectPlanner(
   private def handlePipelineCommand(
       command: proto.PipelineCommand,
       responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
+    // A flow's relation is transformed when the flow is analyzed, after this request completed,
+    // so it is transformed by a planner that is not bound to this request. The flow keeps the
+    // function below, so it refers to the session holder through a local value: referring to the
+    // field would capture this planner, and with it this request, for the lifetime of the flow.
+    val flowSessionHolder = sessionHolder
     val res = PipelinesHandler.handlePipelinesCommand(
       sessionHolder,
       command,
       responseObserver,
-      transformPipelineFlowRelation,
+      (rel, resolveReads) =>
+        new SparkConnectPlanner(flowSessionHolder)
+          .transformPipelineFlowRelation(rel, resolveReads),
       transformExpression)
     executeHolder.eventsManager.postFinished()
     responseObserver.onNext(

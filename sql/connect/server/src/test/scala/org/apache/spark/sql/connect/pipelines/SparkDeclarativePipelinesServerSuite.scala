@@ -544,6 +544,79 @@ class SparkDeclarativePipelinesServerSuite
     }
   }
 
+  test("rerun of a flow that reads a dataset through withColumns depends on it") {
+    withRawBlockingStub { implicit stub =>
+      // `downstream` adds a column to a read of `src`, so it analyzes the read when the
+      // relation is transformed, as `withColumn` in a client does.
+      val downstreamQuery = Relation
+        .newBuilder()
+        .setWithColumns(
+          proto.WithColumns
+            .newBuilder()
+            .setInput(Relation
+              .newBuilder()
+              .setRead(proto.Read
+                .newBuilder()
+                .setNamedTable(proto.Read.NamedTable.newBuilder().setUnparsedIdentifier("src"))))
+            .addAliases(
+              Expression.Alias
+                .newBuilder()
+                .addName("doubled")
+                .setExpr(Expression
+                  .newBuilder()
+                  .setExpressionString(
+                    Expression.ExpressionString.newBuilder().setExpression("id * 2")))))
+        .build()
+
+      // Each run defines the pipeline in a new dataflow graph, as the CLI does.
+      def definePipeline(srcValues: String): String = {
+        val graphId = createDataflowGraph
+        registerPipelineOutputs(new TestPipelineDefinition(graphId) {
+          createTable(
+            name = "src",
+            outputType = OutputType.MATERIALIZED_VIEW,
+            sql = Some(s"SELECT * FROM VALUES $srcValues AS t(id)"))
+          createTable(
+            name = "downstream",
+            outputType = OutputType.MATERIALIZED_VIEW,
+            query = Some(downstreamQuery))
+        })
+        graphId
+      }
+      def downstreamRows(): Set[(Int, Int)] = {
+        spark.catalog.refreshTable("spark_catalog.default.downstream")
+        spark
+          .table("spark_catalog.default.downstream")
+          .collect()
+          .map(r => (r.getInt(0), r.getInt(1)))
+          .toSet
+      }
+
+      startPipelineAndWaitForCompletion(definePipeline("(1), (2)"))
+      assert(downstreamRows() == Set((1, 2), (2, 4)))
+      SparkConnectService.sessionManager
+        .getIsolatedSessionIfPresent(SessionKey(defaultUserId, defaultSessionId))
+        .foreach(_.removeAllPipelineExecutions())
+
+      // The second run defines the pipeline with `src` already materialized in the catalog, and
+      // changes the data of `src`, so that `downstream` only sees the new rows if it runs after
+      // `src` is refreshed.
+      val graphId = definePipeline("(3), (4)")
+      val graph = getDefaultSessionHolder.dataflowGraphRegistry
+        .getDataflowGraphOrThrow(graphId)
+        .toDataflowGraph
+        .resolve(sessionCaseSensitive)
+      assert(
+        graph.resolvedFlows
+          .find(_.identifier.unquotedString == "spark_catalog.default.downstream")
+          .get
+          .inputs
+          .map(_.unquotedString) == Set("spark_catalog.default.src"))
+      startPipelineAndWaitForCompletion(graphId)
+      assert(downstreamRows() == Set((3, 6), (4, 8)))
+    }
+  }
+
   test("create streaming tables, materialized views, and temporary views") {
     withRawBlockingStub { implicit stub =>
       val graphId = createDataflowGraph

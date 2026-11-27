@@ -56,9 +56,10 @@ private[connect] object PipelinesHandler extends Logging {
    *   Command to be handled
    * @param responseObserver
    *   The response observer where the response will be sent
-   * @param transformRelationFunc
-   *   Function used to convert a relation to a LogicalPlan. This is used when determining the
-   *   LogicalPlan that a flow returns.
+   * @param transformFlowRelationFunc
+   *   Function used to convert the relation that a flow returns to a LogicalPlan, given a
+   *   function that resolves the reads of datasets in a plan. It is called when the flow is
+   *   analyzed.
    * @param transformExpressionFunc
    *   Function used to convert a proto expression to a Catalyst expression.
    * @return
@@ -68,7 +69,7 @@ private[connect] object PipelinesHandler extends Logging {
       sessionHolder: SessionHolder,
       cmd: proto.PipelineCommand,
       responseObserver: StreamObserver[ExecutePlanResponse],
-      transformRelationFunc: Relation => LogicalPlan,
+      transformFlowRelationFunc: (Relation, LogicalPlan => LogicalPlan) => LogicalPlan,
       transformExpressionFunc: proto.Expression => Expression): PipelineCommandResult = {
     // Currently most commands do not include any information in the response. We just send back
     // an empty response to the client to indicate that the command was handled successfully
@@ -111,7 +112,7 @@ private[connect] object PipelinesHandler extends Logging {
         val resolvedFlow =
           defineFlow(
             cmd.getDefineFlow,
-            transformRelationFunc,
+            transformFlowRelationFunc,
             transformExpressionFunc,
             sessionHolder)
         val identifierBuilder = ResolvedIdentifier.newBuilder()
@@ -347,7 +348,7 @@ private[connect] object PipelinesHandler extends Logging {
 
   private def defineFlow(
       flow: proto.PipelineCommand.DefineFlow,
-      transformRelationFunc: Relation => LogicalPlan,
+      transformFlowRelationFunc: (Relation, LogicalPlan => LogicalPlan) => LogicalPlan,
       transformExpressionFunc: proto.Expression => Expression,
       sessionHolder: SessionHolder): TableIdentifier = {
     if (flow.hasOnce) {
@@ -403,13 +404,18 @@ private[connect] object PipelinesHandler extends Logging {
 
     flow.getDetailsCase match {
       case proto.PipelineCommand.DefineFlow.DetailsCase.RELATION_FLOW_DETAILS =>
-        val relationFlowDetails = flow.getRelationFlowDetails
+        val relation = flow.getRelationFlowDetails.getRelation
         graphElementRegistry.registerFlow(
           UntypedFlow(
             identifier = flowIdentifier,
             destinationIdentifier = destinationIdentifier,
-            func = FlowAnalysis.createFlowFunctionFromLogicalPlan(
-              transformRelationFunc(relationFlowDetails.getRelation)),
+            // The relation is transformed when the flow is analyzed rather than now, so that the
+            // datasets it reads are resolved against the pipeline, also by the transformations
+            // that analyze their input. A DataFrame cached on the server that the relation refers
+            // to, such as a checkpoint, must therefore stay cached until then; the programming
+            // guide asks users to keep a reference to it while the pipeline runs.
+            func = FlowAnalysis.createFlowFunctionFromPlanBuilder(resolveReads =>
+              transformFlowRelationFunc(relation, resolveReads)),
             sqlConf = flow.getSqlConfMap.asScala.toMap,
             once = false,
             queryContext = QueryContext(Option(defaultCatalog), Option(defaultDatabase)),

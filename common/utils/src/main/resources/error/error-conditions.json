@@ -7467,6 +7467,34 @@
     ],
     "sqlState" : "0A000"
   },
+  "PIPELINE_DATASET_QUERIED_DURING_FLOW_ANALYSIS" : {
+    "message" : [
+      "A flow cannot run a query over the pipeline dataset <datasetIdentifier> while the flow is analyzed, because the dataset has no data at that time."
+    ],
+    "subClass" : {
+      "PARSE_WITHOUT_SCHEMA" : {
+        "message" : [
+          "Parsing <format> data without a schema infers the schema from the data. Specify the schema."
+        ]
+      },
+      "PIVOT_WITHOUT_VALUES" : {
+        "message" : [
+          "A pivot without values computes the pivot values from the data. Specify the pivot values."
+        ]
+      },
+      "QUERY" : {
+        "message" : [
+          "<operation> computes its result from the data."
+        ]
+      },
+      "SAMPLE_WITHOUT_ORDERABLE_COLUMN" : {
+        "message" : [
+          "A sample with a deterministic order, such as a split of randomSplit, caches its input when no column of the input is orderable. Include an orderable column in the input."
+        ]
+      }
+    },
+    "sqlState" : "0A000"
+  },
   "PIPELINE_DATASET_WITHOUT_FLOW" : {
     "message" : [
       "Pipeline dataset <identifier> does not have any defined flows. Please attach a query with the dataset's definition, or explicitly define at least one flow that writes to the dataset."
