@@ -724,10 +724,13 @@ Check a lookup reader against this list:
 - ``close()`` returns within ``spark.python.task.killTimeout``. Do not rely on it for
   correctness: when a task is killed, or after ``lookup`` raises an exception, Spark ends the
   Python worker without calling it.
-- Do not rely on how often the planning methods run. As for a batch read of a Python data
-  source, Spark plans the lookup once when a streaming query starts and reuses the plan while
-  ``spark.sql.python.filterPushdown.enabled`` and ``spark.sql.python.limitPushdown.enabled`` are
-  false, the default. Otherwise, it plans again in every micro-batch.
+- Do not rely on how often the planning methods run. Spark plans a lookup once for the same
+  inputs on a loaded DataFrame and reuses that plan, with its reader, for the start and the
+  micro-batches of a streaming query; a later query over the same DataFrame, such as one started
+  again after a stop, can reuse it too. Spark plans again at the start and in every micro-batch
+  only while ``spark.sql.python.filterPushdown.enabled`` is true and the lookup side has a filter
+  that Spark passes to Python, and changing that configuration or
+  ``spark.sql.python.limitPushdown.enabled`` makes it plan once more.
 
 Caching and Real-Time Mode
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
