@@ -383,7 +383,7 @@ class SparkConnectPlanner(
 
   private def transformSql(sql: proto.SQL): LogicalPlan = {
     val parameterContext = buildParameterContext(sql)
-    parameterContext match {
+    val parsedPlan = parameterContext match {
       case Some(ctx) =>
         // Use parsePlanWithParameters for proper position mapping
         parser.parsePlanWithParameters(sql.getQuery, ctx)
@@ -391,6 +391,9 @@ class SparkConnectPlanner(
         // No parameters - use regular parsing
         parser.parsePlan(sql.getQuery)
     }
+    // A DataFrame operation composed on this relation is analyzed together with the parsed
+    // query, so hide the columns that pipe SET retained from it, as classic Spark does.
+    PipeSetBoundary.wrapQuery(parsedPlan)
   }
 
   /**

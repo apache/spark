@@ -24,7 +24,11 @@ import org.apache.spark.sql.catalyst.analysis.{
   MultiInstanceRelation,
   ResolvedInlineTable
 }
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, PipeSetInput}
+import org.apache.spark.sql.catalyst.expressions.{
+  AttributeReference,
+  PipeSetBoundary,
+  PipeSetInput
+}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.BooleanType
@@ -73,6 +77,8 @@ class ResolutionValidator {
         validateProject(project)
       case pipeSetInput: PipeSetInput =>
         validatePipeSetInput(pipeSetInput)
+      case pipeSetBoundary: PipeSetBoundary =>
+        validatePipeSetBoundary(pipeSetBoundary)
       case filter: Filter =>
         validateFilter(filter)
       case subqueryAlias: SubqueryAlias =>
@@ -167,6 +173,11 @@ class ResolutionValidator {
   private def validatePipeSetInput(pipeSetInput: PipeSetInput): Unit = {
     validate(pipeSetInput.child)
     handleOperatorOutput(pipeSetInput)
+  }
+
+  private def validatePipeSetBoundary(pipeSetBoundary: PipeSetBoundary): Unit = {
+    validate(pipeSetBoundary.child)
+    handleOperatorOutput(pipeSetBoundary)
   }
 
   private def validateCteRelationDef(cteRelationDef: CTERelationDef): Unit = {

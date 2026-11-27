@@ -2451,6 +2451,82 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       assert(plan.metadataOutput.map(_.exprId) === Seq(metadata.exprId), plan.toString)
     }
   }
+
+  test("SPARK-59146: an unqualified name resolved by the visible output skips metadata output") {
+    case class CountingMetadataLeaf(override val output: Seq[Attribute]) extends LeafNode {
+      var metadataOutputCalls: Int = 0
+
+      override def metadataOutput: Seq[Attribute] = {
+        metadataOutputCalls += 1
+        Nil
+      }
+    }
+
+    val attribute = AttributeReference("a", IntegerType)().withQualifier(Seq("t"))
+    val leaf = CountingMetadataLeaf(Seq(attribute))
+    val project = Project(leaf.output, leaf)
+
+    assert(project.resolveChildren(Seq("a"), caseInsensitiveResolution).nonEmpty)
+    assert(project.resolve(Seq("a"), caseInsensitiveResolution).nonEmpty)
+    assert(leaf.metadataOutputCalls === 0)
+  }
+
+  test("SPARK-59146: analysis derives each pipe SET retained row a bounded number of times") {
+    case class CountingMetadataLeaf(override val output: Seq[Attribute]) extends LeafNode {
+      var metadataOutputCalls: Int = 0
+
+      override def metadataOutput: Seq[Attribute] = {
+        metadataOutputCalls += 1
+        Nil
+      }
+    }
+
+    val attribute = AttributeReference("a", IntegerType)().withQualifier(Seq("t"))
+    val leaf = CountingMetadataLeaf(Seq(attribute))
+    val assignmentCount = 10
+    val plan = (1 to assignmentCount).foldLeft[LogicalPlan](leaf) { case (child, _) =>
+      val replacement = Alias(Add(UnresolvedAttribute("a"), Literal(1)), "a")()
+      Project(
+        Seq(UnresolvedStarExceptOrReplace(
+          target = None, excepts = Seq(Seq("a")), replacements = Some(Seq(replacement)))),
+        PipeSetInput(child))
+    }
+
+    getAnalyzer.execute(Project(Seq(UnresolvedAttribute(Seq("t", "a"))), plan))
+
+    // Each PipeSetInput instance derives its retained row once, so the leaf is asked for its
+    // metadata output about as often as analysis rebuilds the lowest marker. Re-deriving the row
+    // on every lookup instead makes this grow with the attribute references and iterations.
+    assert(leaf.metadataOutputCalls <= 4 * assignmentCount, leaf.metadataOutputCalls)
+  }
+
+  test("SPARK-59146: pipe SET cleanup skips analyzed sub-plans") {
+    def projectWithRetainedHiddenOutput(): Project = {
+      val attribute = AttributeReference("a", IntegerType)().withQualifier(Seq("t"))
+      val retained = attribute.markAsQualifiedAccessOnly().markAsPipeSetRetained()
+      val project = Project(Seq(attribute), LocalRelation(attribute))
+      project.setTagValue(Project.hiddenOutputTag, Seq(retained))
+      project
+    }
+
+    val analyzedProject = projectWithRetainedHiddenOutput()
+    analyzedProject.setAnalyzed()
+    val planOverAnalyzed = Project(analyzedProject.output, analyzedProject)
+
+    val cleanedOverAnalyzed = EliminateResolvedPipeSetInputs(planOverAnalyzed)
+
+    assert(cleanedOverAnalyzed.children.head eq analyzedProject)
+    assert(analyzedProject.getTagValue(Project.hiddenOutputTag)
+      .exists(_.exists(_.pipeSetRetained)))
+
+    val unanalyzedProject = projectWithRetainedHiddenOutput()
+    val plan = Project(unanalyzedProject.output, unanalyzedProject)
+
+    val cleanedProject = EliminateResolvedPipeSetInputs(plan).children.head
+
+    assert(cleanedProject ne unanalyzedProject)
+    assert(cleanedProject.getTagValue(Project.hiddenOutputTag).contains(Nil))
+  }
 }
 
 /**

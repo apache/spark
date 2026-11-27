@@ -81,12 +81,29 @@ class ProjectResolver(operatorResolver: Resolver, expressionResolver: Expression
       val resolvedProjectList =
         expressionResolver.resolveProjectList(unresolvedProject.projectList, unresolvedProject)
 
-      val retainedPipeSetOutput = resolvedChild match {
-        case pipeSetInput: PipeSetInput =>
-          pipeSetInput.metadataOutput.filter(_.qualifiedAccessOnly)
-        case _ =>
+      // A projection that is not the top-level operator carries the input row that a pipe SET
+      // retained, so that a later qualified reference can still reach it, as fixed-point does by
+      // adding it to every projection below the reference. PruneMetadataColumns removes the
+      // columns nothing references.
+      val retainedPipeSetOutput =
+        if (unresolvedProject.containsTag(ResolverTag.TOP_LEVEL_OPERATOR)) {
           Seq.empty
-      }
+        } else {
+          resolvedChild match {
+            case pipeSetInput: PipeSetInput =>
+              pipeSetInput.metadataOutput.filter(_.pipeSetRetained)
+            case _ =>
+              val retainedHiddenOutput = scopes.current.hiddenOutput.filter(_.pipeSetRetained)
+              if (retainedHiddenOutput.isEmpty) {
+                Seq.empty
+              } else {
+                // The projection only carries values here; qualified star expansion reads the
+                // repeated positions of the retained row from the scope's hidden output.
+                val childOutput = resolvedChild.outputSet
+                retainedHiddenOutput.filter(childOutput.contains).distinctBy(_.exprId)
+              }
+          }
+        }
 
       val resolvedChildWithMetadataColumns = retainOriginalJoinOutput(
         plan = resolvedChild,
@@ -107,8 +124,7 @@ class ProjectResolver(operatorResolver: Resolver, expressionResolver: Expression
         )
       } else {
         val retainedProjectList =
-          if (retainedPipeSetOutput.isEmpty ||
-              unresolvedProject.containsTag(ResolverTag.TOP_LEVEL_OPERATOR)) {
+          if (retainedPipeSetOutput.isEmpty) {
             Seq.empty
           } else {
             missingRetainedOutput(retainedPipeSetOutput, resolvedProjectList.expressions)

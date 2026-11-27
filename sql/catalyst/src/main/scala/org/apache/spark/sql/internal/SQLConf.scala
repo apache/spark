@@ -9105,6 +9105,21 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_PIPE_OPERATOR_HIDE_REPLACED_COLUMNS =
+    buildConf("spark.sql.legacy.pipeOperatorHideReplacedColumns")
+      .internal()
+      .doc("When true (legacy behavior), a table alias after the pipe SET, EVAL or DROP " +
+        "operator refers only to the operator's output: a qualified reference to a column the " +
+        "operator replaced or dropped does not resolve to that column, and a qualified star " +
+        "expands to the output columns that keep the alias. When false (the default), the alias " +
+        "refers to the operator's input row: a qualified reference returns the original value " +
+        "of a replaced or dropped column, and a qualified star returns the input row in its " +
+        "original column order.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_PERCENTILE_DISC_CALCULATION = buildConf("spark.sql.legacy.percentileDiscCalculation")
     .internal()
     .doc("If true, the old bogus percentile_disc calculation is used. The old calculation " +

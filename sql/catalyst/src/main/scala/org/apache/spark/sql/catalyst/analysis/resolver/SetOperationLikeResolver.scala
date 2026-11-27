@@ -131,7 +131,13 @@ class SetOperationLikeResolver(resolver: Resolver, expressionResolver: Expressio
         )
 
         try {
-          val resolvedChild = resolver.resolve(unresolvedChild)
+          // The operator merges its children by their scope outputs and discards their hidden
+          // output, so trim columns that a child appended for references above it, such as the
+          // retained input row of a pipe SET projection, as other boundaries do.
+          val resolvedChild = resolver.retainOriginalJoinOutputAtBoundary(
+            plan = resolver.resolve(unresolvedChild),
+            outputExpressions = scopes.current.output
+          )
           (resolvedChild, scopes.current)
         } finally {
           cteRegistry.popScope()

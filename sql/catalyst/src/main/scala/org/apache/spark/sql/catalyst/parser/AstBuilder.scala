@@ -8527,7 +8527,7 @@ class AstBuilder extends DataTypeAstBuilder
       val projectList: Seq[NamedExpression] =
         Seq(UnresolvedStarExceptOrReplace(
           target = None, excepts = ids, replacements = None))
-      Project(projectList, left)
+      Project(projectList, withPipeSetInput(left))
     }.getOrElse(Option(ctx.AS).map { _ =>
       SubqueryAlias(getIdentifierText(ctx.errorCapturingIdentifier()), left)
     }.getOrElse(Option(ctx.whereClause).map { c =>
@@ -8597,10 +8597,22 @@ class AstBuilder extends DataTypeAstBuilder
         // Add a projection using the UnresolvedStarExceptOrReplace expression. We do this once per
         // assignment to allow for multiple assignments with optional lateral references to
         // previous ones.
-        // PipeSetInput retains qualified access to the row before the assignment.
-        plan = Project(projectList, PipeSetInput(plan))
+        plan = Project(projectList, withPipeSetInput(plan))
     }
     plan
+  }
+
+  /**
+   * Wraps the input of a pipe SET, EVAL or DROP projection in [[PipeSetInput]], which retains
+   * qualified access to the row before the operator, unless
+   * [[SQLConf.LEGACY_PIPE_OPERATOR_HIDE_REPLACED_COLUMNS]] restores the legacy behavior.
+   */
+  private def withPipeSetInput(input: LogicalPlan): LogicalPlan = {
+    if (conf.getConf(SQLConf.LEGACY_PIPE_OPERATOR_HIDE_REPLACED_COLUMNS)) {
+      input
+    } else {
+      PipeSetInput(input)
+    }
   }
 
   override def visitOperatorPipeSetAssignmentSeq(

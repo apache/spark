@@ -17,13 +17,22 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.analysis.UnresolvedExecuteImmediate
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, UnaryNode}
+import org.apache.spark.sql.catalyst.plans.logical.{
+  Command,
+  CTEInChildren,
+  ExecutableDuringAnalysis,
+  LogicalPlan,
+  Project,
+  UnaryNode
+}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{
   PIPE_EXPRESSION,
   PIPE_OPERATOR,
   PLAN_EXPRESSION,
+  PROJECT,
   TreePattern
 }
 import org.apache.spark.sql.catalyst.util._
@@ -73,7 +82,9 @@ case class PipeSetInput(child: LogicalPlan) extends UnaryNode {
   override def maxRows: Option[Long] = child.maxRows
   override def maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition
 
-  override def metadataOutput: Seq[Attribute] = {
+  // A node and its children are immutable, so the retained row is derived once per instance
+  // rather than on every lookup, which would re-derive every earlier assignment's row.
+  override lazy val metadataOutput: Seq[Attribute] = {
     val childMetadataOutput = child.metadataOutput
     val retainedQualifiedOutput = AttributeSeq
       .mergeHiddenAndVisibleOutput(
@@ -90,33 +101,125 @@ case class PipeSetInput(child: LogicalPlan) extends UnaryNode {
 }
 
 /**
- * Removes resolved [[PipeSetInput]] nodes before analyzed plans cross a Dataset boundary.
+ * Hides the columns that a SQL pipe SET retained (see [[PipeSetInput]]) from the operators above
+ * a parsed SQL query that is analyzed together with them, as Spark Connect does when a client
+ * composes a DataFrame operation on a SQL relation. References inside the query resolve below
+ * this node and still see the retained row; operators above it see only the query's output and
+ * the metadata output that the query has once analysis removed the retained rows, as they would
+ * after classic `spark.sql` analyzed the query eagerly. A hidden USING join key, for example,
+ * stays reachable even though a pipe SET above the join retained it as part of its input row.
+ */
+case class PipeSetBoundary(child: LogicalPlan) extends UnaryNode {
+  final override val nodePatterns: Seq[TreePattern] = Seq(PIPE_OPERATOR)
+
+  override def output: Seq[Attribute] = child.output
+  override def maxRows: Option[Long] = child.maxRows
+  override def maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition
+
+  // A node and its children are immutable, so this is derived once per instance.
+  override lazy val metadataOutput: Seq[Attribute] =
+    EliminateResolvedPipeSetInputs.withoutRetainedRows(child).metadataOutput
+
+  override def withNewChildInternal(newChild: LogicalPlan): PipeSetBoundary =
+    copy(child = newChild)
+}
+
+object PipeSetBoundary {
+
+  /**
+   * Wraps a parsed SQL query that uses pipe SET in a [[PipeSetBoundary]]. Plans that contain a
+   * command or a statement are left unchanged, because they are executed rather than composed.
+   */
+  def wrapQuery(plan: LogicalPlan): LogicalPlan = {
+    val usesPipeSet = plan.containsPattern(PIPE_OPERATOR) && plan.exists {
+      case _: PipeSetInput => true
+      case _ => false
+    }
+    val isQuery = !plan.exists {
+      case _: Command | _: CTEInChildren | _: ExecutableDuringAnalysis |
+          _: UnresolvedExecuteImmediate => true
+      case _ => false
+    }
+    if (usesPipeSet && isQuery) PipeSetBoundary(plan) else plan
+  }
+}
+
+/**
+ * Removes resolved [[PipeSetInput]] and [[PipeSetBoundary]] nodes before analyzed plans cross a
+ * Dataset boundary.
  *
  * Qualified source attributes referenced later in the same pipe query have already been
  * materialized by this point. Removing the marker and any retained attributes copied to hidden
  * output prevents them from being resolved by a subsequent Dataset operation.
+ *
+ * The rule skips already-analyzed sub-plans, which their own analysis cleaned, and enters
+ * expressions only where a subquery occurs. It also cleans a [[Project]] whose marker an
+ * extension rule already removed. A cleaned [[Project]] is rebuilt rather than updated in place,
+ * so that name lookups cached on the old instance are not reused.
  */
 object EliminateResolvedPipeSetInputs extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = {
-    val planWithCleanedHiddenOutput =
-      plan.transformDownWithSubqueriesAndReferenceEquality {
-        case project: Project =>
-          project.getTagValue(Project.hiddenOutputTag) match {
-            case Some(hiddenOutput) if hiddenOutput.exists(_.pipeSetRetained) =>
-              val cleanedHiddenOutput = hiddenOutput.filterNot(_.pipeSetRetained)
-              val cleanedProject = project.copy()
-              cleanedProject.copyTagsFrom(project)
-              cleanedProject.setTagValue(Project.hiddenOutputTag, cleanedHiddenOutput)
-              cleanedProject
-            case _ => project
-          }
-      }
+  override def apply(plan: LogicalPlan): LogicalPlan = cleanup(plan, onlyResolved = true)
 
-    planWithCleanedHiddenOutput.resolveOperatorsUpWithSubqueriesAndPruning(
-      _.containsAnyPattern(PIPE_OPERATOR, PLAN_EXPRESSION), ruleId) {
-      case pipeSetInput: PipeSetInput if pipeSetInput.resolved => pipeSetInput.child
+  /**
+   * Returns `plan` without the retained rows of its pipe SET operators, resolved or not. This is
+   * the operator tree whose metadata output the cleaned plan exposes after analysis.
+   */
+  private[sql] def withoutRetainedRows(plan: LogicalPlan): LogicalPlan =
+    cleanup(plan, onlyResolved = false)
+
+  /**
+   * Cleans `plan` bottom-up. A cleaned [[Project]] is structurally equal to the original one, so
+   * the traversal keeps replacements by reference rather than by equality, as `transform` would.
+   */
+  private def cleanup(plan: LogicalPlan, onlyResolved: Boolean): LogicalPlan = {
+    if (plan.analyzed || !plan.containsAnyPattern(PIPE_OPERATOR, PLAN_EXPRESSION, PROJECT)) {
+      return plan
+    }
+    val withCleanedChildren = plan.mapChildrenWithReferenceEquality(cleanup(_, onlyResolved))
+    val withCleanedSubqueries = if (withCleanedChildren.containsPattern(PLAN_EXPRESSION)) {
+      withCleanedChildren.mapExpressionsWithReferenceEquality(
+        cleanupSubqueries(_, onlyResolved))
+    } else {
+      withCleanedChildren
+    }
+    withCleanedSubqueries match {
+      case marker @ (_: PipeSetInput | _: PipeSetBoundary) if !onlyResolved || marker.resolved =>
+        val child = marker.children.head
+        if (onlyResolved) {
+          child.copyTagsFrom(marker)
+        }
+        child
+      case project: Project => withoutRetainedHiddenOutput(project)
+      case other => other
     }
   }
+
+  private def cleanupSubqueries(expression: Expression, onlyResolved: Boolean): Expression = {
+    if (!expression.containsPattern(PLAN_EXPRESSION)) {
+      expression
+    } else {
+      expression.transformDownWithReferenceEquality {
+        case subquery: SubqueryExpression =>
+          val newPlan = cleanup(subquery.plan, onlyResolved)
+          if (newPlan eq subquery.plan) subquery else subquery.withNewPlan(newPlan)
+      }
+    }
+  }
+
+  /**
+   * Removes retained attributes from a [[Project]]'s hidden output. The [[Project]] is rebuilt
+   * rather than updated in place, so that name lookups cached on the old instance are not reused.
+   */
+  private def withoutRetainedHiddenOutput(project: Project): Project =
+    project.getTagValue(Project.hiddenOutputTag) match {
+      case Some(hiddenOutput) if hiddenOutput.exists(_.pipeSetRetained) =>
+        val cleanedProject = project.copy()
+        cleanedProject.copyTagsFrom(project)
+        cleanedProject.setTagValue(
+          Project.hiddenOutputTag, hiddenOutput.filterNot(_.pipeSetRetained))
+        cleanedProject
+      case _ => project
+    }
 }
 
 /** This rule removes transparent pipe-operator nodes from a logical plan after analysis. */
@@ -125,6 +228,7 @@ object EliminatePipeOperators extends Rule[LogicalPlan] {
     _.containsPattern(PIPE_OPERATOR), ruleId) {
     case PipeOperator(child) => child
     case PipeSetInput(child) => child
+    case PipeSetBoundary(child) => child
   }
 }
 

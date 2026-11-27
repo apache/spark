@@ -19,6 +19,7 @@ package org.apache.spark.sql.analysis.resolver
 
 import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.analysis.resolver.{
   AnalyzerBridgeState,
   ExplicitlyUnsupportedResolverFeature,
@@ -26,11 +27,13 @@ import org.apache.spark.sql.catalyst.analysis.resolver.{
   ResolverGuard
 }
 import org.apache.spark.sql.catalyst.expressions.{
+  Ascending,
   JsonArray,
   JsonObjectExpr,
   Literal,
   PipeOperator,
-  PipeSetInput
+  PipeSetInput,
+  SortOrder
 }
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
@@ -204,13 +207,59 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
   }
 
   test("SPARK-59146: missing attributes cross pipe SET input in dual-run analysis") {
+    // Analyze the Sort together with the parsed SET plan, so that the missing attribute is
+    // inserted through the PipeSetInput marker. `sql(...).orderBy(...)` would analyze the SET
+    // eagerly, which removes the marker before the Sort is resolved.
+    val parsedPlan = spark.sessionState.sqlParser.parsePlan(
+      "SELECT x FROM VALUES (1, 2), (3, 0) AS t(x, y) |> SET x = x + 1")
+    assert(parsedPlan.exists(_.isInstanceOf[PipeSetInput]))
+    val sortedPlan = Sort(
+      Seq(SortOrder(UnresolvedAttribute("y"), Ascending)), global = true, parsedPlan)
+    checkResolverGuard(sortedPlan, unsupportedReason = None)
     withSQLConf(
         SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "true",
         SQLConf.ANALYZER_DUAL_RUN_SAMPLE_RATE.key -> "1.0",
         SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false") {
-      val dataFrame = sql(
-        "SELECT x FROM VALUES (1, 2), (3, 0) AS t(x, y) |> SET x = x + 1")
-      assert(dataFrame.orderBy("y").collect().map(_.getInt(0)) === Array(4, 2))
+      val dataFrame = org.apache.spark.sql.classic.Dataset.ofRows(spark, sortedPlan)
+      assert(dataFrame.collect().map(_.getInt(0)) === Array(4, 2))
+    }
+  }
+
+  test("SPARK-59146: set operations exclude pipe SET retained columns in single-pass analysis") {
+    val setOperationQueries = Seq(
+      "VALUES (1, 10) AS t(a, b) |> SET a = a + 1 |> UNION ALL VALUES (2, 20)" ->
+        Set(Row(2, 10), Row(2, 20)),
+      "VALUES (1, 10) AS t(a, b) |> SET a = a + 1 |> INTERSECT VALUES (2, 10)" ->
+        Set(Row(2, 10)),
+      "VALUES (1, 10) AS t(a, b) |> SET a = a + 1 |> EXCEPT VALUES (2, 20)" ->
+        Set(Row(2, 10)))
+    setOperationQueries.foreach { case (query, _) => checkResolverGuard(query) }
+
+    withSQLConf(
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+      setOperationQueries.foreach { case (query, expectedRows) =>
+        withClue(s"Query: $query") {
+          val result = sql(query)
+          assert(result.schema.fieldNames === Array("a", "b"))
+          assert(result.queryExecution.executedPlan.executeCollectPublic().toSet === expectedRows)
+        }
+      }
+    }
+  }
+
+  test("SPARK-59146: a struct field takes precedence over a hidden USING join key") {
+    // The single-pass resolver picks the hidden join key here, as it did before pipe SET kept
+    // its input row, so check the fixed-point analyzer on its own.
+    withSQLConf(
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+      checkAnswer(
+        sql("SELECT p.id FROM VALUES (named_struct('id', 7), 1) AS o(p, id) " +
+          "JOIN VALUES (1) AS p(id) USING (id)"),
+        Row(7))
     }
   }
 

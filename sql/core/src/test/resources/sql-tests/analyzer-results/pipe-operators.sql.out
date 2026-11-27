@@ -1224,6 +1224,159 @@ Sort [x#x ASC NULLS FIRST], true
 
 
 -- !query
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> inner join values (5) as t(a) on true
+|> select t.a
+-- !query analysis
+Project [a#x]
++- Join Inner, true
+   :- Project [(a#x + 1) AS a#x, b#x]
+   :  +- SubqueryAlias t
+   :     +- LocalRelation [a#x, b#x]
+   +- SubqueryAlias t
+      +- LocalRelation [a#x]
+
+
+-- !query
+values (1, 10) as t1(k, v)
+|> inner join values (1, 20) as t2(k, w) using (k)
+|> select *, t2.k
+|> select t2.*
+-- !query analysis
+Project [k#x, w#x, k#x]
++- Project [k#x, v#x, w#x, k#x]
+   +- Project [k#x, v#x, w#x, k#x]
+      +- Join Inner, (k#x = k#x)
+         :- SubqueryAlias t1
+         :  +- LocalRelation [k#x, v#x]
+         +- SubqueryAlias t2
+            +- LocalRelation [k#x, w#x]
+
+
+-- !query
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> select b
+|> select t.a
+-- !query analysis
+Project [a#x]
++- Project [b#x, a#x]
+   +- Project [(a#x + 1) AS a#x, b#x, a#x]
+      +- SubqueryAlias t
+         +- LocalRelation [a#x, b#x]
+
+
+-- !query
+values (1, 10) as t(a, b)
+|> set b = 0
+|> drop a
+|> select t.a
+-- !query analysis
+Project [a#x]
++- Project [b#x, a#x]
+   +- Project [a#x, 0 AS b#x]
+      +- SubqueryAlias t
+         +- LocalRelation [a#x, b#x]
+
+
+-- !query
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> union all values (2, 20)
+-- !query analysis
+Union false, false
+:- Project [(a#x + 1) AS a#x, b#x]
+:  +- SubqueryAlias t
+:     +- LocalRelation [a#x, b#x]
++- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> intersect values (2, 10)
+-- !query analysis
+Intersect false
+:- Project [(a#x + 1) AS a#x, b#x]
+:  +- SubqueryAlias t
+:     +- LocalRelation [a#x, b#x]
++- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> except values (2, 20)
+-- !query analysis
+Except false
+:- Project [(a#x + 1) AS a#x, b#x]
+:  +- SubqueryAlias t
+:     +- LocalRelation [a#x, b#x]
++- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> inner join values (1, 20) as u(c, d) on a = u.c + 1
+-- !query analysis
+Join Inner, (a#x = (c#x + 1))
+:- Project [(a#x + 1) AS a#x, b#x]
+:  +- SubqueryAlias t
+:     +- LocalRelation [a#x, b#x]
++- SubqueryAlias u
+   +- LocalRelation [c#x, d#x]
+
+
+-- !query
+set spark.sql.legacy.pipeOperatorHideReplacedColumns=true
+-- !query analysis
+SetCommand (spark.sql.legacy.pipeOperatorHideReplacedColumns,Some(true))
+
+
+-- !query
+values (1, 2, 3) as t(a, b, c)
+|> set b = 20
+|> select t.*
+-- !query analysis
+Project [a#x, c#x]
++- Project [a#x, 20 AS b#x, c#x]
+   +- SubqueryAlias t
+      +- LocalRelation [a#x, b#x, c#x]
+
+
+-- !query
+select 1 as x, named_struct('x', 2) as col
+|> as col
+|> set x = x + 1
+|> select x, col.x
+-- !query analysis
+Project [x#x, col#x.x AS x#x]
++- Project [(x#x + 1) AS x#x, col#x]
+   +- SubqueryAlias col
+      +- Project [1 AS x#x, named_struct(x, 2) AS col#x]
+         +- OneRowRelation
+
+
+-- !query
+values (1, 10) as t(a, b)
+|> drop a
+|> select t.*
+-- !query analysis
+Project [b#x]
++- Project [b#x]
+   +- SubqueryAlias t
+      +- LocalRelation [a#x, b#x]
+
+
+-- !query
+set spark.sql.legacy.pipeOperatorHideReplacedColumns=false
+-- !query analysis
+SetCommand (spark.sql.legacy.pipeOperatorHideReplacedColumns,Some(false))
+
+
+-- !query
 table t
 |> set z = 1
 -- !query analysis
@@ -1241,6 +1394,28 @@ org.apache.spark.sql.AnalysisException
     "startIndex" : 1,
     "stopIndex" : 20,
     "fragment" : "table t\n|> set z = 1"
+  } ]
+}
+
+
+-- !query
+values (1), (2) as t(x)
+|> set x = sum(x)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "clause" : "SET",
+    "expr" : "sum(x#x)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 36,
+    "stopIndex" : 41,
+    "fragment" : "sum(x)"
   } ]
 }
 
@@ -1952,6 +2127,55 @@ select 1 as x, named_struct('middle', named_struct('inner', 2)) as outer
 Project [x#x, named_struct(middle, named_struct()) AS outer#x]
 +- Project [1 AS x#x, named_struct(middle, named_struct(inner, 2)) AS outer#x]
    +- OneRowRelation
+
+
+-- !query
+values (1, 10) as t(a, b)
+|> drop a
+|> select t.a
+-- !query analysis
+Project [a#x]
++- Project [b#x, a#x]
+   +- SubqueryAlias t
+      +- LocalRelation [a#x, b#x]
+
+
+-- !query
+values (1, 10) as lhs(k, l)
+|> inner join values (1, 20) as rhs(k, r) using (k)
+|> drop k
+|> select lhs.k
+-- !query analysis
+Project [k#x]
++- Project [l#x, r#x, k#x]
+   +- Project [k#x, l#x, r#x]
+      +- Join Inner, (k#x = k#x)
+         :- SubqueryAlias lhs
+         :  +- LocalRelation [k#x, l#x]
+         +- SubqueryAlias rhs
+            +- LocalRelation [k#x, r#x]
+
+
+-- !query
+values (1, 2, 3) as t(a, b, c)
+|> drop b
+|> select t.*
+-- !query analysis
+Project [a#x, b#x, c#x]
++- Project [a#x, c#x, b#x]
+   +- SubqueryAlias t
+      +- LocalRelation [a#x, b#x, c#x]
+
+
+-- !query
+values (1, 2, 3) as t(a, b, c)
+|> drop b
+|> select *
+-- !query analysis
+Project [a#x, c#x]
++- Project [a#x, c#x]
+   +- SubqueryAlias t
+      +- LocalRelation [a#x, b#x, c#x]
 
 
 -- !query

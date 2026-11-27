@@ -123,3 +123,22 @@ FROM nt2 x LEFT ANTI JOIN (nt1 JOIN nt2 USING (k)) ON x.k = nt2.k;
 FROM nt1 JOIN nt2 USING (k) LEFT SEMI JOIN nt2 x ON nt2.k = x.k;
 
 FROM nt2 x LEFT JOIN (nt1 JOIN nt2 USING (k)) ON x.k = nt2.k;
+
+-- A join over a USING join keeps its output at the top level and under a subquery alias when its
+-- condition references no hidden key
+FROM VALUES (1, 10) AS nt1(k, v1) JOIN VALUES (1, 20) AS nt2(k, v2) USING (k)
+  JOIN VALUES (1, 30) AS nt3(k, v3) ON nt1.k = nt3.k;
+
+SELECT * FROM (
+  FROM VALUES (1, 10) AS nt1(k, v1) JOIN VALUES (1, 20) AS nt2(k, v2) USING (k)
+    JOIN VALUES (1, 30) AS nt3(k, v3) ON nt1.k = nt3.k) AS q;
+
+-- A qualified name that matches both a visible column and a hidden key resolves to the visible
+-- column
+SELECT rhs.k FROM VALUES (1) AS lhs(k) JOIN VALUES (1) AS rhs(k) USING (k)
+  JOIN VALUES (2) AS rhs(k) ON true;
+
+WITH c AS (SELECT 1 AS k, 2 AS v) SELECT c.k FROM c JOIN c USING (k);
+
+-- A qualified star in COUNT over a table whose only columns are hidden keys counts rows
+SELECT count(t2.*) FROM VALUES (1, 2) AS t1(k, v) JOIN VALUES (1) AS t2(k) USING (k);

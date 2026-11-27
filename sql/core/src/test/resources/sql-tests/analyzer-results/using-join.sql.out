@@ -1070,3 +1070,81 @@ Project [k#x, v2#x, k#x, v1#x, v2#x]
                   +- Project [k#x, v2#x]
                      +- SubqueryAlias nt2
                         +- LocalRelation [k#x, v2#x]
+
+
+-- !query
+FROM VALUES (1, 10) AS nt1(k, v1) JOIN VALUES (1, 20) AS nt2(k, v2) USING (k)
+  JOIN VALUES (1, 30) AS nt3(k, v3) ON nt1.k = nt3.k
+-- !query analysis
+Join Inner, (k#x = k#x)
+:- Project [k#x, v1#x, v2#x]
+:  +- Join Inner, (k#x = k#x)
+:     :- SubqueryAlias nt1
+:     :  +- LocalRelation [k#x, v1#x]
+:     +- SubqueryAlias nt2
+:        +- LocalRelation [k#x, v2#x]
++- SubqueryAlias nt3
+   +- LocalRelation [k#x, v3#x]
+
+
+-- !query
+SELECT * FROM (
+  FROM VALUES (1, 10) AS nt1(k, v1) JOIN VALUES (1, 20) AS nt2(k, v2) USING (k)
+    JOIN VALUES (1, 30) AS nt3(k, v3) ON nt1.k = nt3.k) AS q
+-- !query analysis
+Project [k#x, v1#x, v2#x, k#x, v3#x]
++- SubqueryAlias q
+   +- Join Inner, (k#x = k#x)
+      :- Project [k#x, v1#x, v2#x]
+      :  +- Join Inner, (k#x = k#x)
+      :     :- SubqueryAlias nt1
+      :     :  +- LocalRelation [k#x, v1#x]
+      :     +- SubqueryAlias nt2
+      :        +- LocalRelation [k#x, v2#x]
+      +- SubqueryAlias nt3
+         +- LocalRelation [k#x, v3#x]
+
+
+-- !query
+SELECT rhs.k FROM VALUES (1) AS lhs(k) JOIN VALUES (1) AS rhs(k) USING (k)
+  JOIN VALUES (2) AS rhs(k) ON true
+-- !query analysis
+Project [k#x]
++- Join Inner, true
+   :- Project [k#x]
+   :  +- Join Inner, (k#x = k#x)
+   :     :- SubqueryAlias lhs
+   :     :  +- LocalRelation [k#x]
+   :     +- SubqueryAlias rhs
+   :        +- LocalRelation [k#x]
+   +- SubqueryAlias rhs
+      +- LocalRelation [k#x]
+
+
+-- !query
+WITH c AS (SELECT 1 AS k, 2 AS v) SELECT c.k FROM c JOIN c USING (k)
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias c
+:     +- Project [1 AS k#x, 2 AS v#x]
+:        +- OneRowRelation
++- Project [k#x]
+   +- Project [k#x, v#x, v#x]
+      +- Join Inner, (k#x = k#x)
+         :- SubqueryAlias c
+         :  +- CTERelationRef xxxx, true, [k#x, v#x], false, false, 1
+         +- SubqueryAlias c
+            +- CTERelationRef xxxx, true, [k#x, v#x], false, false, 1
+
+
+-- !query
+SELECT count(t2.*) FROM VALUES (1, 2) AS t1(k, v) JOIN VALUES (1) AS t2(k) USING (k)
+-- !query analysis
+Aggregate [count(k#x) AS count(k)#xL]
++- Project [k#x, v#x, k#x]
+   +- Join Inner, (k#x = k#x)
+      :- SubqueryAlias t1
+      :  +- LocalRelation [k#x, v#x]
+      +- SubqueryAlias t2
+         +- LocalRelation [k#x]

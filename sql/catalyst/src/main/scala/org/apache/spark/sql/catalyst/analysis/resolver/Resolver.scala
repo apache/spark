@@ -50,12 +50,13 @@ import org.apache.spark.sql.catalyst.expressions.{
   EliminateResolvedPipeSetInputs,
   Expression,
   ExprId,
+  PipeSetBoundary,
   PipeSetInput
 }
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
-import org.apache.spark.sql.catalyst.util.EvaluateUnresolvedInlineTable
+import org.apache.spark.sql.catalyst.util.{EvaluateUnresolvedInlineTable, MetadataColumnHelper}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 
@@ -302,6 +303,8 @@ class Resolver(
             projectResolver.resolve(unresolvedProject)
           case unresolvedPipeSetInput: PipeSetInput =>
             resolvePipeSetInput(unresolvedPipeSetInput)
+          case unresolvedPipeSetBoundary: PipeSetBoundary =>
+            resolvePipeSetBoundary(unresolvedPipeSetBoundary)
           case unresolvedAggregate: Aggregate =>
             aggregateResolver.resolve(unresolvedAggregate)
           case unresolvedFilter: Filter =>
@@ -391,6 +394,47 @@ class Resolver(
     )
     scopes.overwriteCurrent(hiddenOutput = Some(hiddenOutput))
     resolvedPipeSetInput
+  }
+
+  /**
+   * Resolves the boundary that hides the columns pipe SET retained from the operators above a
+   * parsed SQL query. In the scope's hidden output it keeps a retained attribute only when the
+   * boundary's metadata output still has it, as for a USING join key below the SET, and then in
+   * that form. Like a [[SubqueryAlias]], it trims its child to the scope output, so the other
+   * retained columns that a non-top-level SET projection appended do not leak above it; the
+   * columns of the kept attributes stay, and [[PruneMetadataColumns]] removes those that nothing
+   * above references.
+   */
+  private def resolvePipeSetBoundary(unresolvedPipeSetBoundary: PipeSetBoundary): LogicalPlan = {
+    val resolvedChild = resolve(unresolvedPipeSetBoundary.child)
+
+    val metadataOutputByExprId = PipeSetBoundary(resolvedChild).metadataOutput
+      .map(attribute => attribute.exprId -> attribute)
+      .toMap
+    val keptRetainedExprIds = new java.util.HashSet[ExprId]
+    val hiddenOutput = scopes.current.hiddenOutput.flatMap { attribute =>
+      if (attribute.pipeSetRetained) {
+        // A retained row can repeat an attribute; keep at most one entry for it.
+        metadataOutputByExprId.get(attribute.exprId).filter { _ =>
+          keptRetainedExprIds.add(attribute.exprId)
+        }
+      } else {
+        Some(attribute)
+      }
+    }
+
+    val scopeOutputExprIds = scopes.current.output.map(_.exprId).toSet
+    val keptAppendedOutput = resolvedChild.output.filter { attribute =>
+      keptRetainedExprIds.contains(attribute.exprId) &&
+      !scopeOutputExprIds.contains(attribute.exprId)
+    }
+    val resolvedChildWithScopeOutput = retainOriginalJoinOutputAtBoundary(
+      plan = resolvedChild,
+      outputExpressions = scopes.current.output ++ keptAppendedOutput
+    )
+    scopes.overwriteCurrent(hiddenOutput = Some(hiddenOutput))
+
+    unresolvedPipeSetBoundary.copy(child = resolvedChildWithScopeOutput)
   }
 
   /**

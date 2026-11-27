@@ -31,6 +31,14 @@ object ResolverTag {
     TreeNodeTag[Unit]("project_for_expression_id_deduplication")
 
   /**
+   * Tag used to mark [[Project]] nodes that restore the output of a [[Join]] at a boundary that
+   * discards hidden output (see `RetainsOriginalJoinOutput.retainOriginalJoinOutputAtBoundary`).
+   * [[PruneMetadataColumns]] removes such a [[Project]] when pruning leaves it redundant.
+   */
+  val PROJECT_FOR_JOIN_OUTPUT_AT_BOUNDARY =
+    TreeNodeTag[Unit]("project_for_join_output_at_boundary")
+
+  /**
    * Tag used to mark a node after resolving it to avoid traversing into its subtree twice.
    */
   val SINGLE_PASS_SUBTREE_BOUNDARY =

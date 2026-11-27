@@ -106,6 +106,8 @@ class ResolverGuard(
         checkProject(project)
       case pipeSetInput: PipeSetInput =>
         checkOperator(pipeSetInput.child)
+      case pipeSetBoundary: PipeSetBoundary =>
+        checkOperator(pipeSetBoundary.child)
       case aggregate: Aggregate =>
         checkAggregate(aggregate)
       case filter: Filter =>
@@ -196,8 +198,11 @@ class ResolverGuard(
         checkLiteral(literal)
       case unresolvedOrdinal: UnresolvedOrdinal =>
         checkUnresolvedOrdinal(unresolvedOrdinal)
+      // The legacy configuration builds pipe SET without its PipeSetInput marker, which the
+      // single-pass resolver needs to resolve a qualified name as the fixed-point analyzer does.
       case pipeExpression: PipeExpression
-          if pipeExpression.clause == PipeOperators.setClause =>
+          if pipeExpression.clause == PipeOperators.setClause &&
+            !conf.getConf(SQLConf.LEGACY_PIPE_OPERATOR_HIDE_REPLACED_COLUMNS) =>
         checkExpression(pipeExpression.child)
       case unresolvedPredicate: Predicate =>
         checkUnresolvedPredicate(unresolvedPredicate)

@@ -458,12 +458,76 @@ table t
      t._metadata.file_name is not null as original_metadata_available
 |> order by x;
 
+-- A visible column takes precedence over a retained column with the same qualified name.
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> inner join values (5) as t(a) on true
+|> select t.a;
+
+-- A qualified star over a USING join lists the hidden key first, also when a projection
+-- re-exposes it.
+values (1, 10) as t1(k, v)
+|> inner join values (1, 20) as t2(k, w) using (k)
+|> select *, t2.k
+|> select t2.*;
+
+-- Qualified source values remain available past a later SELECT or DROP.
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> select b
+|> select t.a;
+
+values (1, 10) as t(a, b)
+|> set b = 0
+|> drop a
+|> select t.a;
+
+-- Set operations do not include retained source values.
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> union all values (2, 20);
+
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> intersect values (2, 10);
+
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> except values (2, 20);
+
+-- A join after SET whose condition references no source value keeps the join output.
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> inner join values (1, 20) as u(c, d) on a = u.c + 1;
+
+-- The legacy configuration hides the replaced source values.
+set spark.sql.legacy.pipeOperatorHideReplacedColumns=true;
+
+values (1, 2, 3) as t(a, b, c)
+|> set b = 20
+|> select t.*;
+
+select 1 as x, named_struct('x', 2) as col
+|> as col
+|> set x = x + 1
+|> select x, col.x;
+
+values (1, 10) as t(a, b)
+|> drop a
+|> select t.*;
+
+set spark.sql.legacy.pipeOperatorHideReplacedColumns=false;
+
 -- SET operators: negative tests.
 ---------------------------------
 
 -- SET with a column name that does not exist in the input relation.
 table t
 |> set z = 1;
+
+-- Aggregate functions are not allowed in SET.
+values (1), (2) as t(x)
+|> set x = sum(x);
 
 -- SET with a column name that matches two copies of the same column.
 select x, x from t
@@ -692,6 +756,25 @@ select 1 as x, named_struct('x', 2, 'y', 3) as col
 -- Multi-level nested struct field drop.
 select 1 as x, named_struct('middle', named_struct('inner', 2)) as outer
 |> drop outer.middle.inner;
+
+-- A table alias refers to the original value of a dropped column, as with SET.
+values (1, 10) as t(a, b)
+|> drop a
+|> select t.a;
+
+values (1, 10) as lhs(k, l)
+|> inner join values (1, 20) as rhs(k, r) using (k)
+|> drop k
+|> select lhs.k;
+
+-- A qualified star after DROP returns the original row; an unqualified star does not.
+values (1, 2, 3) as t(a, b, c)
+|> drop b
+|> select t.*;
+
+values (1, 2, 3) as t(a, b, c)
+|> drop b
+|> select *;
 
 -- DROP operators: negative tests.
 ----------------------------------

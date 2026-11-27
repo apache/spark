@@ -2225,8 +2225,10 @@ class Analyzer(
                     resolvesToCountBuiltin &&
                     f.arguments.length == 1) {
                   f.arguments.foreach {
+                    // The input row a pipe SET retained still belongs to its table, unlike
+                    // hidden USING join keys.
                     case u: UnresolvedStar if u.isQualifiedByTable(
-                        child.output ++ child.metadataOutput.filter(_.qualifiedAccessOnly),
+                        child.output ++ child.metadataOutput.filter(_.pipeSetRetained),
                         resolver) =>
                       throw QueryCompilationErrors
                         .singleTableStarInCountNotAllowedError(u.target.get.mkString("."))

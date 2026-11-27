@@ -157,30 +157,92 @@ abstract class LogicalPlan
     }
   }
 
-  private def attributesForResolution(
+  /**
+   * Returns the visible `output` together with the input columns that a SQL pipe SET retained
+   * in `metadataOutput` (see [[PipeSetInput]]) and that `output` does not contain. Multi-part
+   * names resolve against this sequence first, so a qualified reference to a retained column
+   * takes precedence over a struct field of a visible column. Other qualified-access-only
+   * metadata, such as the hidden keys of a USING or NATURAL join, stays in the fallback tier.
+   */
+  private def outputWithPipeSetRetained(
       output: Seq[Attribute],
       metadataOutput: Seq[Attribute]): AttributeSeq = {
-    lazy val outputSet = AttributeSet(output)
-    new AttributeSeq(
-      output.map(_.markAsAllowAnyAccess()) ++
-        metadataOutput.filter(attribute =>
-          attribute.qualifiedAccessOnly && !outputSet.contains(attribute)))
+    val retained = metadataOutput.filter(_.pipeSetRetained)
+    if (retained.isEmpty) {
+      AttributeSeq.fromNormalOutput(output)
+    } else {
+      val outputSet = AttributeSet(output)
+      new AttributeSeq(
+        output.map(_.markAsAllowAnyAccess()) ++ retained.filterNot(outputSet.contains))
+    }
+  }
+
+  /**
+   * Resolves `nameParts` in the following tiers:
+   *  - A single-part name resolves against `visibleAttributes` first. Metadata output is only
+   *    evaluated when the visible output does not resolve it.
+   *  - A multi-part name resolves against `visibleAndRetainedAttributes` first. When its
+   *    candidates include both visible columns and columns a pipe SET retained, the visible ones
+   *    win, as in the single-pass resolver.
+   *  - Otherwise the name resolves against `metadataAttributes`.
+   */
+  private def resolveInTiers(
+      nameParts: Seq[String],
+      resolver: Resolver,
+      optionalNamePartIndices: Set[Int],
+      visibleAttributes: AttributeSeq,
+      visibleAndRetainedAttributes: => AttributeSeq,
+      metadataAttributes: => AttributeSeq): Option[NamedExpression] = {
+    val firstTier = if (nameParts.length > 1) {
+      resolvePreferringVisible(
+        visibleAndRetainedAttributes, nameParts, resolver, optionalNamePartIndices)
+    } else {
+      visibleAttributes.resolve(nameParts, resolver, optionalNamePartIndices)
+    }
+    firstTier.orElse(metadataAttributes.resolve(nameParts, resolver, optionalNamePartIndices))
+  }
+
+  private def resolvePreferringVisible(
+      attributes: AttributeSeq,
+      nameParts: Seq[String],
+      resolver: Resolver,
+      optionalNamePartIndices: Set[Int]): Option[NamedExpression] = {
+    val (candidates, nestedFields) = attributes.getCandidatesForResolution(nameParts, resolver)
+    // The pipe SET retained marker is still present here; `resolveCandidates` removes it.
+    val (retainedCandidates, visibleCandidates) = candidates.partition(_.pipeSetRetained)
+    val preferredCandidates = if (retainedCandidates.nonEmpty && visibleCandidates.nonEmpty) {
+      visibleCandidates
+    } else {
+      candidates
+    }
+    attributes.resolveCandidates(
+      nameParts, resolver, preferredCandidates, nestedFields, optionalNamePartIndices) match {
+      case Seq() => None
+      case Seq(a) => Some(a)
+      case ambiguousReferences =>
+        throw QueryCompilationErrors.ambiguousReferenceError(
+          UnresolvedAttribute(nameParts).name,
+          ambiguousReferences.map(_.toAttribute))
+    }
   }
 
   private[this] lazy val childOutput = children.flatMap(_.output)
 
   private[this] lazy val childMetadataOutput = children.flatMap(_.metadataOutput)
 
-  private[this] lazy val childAttributes =
-    attributesForResolution(childOutput, childMetadataOutput)
+  private[this] lazy val childAttributes = AttributeSeq.fromNormalOutput(childOutput)
 
-  private[this] lazy val childMetadataAttributes =
-    new AttributeSeq(childMetadataOutput.filterNot(_.qualifiedAccessOnly))
+  private[this] lazy val childAttributesWithPipeSetRetained =
+    outputWithPipeSetRetained(childOutput, childMetadataOutput)
 
-  private[this] lazy val outputAttributes = attributesForResolution(output, metadataOutput)
+  private[this] lazy val childMetadataAttributes = AttributeSeq(childMetadataOutput)
 
-  private[this] lazy val outputMetadataAttributes =
-    new AttributeSeq(metadataOutput.filterNot(_.qualifiedAccessOnly))
+  private[this] lazy val outputAttributes = AttributeSeq.fromNormalOutput(output)
+
+  private[this] lazy val outputAttributesWithPipeSetRetained =
+    outputWithPipeSetRetained(output, metadataOutput)
+
+  private[this] lazy val outputMetadataAttributes = AttributeSeq(metadataOutput)
 
   /**
    * Optionally resolves the given strings to a [[NamedExpression]] using the input from all child
@@ -200,8 +262,13 @@ abstract class LogicalPlan
       nameParts: Seq[String],
       resolver: Resolver,
       optionalNamePartIndices: Set[Int]): Option[NamedExpression] =
-    childAttributes.resolve(nameParts, resolver, optionalNamePartIndices)
-      .orElse(childMetadataAttributes.resolve(nameParts, resolver, optionalNamePartIndices))
+    resolveInTiers(
+      nameParts,
+      resolver,
+      optionalNamePartIndices,
+      childAttributes,
+      childAttributesWithPipeSetRetained,
+      childMetadataAttributes)
 
   /**
    * Optionally resolves the given strings to a [[NamedExpression]] based on the output of this
@@ -221,8 +288,13 @@ abstract class LogicalPlan
       nameParts: Seq[String],
       resolver: Resolver,
       optionalNamePartIndices: Set[Int]): Option[NamedExpression] =
-    outputAttributes.resolve(nameParts, resolver, optionalNamePartIndices)
-      .orElse(outputMetadataAttributes.resolve(nameParts, resolver, optionalNamePartIndices))
+    resolveInTiers(
+      nameParts,
+      resolver,
+      optionalNamePartIndices,
+      outputAttributes,
+      outputAttributesWithPipeSetRetained,
+      outputMetadataAttributes)
 
   /**
    * Given an attribute name, split it to name parts by dot, but

@@ -159,6 +159,9 @@ trait RetainsOriginalJoinOutput {
       if (project.sameOutput(join)) {
         join
       } else {
+        // Columns appended below the join may still be pruned later, which can leave this
+        // Project redundant. PruneMetadataColumns then removes it, as fixed-point never adds it.
+        project.setTagValue(ResolverTag.PROJECT_FOR_JOIN_OUTPUT_AT_BOUNDARY, ())
         project
       }
     case withCte: WithCTE =>

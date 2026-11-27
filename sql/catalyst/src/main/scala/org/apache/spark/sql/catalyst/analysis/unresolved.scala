@@ -595,17 +595,21 @@ trait UnresolvedStarBase extends Star with Unevaluable {
     // If there is no table specified, use all non-hidden input attributes.
     if (target.isEmpty) return parameters.childOperatorOutput
 
-    // If there is a table specified, use hidden input attributes as well
-    val hiddenOutput = parameters.childOperatorMetadataOutput
+    // If there is a table specified, use hidden input attributes as well. Only the input row that
+    // a pipe SET retained is merged with the visible output by occurrence, so that it keeps its
+    // original column order; other hidden attributes, such as USING join keys, come first.
+    val (pipeSetRetainedOutput, otherHiddenOutput) = parameters.childOperatorMetadataOutput
       .filter(_.qualifiedAccessOnly)
-      // Remove the qualified-access-only restriction immediately. The expanded attributes will be
-      // put in a logical plan node and becomes normal attributes. They can still keep the special
-      // attribute metadata to indicate that they are from metadata columns, but they should not
-      // keep any restrictions that may break column resolution for normal attributes.
-      // See SPARK-42084 for more details.
-      .map(_.markAsAllowAnyAccess())
-    val expandedAttributes = AttributeSeq
-      .mergeHiddenAndVisibleOutput(hiddenOutput, parameters.childOperatorOutput)
+      .partition(_.pipeSetRetained)
+    // Remove the qualified-access-only restriction immediately. The expanded attributes will be
+    // put in a logical plan node and becomes normal attributes. They can still keep the special
+    // attribute metadata to indicate that they are from metadata columns, but they should not
+    // keep any restrictions that may break column resolution for normal attributes.
+    // See SPARK-42084 for more details.
+    val expandedAttributes = (otherHiddenOutput.map(_.markAsAllowAnyAccess()) ++
+      AttributeSeq.mergeHiddenAndVisibleOutput(
+        pipeSetRetainedOutput.map(_.markAsAllowAnyAccess()),
+        parameters.childOperatorOutput))
       .filter(matchedQualifier(_, target.get, parameters.resolver))
 
     if (expandedAttributes.nonEmpty) return expandedAttributes
