@@ -724,6 +724,28 @@ abstract class SchemaPruningSuite
     checkAnswer(query3, Row("Susan", "Z.", Row("Susan", "Z.", "Smith")) :: Nil)
   }
 
+  testSchemaPruning("SPARK-60564: nested schema pruning on a left outer lateral join") {
+    // A column of the subquery that is not NULL on the row the left outer lateral join adds for
+    // a contact without friends, such as contacts 1, 2 and 3, needs a marker of the generated
+    // rows. The position of a posexplode is that marker, so the friends are still pruned.
+    val query1 = sql(
+      """
+        |select c.id, x.* from contacts c
+        |left join lateral (select c.id as i, f.first from explode(c.friends) t(f)) x
+        |""".stripMargin)
+    checkScan(query1, "struct<id:int,friends:array<struct<first:string>>>")
+    checkAnswer(query1,
+      Row(0, 0, "Susan") :: Row(1, null, null) :: Row(2, null, null) :: Row(3, null, null) :: Nil)
+
+    val query2 = sql(
+      """
+        |select c.id, x.* from contacts c
+        |left join lateral (select coalesce(f.first, '') as first from explode(c.friends) t(f)) x
+        |""".stripMargin)
+    checkScan(query2, "struct<id:int,friends:array<struct<first:string>>>")
+    checkAnswer(query2, Row(0, "Susan") :: Row(1, null) :: Row(2, null) :: Row(3, null) :: Nil)
+  }
+
   testSchemaPruning("select one deep nested complex field after repartition") {
     val query = sql("select * from contacts")
       .repartition(100)

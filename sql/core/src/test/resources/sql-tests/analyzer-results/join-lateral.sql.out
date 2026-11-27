@@ -2698,6 +2698,75 @@ Project [c1#x, c2#x, x#x, c3#x]
 
 
 -- !query
+SELECT * FROM t3 LEFT JOIN LATERAL (SELECT coalesce(c3, 0) AS x, c3 FROM EXPLODE(c2) t(c3))
+  WHERE c3 IS NULL
+-- !query analysis
+Project [c1#x, c2#x, x#x, c3#x]
++- Filter isnull(c3#x)
+   +- LateralJoin lateral-subquery#x [c2#x], LeftOuter
+      :  +- SubqueryAlias __auto_generated_subquery_name
+      :     +- Project [coalesce(c3#x, 0) AS x#x, c3#x]
+      :        +- SubqueryAlias t
+      :           +- Project [col#x AS c3#x]
+      :              +- Generate explode(outer(c2#x)), false, [col#x]
+      :                 +- OneRowRelation
+      +- SubqueryAlias spark_catalog.default.t3
+         +- View (`spark_catalog`.`default`.`t3`, [c1#x, c2#x])
+            +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as array<int>) AS c2#x]
+               +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT * FROM VALUES (0, ARRAY()), (1, ARRAY(1)) AS t(c1, c2)
+  LEFT JOIN LATERAL (SELECT 10 / c1 + v AS w FROM EXPLODE(c2) t2(v))
+-- !query analysis
+Project [c1#x, c2#x, w#x]
++- LateralJoin lateral-subquery#x [c1#x && c2#x], LeftOuter
+   :  +- SubqueryAlias __auto_generated_subquery_name
+   :     +- Project [((cast(10 as double) / cast(outer(c1#x) as double)) + cast(v#x as double)) AS w#x]
+   :        +- SubqueryAlias t2
+   :           +- Project [col#x AS v#x]
+   :              +- Generate explode(outer(c2#x)), false, [col#x]
+   :                 +- OneRowRelation
+   +- SubqueryAlias t
+      +- LocalRelation [c1#x, c2#x]
+
+
+-- !query
+SELECT * FROM t3 LEFT JOIN LATERAL (SELECT coalesce(v, -1) AS w, p FROM POSEXPLODE(c2) t(p, v))
+-- !query analysis
+Project [c1#x, c2#x, w#x, p#x]
++- LateralJoin lateral-subquery#x [c2#x], LeftOuter
+   :  +- SubqueryAlias __auto_generated_subquery_name
+   :     +- Project [coalesce(v#x, -1) AS w#x, p#x]
+   :        +- SubqueryAlias t
+   :           +- Project [pos#x AS p#x, col#x AS v#x]
+   :              +- Generate posexplode(outer(c2#x)), false, [pos#x, col#x]
+   :                 +- OneRowRelation
+   +- SubqueryAlias spark_catalog.default.t3
+      +- View (`spark_catalog`.`default`.`t3`, [c1#x, c2#x])
+         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as array<int>) AS c2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT * FROM tm LEFT JOIN LATERAL (SELECT coalesce(v, 0) AS w, k FROM EXPLODE(m) t(k, v))
+-- !query analysis
+Project [id#x, m#x, w#x, k#x]
++- LateralJoin lateral-subquery#x [m#x], LeftOuter
+   :  +- SubqueryAlias __auto_generated_subquery_name
+   :     +- Project [coalesce(v#x, 0) AS w#x, k#x]
+   :        +- SubqueryAlias t
+   :           +- Project [key#x AS k#x, value#x AS v#x]
+   :              +- Generate explode(outer(m#x)), false, [key#x, value#x]
+   :                 +- OneRowRelation
+   +- SubqueryAlias spark_catalog.default.tm
+      +- View (`spark_catalog`.`default`.`tm`, [id#x, m#x])
+         +- Project [cast(col1#x as int) AS id#x, cast(col2#x as map<string,int>) AS m#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
 SELECT * FROM tm LEFT JOIN LATERAL EXPLODE(m) t(k, v) WHERE k IS NULL
 -- !query analysis
 Project [id#x, m#x, k#x, v#x]

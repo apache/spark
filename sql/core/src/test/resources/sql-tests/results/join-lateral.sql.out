@@ -1675,6 +1675,46 @@ struct<c1:int,c2:array<int>,x:int,c3:int>
 
 
 -- !query
+SELECT * FROM t3 LEFT JOIN LATERAL (SELECT coalesce(c3, 0) AS x, c3 FROM EXPLODE(c2) t(c3))
+  WHERE c3 IS NULL
+-- !query schema
+struct<c1:int,c2:array<int>,x:int,c3:int>
+-- !query output
+2	[]	NULL	NULL
+
+
+-- !query
+SELECT * FROM VALUES (0, ARRAY()), (1, ARRAY(1)) AS t(c1, c2)
+  LEFT JOIN LATERAL (SELECT 10 / c1 + v AS w FROM EXPLODE(c2) t2(v))
+-- !query schema
+struct<c1:int,c2:array<int>,w:double>
+-- !query output
+0	[]	NULL
+1	[1]	11.0
+
+
+-- !query
+SELECT * FROM t3 LEFT JOIN LATERAL (SELECT coalesce(v, -1) AS w, p FROM POSEXPLODE(c2) t(p, v))
+-- !query schema
+struct<c1:int,c2:array<int>,w:int,p:int>
+-- !query output
+0	[0,1]	0	0
+0	[0,1]	1	1
+1	[2]	2	0
+2	[]	NULL	NULL
+NULL	[4]	4	0
+
+
+-- !query
+SELECT * FROM tm LEFT JOIN LATERAL (SELECT coalesce(v, 0) AS w, k FROM EXPLODE(m) t(k, v))
+-- !query schema
+struct<id:int,m:map<string,int>,w:int,k:string>
+-- !query output
+1	{"a":1}	1	a
+2	{}	NULL	NULL
+
+
+-- !query
 SELECT * FROM tm LEFT JOIN LATERAL EXPLODE(m) t(k, v) WHERE k IS NULL
 -- !query schema
 struct<id:int,m:map<string,int>,k:string,v:int>

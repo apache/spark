@@ -1165,9 +1165,11 @@ object OptimizeOneRowRelationSubquery extends Rule[LogicalPlan] {
     // left outer lateral join keeps a left row for which the generator returns no rows once, with
     // NULLs for the columns of the subquery, so its Generate becomes outer, which adds that row.
     // A Project over a Generate that is not outer must not compute values that are not NULL on
-    // that row, as the subquery has no row there. A column of the generator, and a null-intolerant
-    // expression over one, are NULL there already. For other expressions, such as coalesce, a
-    // literal or an outer column, the Generate marks the rows the generator returns, see
+    // that row, nor evaluate inputs that can fail on it, as the subquery has no row there. A column
+    // of the generator, and a null-intolerant, deterministic expression over one whose other inputs
+    // can not fail, are NULL there already. For other expressions, such as coalesce, a literal, an
+    // outer column, a Python UDF or an expression with an input that can fail, the Generate marks
+    // the rows the generator returns, by the position of explode and posexplode or with
     // `GeneratedRowMarker`, and the Project gives NULL on the row it does not mark.
     case LateralJoin(
       left, right @ LateralSubquery(OneRowSubquery(plan), _, _, _, _), joinType, None)
@@ -1222,7 +1224,20 @@ object OptimizeOneRowRelationSubquery extends Rule[LogicalPlan] {
               g.copy(generator = newGenerator, outer = g.outer || keepLeftRows, child = left)
             Project(left.output ++ newPList, newGenerate)
           } else {
-            val marker = AttributeReference(GeneratedRowMarker.columnName, BooleanType)()
+            // The rows of explode and posexplode have a position, which is NULL on the added row,
+            // so the position marks them and the Generate keeps a generator that whole-stage
+            // codegen and nested column pruning support. Other generators are wrapped in
+            // GeneratedRowMarker. The marker is referenced as nullable, as it is NULL on that row.
+            val (markedGenerator, markedOutput, marker) = newGenerator match {
+              case e: Explode =>
+                val pos = AttributeReference("pos", IntegerType, nullable = false)()
+                (PosExplode(e.child), pos +: g.generatorOutput, pos.withNullability(true))
+              case p: PosExplode =>
+                (p, g.generatorOutput, g.generatorOutput.head.withNullability(true))
+              case _ =>
+                val m = AttributeReference(GeneratedRowMarker.columnName, BooleanType)()
+                (GeneratedRowMarker(newGenerator), g.generatorOutput :+ m, m)
+            }
             // A Python or external UDF is lifted out of the If and evaluated on every row, so an
             // expression with one is wrapped in EvalOnlyWhen, which evaluates it only on the rows
             // the generator returns. The If and the EvalOnlyWhen use one condition, so
@@ -1244,9 +1259,9 @@ object OptimizeOneRowRelationSubquery extends Rule[LogicalPlan] {
                   s"Unexpected expression in a lateral subquery over a generator: $o")
             }
             val markedGenerate = g.copy(
-              generator = GeneratedRowMarker(newGenerator),
+              generator = markedGenerator,
               outer = true,
-              generatorOutput = g.generatorOutput :+ marker,
+              generatorOutput = markedOutput,
               child = left)
             Project(left.output ++ markedPList, markedGenerate)
           }
