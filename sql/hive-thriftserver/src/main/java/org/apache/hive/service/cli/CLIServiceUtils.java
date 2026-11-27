@@ -28,9 +28,9 @@ public class CLIServiceUtils {
 
 
   private static final char SEARCH_STRING_ESCAPE = '\\';
-  public static final StringLayout verboseLayout = PatternLayout.newBuilder().withPattern(
+  public static final StringLayout verboseLayout = PatternLayout.newBuilder().setPattern(
     "%d{yy/MM/dd HH:mm:ss} %p %c{2}: %m%n%ex").build();
-  public static final StringLayout nonVerboseLayout = PatternLayout.newBuilder().withPattern(
+  public static final StringLayout nonVerboseLayout = PatternLayout.newBuilder().setPattern(
     "%-5p : %m%n%ex").build();
 
   /**
