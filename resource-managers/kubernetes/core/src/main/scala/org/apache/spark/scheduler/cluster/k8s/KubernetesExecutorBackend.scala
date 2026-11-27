@@ -125,6 +125,7 @@ private[spark] object KubernetesExecutorBackend extends Logging {
       }
 
       driverConf.set(EXECUTOR_ID, execId)
+      CoarseGrainedExecutorBackend.setResourceProfileConfs(driverConf, cfg.resourceProfile)
       val env = SparkEnv.createExecutorEnv(driverConf, execId, arguments.bindAddress,
         arguments.hostname, arguments.cores, cfg.ioEncryptionKey, isLocal = false)
 
