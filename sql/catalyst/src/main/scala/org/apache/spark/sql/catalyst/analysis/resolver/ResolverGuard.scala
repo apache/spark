@@ -488,11 +488,21 @@ class ResolverGuard(
 
   private def checkRange(range: Range) = None
 
+  /**
+   * [[SetOperationLikeResolver]] always deduplicates [[Union]] child outputs after type coercion,
+   * which matches the fixed-point [[Analyzer]] only when the legacy flags
+   * [[SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED]] and
+   * [[SQLConf.ENFORCE_TYPE_COERCION_BEFORE_UNION_DEDUPLICATION]] are enabled. Otherwise the
+   * fixed-point [[Analyzer]] can keep duplicate expression IDs in the [[Union]] output.
+   */
   private def checkUnion(union: Union) = {
     if (union.byName) {
       Some("union by name")
     } else if (union.allowMissingCol) {
       Some("union allow missing col")
+    } else if (!conf.unionIsResolvedWhenDuplicatesPerChildResolved ||
+      !conf.getConf(SQLConf.ENFORCE_TYPE_COERCION_BEFORE_UNION_DEDUPLICATION)) {
+      Some("legacy union deduplication")
     } else {
       union.children.collectFirst { case CheckOperator(reason) => reason }
     }

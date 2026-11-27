@@ -250,6 +250,31 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase with SqlScriptingTestUti
     }
   }
 
+  gridTest("UNION with legacy deduplication flags")(
+    Seq((true, true), (false, true), (true, false), (false, false))) {
+    case (unionIsResolvedWhenDuplicatesPerChildResolved, enforceTypeCoercionBeforeDeduplication) =>
+      withSQLConf(
+        SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED.key ->
+          unionIsResolvedWhenDuplicatesPerChildResolved.toString,
+        SQLConf.ENFORCE_TYPE_COERCION_BEFORE_UNION_DEDUPLICATION.key ->
+          enforceTypeCoercionBeforeDeduplication.toString) {
+        val expectedReason =
+          if (unionIsResolvedWhenDuplicatesPerChildResolved &&
+            enforceTypeCoercionBeforeDeduplication) {
+            None
+          } else {
+            Some("legacy union deduplication")
+          }
+        checkResolverGuard(
+          "SELECT col1, col1 FROM VALUES (1) UNION ALL SELECT col1, col2 FROM VALUES (1, 2)",
+          unsupportedReason = expectedReason
+        )
+        checkResolverGuard(
+          "SELECT * FROM VALUES (1) INTERSECT ALL SELECT * FROM VALUES (1)"
+        )
+      }
+  }
+
   test("Subquery column aliases") {
     checkResolverGuard(
       "SELECT t.a, t.b FROM VALUES (1, 2) t (a, b)"
