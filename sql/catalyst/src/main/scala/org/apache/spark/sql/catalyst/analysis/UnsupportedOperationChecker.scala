@@ -23,12 +23,14 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{ANALYSIS_ERROR, QUERY_PLAN}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, CurrentDate, CurrentTimestampLike, Expression, GroupingSets, LocalTimestamp, LocalTimestampNanos, MonotonicallyIncreasingID, NamedExpression, SessionWindow, WindowExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Cast, CurrentDate, CurrentTimestampLike, EqualTo, Expression, GroupingSets, LocalTimestamp, LocalTimestampNanos, MonotonicallyIncreasingID, NamedExpression, SessionWindow, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.QueryCompilationErrors.{toSQLConf, toSQLExpr}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
 
@@ -732,6 +734,84 @@ object UnsupportedOperationChecker extends Logging {
         s"Stream-stream ${join.joinType} join between two streaming DataFrame/Datasets " +
           "is not supported without a watermark in the join keys, or a watermark on " +
           "the nullable side and an appropriate range condition")(join)
+    }
+
+    if (SQLConf.get.getConf(SQLConf.STREAMING_JOIN_CHECK_WATERMARK_DIRECTION_ENABLED)) {
+      checkStreamStreamJoinWatermarkDirection(join)
+    }
+  }
+
+  /**
+   * When the join evicts an unmatched row of an input, an outer join outputs it with NULLs and a
+   * left semi join drops it. Both are final only if later rows of the other input cannot match
+   * the row. So the other input's watermark must bound this input's state, through the
+   * equality key that eviction uses or through a range condition.
+   *
+   * TODO: [SPARK-62002] [SPARK-61989] [SPARK-61990] The check still accepts, as earlier versions
+   *  did, joins whose eviction can lose matches or never output unmatched rows: an input without
+   *  its own watermark, whose state the other input's watermarked key evicts while its own later
+   *  rows are not filtered, or, without such a key, is never evicted; a key at the eviction
+   *  ordinal that its own input's watermark does not bound, such as `lt - INTERVAL 10 SECONDS =
+   *  rt`; and, without a watermarked key, a range condition on a column other than the
+   *  watermarked one, which eviction does not compare. It also reads the analyzed keys, so a
+   *  later rewrite other than the removal of a no-op cast can still move the eviction ordinal.
+   */
+  private def checkStreamStreamJoinWatermarkDirection(join: Join): Unit = {
+    val (leftKeys, rightKeys) = join match {
+      case ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _, _, _, _) => (leftKeys, rightKeys)
+      case _ => (Nil, Nil)
+    }
+    // Eviction reads the keys of the optimized plan, from which SimplifyCasts removes a cast to the
+    // type its input already has, so the ordinal is found through such casts too.
+    def withoutNoOpCasts(key: Expression): Expression = key match {
+      case Cast(child, dataType, _, _) if child.dataType == dataType => withoutNoOpCasts(child)
+      case _ => key
+    }
+    val keyOrdinal = StreamingJoinHelper.findJoinKeyOrdinalForWatermark(
+      leftKeys.map(withoutNoOpCasts), rightKeys.map(withoutNoOpCasts))
+
+    def checkInput(
+        stateSide: String,
+        state: LogicalPlan,
+        otherSide: String,
+        other: LogicalPlan,
+        otherKeys: Seq[Expression]): Unit = {
+      val boundedByKey = keyOrdinal.exists { ordinal =>
+        StreamingJoinHelper.isKeyBoundedByWatermark(otherKeys(ordinal), other)
+      }
+      // TODO: [SPARK-62002] [SPARK-61989] With a watermarked equality key, eviction uses the key
+      //  and ignores the range, yet this arm still accepts an input that a range condition
+      //  bounds. Make this arm precise for such keyed joins.
+      lazy val boundedByRange = StreamingJoinHelper.getStateValueWatermark(
+        state.outputSet, other.outputSet, join.condition, Some(1000000)).isDefined
+      if (!boundedByKey && !boundedByRange) {
+        val parameters = Map(
+          "joinType" -> join.joinType.toString,
+          "stateSide" -> stateSide,
+          "otherSide" -> otherSide,
+          "config" -> toSQLConf(SQLConf.STREAMING_JOIN_CHECK_WATERMARK_DIRECTION_ENABLED.key))
+        // Without a watermarked equality key, only a range condition evicts this input.
+        val (subClass, equality) = keyOrdinal match {
+          case Some(ordinal) =>
+            ("EQUALITY_KEY",
+              Map("equality" -> toSQLExpr(EqualTo(leftKeys(ordinal), rightKeys(ordinal)))))
+          case None => ("NO_EVICTION", Map.empty[String, String])
+        }
+        throw new ExtendedAnalysisException(
+          new AnalysisException(
+            errorClass = s"STREAM_STREAM_JOIN_WATERMARK_DOES_NOT_BOUND_STATE.$subClass",
+            messageParameters = parameters ++ equality),
+          plan = join)
+      }
+    }
+
+    join.joinType match {
+      case LeftOuter | LeftSemi => checkInput("left", join.left, "right", join.right, rightKeys)
+      case RightOuter => checkInput("right", join.right, "left", join.left, leftKeys)
+      case FullOuter =>
+        checkInput("left", join.left, "right", join.right, rightKeys)
+        checkInput("right", join.right, "left", join.left, leftKeys)
+      case _ =>
     }
   }
 }

@@ -25,7 +25,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
-import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, Filter, LogicalPlan, Project, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -150,6 +150,103 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
           .contains(unit.toUpperCase(Locale.ROOT))
       case _ => false
     }
+  }
+
+  /**
+   * Find the ordinal of the equality key whose watermark evicts the state of both inputs.
+   *
+   * Join keys of both sides generate rows of the same fields, that is, same sequence of data
+   * types. If one side (say left side) has a column (say timestamp) that has a watermark on it,
+   * then it will never consider joining keys that are < state key watermark (i.e. event time
+   * watermark). On the other side (i.e. right side), even if there is no watermark defined,
+   * there has to be an equivalent column (i.e., timestamp). And any right side data that has the
+   * timestamp < watermark will not match will not match with left side data, as the left side get
+   * filtered with the explicitly defined watermark. So, the watermark in timestamp column in
+   * left side keys effectively causes the timestamp on the right side to have a watermark.
+   * We will use the ordinal of the left timestamp in the left keys to find the corresponding
+   * right timestamp in the right keys.
+   */
+  def findJoinKeyOrdinalForWatermark(
+      leftKeys: Seq[Expression],
+      rightKeys: Seq[Expression]): Option[Int] = {
+    leftKeys.zipWithIndex.collectFirst {
+      case (ne: NamedExpression, index) if ne.metadata.contains(delayKey) => index
+    } orElse {
+      rightKeys.zipWithIndex.collectFirst {
+        case (ne: NamedExpression, index) if ne.metadata.contains(delayKey) => index
+      }
+    }
+  }
+
+  /**
+   * Whether an equality key of one input bounds, by that input's watermark, the equal key of the
+   * other input's state rows. Later rows of this input pass late-row filtering only with the
+   * watermarked column, or the end of a watermarked window, above the watermark. Their keys are
+   * above it too if the key is that column, or that column shifted forward by constants. With a
+   * backward shift, or a key in another form, they can still match state keys at or below the
+   * watermark, which eviction removes.
+   *
+   * The watermark comes from the input's output, not from the key's reference, which keeps the
+   * metadata of the plan it was taken from. A column that the join condition names reaches the
+   * join, so any watermarked column of the output counts for it: it is the one late-row filtering
+   * compares, or the join fails with MULTIPLE_EVENT_TIME_COLUMNS. A key, or the start of a shift,
+   * can also be a column that the input computes before the join, in a Project reached only
+   * through nodes that keep the values of their child's columns. Its base must be the first
+   * watermarked column of the output, or a column that it renames.
+   *
+   * TODO: The join condition does not name the base of such a computed key, so column pruning can
+   *  drop it before the join, which then filters no late rows of that input, as in earlier
+   *  versions.
+   */
+  def isKeyBoundedByWatermark(key: Expression, input: LogicalPlan): Boolean = {
+    // The expression that defines `a` in a Project of `plan`, and the plan it reads.
+    def definition(a: Attribute, plan: LogicalPlan): Option[(Expression, LogicalPlan)] =
+      plan match {
+        case Project(projectList, child) => projectList.collectFirst {
+          case alias: Alias if alias.exprId == a.exprId => (alias.child, child)
+        }.orElse(definition(a, child))
+        case _: Filter | _: EventTimeWatermark | _: SubqueryAlias | _: View =>
+          definition(a, plan.children.head)
+        case _ => None
+      }
+    val watermarked = input.output.filter(_.metadata.contains(delayKey)).map(_.exprId).toSet
+    // The first watermarked column of the output and the columns it renames.
+    val firstAndRenamed = input.output.find(_.metadata.contains(delayKey)).toSeq.flatMap { first =>
+      Iterator.iterate(Option[(Expression, LogicalPlan)]((first, input))) {
+        case Some((a: Attribute, plan)) => definition(a, plan)
+        case _ => None
+      }.takeWhile(_.isDefined).flatten.collect { case (a: Attribute, _) => a.exprId }.toSeq
+    }.toSet
+    // A fresh copy: queries that start at the same time can check the same analyzed plan.
+    def isNotBackward(shift: Expression): Boolean = shift.foldable &&
+      (shift.freshCopyIfContainsStatefulExpression().eval() match {
+        case i: CalendarInterval => i.months >= 0 && i.days >= 0 && i.microseconds >= 0
+        case n: java.lang.Number => n.longValue >= 0
+        case _ => false
+      })
+    // `named` is whether the join condition names the key's columns, not a Project below it.
+    def isBounded(key: Expression, plan: LogicalPlan, named: Boolean): Boolean = {
+      def isWatermarked(a: Attribute): Boolean =
+        (if (named) watermarked else firstAndRenamed).contains(a.exprId)
+      key match {
+        case a: AttributeReference => isWatermarked(a) || definition(a, plan).exists {
+          case (expr, below) => isBounded(expr, below, named = false)
+        }
+        // NOTE: We assume this is window struct, as same as WatermarkSupport.watermarkExpression
+        case GetStructField(a: AttributeReference, 1, _) => isWatermarked(a)
+        case Cast(child, dataType, _, _) if child.dataType == dataType =>
+          isBounded(child, plan, named)
+        case DatetimeSub(_, _, replacement) => isBounded(replacement, plan, named)
+        case TimestampAddInterval(start, interval, _) =>
+          isNotBackward(interval) && isBounded(start, plan, named)
+        case TimestampAddYMInterval(start, interval, _) =>
+          isNotBackward(interval) && isBounded(start, plan, named)
+        case TimestampAdd(_, quantity, start, _) =>
+          isNotBackward(quantity) && isBounded(start, plan, named)
+        case _ => false
+      }
+    }
+    isBounded(key, input, named = true)
   }
 
   /**

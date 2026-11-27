@@ -23,7 +23,7 @@ import org.apache.spark.{Partition, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{RDD, ZippedPartitionsBaseRDD, ZippedPartitionsPartition}
 import org.apache.spark.sql.catalyst.analysis.StreamingJoinHelper
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet, Between, BinaryComparison, BoundReference, Cast, Expression, GreaterThanOrEqual, LessThanOrEqual, Literal, NamedExpression, PredicateHelper, TimestampAddInterval}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet, Between, BinaryComparison, BoundReference, Cast, Expression, GreaterThanOrEqual, LessThanOrEqual, Literal, PredicateHelper, TimestampAddInterval}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -384,25 +384,8 @@ object StreamingSymmetricHashJoinHelper extends Logging {
 
   private[join] def findJoinKeyOrdinalForWatermark(
       leftKeys: Seq[Expression],
-      rightKeys: Seq[Expression]): Option[Int] = {
-    // Join keys of both sides generate rows of the same fields, that is, same sequence of data
-    // types. If one side (say left side) has a column (say timestamp) that has a watermark on it,
-    // then it will never consider joining keys that are < state key watermark (i.e. event time
-    // watermark). On the other side (i.e. right side), even if there is no watermark defined,
-    // there has to be an equivalent column (i.e., timestamp). And any right side data that has the
-    // timestamp < watermark will not match will not match with left side data, as the left side get
-    // filtered with the explicitly defined watermark. So, the watermark in timestamp column in
-    // left side keys effectively causes the timestamp on the right side to have a watermark.
-    // We will use the ordinal of the left timestamp in the left keys to find the corresponding
-    // right timestamp in the right keys.
-    leftKeys.zipWithIndex.collectFirst {
-      case (ne: NamedExpression, index) if ne.metadata.contains(delayKey) => index
-    } orElse {
-      rightKeys.zipWithIndex.collectFirst {
-        case (ne: NamedExpression, index) if ne.metadata.contains(delayKey) => index
-      }
-    }
-  }
+      rightKeys: Seq[Expression]): Option[Int] =
+    StreamingJoinHelper.findJoinKeyOrdinalForWatermark(leftKeys, rightKeys)
 
   /**
    * A custom RDD that allows partitions to be "zipped" together, while ensuring the tasks'

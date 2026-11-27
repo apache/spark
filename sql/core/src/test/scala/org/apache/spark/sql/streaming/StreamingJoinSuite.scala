@@ -2587,9 +2587,11 @@ abstract class StreamingOuterJoinBase extends StreamingJoinSuite {
       }
 
       // Without constraint propagation, no inferred IS NOT NULL filter removes the NULL keys
-      // before the join, so every side of each join type sees them.
+      // before the join, so every side of each join type sees them. The watermark direction
+      // check rejects an outer join with a right input without a watermark, so it is turned off.
       withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false",
-          SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
+          SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false",
+          SQLConf.STREAMING_JOIN_CHECK_WATERMARK_DIRECTION_ENABLED.key -> "false") {
         testStream(joined)(firstBatches ++ Seq(
           // The watermark moves to 90 seconds, and the next batch evicts the rows at 5 and 10.
           AddData(leftInput, (2, 100)),
@@ -2933,7 +2935,10 @@ abstract class StreamingFullOuterJoinBase extends StreamingJoinSuite {
       // Left time 5 is in window [0, 10).
       val (matchingStart, length) = if (windowKey) (0, 10L) else (5, 0L)
 
-      withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
+      // The watermark direction check rejects a full outer join with a right input without a
+      // watermark, so it is turned off.
+      withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false",
+          SQLConf.STREAMING_JOIN_CHECK_WATERMARK_DIRECTION_ENABLED.key -> "false") {
         testStream(joined)(
           StreamProgressLockedActions(Seq(
             AddData(leftInput, (1, 5)),
@@ -3174,8 +3179,10 @@ abstract class StreamingLeftSemiJoinBase extends StreamingJoinSuite {
   }
 
   test("left semi join skips evicted right rows below an exact key cutoff") {
-    withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
-      // The right input has no watermark, so its rows are not late-filtered.
+    // The right input has no watermark, so its rows are not late-filtered. The watermark
+    // direction check rejects such a left semi join, so it is turned off.
+    withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false",
+        SQLConf.STREAMING_JOIN_CHECK_WATERMARK_DIRECTION_ENABLED.key -> "false") {
       val (leftInput, rightInput, joined) =
         leftSemiJoin("leftTime = rightTime", rightWatermark = false)
       testStream(joined)(
@@ -3500,6 +3507,7 @@ abstract class StreamingLeftSemiJoinBase extends StreamingJoinSuite {
 
   // A left semi join over a union. Only the first union input has a watermark, so the second
   // one, when it has no data in a micro-batch, is an empty relation the optimizer could prune.
+  // The watermark on rt bounds the state of the left input, as a left semi join requires.
   private def leftSemiJoinOverUnion(): (MemoryStream[(Int, Int)], MemoryStream[(Int, Int)],
       MemoryStream[(Int, Int)], DataFrame) = {
     val input1 = MemoryStream[(Int, Int)]
@@ -3510,6 +3518,7 @@ abstract class StreamingLeftSemiJoinBase extends StreamingJoinSuite {
     val left = withTime(input1).withWatermark("lt", "10 seconds").union(withTime(input2))
     val right = rightInput.toDF().toDF("rk", "s")
       .select($"rk", timestamp_seconds($"s").as("rt"))
+      .withWatermark("rt", "10 seconds")
     val joined = left.join(right, expr("lk = rk AND lt = rt"), "left_semi")
       .select($"lk", $"lt".cast("long"))
     (input1, input2, rightInput, joined)

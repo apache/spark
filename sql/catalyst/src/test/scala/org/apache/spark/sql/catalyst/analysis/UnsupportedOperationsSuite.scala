@@ -17,21 +17,26 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import java.util.Locale
+import java.time.{Duration, Period}
+import java.util.{Locale, UUID}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, MonotonicallyIncreasingID, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Cast, DatetimeSub, Expression, GetStructField, Literal, MonotonicallyIncreasingID, NamedExpression, TimestampAdd, TimestampAddInterval, TimestampAddYMInterval, UnaryMinus}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_SECOND
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StatefulProcessor, TimeMode, TimerValues}
-import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder, StructType}
+import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder, StructType, TimestampType}
+import org.apache.spark.unsafe.types.CalendarInterval
 
 /** A dummy command for testing unsupported operations. */
 case class DummyCommand() extends LeafCommand
@@ -46,6 +51,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
   val attributeWithWatermark = attribute.withMetadata(watermarkMetadata)
   val batchRelation = LocalRelation(attribute)
   val streamRelation = new TestStreamingRelation(attribute)
+  // A stream whose output has the watermark, which the stream-stream join check reads.
+  val streamRelationWithWatermark = new TestStreamingRelation(attributeWithWatermark)
 
   /*
     =======================================================================================
@@ -490,8 +497,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
   // LeftSemi join: Update mode allowed (equivalent to Append mode for non-outer joins)
   assertSupportedInStreamingPlan(
     s"LeftSemi join with stream-stream relations and update mode",
-    streamRelation.join(streamRelation, joinType = LeftSemi,
-      condition = Some(attributeWithWatermark === attribute)),
+    streamRelation.join(streamRelationWithWatermark, joinType = LeftSemi,
+      condition = Some(attribute === attributeWithWatermark)),
     OutputMode.Update())
 
   // Complete mode not allowed for stream-stream joins. The error message also indicates
@@ -513,17 +520,37 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
 
   // Left outer, right outer, full outer, left semi joins
   Seq(LeftOuter, RightOuter, FullOuter, LeftSemi).foreach { joinType =>
-    // Stream-stream allowed with join on watermark attribute
-    // Note that the attribute need not be watermarked on both sides.
+    // Stream-stream allowed with join on watermark attribute if the watermark is on the right
+    // input of a left outer or left semi join, or on the left input of a right outer join.
+    Seq(
+      ("left", attributeWithWatermark === attribute, joinType == RightOuter),
+      ("right", attribute === attributeWithWatermark, joinType == LeftOuter || joinType == LeftSemi)
+    ).foreach { case (side, condition, supported) =>
+      val name = s"$joinType join with stream-stream relations and join on attribute with " +
+        s"$side watermark"
+      val (left, right) = if (side == "left") {
+        (streamRelationWithWatermark, streamRelation)
+      } else {
+        (streamRelation, streamRelationWithWatermark)
+      }
+      val plan = left.join(right, joinType = joinType, condition = Some(condition))
+      if (supported) {
+        assertSupportedInStreamingPlan(name, plan, OutputMode.Append())
+      } else {
+        // The rejected input is the one whose key has the watermark.
+        val otherSide = if (side == "left") "right" else "left"
+        assertNotSupportedInStreamingPlan(name, plan, OutputMode.Append(),
+          Seq(s"without a watermark on the $otherSide input that bounds the state of the " +
+            s"$side input"))
+      }
+      assertSupportedInStreamingPlan(s"$name, watermark direction check disabled", plan,
+        OutputMode.Append(),
+        SQLConf.STREAMING_JOIN_CHECK_WATERMARK_DIRECTION_ENABLED.key -> "false")
+    }
     assertSupportedInStreamingPlan(
-      s"$joinType join with stream-stream relations and join on attribute with left watermark",
-      streamRelation.join(streamRelation, joinType = joinType,
-        condition = Some(attributeWithWatermark === attribute)),
-      OutputMode.Append())
-    assertSupportedInStreamingPlan(
-      s"$joinType join with stream-stream relations and join on attribute with right watermark",
-      streamRelation.join(streamRelation, joinType = joinType,
-        condition = Some(attribute === attributeWithWatermark)),
+      s"$joinType join with stream-stream relations and join on attribute with both watermarks",
+      streamRelationWithWatermark.join(streamRelationWithWatermark, joinType = joinType,
+        condition = Some(attributeWithWatermark === attributeWithWatermark)),
       OutputMode.Append())
     assertNotSupportedInStreamingPlan(
       s"$joinType join with stream-stream relations and join on non-watermarked attribute",
@@ -543,11 +570,20 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       }
 
     // stream-stream allowed with range condition yielding state value watermark
-    assertSupportedInStreamingPlan(
-      s"$joinType join with stream-stream relations and state value watermark",
-      leftRelation.join(rightRelation, joinType = joinType,
-        condition = Some(attribute > timeWithWatermark + 10)),
-      OutputMode.Append())
+    val rangeJoin = leftRelation.join(rightRelation, joinType = joinType,
+      condition = Some(attribute > timeWithWatermark + 10))
+    if (joinType == FullOuter) {
+      // The left input has no watermark to bound the right input's state.
+      assertNotSupportedInStreamingPlan(
+        s"$joinType join with stream-stream relations and state value watermark on one side",
+        rangeJoin, OutputMode.Append(), Seq("without a watermark on the left input",
+          "the join never evicts the right input's state"),
+        condition = "STREAM_STREAM_JOIN_WATERMARK_DOES_NOT_BOUND_STATE.NO_EVICTION")
+    } else {
+      assertSupportedInStreamingPlan(
+        s"$joinType join with stream-stream relations and state value watermark",
+        rangeJoin, OutputMode.Append())
+    }
 
     // stream-stream not allowed with insufficient range condition
     assertNotSupportedInStreamingPlan(
@@ -557,6 +593,245 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       OutputMode.Append(),
       Seq("is not supported without a watermark in the join keys, or a watermark on " +
         "the nullable side and an appropriate range condition"))
+  }
+
+  {
+    val leftKey = AttributeReference("lk", IntegerType)()
+    val rightKey = AttributeReference("rk", IntegerType)()
+    val leftTime = AttributeReference("lt", TimestampType)()
+    val rightTime = AttributeReference("rt", TimestampType)()
+    def withWatermark(time: Attribute, watermark: Boolean): Attribute =
+      if (watermark) time.withMetadata(watermarkMetadata) else time
+    def shift(time: Expression, seconds: Int): Expression = {
+      val interval = new CalendarInterval(0, 0, seconds * MICROS_PER_SECOND)
+      if (seconds == 0) time else TimestampAddInterval(time, Literal(interval))
+    }
+
+    // (name, left watermark, right watermark, key shift of rightTime in seconds, supported)
+    def cases(joinType: JoinType): Seq[(String, Boolean, Boolean, Int, Boolean)] = {
+      joinType match {
+        case LeftOuter | LeftSemi => Seq(
+          ("left watermark only", true, false, 0, false),
+          ("right watermark only", false, true, 0, true),
+          ("forward shifted key", true, true, 10, true),
+          ("backward shifted key", true, true, -10, false))
+        case RightOuter => Seq(
+          ("left watermark only", true, false, 0, true),
+          ("right watermark only", false, true, 0, false))
+        case _ => Seq(
+          ("left watermark only", true, false, 0, false),
+          ("right watermark only", false, true, 0, false),
+          ("forward shifted key", true, true, 10, true),
+          ("backward shifted key", true, true, -10, false))
+      }
+    }
+
+    Seq(LeftOuter, LeftSemi, RightOuter, FullOuter).foreach { joinType =>
+      cases(joinType).foreach { case (name, leftWatermark, rightWatermark, seconds, supported) =>
+        val lt = withWatermark(leftTime, leftWatermark)
+        val rt = withWatermark(rightTime, rightWatermark)
+        val plan = new TestStreamingRelation(Seq(leftKey, lt)).join(
+          new TestStreamingRelation(Seq(rightKey, rt)), joinType = joinType,
+          condition = Some(leftKey === rightKey && lt === shift(rt, seconds)))
+        val testName = s"$joinType join on event time with $name"
+        // A full outer join checks the left input first, which needs the right key bounded.
+        val stateSide = joinType match {
+          case RightOuter => "right"
+          case FullOuter if rightWatermark && seconds >= 0 => "right"
+          case _ => "left"
+        }
+        val otherSide = if (stateSide == "left") "right" else "left"
+        if (supported) {
+          assertSupportedInStreamingPlan(testName, plan, OutputMode.Append())
+        } else {
+          assertNotSupportedInStreamingPlan(testName, plan, OutputMode.Append(),
+            Seq(s"without a watermark on the $otherSide input that bounds the state of the " +
+              s"$stateSide input", "can match a", "that the join already evicted"))
+        }
+      }
+    }
+
+    // The right key in other forms, with watermarks on both inputs.
+    val lt = leftTime.withMetadata(watermarkMetadata)
+    val rt = rightTime.withMetadata(watermarkMetadata)
+    val windowType = new StructType().add("start", TimestampType).add("end", TimestampType)
+    val rw = AttributeReference("rw", windowType)().withMetadata(watermarkMetadata)
+    def backward(interval: Expression): Expression =
+      Cast(DatetimeSub(rt, interval, TimestampAddInterval(rt, UnaryMinus(interval))), TimestampType)
+    val rightQuantity = AttributeReference("rq", IntegerType)()
+    Seq(
+      ("TIMESTAMPADD forward", TimestampAdd("SECOND", Literal(10), rt), true),
+      ("TIMESTAMPADD backward", TimestampAdd("SECOND", Literal(-10), rt), false),
+      ("month interval forward", TimestampAddYMInterval(rt, Literal(Period.ofMonths(1))), true),
+      ("resolved month interval subtraction", DatetimeSub(rt, Literal(Period.ofMonths(1)),
+        TimestampAddYMInterval(rt, UnaryMinus(Literal(Period.ofMonths(1))))), false),
+      ("calendar interval of -1 day",
+        TimestampAddInterval(rt, Literal(new CalendarInterval(0, -1, 0))), false),
+      ("calendar interval of -1 month",
+        TimestampAddInterval(rt, Literal(new CalendarInterval(-1, 0, 0))), false),
+      ("TIMESTAMPADD by a column", TimestampAdd("SECOND", rightQuantity, rt), false),
+      ("window end", GetStructField(rw, 1, Some("end")), true),
+      ("window start", GetStructField(rw, 0, Some("start")), false),
+      ("resolved interval addition",
+        Cast(TimestampAddInterval(rt, Literal(Duration.ofSeconds(10))), TimestampType), true),
+      ("resolved interval subtraction", backward(Literal(Duration.ofSeconds(10))), false),
+      ("1 microsecond backward", backward(Literal(Duration.ofNanos(1000))), false),
+      ("resolved subtraction of a negative interval",
+        backward(Literal(Duration.ofSeconds(-10))), true)
+    ).foreach { case (name, rightKey, supported) =>
+      val plan = new TestStreamingRelation(Seq(leftKey, lt)).join(
+        new TestStreamingRelation(rightKey.references.toSeq), joinType = LeftOuter,
+        condition = Some(lt === rightKey))
+      val testName = s"LeftOuter join on event time with key $name"
+      if (supported) {
+        assertSupportedInStreamingPlan(testName, plan, OutputMode.Append())
+      } else {
+        assertNotSupportedInStreamingPlan(testName, plan, OutputMode.Append(),
+          Seq("without a watermark on the right input"))
+      }
+    }
+
+    // The forward forms above are not bounded when the right input has no watermark.
+    val rightWindow = AttributeReference("rw", windowType)()
+    Seq(
+      ("TIMESTAMPADD forward", TimestampAdd("SECOND", Literal(10), rightTime)),
+      ("month interval forward", TimestampAddYMInterval(rightTime, Literal(Period.ofMonths(1)))),
+      ("window end", GetStructField(rightWindow, 1, Some("end"))),
+      ("resolved interval addition",
+        Cast(TimestampAddInterval(rightTime, Literal(Duration.ofSeconds(10))), TimestampType))
+    ).foreach { case (name, rightKey) =>
+      assertNotSupportedInStreamingPlan(
+        s"LeftOuter join on event time with key $name, without a right watermark",
+        new TestStreamingRelation(Seq(leftKey, lt)).join(
+          new TestStreamingRelation(rightKey.references.toSeq), joinType = LeftOuter,
+          condition = Some(lt === rightKey)),
+        OutputMode.Append(), Seq("without a watermark on the right input"))
+    }
+
+    // A right key that the right input computes before the join, in a Project.
+    val rtWithWatermark = rightTime.withMetadata(watermarkMetadata)
+    val rwWithWatermark = rightWindow.withMetadata(watermarkMetadata)
+    val rightColumns = Seq(rightKey, rtWithWatermark)
+    val rightInput = new TestStreamingRelation(rightColumns)
+    val windowColumns = Seq(rightKey, rwWithWatermark)
+    val windowInput = new TestStreamingRelation(windowColumns)
+    // With a time zone, so that the Project and its column `rc` are resolved.
+    def forward(time: Expression, seconds: Int): Expression =
+      TimestampAddInterval(time, Literal(Duration.ofSeconds(seconds)), Some("UTC"))
+    // Returns the name, the right input that adds the key column `rc`, that column, and whether
+    // the join is supported.
+    def computed(
+        name: String,
+        column: Expression,
+        supported: Boolean,
+        columns: Seq[Attribute] = rightColumns,
+        below: LogicalPlan = rightInput): (String, LogicalPlan, Attribute, Boolean) = {
+      val alias = Alias(column, "rc")()
+      (name, Project(columns :+ alias, below), alias.toAttribute, supported)
+    }
+    val forwardShift = computed("a forward shift", forward(rtWithWatermark, 10), true)
+    Seq(
+      forwardShift,
+      computed("a window end", GetStructField(rwWithWatermark, 1, Some("end")), true,
+        windowColumns, windowInput),
+      forwardShift.copy(_1 = "a forward shift below a Filter and a SubqueryAlias",
+        _2 = SubqueryAlias("r", Filter(Literal(true), forwardShift._2))),
+      computed("a backward shift", forward(rtWithWatermark, -10), false),
+      computed("a forward shift of a column without a watermark", forward(rightTime, 10), false,
+        Seq(rightKey, rightTime), new TestStreamingRelation(Seq(rightKey, rightTime))),
+      computed("a forward shift in a projection that drops rt", forward(rtWithWatermark, 10),
+        false, Seq(rightKey)),
+      forwardShift.copy(_1 = "a forward shift below a Union",
+        _2 = Union(forwardShift._2, forwardShift._2), _4 = false)
+    ).foreach { case (name, right, key, supported) =>
+      assert(key.resolved, name)
+      val plan = new TestStreamingRelation(Seq(leftKey, lt)).join(right, joinType = LeftOuter,
+        condition = Some(lt === key))
+      val testName = s"LeftOuter join on event time with a right key computed as $name"
+      if (supported) {
+        assertSupportedInStreamingPlan(testName, plan, OutputMode.Append())
+      } else {
+        assertNotSupportedInStreamingPlan(testName, plan, OutputMode.Append(),
+          Seq("without a watermark on the right input"),
+          condition = "STREAM_STREAM_JOIN_WATERMARK_DOES_NOT_BOUND_STATE.EQUALITY_KEY")
+      }
+    }
+
+    // An input can rename its watermarked column after computing a key from it, and reach the
+    // join through a View or below an EventTimeWatermark. It can also have more than one
+    // watermarked column, such as a window over its event time, or both event times of an inner
+    // join, of which only the one the join condition names reaches the join.
+    val rtime = Alias(rtWithWatermark, "rtime")()
+    val rbWithWatermark = AttributeReference("rb", TimestampType)().withMetadata(watermarkMetadata)
+    val view = CatalogTable(
+      identifier = TableIdentifier("v"),
+      tableType = CatalogTableType.VIEW,
+      storage = CatalogStorageFormat.empty,
+      schema = forwardShift._2.schema)
+    val (_, rightBeforeWatermark, keyBeforeWatermark, _) = computed("", forward(rightTime, 10),
+      true, Seq(rightKey, rightTime), new TestStreamingRelation(Seq(rightKey, rightTime)))
+    val innerJoin = new TestStreamingRelation(Seq(rightKey, rtWithWatermark)).join(
+      new TestStreamingRelation(Seq(rbWithWatermark)), joinType = Inner,
+      condition = Some(rtWithWatermark === rbWithWatermark))
+    val shiftedBesideRename = Alias(forward(rtWithWatermark, 10), "rc")()
+    val shiftedFromSecond = Alias(forward(rbWithWatermark, 10), "rc")()
+    Seq(
+      ("a forward shift, then a rename of rt",
+        Project(Seq(rightKey, rtime, forwardShift._3), forwardShift._2), forwardShift._3, true),
+      ("a forward shift and a rename of rt in one projection",
+        Project(Seq(rightKey, rtime, shiftedBesideRename), rightInput),
+        shiftedBesideRename.toAttribute, true),
+      ("a forward shift below a View", View(view, isTempView = true, forwardShift._2),
+        forwardShift._3, true),
+      ("a forward shift below an EventTimeWatermark", EventTimeWatermark(UUID.randomUUID(),
+        rightTime, new CalendarInterval(0, 0, MICROS_PER_SECOND), rightBeforeWatermark),
+        keyBeforeWatermark, true),
+      ("the end of a window beside its time column",
+        new TestStreamingRelation(Seq(rightKey, rtWithWatermark, rwWithWatermark)),
+        GetStructField(rwWithWatermark, 1, Some("end")), true),
+      ("the second event time of an inner join", innerJoin, rbWithWatermark, true),
+      ("a forward shift of a watermarked column that is not the first",
+        Project(Seq(rightKey, rtWithWatermark, rbWithWatermark, shiftedFromSecond),
+          new TestStreamingRelation(Seq(rightKey, rtWithWatermark, rbWithWatermark))),
+        shiftedFromSecond.toAttribute, false)
+    ).foreach { case (name, right, key, supported) =>
+      assert(key.resolved, name)
+      val plan = new TestStreamingRelation(Seq(leftKey, lt)).join(right, joinType = LeftOuter,
+        condition = Some(lt === key))
+      val testName = s"LeftOuter join on event time with a right key from $name"
+      if (supported) {
+        assertSupportedInStreamingPlan(testName, plan, OutputMode.Append())
+      } else {
+        assertNotSupportedInStreamingPlan(testName, plan, OutputMode.Append(),
+          Seq("without a watermark on the right input"),
+          condition = "STREAM_STREAM_JOIN_WATERMARK_DOES_NOT_BOUND_STATE.EQUALITY_KEY")
+      }
+    }
+
+    // Eviction reads the keys without a cast to the type they already have.
+    val lw = AttributeReference("lw", windowType)().withMetadata(watermarkMetadata)
+    assertSupportedInStreamingPlan("LeftOuter join on windows with a right window cast to its type",
+      new TestStreamingRelation(Seq(leftKey, lw)).join(windowInput, joinType = LeftOuter,
+        condition = Some(lw === Cast(rwWithWatermark, windowType))),
+      OutputMode.Append())
+
+    test("watermark direction check raises a named error condition") {
+      val plan = new TestStreamingRelation(Seq(leftKey, lt)).join(
+        new TestStreamingRelation(Seq(rightKey, rightTime)), joinType = LeftOuter,
+        condition = Some(leftKey === rightKey && lt === rightTime))
+      checkError(
+        exception = intercept[AnalysisException] {
+          UnsupportedOperationChecker.checkForStreaming(wrapInStreaming(plan), OutputMode.Append())
+        },
+        condition = "STREAM_STREAM_JOIN_WATERMARK_DOES_NOT_BOUND_STATE.EQUALITY_KEY",
+        sqlState = "0A000",
+        parameters = Map(
+          "joinType" -> "LeftOuter",
+          "stateSide" -> "left",
+          "otherSide" -> "right",
+          "equality" -> "\"(lt = rt)\"",
+          "config" -> "\"spark.sql.streaming.join.checkWatermarkDirection.enabled\""))
+    }
   }
 
   // multi-aggregations only supported in Append mode

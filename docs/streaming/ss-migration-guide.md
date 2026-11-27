@@ -23,6 +23,22 @@ Note that this migration guide describes the items specific to Structured Stream
 Many items of SQL migration can be applied when migrating Structured Streaming to higher versions.
 Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-guide.html).
 
+## Upgrading from Structured Streaming 4.4 to 4.5
+
+- Since Spark 4.5, a stream-stream left outer, left semi, right outer or full outer join fails
+  analysis unless the watermark of the other input bounds the state of each input whose unmatched
+  rows the join outputs with NULLs or, in a left semi join, drops: the left input of a left outer
+  or left semi join, the right input of a right outer join, and both inputs of a full outer join,
+  as the join support table of the programming guide requires. For example,
+  a left outer join on `leftTime = rightTime` with a watermark only on `leftTime` is rejected:
+  a later right row could match a left row that was already output with NULLs. So are joins on
+  a key shifted backward, such as `leftTime = rightTime - INTERVAL 10 SECONDS`, and on a key in
+  any other form than the event-time column shifted forward by constants, such as a UDF of that
+  column. A full outer join needs watermarks on both inputs. As a result, existing queries with
+  such joins fail to restart. To restore the earlier check, set
+  `spark.sql.streaming.join.checkWatermarkDirection.enabled` to `false`. The checkpoint does not
+  record this conf, so set it each time such a query restarts.
+
 ## Upgrading from Structured Streaming 4.3 to 4.4
 
 - Since Spark 4.4, a new streaming query whose only stateful operator is a stream-stream join

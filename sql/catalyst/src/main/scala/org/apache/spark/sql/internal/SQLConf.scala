@@ -4506,6 +4506,26 @@ object SQLConf {
       .checkValue(v => Set(1, 2, 3, 4).contains(v), "Valid versions are 1, 2, 3, and 4")
       .createWithDefault(2)
 
+  val STREAMING_JOIN_CHECK_WATERMARK_DIRECTION_ENABLED =
+    buildConf("spark.sql.streaming.join.checkWatermarkDirection.enabled")
+      .internal()
+      .doc("When true, a stream-stream left outer, left semi, right outer or full outer join " +
+        "fails analysis unless the other input's watermark bounds the state of each input " +
+        "whose unmatched rows the join outputs with NULLs or, in a left semi join, drops (the " +
+        "left input of a left outer or left semi join, the right input of a right outer join, " +
+        "and both inputs of a full outer join): through the equality that eviction uses, the " +
+        "first one whose key is a watermarked column, when its other-input side is that " +
+        "input's event-time column or the end of its window, optionally shifted forward by a " +
+        "constant, or through a range condition. " +
+        "Otherwise, later rows of the other input can match rows that were already evicted, " +
+        "or, in a full outer join without a watermarked equality key, the join never evicts " +
+        "that input, so its unmatched rows are never output. When false, only the check of " +
+        "earlier versions applies.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val STREAMING_SESSION_WINDOW_MERGE_SESSIONS_IN_LOCAL_PARTITION =
     buildConf("spark.sql.streaming.sessionWindow.merge.sessions.in.local.partition")
       .doc("When true, streaming session window sorts and merge sessions in local partition " +
