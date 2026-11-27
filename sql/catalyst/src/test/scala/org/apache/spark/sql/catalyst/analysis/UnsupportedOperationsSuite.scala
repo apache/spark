@@ -24,14 +24,14 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, CreateArray, Explode, Expression, Literal, MonotonicallyIncreasingID, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, CreateArray, CreateNamedStruct, Explode, Expression, GetArrayItem, GetStructField, Literal, MonotonicallyIncreasingID, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StatefulProcessor, TimeMode, TimerValues}
-import org.apache.spark.sql.types.{IntegerType, LongType, Metadata, MetadataBuilder, StructType, TimestampType}
+import org.apache.spark.sql.types.{ArrayType, IntegerType, LongType, Metadata, MetadataBuilder, StructType, TimestampType}
 import org.apache.spark.unsafe.types.CalendarInterval
 
 /** A dummy command for testing unsupported operations. */
@@ -1240,6 +1240,62 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  // The left input has its time only in a struct: eviction only uses a top-level event-time
+  // column, so that input has no cutoff, even when a range bounds an unwatermarked copy of its
+  // time. With no watermark metadata in the struct, the input has no event time. The time read
+  // above the join is an event time either way.
+  private def timeFromStruct(fieldMetadata: Metadata, inArray: Boolean, withCopy: Boolean) = {
+    val structType = new StructType().add("lt", TimestampType, nullable = true, fieldMetadata)
+    val payload =
+      AttributeReference("payload", if (inArray) ArrayType(structType) else structType)()
+    val copy = AttributeReference("lc", TimestampType)()
+    val join = joinOf(Seq(leftKey, payload) ++ Seq(copy).filter(_ => withCopy),
+      Seq(rightKey, rightTime),
+      if (withCopy) leftKey === rightKey && copy > rightTime else leftKey === rightKey)
+    val time = Alias(GetStructField(if (inArray) GetArrayItem(payload, Literal(0)) else payload,
+      0, Some("lt")), "t")(explicitMetadata = Some(watermarkMetadata))
+    Aggregate(Seq(time.toAttribute), Seq(time.toAttribute), Project(Seq(time), join))
+  }
+  Seq(("a struct", false, false), ("a struct inside an array", true, false),
+    ("a struct next to an unwatermarked copy that a range bounds", false, true)
+  ).foreach { case (name, inArray, withCopy) =>
+    test(s"join output watermark: key-only join of an input with its time only in $name") {
+      val e = intercept[AnalysisException](
+        UnsupportedOperationChecker.checkStreamStreamJoinOutputWatermark(
+          timeFromStruct(watermarkMetadata, inArray, withCopy), Append))
+      assert(e.getMessage.contains(
+        "the state of the left input of a stream-stream join has no cutoff"))
+    }
+  }
+  test("join output watermark: accept a join of an input with a struct without an event time") {
+    UnsupportedOperationChecker.checkStreamStreamJoinOutputWatermark(
+      timeFromStruct(Metadata.empty, inArray = false, withCopy = false), Append)
+  }
+
+  // A path ends at another operator that drops late rows only if its own check traces the
+  // columns of the path. These carry the time in a struct, through a deduplication, and through
+  // an aggregation that extracts the time from a struct it groups by.
+  test("join output watermark: an event time in a struct past another late-dropping operator") {
+    def struct(time: Attribute, name: String): Alias =
+      Alias(CreateNamedStruct(Seq(Literal(time.name), time)), name)()
+    def field(struct: Attribute): Alias = Alias(GetStructField(struct, 0, None), "t")()
+    def groupBy(time: NamedExpression, child: LogicalPlan): Aggregate =
+      Aggregate(Seq(time.toAttribute), Seq(time.toAttribute), Project(Seq(time), child))
+    val payload = struct(leftTime, "payload")
+    val deduplicated = Deduplicate(Seq(leftKey), Project(Seq(leftKey, payload), keyOnlyJoin))
+    val s = struct(rightTime, "s")
+    val extracted = field(s.toAttribute)
+    val aggregated = Aggregate(Seq(leftTime, s.toAttribute), Seq(leftTime, extracted),
+      Project(Seq(leftTime, s), oneSidedJoin))
+    Seq((groupBy(field(payload.toAttribute), deduplicated), "left"),
+      (Aggregate(Seq(extracted.toAttribute), Seq(extracted.toAttribute), aggregated), "right")
+    ).foreach { case (plan, side) =>
+      val e = intercept[AnalysisException](
+        UnsupportedOperationChecker.checkStreamStreamJoinOutputWatermark(plan, Append))
+      assert(e.getMessage.contains(
+        s"the state of the $side input of a stream-stream join has no cutoff"))
+    }
+  }
 
   private def pythonTransformWithState(child: LogicalPlan, timeMode: TimeMode) =
     TransformWithStateInPySpark(Literal(1), 1, Seq(att), Append, timeMode,

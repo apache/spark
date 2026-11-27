@@ -338,6 +338,33 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
       }
     }
 
+    // Eviction only uses a top-level event-time column, so the left input has no cutoff.
+    test(s"reject a key-only join of an input with its time only in a struct, V$version") {
+      withJoinConf(version) {
+        val (leftInput, left) = input("left")
+        val (_, right) = input("right")
+        val result = left.select($"leftKey", struct($"leftTime").as("payload"))
+          .join(right, expr(keyOnly))
+          .select($"payload", $"payload.leftTime".as("t"))
+          .groupBy(window($"t", "10 seconds")).agg(count("*"), collect_list($"payload"))
+        testStream(result)(AddData(leftInput, (1, 5L)), expectRejected("left"))
+      }
+    }
+
+    // The deduplication's own check does not trace the time in the struct.
+    test(s"reject a key-only join before a deduplication of its time in a struct, V$version") {
+      withJoinConf(version) {
+        val (leftInput, left) = input("left")
+        val (_, right) = input("right")
+        val result = left.join(right, expr(keyOnly))
+          .select($"leftKey", struct($"leftTime").as("payload"))
+          .dropDuplicates("leftKey")
+          .select($"payload.leftTime".as("t"))
+          .groupBy(window($"t", "10 seconds")).count()
+        testStream(result)(AddData(leftInput, (1, 5L)), expectRejected("left"))
+      }
+    }
+
     test(s"reject a key-only join in a SQL CTE before a window aggregation, V$version") {
       withJoinConf(version) {
         val (leftInput, left) = input("left")
@@ -379,6 +406,21 @@ class StreamingJoinOutputWatermarkSuite extends StreamTest {
             MultiAddData(leftInput, (1, 5L))(rightInput, (1, 5L)), CheckNewAnswer())
         }
         assert(logAppender.loggingEvents.exists(_.getMessage.getFormattedMessage.contains(
+          "the state of the left input of a stream-stream join has no cutoff")))
+      }
+    }
+  }
+
+  test("a key-only join before a window aggregation runs with unsupported operation checks off") {
+    withJoinConf(4) {
+      withSQLConf(SQLConf.UNSUPPORTED_OPERATION_CHECK_ENABLED.key -> "false") {
+        val (leftInput, rightInput, result) = countJoined(keyOnly, "leftTime")
+        val logAppender = new LogAppender("join output watermark")
+        withLogAppender(logAppender, level = Some(Level.WARN)) {
+          testStream(result)(
+            MultiAddData(leftInput, (1, 5L))(rightInput, (1, 5L)), CheckNewAnswer())
+        }
+        assert(!logAppender.loggingEvents.exists(_.getMessage.getFormattedMessage.contains(
           "the state of the left input of a stream-stream join has no cutoff")))
       }
     }

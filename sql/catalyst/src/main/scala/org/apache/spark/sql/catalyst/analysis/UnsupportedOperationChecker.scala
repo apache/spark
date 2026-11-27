@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType}
 
 /**
  * Analyzes the presence of unsupported operations in a logical plan.
@@ -209,7 +210,9 @@ object UnsupportedOperationChecker extends Logging {
 
   // An input of a stream-stream join with an event time but no state cutoff, as eviction derives
   // it: no watermark in the join keys, and no range condition that bounds the input by the
-  // watermark of the other input. A left semi join only emits left rows.
+  // watermark of the other input. Eviction only uses a top-level event-time column, so an input
+  // whose event time is only nested in a struct, array or map has no cutoff. A left semi join
+  // only emits left rows.
   // TODO: An input evicted by another column is not checked yet, such as the right input of
   //   `leftKey = rightKey AND leftTime = rightTs`, evicted by rightTs, not its event time.
   private def joinInputWithoutStateCutoff(
@@ -222,19 +225,30 @@ object UnsupportedOperationChecker extends Logging {
           case (side, input, other) if input.output.exists(hasEventTimeCol) &&
               StreamingJoinHelper.getStateValueWatermark(
                 input.outputSet, other.outputSet, condition, Some(1000000)).isEmpty => side
+          case (side, input, _) if !input.output.exists(hasEventTimeCol) &&
+              input.output.exists(a => nestsEventTime(a.dataType)) => side
         }
     case _ => None
   }
 
+  private def nestsEventTime(dataType: DataType): Boolean = dataType match {
+    case s: StructType => s.fields.exists { f =>
+      f.metadata.contains(EventTimeWatermark.delayKey) || nestsEventTime(f.dataType)
+    }
+    case a: ArrayType => nestsEventTime(a.elementType)
+    case m: MapType => nestsEventTime(m.keyType) || nestsEventTime(m.valueType)
+    case _ => false
+  }
+
   // The columns of `join`'s output that the event-time columns by which `operator` drops late rows
-  // are computed from, traced through each input of the operator that contains the join: an
-  // aggregation's grouping columns, or else that input's columns. Projections and the expansion of
-  // a sliding window map their columns to the columns they read, and a union maps them by position
-  // into each of its inputs that contains the join; any other node that is not stateful is
-  // followed into the one child that outputs all the traced columns. A path ends at another
-  // operator that drops late rows: its own check traces every event time it outputs from the
-  // join. A path that no longer carries a traced column or the join counts no input. None as soon
-  // as one path cannot be followed, such as one through any other stateful operator.
+  // are computed from, traced from its `lateRowColumns` in each of its inputs.
+  // Projections and the expansion of a sliding window map their columns to the columns they read,
+  // and a union maps them by position into each of its inputs that contains the join; any other
+  // node that is not stateful is followed into the one child that outputs all the traced columns.
+  // A path ends at another operator that drops late rows if its own check traces every traced
+  // column: each is one of its `lateRowColumns`, or for an aggregation, computed only from them.
+  // A path that no longer carries a traced column or the join counts no input. None as soon as
+  // one path cannot be followed, such as one through any other stateful operator.
   private def eventTimeSources(operator: LogicalPlan, join: Join): Option[AttributeSet] = {
     def traceAll(paths: Seq[(LogicalPlan, Seq[Attribute])]): Option[AttributeSet] =
       paths.foldLeft(Option(AttributeSet.empty)) { case (sources, (plan, attrs)) =>
@@ -253,7 +267,16 @@ object UnsupportedOperationChecker extends Logging {
       case u: Union =>
         val positions = u.output.indices.filter(i => attrs.contains(u.output(i)))
         traceAll(u.children.map(c => c -> positions.map(c.output)))
-      case p if dropsLateRows(p) => Some(AttributeSet.empty)
+      case p if dropsLateRows(p) && attrs.forall { a =>
+          val own = AttributeSet(p.children.flatMap(lateRowColumns(p, _)))
+          p match {
+            case agg: Aggregate => agg.aggregateExpressions.exists { e =>
+              e.toAttribute.exprId == a.exprId && e.references.nonEmpty &&
+                e.references.subsetOf(own)
+            }
+            case _ => own.contains(a)
+          }
+        } => Some(AttributeSet.empty)
       case p if !isStatefulOperation(p) =>
         p.children.filter(c => attrs.subsetOf(c.outputSet)) match {
           case Seq(child) => trace(child, attrs)
@@ -261,14 +284,16 @@ object UnsupportedOperationChecker extends Logging {
         }
       case _ => None
     }
-    val groupingEventTimes = operator match {
-      case a: Aggregate => Some(a.groupingExpressions.flatMap(_.references).filter(hasEventTimeCol))
-      case _ => None
-    }
-    traceAll(operator.children.map { c =>
-      c -> groupingEventTimes.getOrElse(c.output.filter(hasEventTimeCol))
-    })
+    traceAll(operator.children.map(c => c -> lateRowColumns(operator, c)))
   }
+
+  // The event-time columns of `child` by which `operator` drops late rows: an aggregation's
+  // grouping columns, or else that input's columns.
+  private def lateRowColumns(operator: LogicalPlan, child: LogicalPlan): Seq[Attribute] =
+    operator match {
+      case a: Aggregate => a.groupingExpressions.flatMap(_.references).filter(hasEventTimeCol)
+      case _ => child.output.filter(hasEventTimeCol)
+    }
 
   // A stateful operator that drops the input rows below its watermark for late rows, by an
   // event-time column of its input.
