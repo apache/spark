@@ -102,6 +102,19 @@ class SeriesMissingDataMixin:
         ):
             psdf.a.fillna(0, limit=1)
 
+    def test_fillna_series_same_frame(self):
+        pdf = pd.DataFrame({"x": [np.nan,2,3,4, np.nan,6], "y": [10,20,30,40,50,60]})
+        psdf = ps.from_pandas(pdf)
+
+        self.assert_eq(psdf.x.fillna(psdf.y), pdf.x.fillna(pdf.y))
+
+        psser = psdf.x
+        pser = pdf.x
+        psser.fillna(psser.y, inplace=True)
+        pser.fillna(pser.y, inplace=True)
+        self.assert_eq(psser, pser)
+        self.assert_eq(psdf, pdf)
+
     def test_dropna(self):
         pdf = pd.DataFrame({"x": [np.nan, 2, 3, 4, np.nan, 6]})
         psdf = ps.from_pandas(pdf)
