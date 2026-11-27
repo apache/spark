@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression, Sort}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
-import org.apache.spark.sql.execution.{CommandResultExec, OneRowRelationExec, UnionExec}
+import org.apache.spark.sql.execution.{CommandResultExec, OneRowRelationExec, ProjectExec, UnionExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate._
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
@@ -49,7 +49,7 @@ import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InsertIntoH
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
-import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
+import org.apache.spark.sql.execution.exchange.{ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.functions._
@@ -5192,6 +5192,62 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     val df = sql("SELECT col1 FROM values(1) WHERE 1 IN (SELECT col1 UNION SELECT col1);")
 
     checkAnswer(df, Row(1))
+  }
+
+  test("SPARK-62383: identical Union branches that re-alias an output keep their exchange") {
+    val repartitioned = "SELECT /*+ REPARTITION(4) */ id AS id FROM range(0, 100)"
+    val query =
+      s"""SELECT id, id AS id2 FROM ($repartitioned)
+         |UNION ALL
+         |SELECT id, id AS id2 FROM ($repartitioned)
+         |""".stripMargin
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val df = sql(query)
+      checkAnswer(df, (0L until 100L).flatMap(i => Seq(Row(i, i), Row(i, i))))
+      val plan = df.queryExecution.executedPlan
+      assert(plan.collect {
+        case s: ShuffleExchangeExec => s
+      }.size == 1, plan)
+      assert(plan.collect {
+        case r: org.apache.spark.sql.execution.exchange.ReusedExchangeExec => r
+      }.size == 1, plan)
+    }
+  }
+
+  test("SPARK-62383: an alias-free first Union branch does not change the later branches") {
+    val repartitioned = "SELECT /*+ REPARTITION(4) */ id AS id FROM range(0, 100)"
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      // The first branch has no alias, so the two later branches must both be handled as
+      // non-first and stay identical. Protecting the first branch that happens to carry an alias
+      // splits them and loses the exchange reuse.
+      val triple = sql(
+        s"""SELECT id FROM range(0, 5)
+           |UNION ALL
+           |SELECT id FROM ($repartitioned)
+           |UNION ALL
+           |SELECT id FROM ($repartitioned)
+           |""".stripMargin)
+      checkAnswer(triple,
+        (0L until 100L).flatMap(i => Seq(Row(i), Row(i))) ++ (0L until 5L).map(Row(_)))
+      val plan = triple.queryExecution.executedPlan
+      assert(plan.collect {
+        case s: ShuffleExchangeExec => s
+      }.size == 1, plan)
+      assert(plan.collect {
+        case r: org.apache.spark.sql.execution.exchange.ReusedExchangeExec => r
+      }.size == 1, plan)
+
+      // The second branch keeps stripping, so the projection that becomes a no-op is removed.
+      val pair = sql(
+        """SELECT a FROM VALUES(1) AS t(a)
+          |UNION ALL
+          |SELECT a AS a FROM VALUES(2) AS t(a)
+          |""".stripMargin)
+      checkAnswer(pair, Seq(Row(1), Row(2)))
+      assert(pair.queryExecution.executedPlan.collect {
+        case p: ProjectExec => p
+      }.isEmpty, pair.queryExecution.executedPlan)
+    }
   }
 
   test("SPARK-62383: RemoveRedundantAliases keeps Union valid with barriers and double aliases") {
