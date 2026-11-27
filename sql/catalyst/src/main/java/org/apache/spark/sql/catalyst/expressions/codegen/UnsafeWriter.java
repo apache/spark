@@ -16,6 +16,11 @@
  */
 package org.apache.spark.sql.catalyst.expressions.codegen;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Map;
+
+import org.apache.spark.SparkIllegalArgumentException;
 import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData;
 import org.apache.spark.sql.catalyst.expressions.UnsafeMapData;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
@@ -34,6 +39,12 @@ import org.apache.spark.unsafe.types.VariantVal;
  * Base class for writing Unsafe* structures.
  */
 public abstract class UnsafeWriter {
+  /** The most bytes {@link #writeFromStream} reads from its input at a time. */
+  public static final int STREAM_READ_CHUNK_BYTES = 1 << 20;
+
+  /** The fewest bytes {@link #writeFromStream} asks its input for at a time. */
+  public static final int STREAM_READ_MIN_CHUNK_BYTES = 8 << 10;
+
   // Keep internal buffer holder
   protected final BufferHolder holder;
 
@@ -137,6 +148,41 @@ public abstract class UnsafeWriter {
     Platform.copyMemory(baseObject, baseOffset, getBuffer(), cursor(), numBytes);
     setOffsetAndSize(ordinal, numBytes);
     increaseCursor(roundedSize);
+  }
+
+  /**
+   * Writes the rest of {@code input} as one variable-length value, as
+   * {@code write(ordinal, input.readAllBytes())} does, but copies it into the buffer chunk by chunk
+   * instead of through an array of the whole value. A growable buffer follows the data toward
+   * {@code expectedNumBytes}, and grows beyond it if the stream holds more. This avoids allocating
+   * the entire expected size when it overstates the content length. Uses a read chunk of at most
+   * 1 MiB. Does not close {@code input}, and propagates its exceptions.
+   */
+  public final void writeFromStream(int ordinal, InputStream input, int expectedNumBytes)
+      throws IOException {
+    if (expectedNumBytes < 0) {
+      throw new SparkIllegalArgumentException("INTERNAL_ERROR", Map.of("message",
+        "Negative number of bytes to write from a stream: " + expectedNumBytes));
+    }
+    final int start = cursor();
+    // The buffer length that holds what is already written plus the expected value.
+    final long expectedBufferSize = holder.totalSize() +
+      ByteArrayMethods.roundNumberOfBytesToNearestWord((long) expectedNumBytes);
+    final byte[] chunk = new byte[
+      Math.min(Math.max(expectedNumBytes, STREAM_READ_MIN_CHUNK_BYTES), STREAM_READ_CHUNK_BYTES)];
+    int count;
+    while ((count = input.read(chunk, 0, chunk.length)) >= 0) {
+      // Growing keeps only the bytes before the cursor, so the cursor covers each copied chunk.
+      holder.growTowards(count, expectedBufferSize);
+      Platform.copyMemory(chunk, Platform.BYTE_ARRAY_OFFSET, getBuffer(), cursor(), count);
+      increaseCursor(count);
+    }
+    final int numBytes = cursor() - start;
+    final int paddingBytes = ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes) - numBytes;
+    holder.growTowards(paddingBytes, expectedBufferSize);
+    Platform.setMemory(getBuffer(), cursor(), paddingBytes, (byte) 0);
+    increaseCursor(paddingBytes);
+    setOffsetAndSize(ordinal, start, numBytes);
   }
 
   public void write(int ordinal, CalendarInterval input) {

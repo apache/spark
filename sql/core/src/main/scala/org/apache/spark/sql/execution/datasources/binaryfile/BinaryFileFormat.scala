@@ -127,12 +127,33 @@ case class BinaryFileFormat() extends FileFormat
           val entryStatus = new FileStatus(
             entry.getSize, false, 0, 0, status.getModificationTime,
             new Path(s"${status.getPath}!/${entry.getName}"))
-          BinaryFileFormat.parse(() => in, entryStatus, requiredSchema, maxLength, filterFuncs)
+          BinaryFileFormat.parse(() => in, entryStatus, requiredSchema, maxLength, filterFuncs,
+            lengthFromHeader = true)
         }
       } else {
         BinaryFileFormat.parse(
           () => fs.open(status.getPath), status, requiredSchema, maxLength, filterFuncs)
       }
+    }
+  }
+
+  override def buildReaderWithPartitionValues(
+      sparkSession: SparkSession,
+      dataSchema: StructType,
+      partitionSchema: StructType,
+      requiredSchema: StructType,
+      filters: Seq[Filter],
+      options: Map[String, String],
+      hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
+    // The reader already returns an UnsafeRow with exactly the required schema. Without partition
+    // columns, the inherited projection only copies the content into another growable buffer.
+    if (partitionSchema.isEmpty && requiredSchema.fieldNames.contains(CONTENT) &&
+        getSqlConf(sparkSession).getConf(SQLConf.BINARY_FILE_SINGLE_CONTENT_COPY_ENABLED)) {
+      buildReader(
+        sparkSession, dataSchema, partitionSchema, requiredSchema, filters, options, hadoopConf)
+    } else {
+      super.buildReaderWithPartitionValues(
+        sparkSession, dataSchema, partitionSchema, requiredSchema, filters, options, hadoopConf)
     }
   }
 }
@@ -146,6 +167,28 @@ object BinaryFileFormat {
   private[binaryfile] val BINARY_FILE = "binaryFile"
   private[binaryfile] val WHOLE_FILE = "wholeFile"
 
+  /** Variable-length buffer size for the requested path and content, if their sizes fit a row. */
+  private def computeBufferSize(
+      schema: StructType,
+      status: FileStatus,
+      maxLength: Int,
+      pathValue: => UTF8String): Option[Int] = {
+    if (!schema.fieldNames.contains(CONTENT) || status.getLen < 0 || status.getLen > maxLength ||
+        !SQLConf.get.getConf(SQLConf.BINARY_FILE_SINGLE_CONTENT_COPY_ENABLED)) {
+      return None
+    }
+    val pathBytes = if (schema.fieldNames.contains(PATH)) pathValue.numBytes().toLong else 0L
+    val bufferSize =
+      UnsafeRowWriter.exactVariableLengthBufferSize(schema.length, pathBytes, status.getLen)
+    Option.when(bufferSize >= 0)(bufferSize)
+  }
+
+  private def readsContentFromStream(status: FileStatus): Boolean = {
+    val conf = SQLConf.get
+    status.getLen >= conf.getConf(SQLConf.BINARY_FILE_STREAM_CONTENT_READ_MIN_FILE_SIZE) &&
+      conf.getConf(SQLConf.BINARY_FILE_STREAM_CONTENT_READ_ENABLED)
+  }
+
   /**
    * Builds one row from `status` (path/length/modificationTime) and the bytes of `getContent`,
    * skipping the row when `filterFuncs` reject `status`. Used for both a standalone file and a
@@ -156,25 +199,35 @@ object BinaryFileFormat {
       status: FileStatus,
       schema: StructType,
       maxLength: Int,
-      filterFuncs: Seq[FileStatus => Boolean]): Iterator[InternalRow] = {
+      filterFuncs: Seq[FileStatus => Boolean],
+      lengthFromHeader: Boolean = false): Iterator[InternalRow] = {
     if (filterFuncs.forall(_.apply(status))) {
-      val writer = new UnsafeRowWriter(schema.length)
+      lazy val pathValue = UTF8String.fromString(status.getPath.toString)
+      val bufferSize = computeBufferSize(schema, status, maxLength, pathValue)
+      // Archive headers may overstate the content size. Grow with the data instead of allocating
+      // the declared size up front; the stream writer uses it only as a capacity hint.
+      val writer = bufferSize
+        .filterNot(_ => lengthFromHeader)
+        .map(new UnsafeRowWriter(schema.length, _))
+        .getOrElse(new UnsafeRowWriter(schema.length))
       writer.resetRowWriter()
       schema.fieldNames.zipWithIndex.foreach {
-        case (PATH, i) => writer.write(i, UTF8String.fromString(status.getPath.toString))
+        case (PATH, i) => writer.write(i, pathValue)
         case (LENGTH, i) => writer.write(i, status.getLen)
         case (MODIFICATION_TIME, i) =>
           writer.write(i, DateTimeUtils.millisToMicros(status.getModificationTime))
         case (CONTENT, i) =>
-          // Skipped when the size is unknown (`status.getLen < 0`), which is the case for a
-          // streaming-zip entry sized only by a trailing data descriptor; such an entry is read
-          // unbounded until zip reads move to ZipFile (which exposes entry sizes up front).
+          // Entries with unknown lengths retain the whole-stream read.
           if (status.getLen > maxLength) {
             throw QueryExecutionErrors.fileLengthExceedsMaxLengthError(status, maxLength)
           }
           val content = getContent()
           try {
-            writer.write(i, content.readAllBytes())
+            if (bufferSize.isDefined && readsContentFromStream(status)) {
+              writer.writeFromStream(i, content, status.getLen.toInt)
+            } else {
+              writer.write(i, content.readAllBytes())
+            }
           } finally {
             Closeables.close(content, true)
           }

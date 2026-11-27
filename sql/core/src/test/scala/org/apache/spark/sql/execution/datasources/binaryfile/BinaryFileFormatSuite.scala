@@ -17,21 +17,28 @@
 
 package org.apache.spark.sql.execution.datasources.binaryfile
 
-import java.io.{File, IOException}
+import java.io.{ByteArrayInputStream, File, InputStream, IOException}
+import java.lang.management.ManagementFactory
 import java.nio.file.{Files, StandardOpenOption}
 import java.sql.Timestamp
 
 import scala.jdk.CollectionConverters._
 
 import com.google.common.io.Closeables
+import com.sun.management.ThreadMXBean
 import org.apache.hadoop.fs.{FileStatus, FileSystem, GlobFilter, Path}
 import org.mockito.Mockito.{mock, when}
 
-import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.{DebugFilesystem, SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeWriter
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.PartitionedFile
 import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.SOURCES_BINARY_FILE_MAX_LENGTH
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSparkSession
@@ -373,6 +380,244 @@ class BinaryFileFormatSuite extends SharedSparkSession {
     }
   }
 
+  private val chunkBytes = UnsafeWriter.STREAM_READ_CHUNK_BYTES
+
+  private def withContentCopyFlags[T](
+      singleContentCopy: Boolean,
+      streamRead: Boolean = true,
+      streamReadMinFileSize: Long = 0L)(f: => T): T = withSQLConf(
+    SQLConf.BINARY_FILE_SINGLE_CONTENT_COPY_ENABLED.key -> singleContentCopy.toString,
+    SQLConf.BINARY_FILE_STREAM_CONTENT_READ_ENABLED.key -> streamRead.toString,
+    SQLConf.BINARY_FILE_STREAM_CONTENT_READ_MIN_FILE_SIZE.key -> streamReadMinFileSize.toString)(f)
+
+  private def contentOf(numBytes: Int, seed: Int): Array[Byte] =
+    Array.tabulate[Byte](numBytes)(i => ((i * 31 + seed) % 251 + 1).toByte)
+
+  private def bufferLength(row: UnsafeRow): Int =
+    row.getBaseObject.asInstanceOf[Array[Byte]].length
+
+  private def parseFile(
+      status: FileStatus,
+      requiredSchema: StructType,
+      open: () => InputStream): UnsafeRow = {
+    BinaryFileFormat.parse(open, status, requiredSchema, Int.MaxValue, Seq.empty)
+      .next().asInstanceOf[UnsafeRow]
+  }
+
+  private def buildFileReader(
+      file: File,
+      requiredSchema: StructType): (PartitionedFile => Iterator[InternalRow], PartitionedFile) = {
+    val reader = new BinaryFileFormat().buildReaderWithPartitionValues(
+      spark, schema, StructType(Nil), requiredSchema, Seq.empty, Map.empty,
+      spark.sessionState.newHadoopConf())
+    val partitionedFile = mock(classOf[PartitionedFile])
+    when(partitionedFile.toPath).thenReturn(new Path(file.toURI))
+    when(partitionedFile.partitionValues).thenReturn(InternalRow.empty)
+    (reader, partitionedFile)
+  }
+
+  private class TrackingInputStream(bytes: Array[Byte]) extends InputStream {
+    private val in = new ByteArrayInputStream(bytes)
+    var readAllBytesCalls = 0
+    var closed = false
+
+    override def read(): Int = in.read()
+
+    // Remote file systems may return short, unaligned reads.
+    override def read(b: Array[Byte], off: Int, len: Int): Int =
+      in.read(b, off, math.min(len, 4093))
+
+    override def readAllBytes(): Array[Byte] = {
+      readAllBytesCalls += 1
+      super.readAllBytes()
+    }
+
+    override def close(): Unit = { closed = true }
+  }
+
+  test("SPARK-62256: exact row buffers across column selections, paths and content sizes") {
+    val sizes = Seq(0, 7, 8, 2 * chunkBytes + 3)
+    // scalastyle:off nonascii
+    val paths = Seq("file:/data.bin", "file:/a b%c/\u6570\u636e\u6587\u4ef6.bin")
+    // scalastyle:on nonascii
+    val columnSets = Seq(
+      Seq(PATH, MODIFICATION_TIME, LENGTH, CONTENT), Seq(CONTENT), Seq(CONTENT, PATH),
+      Seq(LENGTH, CONTENT, MODIFICATION_TIME), Seq(PATH, LENGTH))
+    for {
+      columns <- columnSets
+      path <- paths
+      numBytes <- sizes
+    } {
+      val bytes = contentOf(numBytes, numBytes)
+      val status = new FileStatus(numBytes, false, 0, 0, 1234567L, new Path(path))
+      val required = StructType(columns.map(schema(_)))
+      val expected = withContentCopyFlags(singleContentCopy = false) {
+        parseFile(status, required, () => new TrackingInputStream(bytes))
+      }
+      Seq(0L, numBytes + 1L).foreach { minSize =>
+        withContentCopyFlags(singleContentCopy = true, streamReadMinFileSize = minSize) {
+          val input = new TrackingInputStream(bytes)
+          val row = parseFile(status, required, () => input)
+          assert(row === expected, s"$columns, $path, $numBytes bytes, minimum $minSize")
+          columns.zipWithIndex.foreach {
+            case (CONTENT, i) => assert(row.getBinary(i) === bytes)
+            case (PATH, i) => assert(row.getUTF8String(i).toString === status.getPath.toString)
+            case (LENGTH, i) => assert(row.getLong(i) === numBytes)
+            case (MODIFICATION_TIME, i) =>
+              assert(row.getLong(i) === DateTimeUtils.millisToMicros(1234567L))
+          }
+          if (columns.contains(CONTENT)) {
+            assert(bufferLength(row) === row.getSizeInBytes)
+            assert(input.readAllBytesCalls === (if (numBytes >= minSize) 0 else 1))
+            assert(input.closed)
+          } else {
+            assert(!input.closed, "a metadata-only read must not open the stream")
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-62256: partition and metadata projections preserve query results") {
+    withTempDir { dir =>
+      val entries = Seq("year=2014/small.bin" -> 1001,
+        "year=2014/large.bin" -> (2 * chunkBytes + 3), "year=2015/word.bin" -> 8)
+      entries.zipWithIndex.foreach { case ((name, size), seed) =>
+        val file = new File(dir, name)
+        file.getParentFile.mkdirs()
+        Files.write(file.toPath, contentOf(size, seed))
+      }
+      for {
+        path <- Seq(dir.getPath, new File(dir, "year=2014").getPath)
+        columns <- Seq(Seq(CONTENT), Seq(PATH, LENGTH, CONTENT),
+          Seq(CONTENT, "_metadata.file_name", "_metadata.file_size"))
+      } {
+        def read(): DataFrame = spark.read.format(BINARY_FILE).load(path)
+          .select(columns.map(col): _*)
+        val expected = withContentCopyFlags(singleContentCopy = false)(read().collect())
+        withContentCopyFlags(singleContentCopy = true, streamReadMinFileSize = 4096L) {
+          checkAnswer(read(), expected.toSeq)
+        }
+      }
+      withContentCopyFlags(singleContentCopy = true) {
+        val result = spark.read.format(BINARY_FILE).load(dir.getPath).select("year", CONTENT)
+        checkAnswer(result, entries.zipWithIndex.map { case ((name, size), seed) =>
+          Row(name.substring(5, 9).toInt, contentOf(size, seed))
+        })
+      }
+    }
+  }
+
+  test("SPARK-62256: stale and unknown listed lengths preserve all stream content") {
+    val bytes = contentOf(chunkBytes + 5, seed = 1)
+    Seq(-1L, 0L, bytes.length - 40L, bytes.length.toLong, bytes.length + 50L, Int.MaxValue.toLong)
+      .foreach { listed =>
+        val status = new FileStatus(listed, false, 0, 0, 0, new Path("file:/stale.bin"))
+        val expected = withContentCopyFlags(singleContentCopy = false) {
+          parseFile(status, schema, () => new TrackingInputStream(bytes))
+        }
+        assert(expected.getBinary(schema.fieldIndex(CONTENT)) === bytes)
+        Seq(true, false).foreach { streamRead =>
+          withContentCopyFlags(singleContentCopy = true, streamRead = streamRead) {
+            assert(parseFile(status, schema, () => new TrackingInputStream(bytes)) === expected)
+          }
+        }
+      }
+  }
+
+  test("SPARK-62256: filesystem length changes preserve content through a scan") {
+    withTempDir { dir =>
+      val bytes = contentOf(1001, seed = 7)
+      Files.write(new File(dir, "data.bin").toPath, bytes)
+      Seq(classOf[LongerFileStatusFileSystem] -> 1009L,
+        classOf[ShorterFileStatusFileSystem] -> 993L).foreach { case (fileSystem, listed) =>
+        withSQLConf("fs.file.impl" -> fileSystem.getName, "fs.file.impl.disable.cache" -> "true") {
+          Seq((false, false), (true, false), (true, true)).foreach {
+            case (singleCopy, streamRead) =>
+              withContentCopyFlags(singleCopy, streamRead) {
+                val df = spark.read.format(BINARY_FILE).load(dir.getPath).select(LENGTH, CONTENT)
+                checkAnswer(df, Row(listed, bytes))
+              }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-62256: length limits and filters apply before allocating or opening content") {
+    val threads = ManagementFactory.getThreadMXBean.asInstanceOf[ThreadMXBean]
+    assume(threads.isThreadAllocatedMemorySupported && threads.isThreadAllocatedMemoryEnabled)
+    val listed = 64L * chunkBytes
+    val status = new FileStatus(listed, false, 0, 0, 0, new Path("file:/large.bin"))
+    withContentCopyFlags(singleContentCopy = true) {
+      val open = () => fail("content must not be opened")
+      assert(BinaryFileFormat.parse(open, status, schema, 1024, Seq(_ => false)).isEmpty)
+      val start = threads.getThreadAllocatedBytes(Thread.currentThread().threadId())
+      val error = intercept[SparkException] {
+        BinaryFileFormat.parse(open, status, schema, 1024, Seq.empty)
+      }
+      val allocated = threads.getThreadAllocatedBytes(Thread.currentThread().threadId()) - start
+      assert(error.getMessage.contains("exceeds the max length allowed"))
+      assert(allocated < listed / 8, s"allocated $allocated bytes for a file listed at $listed")
+    }
+  }
+
+  test("SPARK-62256: stream failures propagate and close the content") {
+    Seq(true, false).foreach { streamRead =>
+      withContentCopyFlags(singleContentCopy = true, streamRead = streamRead) {
+        val failure = new IOException("read failed")
+        var closed = false
+        val input = new InputStream {
+          override def read(): Int = throw failure
+          override def read(b: Array[Byte], off: Int, len: Int): Int = throw failure
+          override def close(): Unit = { closed = true }
+        }
+        val status = new FileStatus(1001, false, 0, 0, 0, new Path("file:/failed.bin"))
+        assert(intercept[IOException](parseFile(status, schema, () => input)) eq failure)
+        assert(closed)
+      }
+    }
+  }
+
+  test("SPARK-62256: a whole-file read allocates the content once") {
+    val threads = ManagementFactory.getThreadMXBean.asInstanceOf[ThreadMXBean]
+    assume(threads.isThreadAllocatedMemorySupported && threads.isThreadAllocatedMemoryEnabled)
+    val numBytes = 16 * chunkBytes + 3
+    withTempPath { file =>
+      Files.write(file.toPath, contentOf(numBytes, seed = 5))
+      val required = StructType(Seq(schema(PATH), schema(CONTENT)))
+      /** The fewest bytes this thread allocates to read the file's row, after a warm-up read. */
+      def allocatedBytes(): Long = {
+        val (reader, partitionedFile) =
+          buildFileReader(file, required)
+        reader(partitionedFile).next()
+        Seq.fill(3) {
+          val start = threads.getThreadAllocatedBytes(Thread.currentThread().threadId())
+          val row = reader(partitionedFile).next().asInstanceOf[UnsafeRow]
+          val allocated = threads.getThreadAllocatedBytes(Thread.currentThread().threadId()) - start
+          assert(row.getSizeInBytes > numBytes)
+          allocated
+        }.min
+      }
+      // The 1 MiB read chunk and the small objects of opening and parsing one file.
+      val slack = 4L * chunkBytes
+      def measure(singleContentCopy: Boolean, streamRead: Boolean): Long =
+        withContentCopyFlags(singleContentCopy = singleContentCopy, streamRead = streamRead) {
+          allocatedBytes()
+        }
+      val streamed = measure(singleContentCopy = true, streamRead = true)
+      val wholeFileArray = measure(singleContentCopy = true, streamRead = false)
+      val legacy = measure(singleContentCopy = false, streamRead = false)
+      val clue = s"$numBytes-byte file: streamed $streamed, whole-file array $wholeFileArray, " +
+        s"legacy $legacy bytes"
+      assert(streamed <= numBytes + slack, clue)
+      // readAllBytes buffers the stream in pieces before copying it into one array.
+      assert(wholeFileArray <= 3L * numBytes + slack, clue)
+      // The measurement sees the copies this change removes.
+      assert(legacy >= 4L * numBytes, clue)
+    }
+  }
+
   test("SPARK-28030: support chars in file names that require URL encoding") {
     withTempDir { dir =>
       val file = new File(dir, "test space.txt")
@@ -387,3 +632,20 @@ class BinaryFileFormatSuite extends SharedSparkSession {
     }
   }
 }
+
+/** Reports a different file length, as if the file changed after it was listed. */
+abstract class MisreportedLengthFileSystem(delta: Long) extends DebugFilesystem {
+  override def getFileStatus(f: Path): FileStatus = {
+    val status = super.getFileStatus(f)
+    if (status.isFile) {
+      new FileStatus(status.getLen + delta, false, status.getReplication, status.getBlockSize,
+        status.getModificationTime, status.getPath)
+    } else {
+      status
+    }
+  }
+}
+
+class LongerFileStatusFileSystem extends MisreportedLengthFileSystem(8)
+
+class ShorterFileStatusFileSystem extends MisreportedLengthFileSystem(-8)

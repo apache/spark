@@ -94,6 +94,26 @@ final class BufferHolder {
     }
   }
 
+  /**
+   * Like {@link #grow}, but caps growth at {@code capacityHint} while the required size fits
+   * within it. The buffer follows what is written, reaching the hint when that much is written.
+   */
+  void growTowards(int neededSize, long capacityHint) {
+    final long maxLength = Math.min(capacityHint, ARRAY_MAX);
+    final long length = (long) totalSize() + neededSize;
+    if (neededSize < 0 || length > maxLength || buffer.length >= length) {
+      grow(neededSize);
+      return;
+    }
+    // At most maxLength, which is at most ARRAY_MAX, so it fits an int.
+    final int newLength = (int) Math.min(2 * length, maxLength);
+    final byte[] tmp = new byte[ByteArrayMethods.roundNumberOfBytesToNearestWord(newLength)];
+    Platform.copyMemory(
+      buffer, Platform.BYTE_ARRAY_OFFSET, tmp, Platform.BYTE_ARRAY_OFFSET, totalSize());
+    buffer = tmp;
+    row.pointTo(buffer, buffer.length);
+  }
+
   byte[] getBuffer() {
     return buffer;
   }
