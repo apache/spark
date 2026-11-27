@@ -18,9 +18,7 @@ package org.apache.spark.status.api.v1
 
 import jakarta.ws.rs._
 import jakarta.ws.rs.core.MediaType
-import org.eclipse.jetty.ee10.servlet.{ServletContextHandler, ServletHolder}
-import org.glassfish.jersey.server.ServerProperties
-import org.glassfish.jersey.servlet.ServletContainer
+import org.eclipse.jetty.ee10.servlet.ServletContextHandler
 
 import org.apache.spark.{SPARK_REVISION, SPARK_VERSION_SHORT}
 import org.apache.spark.annotation.Experimental
@@ -109,13 +107,7 @@ private[v1] class PrometheusResource extends ApiRequestContext {
 }
 
 private[spark] object PrometheusResource {
-  def getServletHandler(uiRoot: UIRoot): ServletContextHandler = {
-    val jerseyContext = new ServletContextHandler(ServletContextHandler.NO_SESSIONS)
-    jerseyContext.setContextPath("/metrics")
-    val holder: ServletHolder = new ServletHolder(classOf[ServletContainer])
-    holder.setInitParameter(ServerProperties.PROVIDER_PACKAGES, "org.apache.spark.status.api.v1")
-    UIRootFromServletContext.setUiRoot(jerseyContext, uiRoot)
-    jerseyContext.addServlet(holder, "/*")
-    jerseyContext
-  }
+  // The endpoint only produces text/plain, so no JSON message body writer is registered.
+  def getServletHandler(uiRoot: UIRoot): ServletContextHandler =
+    ApiRootResource.createJerseyHandler("/metrics", uiRoot, classOf[PrometheusResource])
 }
