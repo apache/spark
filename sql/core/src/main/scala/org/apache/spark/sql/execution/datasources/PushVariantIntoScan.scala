@@ -281,6 +281,13 @@ class VariantInRelation {
     map.getOrElseUpdate(field, idx)
   }
 
+  // The Parquet variant readers cannot produce a FILE, so an extraction whose type contains one
+  // reads the whole variant and is evaluated above the scan, in `VariantGet.cast`. The same check
+  // is applied in `collectRequestedFields` and `rewriteExpr`, as the rewrite looks up the field
+  // that collection requested.
+  private def isPushableTarget(dataType: DataType): Boolean =
+    !dataType.existsRecursively(_.isInstanceOf[FileType])
+
   // Update `mapping` with any access to a variant. Add the requested fields of each variant and
   // potentially remove non-eligible variants.
   // If a struct containing a variant is directly used, this variant is not eligible for push down.
@@ -288,9 +295,11 @@ class VariantInRelation {
   // fields, which also changes the struct type containing it, and it is difficult to reconstruct
   // the original struct value. This is not a big loss, because we need the full variant anyway.
   def collectRequestedFields(expr: Expression): Unit = expr match {
-    case v@VariantGet(StructPathToVariant(fields), path, _, _, _, _) if path.foldable =>
+    case v@VariantGet(StructPathToVariant(fields), path, _, _, _, _)
+        if path.foldable && isPushableTarget(v.dataType) =>
       addField(fields, RequestedVariantField(v))
-    case c@Cast(StructPathToVariant(fields), _, _, _) => addField(fields, RequestedVariantField(c))
+    case c@Cast(StructPathToVariant(fields), _, _, _) if isPushableTarget(c.dataType) =>
+      addField(fields, RequestedVariantField(c))
     case IsNotNull(StructPath(_, _)) | IsNull(StructPath(_, _)) =>
     case StructPath(attrId, path) =>
       mapping.get(attrId) match {
@@ -343,11 +352,12 @@ class VariantInRelation {
 
     // Rewrite patterns should be consistent with visit patterns in `collectRequestedFields`.
     expr.transformDown {
-      case g@VariantGet(v@StructPathToVariant(fields), path, _, _, _, _) if path.foldable =>
+      case g@VariantGet(v@StructPathToVariant(fields), path, _, _, _, _)
+          if path.foldable && isPushableTarget(g.dataType) =>
         // Rewrite the attribute in advance, rather than depending on the last branch to rewrite it.
         // Ww need to avoid the `v@StructPathToVariant(fields)` branch to rewrite the child again.
         accessRequestedField(fields, RequestedVariantField(g), rewriteAttribute(v))
-      case c@Cast(v@StructPathToVariant(fields), _, _, _) =>
+      case c@Cast(v@StructPathToVariant(fields), _, _, _) if isPushableTarget(c.dataType) =>
         accessRequestedField(fields, RequestedVariantField(c), rewriteAttribute(v))
       case i@IsNotNull(StructPath(_, _)) => rewriteAttribute(i)
       case i@IsNull(StructPath(_, _)) => rewriteAttribute(i)

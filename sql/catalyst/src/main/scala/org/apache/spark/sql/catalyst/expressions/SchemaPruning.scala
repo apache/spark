@@ -109,6 +109,8 @@ object SchemaPruning extends SQLConfHelper {
           }
         }
         StructType(sortedLeftFields)
+      // A FILE is not pruned: keep the FileType of the relation, with its mode.
+      case (_, rightFileType: FileType) => rightFileType
       case _ => left
     }
 
@@ -335,6 +337,11 @@ object SchemaPruning extends SQLConfHelper {
             case schema: StructType if schema.length == 1 =>
               schema.head -> variable
           }
+        // A FILE is not pruned to the fields that are read: request the whole FileType, with
+        // its mode, as `SelectedField` does.
+        case getStructField: GetStructField
+            if getStructField.child.dataType.isInstanceOf[FileType] =>
+          selectField(getStructField.child, Some(getStructField.child.dataType))
         case getStructField: GetStructField =>
           val field = getStructField.childSchema(getStructField.ordinal)
           val newField = field.copy(dataType = dataTypeOpt.getOrElse(field.dataType))

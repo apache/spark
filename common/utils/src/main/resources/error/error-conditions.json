@@ -1055,6 +1055,24 @@
     ],
     "sqlState" : "22003"
   },
+  "CAST_TO_FILE_TYPE" : {
+    "message" : [
+      "Cannot cast <sourceType> to FILE."
+    ],
+    "subClass" : {
+      "DUPLICATE_FIELD" : {
+        "message" : [
+          "Source contains a duplicate FILE field <fieldName>."
+        ]
+      },
+      "NULL_URI" : {
+        "message" : [
+          "The source value is missing the required `uri` field or it is NULL."
+        ]
+      }
+    },
+    "sqlState" : "22023"
+  },
   "CATALOG_NOT_FOUND" : {
     "message" : [
       "The catalog <catalogName> not found. Consider to set the SQL config <config> to a catalog plugin."

@@ -105,6 +105,10 @@ case class ProjectionOverSchema(schema: StructType, output: AttributeSet) {
         getProjection(child).map(p => (p, p.dataType)).map {
           case (projection, projSchema: StructType) =>
             GetStructField(projection, projSchema.fieldIndex(field.name))
+          // A FILE is not pruned, so its field keeps its ordinal in FileType.FIELDS (see
+          // GetStructField.childSchema).
+          case (projection, _: FileType) =>
+            GetStructField(projection, FileType.asStruct.fieldIndex(field.name))
           case (_, projSchema) =>
             throw SparkException.internalError(
               s"unmatched child schema for GetStructField: ${projSchema.toString}"
@@ -176,6 +180,8 @@ case class ProjectionOverSchema(schema: StructType, output: AttributeSet) {
           projection.dataType match {
             case projectedSchema: StructType =>
               GetStructField(projection, projectedSchema.fieldIndex(field.name))
+            case _: FileType =>
+              GetStructField(projection, FileType.asStruct.fieldIndex(field.name))
             case dataType =>
               throw SparkException.internalError(
                 s"unmatched lambda child schema for GetStructField: ${dataType.toString}")

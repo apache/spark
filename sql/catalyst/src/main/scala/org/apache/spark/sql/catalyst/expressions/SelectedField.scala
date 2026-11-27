@@ -90,7 +90,12 @@ object SelectedField {
       case c: GetStructField =>
         val field = c.childSchema(c.ordinal)
         val newField = field.copy(dataType = dataTypeOpt.getOrElse(field.dataType))
-        selectField(c.child, Option(struct(newField)))
+        c.child.dataType match {
+          // A FILE is not pruned to the fields that are accessed: select the whole FileType, so
+          // the pruned schema keeps the type and its mode instead of a struct of one field.
+          case _: FileType => selectField(c.child, Option(c.child.dataType))
+          case _ => selectField(c.child, Option(struct(newField)))
+        }
       case GetArrayStructFields(child, _, ordinal, _, containsNull) =>
         // For case-sensitivity aware field resolution, we should take `ordinal` which
         // points to correct struct field.

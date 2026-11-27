@@ -308,6 +308,8 @@ object NestedColumnAliasing {
    */
   private def totalFieldNum(dataType: DataType): Int = dataType match {
     case _: AtomicType => 1
+    // A FILE counts its fields, so that accessing one of them, such as `f.uri`, is aliased.
+    case _: FileType => FileType.FIELDS.length
     case StructType(fields) => fields.map(f => totalFieldNum(f.dataType)).sum
     case ArrayType(elementType, _) => totalFieldNum(elementType)
     case MapType(keyType, valueType, _) => totalFieldNum(keyType) + totalFieldNum(valueType)
@@ -372,6 +374,21 @@ object GeneratorNestedColumnAliasing {
 
       val pushedThrough = NestedColumnAliasing.rewritePlanWithAliases(
         plan, attrToExtractValuesNotOnGenerator)
+
+      // A FILE is not pruned, so a field extractor cannot be pushed into a FILE that the
+      // generator produces, such as an element of an `ARRAY<FILE>`. Only a generator whose
+      // output holds a FILE can produce one, so the project list is walked only then.
+      val accessesGeneratorFileField =
+        g.qualifiedGeneratorOutput.exists(_.dataType.existsRecursively(_.isInstanceOf[FileType])) &&
+          projectList.exists(_.exists {
+            case gsf: GetStructField =>
+              gsf.child.dataType.isInstanceOf[FileType] &&
+                gsf.references.subsetOf(generatorOutputSet)
+            case _ => false
+          })
+      if (accessesGeneratorFileField) {
+        return Some(pushedThrough)
+      }
 
       // We cannot push through if the child of generator is `MapType`.
       g.generator.children.head.dataType match {

@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.optimizer.SimpleTestOptimizer
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
+import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, MapData}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -111,7 +112,8 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
       expected: Any,
       exprDataType: DataType,
       exprNullable: Boolean): Boolean = {
-    val dataType = UserDefinedType.sqlType(exprDataType)
+    // A framework type such as FILE is compared as its row representation, such as a struct.
+    val dataType = TypeOps.rowRepresentationOrSelf(UserDefinedType.sqlType(exprDataType))
 
     // The result is null for a non-nullable expression
     assert(result != null || exprNullable, "exprNullable should be true if result is null")

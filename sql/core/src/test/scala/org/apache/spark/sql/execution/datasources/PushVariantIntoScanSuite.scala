@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkRuntimeException}
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.variant._
@@ -930,6 +930,58 @@ trait PushVariantIntoScanSuiteBase extends SharedSparkSession {
         s"ORDER BY variant_get over a join produced the wrong row order: got " +
           s"${sql(query).collect().map(_.getInt(0)).toList}, expected $expectedOrder")
       assertShreddedStruct(scanColumnType(sql(query).queryExecution.optimizedPlan, "data"))
+    }
+  }
+
+  test("casts of a variant column to FILE are evaluated above the scan") {
+    // The Parquet variant readers cannot produce a FILE, so a cast or variant_get to a type that
+    // contains a FILE reads the whole variant and converts it in `VariantGet.cast` above the
+    // scan, while the other extractions of the same column are still pushed into the scan.
+    val file = new FileRef("s3://bucket/a.txt", null, 5L, null, null)
+    val obj = """{"uri": "s3://bucket/a.txt", "size": 5}"""
+    val noUri = """{"size": 1}"""
+    val shreddingConfs = Seq(
+      Nil,
+      Seq(
+        SQLConf.VARIANT_WRITE_SHREDDING_ENABLED.key -> "true",
+        SQLConf.VARIANT_FORCE_SHREDDING_SCHEMA_FOR_TEST.key ->
+          "uri string, size bigint, x int, f struct<uri: string, size: bigint>"))
+    for (confs <- shreddingConfs; vectorized <- Seq("true", "false")) {
+      withSQLConf(confs: _*) {
+        withVariantParquetData("id int, v variant",
+            s"""(1, parse_json('{"uri": "s3://bucket/a.txt", "size": 5, "x": 7}'))""",
+            s"""(2, parse_json('{"f": $obj, "x": 8}'))""",
+            s"""(3, parse_json('$noUri'))""") {
+          withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
+            def rows(query: String): Seq[Seq[Any]] =
+              sql(query).collect().toSeq.map(_.toSeq)
+            assert(rows("select id, try_cast(v as file) from T order by id") ==
+              Seq(Seq(1, file), Seq(2, null), Seq(3, null)))
+            assert(rows(
+              "select try_variant_get(v, '$', 'file') from T where id = 1") == Seq(Seq(file)))
+            assert(rows("select cast(v as file) from T where id = 1") == Seq(Seq(file)))
+            assert(rows("select variant_get(v, '$.f', 'file') from T where id = 2") ==
+              Seq(Seq(file)))
+            val nested = rows("select cast(v as struct<f: file>), " +
+              "cast(parse_json(concat('[', to_json(v:f), ']')) as array<file>) " +
+              "from T where id = 2")
+            assert(nested == Seq(Seq(Row(file), Seq(file))))
+            val ex = intercept[SparkRuntimeException](
+              sql("select cast(v as file) from T where id = 3").collect())
+            assert(ex.getCondition == "CAST_TO_FILE_TYPE.NULL_URI")
+
+            // A FILE target is not pushed, while an integer extraction of the same column is.
+            val mixed = sql(
+              "select variant_get(v, '$.x', 'int'), try_cast(v as file) from T where id = 1")
+            assert(mixed.collect().toSeq.map(_.toSeq) == Seq(Seq(7, file)))
+            val scanned = assertShreddedStruct(
+              scanColumnType(mixed.queryExecution.optimizedPlan, "v"),
+              expectFullVariantSlot = true)
+            assert(scanned.fields.exists(_.dataType == IntegerType), scanned)
+            assert(!scanned.existsRecursively(_.isInstanceOf[FileType]), scanned)
+          }
+        }
+      }
     }
   }
 }

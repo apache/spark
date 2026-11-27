@@ -27,6 +27,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.ResolveTimeZone
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.internal.SQLConf
@@ -2735,5 +2736,89 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     intercept[org.apache.spark.sql.AnalysisException] {
       noPaths.checkInputDataTypes()
     }
+  }
+
+  private def evalInUtc(e: VariantGet): Any = e.withTimeZone("UTC").eval()
+
+  test("variant_get to FILE: a FILE of unknown mode, also nested, is a valid target") {
+    Seq(FileType(), ArrayType(FileType()), new StructType().add("f", FileType()),
+        MapType(StringType, FileType())).foreach { dt =>
+      assert(variantGet("""{"uri": "a"}""", "$", dt).checkInputDataTypes().isSuccess, dt)
+    }
+    Seq(FileType.external, ArrayType(FileType.external)).foreach { dt =>
+      assert(variantGet("""{"uri": "a"}""", "$", dt).checkInputDataTypes().isFailure, dt)
+    }
+  }
+
+  test("variant_get to FILE: the public fields, by name") {
+    val row = evalInUtc(variantGet(
+      """{"uri": "s3://b/a", "offset": 1, "size": 2, "Content_Type": "text/plain", "x": 3}""",
+      "$", FileType())).asInstanceOf[InternalRow]
+    assert(row.numFields == FileType.FIELDS.length)
+    assert(row.getUTF8String(FileType.URI_INDEX).toString == "s3://b/a")
+    assert(row.getLong(FileType.OFFSET_INDEX) == 1L)
+    assert(row.getLong(FileType.SIZE_INDEX) == 2L)
+    assert(row.getUTF8String(FileType.CONTENT_TYPE_INDEX).toString == "text/plain")
+    assert(row.isNullAt(FileType.CHECKSUM_INDEX))
+    assert(row.isNullAt(FileType.INLINE_INDEX))
+    // A variant string does not hold the inline bytes, so an `inline` key is ignored.
+    val withInline = evalInUtc(variantGet("""{"uri": "a", "inline": "SU5MSU5F"}""", "$",
+      FileType())).asInstanceOf[InternalRow]
+    assert(withInline.isNullAt(FileType.INLINE_INDEX))
+    // A value that is not an object is not a FILE.
+    checkErrorInExpression[SparkRuntimeException](variantGet("1", "$", FileType()),
+      "INVALID_VARIANT_CAST", Map("value" -> "1", "dataType" -> "\"FILE\""))
+    checkEvaluation(tryVariantGet("1", "$", FileType()), null)
+  }
+
+  test("try_variant_get returns NULL for an invalid FILE value, like any failed cast") {
+    val invalid = Seq(
+      ("""{"size": 1}""", "CAST_TO_FILE_TYPE.NULL_URI", Map("sourceType" -> "\"VARIANT\"")),
+      ("""{"uri": null}""", "CAST_TO_FILE_TYPE.NULL_URI", Map("sourceType" -> "\"VARIANT\"")),
+      ("""{"uri": "a", "URI": "b"}""", "CAST_TO_FILE_TYPE.DUPLICATE_FIELD",
+        Map("sourceType" -> "\"VARIANT\"", "fieldName" -> "`uri`")))
+    for ((json, condition, parameters) <- invalid) {
+      checkEvaluation(tryVariantGet(json, "$", FileType()), null)
+      checkErrorInExpression[SparkRuntimeException](
+        variantGet(json, "$", FileType()), condition, parameters)
+      checkError(
+        exception = intercept[SparkRuntimeException](
+          evalInUtc(variantGet(json, "$", FileType()))),
+        condition = condition,
+        sqlState = "22023",
+        parameters = parameters)
+    }
+
+    def checkFile(value: Any): InternalRow = {
+      assert(value != null)
+      val row = value.asInstanceOf[InternalRow]
+      assert(row.getUTF8String(FileType.URI_INDEX).toString == "a")
+      row
+    }
+    checkFile(evalInUtc(variantGet("""{"uri": "a"}""", "$", FileType())))
+    checkFile(evalInUtc(tryVariantGet("""{"uri": "a"}""", "$", FileType())))
+    // A field that fails to cast is NULL, and the row with a valid uri is kept.
+    val badSize = checkFile(
+      evalInUtc(tryVariantGet("""{"uri": "a", "size": "big"}""", "$", FileType())))
+    assert(badSize.isNullAt(FileType.SIZE_INDEX))
+
+    // Only the invalid element or field is NULL, as for other nested variant casts.
+    val array = evalInUtc(tryVariantGet("""[{"uri": "a"}, {"size": 1}]""", "$",
+      ArrayType(FileType()))).asInstanceOf[ArrayData]
+    assert(array.numElements() == 2 && !array.isNullAt(0) && array.isNullAt(1))
+    // TRY_CAST from VARIANT casts with failOnError = false too.
+    val tryCast = Cast(Literal(parseJson("""[{"uri": "a"}, {"size": 1}]""")),
+      ArrayType(FileType()), Some("UTC"), EvalMode.TRY).eval().asInstanceOf[ArrayData]
+    assert(tryCast.numElements() == 2 && !tryCast.isNullAt(0) && tryCast.isNullAt(1))
+    val struct = evalInUtc(tryVariantGet("""{"f": {"size": 1}, "g": 1}""", "$",
+      new StructType().add("f", FileType()).add("g", IntegerType))).asInstanceOf[InternalRow]
+    assert(struct.isNullAt(0) && struct.getInt(1) == 1)
+  }
+
+  test("a FILE cannot be cast to a variant yet") {
+    val file = Literal.create(null, FileType())
+    assert(Cast(file, VariantType).checkInputDataTypes().isFailure)
+    assert(ToVariantObject(Literal.create(null, ArrayType(FileType())))
+      .checkInputDataTypes().isFailure)
   }
 }

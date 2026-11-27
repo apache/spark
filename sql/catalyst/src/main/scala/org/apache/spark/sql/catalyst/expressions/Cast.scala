@@ -153,7 +153,7 @@ object Cast extends QueryErrorsBase {
     case (BooleanType, _: NumericType) => true
     case (TimestampType, _: NumericType) => true
 
-    case (VariantType, _) => variant.VariantGet.checkDataType(to)
+    case (VariantType, _) => variant.VariantGet.checkDataType(to, allowFileType = true)
     // Structs and Maps can't be cast to Variants since the Variant spec does not yet contain
     // lossless equivalents for these types. The `to_variant_object` expression can be used instead
     // to convert data of these types to Variant Objects.
@@ -195,6 +195,8 @@ object Cast extends QueryErrorsBase {
     case (udt1: UserDefinedType[_], udt2: UserDefinedType[_]) if udt2.acceptsType(udt1) => true
     // A FILE casts to a FILE of unknown mode: the value does not change.
     case (_: FileType, FileType(FileTypeMode.UNKNOWN)) => true
+    // A struct of the FILE fields casts to a FILE of unknown mode.
+    case (s: StructType, FileType(FileTypeMode.UNKNOWN)) => canCastToFileType(s, canAnsiCast)
 
     // Casts from concrete GEOGRAPHY(srid) to mixed GEOGRAPHY(ANY) is allowed.
     case (gt1: GeographyType, gt2: GeographyType) if !gt1.isMixedSrid && gt2.isMixedSrid =>
@@ -214,7 +216,33 @@ object Cast extends QueryErrorsBase {
 
   // If the target data type is a complex type which can't have Null values, we should guarantee
   // that the casting between the element types won't produce Null results.
-  def canTryCast(from: DataType, to: DataType): Boolean = (from, to) match {
+  def canTryCast(from: DataType, to: DataType): Boolean =
+    !tryCastPutsFileInNotNullSlot(from, to) && canTryCastInternal(from, to)
+
+  // Under TRY, a struct without a uri casts to a NULL FILE, so a FILE cast from a struct cannot
+  // fill a slot that is not nullable, at any depth. `forceNullable` does not say so, as the other
+  // modes fail on such a struct instead of returning NULL.
+  private def tryCastPutsFileInNotNullSlot(from: DataType, to: DataType): Boolean = {
+    def structToFile(from: DataType, to: DataType): Boolean =
+      from.isInstanceOf[StructType] && to.isInstanceOf[FileType]
+    (from, to) match {
+      case (ArrayType(fromType, _), ArrayType(toType, toNull)) =>
+        (!toNull && structToFile(fromType, toType)) ||
+          tryCastPutsFileInNotNullSlot(fromType, toType)
+      case (MapType(fromKey, fromValue, _), MapType(toKey, toValue, toNull)) =>
+        structToFile(fromKey, toKey) || (!toNull && structToFile(fromValue, toValue)) ||
+          tryCastPutsFileInNotNullSlot(fromKey, toKey) ||
+          tryCastPutsFileInNotNullSlot(fromValue, toValue)
+      case (StructType(fromFields), StructType(toFields)) if fromFields.length == toFields.length =>
+        fromFields.zip(toFields).exists { case (fromField, toField) =>
+          (!toField.nullable && structToFile(fromField.dataType, toField.dataType)) ||
+            tryCastPutsFileInNotNullSlot(fromField.dataType, toField.dataType)
+        }
+      case _ => false
+    }
+  }
+
+  private def canTryCastInternal(from: DataType, to: DataType): Boolean = (from, to) match {
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
       canCast(fromType, toType) &&
         resolvableNullability(fn || forceNullable(fromType, toType), tn)
@@ -342,7 +370,7 @@ object Cast extends QueryErrorsBase {
     case (TimestampType, _: NumericType) => true
     case (_: NumericType, _: NumericType) => true
 
-    case (VariantType, _) => variant.VariantGet.checkDataType(to)
+    case (VariantType, _) => variant.VariantGet.checkDataType(to, allowFileType = true)
     // Structs and Maps can't be cast to Variants since the Variant spec does not yet contain
     // lossless equivalents for these types. The `to_variant_object` expression can be used instead
     // to convert data of these types to Variant Objects.
@@ -385,6 +413,8 @@ object Cast extends QueryErrorsBase {
     case (udt1: UserDefinedType[_], udt2: UserDefinedType[_]) if udt2.acceptsType(udt1) => true
     // A FILE casts to a FILE of unknown mode: the value does not change.
     case (_: FileType, FileType(FileTypeMode.UNKNOWN)) => true
+    // A struct of the FILE fields casts to a FILE of unknown mode.
+    case (s: StructType, FileType(FileTypeMode.UNKNOWN)) => canCastToFileType(s, canCast)
 
     // Casts from concrete GEOGRAPHY(srid) to mixed GEOGRAPHY(ANY) is allowed.
     case (gt1: GeographyType, gt2: GeographyType) if !gt1.isMixedSrid && gt2.isMixedSrid =>
@@ -400,6 +430,22 @@ object Cast extends QueryErrorsBase {
       true
 
     case _ => false
+  }
+
+  /**
+   * Whether a struct casts to a FILE. It must have the fields of [[FileType.PUBLIC_FIELDS]], in
+   * that order, with names matched by the resolver and types that `canCastField` casts to the
+   * types of the FILE fields. The internal `inline` field cannot be set this way.
+   */
+  private def canCastToFileType(
+      from: StructType,
+      canCastField: (DataType, DataType) => Boolean): Boolean = {
+    val resolver = SQLConf.get.resolver
+    from.fields.length == FileType.PUBLIC_FIELDS.length &&
+      from.fields.zip(FileType.PUBLIC_FIELDS).forall { case (fromField, fileField) =>
+        resolver(fromField.name, fileField.name) &&
+          canCastField(fromField.dataType, fileField.dataType)
+      }
   }
 
   /**
@@ -462,6 +508,8 @@ object Cast extends QueryErrorsBase {
           case (fromField, toField) =>
             needsTimeZone(fromField.dataType, toField.dataType)
         }
+    // A struct casts to a FILE field by field, as to a struct of the public FILE fields.
+    case (s: StructType, _: FileType) => needsTimeZone(s, StructType(FileType.PUBLIC_FIELDS))
     // `castToString` recurses into ARRAY/MAP/STRUCT and formats each LTZ or VARIANT leaf with
     // `zoneId`, while the complex-to-complex cases above only match a target of the same shape.
     case (from, _: StringType) => from.existsRecursively(needsTimeZoneToString)
@@ -1757,10 +1805,23 @@ case class Cast(
           identity[Any]
         case ft: FileType if ft.acceptsType(from) =>
           identity[Any]
+        case _: FileType => castToFileType(from)
         case _: UserDefinedType[_] =>
           throw QueryExecutionErrors.cannotCastError(from, to)
       }
     }
+  }
+
+  // Casts a struct of the FILE fields to a FILE. The struct cast gives the public fields, the
+  // internal `inline` field is appended as NULL, and the value is validated.
+  private[this] def castToFileType(from: DataType): Any => Any = from match {
+    case s: StructType =>
+      castStruct(s, StructType(FileType.PUBLIC_FIELDS)).andThen { row =>
+        val withInline = FileTypeCastUtils.appendInlineField(row.asInstanceOf[InternalRow])
+        FileTypeCastUtils.validateFileTypeRow(withInline, s)
+      }
+    case _ =>
+      throw QueryExecutionErrors.cannotCastError(from, FileType())
   }
 
   private def cast(from: DataType, to: DataType): Any => Any = {
@@ -1876,9 +1937,27 @@ case class Cast(
       (c, evPrim, evNull) => code"$evPrim = $c;"
     case ft: FileType if ft.acceptsType(from) =>
       (c, evPrim, evNull) => code"$evPrim = $c;"
+    case _: FileType => castToFileTypeCode(from, ctx)
     case _: UserDefinedType[_] =>
       throw QueryExecutionErrors.cannotCastError(from, to)
   }
+
+  // The generated version of `castToFileType`.
+  private[this] def castToFileTypeCode(from: DataType, ctx: CodegenContext): CastFunction =
+    from match {
+      case s: StructType =>
+        val helperCls = FileTypeCastUtils.getClass.getName.stripSuffix("$")
+        val sourceType = ctx.addReferenceObj("sourceType", s)
+        val structCast = castStructCode(s, StructType(FileType.PUBLIC_FIELDS), ctx)
+        (input, result, resultIsNull) =>
+          code"""
+            ${structCast(input, result, resultIsNull)}
+            $result = $helperCls.appendInlineField($result);
+            $result = $helperCls.validateFileTypeRow($result, $sourceType);
+          """
+      case _ =>
+        throw QueryExecutionErrors.cannotCastError(from, FileType())
+    }
 
   // Since we need to cast input expressions recursively inside ComplexTypes, such as Map's
   // Key and Value, Struct's field, we need to name out all the variable names involved in a cast.

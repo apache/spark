@@ -21,7 +21,7 @@ import org.apache.spark.{SPARK_DOC_ROOT, SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedExtractValue}
+import org.apache.spark.sql.catalyst.analysis.{caseSensitiveResolution, Resolver, TypeCheckResult, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
@@ -555,6 +555,52 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     val prettySQL = toPrettySQL(getField)
     assert(prettySQL.contains("c2"))
     assert(prettySQL.contains("f1"))
+  }
+
+  test("GetStructField over FileType: childSchema, dataType, canonicalization") {
+    // A FILE is physically a struct of FileType.FIELDS, which childSchema unwraps. The name hint
+    // is dropped on canonicalization, so `f.uri` and `f.URI` are the same expression.
+    val fileAttr = AttributeReference("f", FileType.external)()
+    val accessWithHint = GetStructField(fileAttr, FileType.URI_INDEX, Some("uri"))
+    val accessWithoutHint = GetStructField(fileAttr, FileType.URI_INDEX)
+    assert(accessWithHint.childSchema == FileType.asStruct)
+    assert(accessWithHint.dataType == StringType)
+    assert(accessWithHint.checkInputDataTypes().isSuccess)
+    assert(accessWithHint.canonicalized == accessWithoutHint.canonicalized)
+  }
+
+  test("ExtractValue over FileType: the public fields by name") {
+    val file = Literal.create(
+      InternalRow(UTF8String.fromString("s3://bucket/a.pdf"), 10L, null,
+        UTF8String.fromString("application/pdf"), null, Array[Byte](1, 2)),
+      FileType())
+    def extract(name: String, resolver: Resolver = SQLConf.get.resolver): Expression =
+      ExtractValue(file, Literal(name), resolver)
+
+    checkEvaluation(extract("uri"), "s3://bucket/a.pdf")
+    checkEvaluation(extract("offset"), 10L)
+    checkEvaluation(extract("size"), null)
+    checkEvaluation(extract("content_type"), "application/pdf")
+    checkEvaluation(extract("checksum"), null)
+    checkEvaluation(extract("URI"), "s3://bucket/a.pdf")
+    assert(extract("offset").dataType == LongType)
+    assert(FileType.PUBLIC_FIELDS.forall(f => extract(f.name).nullable))
+
+    // The internal inline field cannot be accessed by name.
+    checkError(
+      exception = intercept[AnalysisException](extract("inline")),
+      condition = "FIELD_NOT_FOUND",
+      parameters = Map(
+        "fieldName" -> "`inline`",
+        "fields" -> "`uri`, `offset`, `size`, `content_type`, `checksum`"))
+    // Field names are case-sensitive under a case-sensitive resolver.
+    checkError(
+      exception = intercept[AnalysisException](
+        extract("URI", caseSensitiveResolution)),
+      condition = "FIELD_NOT_FOUND",
+      parameters = Map(
+        "fieldName" -> "`URI`",
+        "fields" -> "`uri`, `offset`, `size`, `content_type`, `checksum`"))
   }
 
   test("GetArrayStructFields") {

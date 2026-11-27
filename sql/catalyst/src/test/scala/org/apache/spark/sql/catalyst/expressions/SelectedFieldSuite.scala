@@ -610,6 +610,38 @@ class SelectedFieldSuite extends AnalysisTest {
     SelectedField.unapply(analyzed.expressions.head)
   }
 
+  // A FILE is not pruned to the fields that are accessed, so SelectedField keeps the FileType,
+  // with its mode, instead of a struct of the accessed field.
+  test("SelectedField keeps the FileType over a top-level FileType attribute") {
+    val fileAttr = AttributeReference("file_data", FileType.external)()
+    val getUri = GetStructField(fileAttr, FileType.URI_INDEX, Some("uri"))
+    SelectedField.unapply(getUri) match {
+      case Some(field) =>
+        assert(field.name == "file_data")
+        assert(field.dataType === FileType.external)
+      case None =>
+        fail("SelectedField did not match GetStructField over a FileType attribute")
+    }
+  }
+
+  test("SelectedField keeps the FileType when nested under a StructType") {
+    // parent: struct<owner: string, file_data: file external>, query: parent.file_data.uri
+    val parentType = StructType(
+      StructField("owner", StringType) ::
+      StructField("file_data", FileType.external) :: Nil)
+    val parentAttr = AttributeReference("parent", parentType)()
+    val innerAccess = GetStructField(parentAttr, 1, Some("file_data"))
+    val uriAccess = GetStructField(innerAccess, FileType.URI_INDEX, Some("uri"))
+    SelectedField.unapply(uriAccess) match {
+      case Some(field) =>
+        assert(field.name == "parent")
+        assert(field.dataType ===
+          StructType(StructField("file_data", FileType.external) :: Nil))
+      case None =>
+        fail("SelectedField did not match a nested GetStructField over FileType")
+    }
+  }
+
   private def parseAsCatalystExpression(exprs: Seq[String]) = {
     exprs.map(CatalystSqlParser.parseExpression(_) match {
       case namedExpr: NamedExpression => namedExpr
