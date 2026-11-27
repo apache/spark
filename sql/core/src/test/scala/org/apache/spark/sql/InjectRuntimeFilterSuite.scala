@@ -2465,8 +2465,16 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
           }.getOrElse(fail(s"no scan of rf_lim in\n$nestedPlan"))
           assert(large.hasSelectivePushedFilters && large.stats.sizeInBytes >
             spark.sessionState.conf.runtimeFilterCreationSideThreshold, nestedPlan)
-          assert(bloomFilterKeyNames(nestedPlan).contains("part"),
-            s"expected a bloom filter on part:\n$nestedPlan")
+          // The bloom filter on `part` reads `bf2`. The inner shuffle join can put another one on
+          // `l.i`, so the check looks only at the one on `part`.
+          val partLeaves = nestedPlan.flatMap(_.expressions).flatMap(_.collect {
+            case BloomFilterMightContain(s: ScalarSubquery, XxHash64(Seq(key), _))
+                if key.references.exists(_.name == "part") => s.plan.collectLeaves()
+          }).flatten
+          assert(partLeaves.nonEmpty && partLeaves.forall {
+            case LogicalRelationWithTable(_, Some(table)) => table.identifier.table == "bf2"
+            case _ => false
+          }, s"expected a bloom filter on part from bf2:\n$nestedPlan")
           checkAnswer(nested, factRows(_ == 5))
         }
       }
