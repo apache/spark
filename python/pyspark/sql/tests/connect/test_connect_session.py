@@ -434,6 +434,15 @@ class SparkConnectSessionWithOptionsTest(unittest.TestCase):
         self.assertEqual(self.spark.conf.get("boolean"), "false")
         self.assertEqual(self.spark.conf.get("integer"), "1")
 
+    def test_static_config_warning(self):
+        key = "spark.sql.warehouse.dir"
+        original = self.spark.conf.get(key)
+        with self.assertWarnsRegex(UserWarning, "Failed to set spark.sql.warehouse.dir"):
+            session = RemoteSparkSession.builder.config(key, original + "/ignored").getOrCreate()
+        self.assertIs(session, self.spark)
+        self.assertEqual(session.conf.get(key), original)
+        self.assertEqual(session.range(1).count(), 1)
+
 
 if __name__ == "__main__":
     from pyspark.testing import main

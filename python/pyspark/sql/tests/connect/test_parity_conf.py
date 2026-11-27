@@ -20,7 +20,24 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class ConfParityTests(ConfTestsMixin, ReusedConnectTestCase):
-    pass
+    def test_unsupported_config_warnings(self):
+        key = "spark.sql.execution.arrow.enabled"
+        original = self.spark.conf.get(key, None)
+        warning = "is NOT supported in Spark Connect"
+        try:
+            with self.assertWarnsRegex(UserWarning, warning):
+                self.spark.conf.set(key, False)
+            self.assertEqual(self.spark.conf.get(key), "false")
+            with self.assertWarnsRegex(UserWarning, warning):
+                self.spark.conf.unset(key)
+            self.assertIsNone(self.spark.conf.get(key, None))
+        finally:
+            if original is not None:
+                with self.assertWarnsRegex(UserWarning, warning):
+                    self.spark.conf.set(key, original)
+            else:
+                with self.assertWarnsRegex(UserWarning, warning):
+                    self.spark.conf.unset(key)
 
 
 if __name__ == "__main__":
