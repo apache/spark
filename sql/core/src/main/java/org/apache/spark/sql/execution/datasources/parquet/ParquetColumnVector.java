@@ -59,6 +59,9 @@ final class ParquetColumnVector {
   /** Whether this column is primitive (i.e., leaf column) */
   private final boolean isPrimitive;
 
+  /** Whether this column is assembled as a struct, see `isStructBacked` */
+  private final boolean isStructBacked;
+
   /** Reader for this column - only set if 'isPrimitive' is true */
   private VectorizedColumnReader columnReader;
 
@@ -73,6 +76,7 @@ final class ParquetColumnVector {
     this.vector = vector;
     this.children = new ArrayList<>();
     this.isPrimitive = column.isPrimitive();
+    this.isStructBacked = isStructBacked(column.sparkType());
 
     if (missingColumns.contains(column)) {
       if (ParquetRowIndexUtil.isRowIndexColumn(column)) {
@@ -205,7 +209,7 @@ final class ParquetColumnVector {
         child.assemble();
       }
       assembleCollection();
-    } else if (isStructBacked(type)) {
+    } else if (isStructBacked) {
       for (ParquetColumnVector child : children) {
         child.assemble();
       }

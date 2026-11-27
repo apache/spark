@@ -71,10 +71,10 @@ private[parquet] trait ParentContainerUpdater {
 }
 
 /**
- * Marks an updater whose parent container is a struct, so that its converter runs exactly once
- * per Parquet record, as opposed to a map or array element updater, whose converter can run many
- * times per record. A nested struct converter uses this to decide whether the SPARK-30338 deep
- * copy is needed, see [[ParquetRowConverter.newStructConverter]].
+ * Marks an updater that sets a field of a struct row: its converter runs at most once per value of
+ * that row, whereas a map or array element updater can run many times per value. A nested struct
+ * converter skips the SPARK-30338 deep copy for it; a row nested in an array or a map is copied by
+ * its ancestor instead, see [[ParquetRowConverter.newStructConverter]].
  */
 private[parquet] trait StructFieldUpdater extends ParentContainerUpdater
 

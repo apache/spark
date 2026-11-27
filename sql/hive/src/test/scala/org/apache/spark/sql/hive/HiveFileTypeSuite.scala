@@ -16,14 +16,17 @@
  */
 package org.apache.spark.sql.hive
 
+import org.apache.logging.log4j.Level
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.types.{ArrayType, DataType, FileRef, FileType, IntegerType, StructType}
 
 /**
  * Tests for FILE in the Hive catalog: a data source Parquet table stores FILE, and a Hive serde
- * table, which Hive has no type for, rejects it.
+ * table rejects it, as Hive has no FILE type.
  */
 class HiveFileTypeSuite extends QueryTest with TestHiveSingleton {
 
@@ -53,7 +56,19 @@ class HiveFileTypeSuite extends QueryTest with TestHiveSingleton {
   test("a data source Parquet table in the Hive catalog stores FILE") {
     withSource {
       withTable("t") {
-        sql("CREATE TABLE t (id INT, c FILE EXTERNAL, s STRUCT<g: FILE EXTERNAL>) USING parquet")
+        val logAppender = new LogAppender("FILE is reported as Hive incompatible")
+        logAppender.setThreshold(Level.WARN)
+        withLogAppender(logAppender) {
+          sql("CREATE TABLE t (id INT, c FILE EXTERNAL, s STRUCT<g: FILE EXTERNAL>) USING parquet")
+        }
+        // The table is not offered to the Hive metastore in a Hive compatible format first.
+        val incompatible = Seq(FileType.external, new StructType().add("g", FileType.external))
+          .map(_.simpleString).mkString(", ")
+        val expectedMsg = s"Hive incompatible types found: $incompatible. " +
+          s"Persisting data source table `$SESSION_CATALOG_NAME`.`default`.`t` into Hive " +
+          "metastore in Spark SQL specific format, which is NOT compatible with Hive."
+        assert(logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
+          .contains(expectedMsg))
         sql("INSERT INTO t SELECT * FROM src")
         val expected = spark.table("src").schema
         assert(spark.table("t").schema === expected)

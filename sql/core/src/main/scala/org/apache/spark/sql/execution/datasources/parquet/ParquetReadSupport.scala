@@ -233,20 +233,27 @@ object ParquetReadSupport extends Logging {
     }
   }
 
+  /**
+   * Whether the Parquet type of a [[DataType]] is a group that is clipped to the requested fields:
+   * a nested type, or a framework type stored as a group of the fields of its struct schema, such
+   * as FILE. A list or a map clips its element, key and value types only when they are such a type.
+   */
+  private def isClippedAsGroup(dataType: DataType): Boolean =
+    ParquetSchemaConverter.isComplexType(dataType) ||
+      ParquetTypeOps(dataType).exists(_.parquetStructSchema.isDefined)
+
   private def clipParquetTypeDefault(
       parquetType: Type,
       catalystType: DataType,
       caseSensitive: Boolean,
       useFieldId: Boolean,
       returnNullStructIfAllFieldsMissing: Boolean): Type = catalystType match {
-    case t: ArrayType if ParquetSchemaConverter.isComplexType(t.elementType) =>
+    case t: ArrayType if isClippedAsGroup(t.elementType) =>
       // Only clips array types with nested type as element type.
       clipParquetListType(parquetType.asGroupType(), t.elementType, caseSensitive, useFieldId,
         returnNullStructIfAllFieldsMissing)
 
-    case t: MapType
-      if ParquetSchemaConverter.isComplexType(t.keyType) ||
-         ParquetSchemaConverter.isComplexType(t.valueType) =>
+    case t: MapType if isClippedAsGroup(t.keyType) || isClippedAsGroup(t.valueType) =>
       // Only clips map types with nested key type or value type
       clipParquetMapType(
         parquetType.asGroupType(), t.keyType, t.valueType, caseSensitive, useFieldId,
@@ -268,7 +275,7 @@ object ParquetReadSupport extends Logging {
   /**
    * Clips a Parquet [[GroupType]] which corresponds to a Catalyst [[ArrayType]].  The element type
    * of the [[ArrayType]] should also be a nested type, namely an [[ArrayType]], a [[MapType]], or a
-   * [[StructType]].
+   * [[StructType]], or a framework type stored as a group (see `isClippedAsGroup`).
    */
   private def clipParquetListType(
       parquetList: GroupType,
@@ -277,7 +284,7 @@ object ParquetReadSupport extends Logging {
       useFieldId: Boolean,
       returnNullStructIfAllFieldsMissing: Boolean): Type = {
     // Precondition of this method, should only be called for lists with nested element types.
-    assert(ParquetSchemaConverter.isComplexType(elementType))
+    assert(isClippedAsGroup(elementType))
 
     // Unannotated repeated group should be interpreted as required list of required element, so
     // list element type is just the group itself.  Clip it.
@@ -350,7 +357,7 @@ object ParquetReadSupport extends Logging {
   /**
    * Clips a Parquet [[GroupType]] which corresponds to a Catalyst [[MapType]].  Either key type or
    * value type of the [[MapType]] must be a nested type, namely an [[ArrayType]], a [[MapType]], or
-   * a [[StructType]].
+   * a [[StructType]], or a framework type stored as a group (see `isClippedAsGroup`).
    */
   private def clipParquetMapType(
       parquetMap: GroupType,
@@ -360,8 +367,7 @@ object ParquetReadSupport extends Logging {
       useFieldId: Boolean,
       returnNullStructIfAllFieldsMissing: Boolean): GroupType = {
     // Precondition of this method, only handles maps with nested key types or value types.
-    assert(ParquetSchemaConverter.isComplexType(keyType) ||
-      ParquetSchemaConverter.isComplexType(valueType))
+    assert(isClippedAsGroup(keyType) || isClippedAsGroup(valueType))
 
     val repeatedGroup = parquetMap.getType(0).asGroupType()
     val parquetKeyType = repeatedGroup.getType(0)

@@ -20,9 +20,10 @@ import org.apache.hadoop.fs.Path
 import org.apache.parquet.hadoop.ParquetFileReader
 import org.apache.parquet.hadoop.util.HadoopInputFile
 
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.execution.FileSourceScanExec
-import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation}
+import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -243,6 +244,46 @@ class ParquetFileTypeSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("FILE array elements and map values in another layout read by field name") {
+    // Array elements and map values written by another writer as a struct of some of the FILE
+    // fields, in another order, or with fields that FILE does not have, read as FILE values by
+    // field name, as a FILE at the top level or in a struct does.
+    val bytes = Array[Byte](7)
+    val full = FileRefInternals.create("s3://bucket/g", 1L, 2L, "text/plain", "c", bytes)
+    val layouts: Seq[(String, StructType, Row, FileRef)] = Seq(
+      ("reordered", new StructType()
+        .add("uri", StringType).add("size", LongType).add("offset", LongType)
+        .add("content_type", StringType).add("checksum", StringType).add("inline", BinaryType),
+        Row("s3://bucket/g", 2L, 1L, "text/plain", "c", bytes), full),
+      ("some fields", new StructType().add("size", LongType).add("uri", StringType),
+        Row(2L, "s3://bucket/g"), new FileRef("s3://bucket/g", null, 2L, null, null)),
+      ("an extra field", FileType.asStruct.add("extra", IntegerType),
+        Row("s3://bucket/g", 1L, 2L, "text/plain", "c", bytes, 5), full))
+    for ((layout, struct, value, expected) <- layouts) {
+      val written = new StructType()
+        .add("a", ArrayType(struct))
+        .add("m", MapType(StringType, struct))
+        .add("aa", ArrayType(ArrayType(struct)))
+      val fileSchema = new StructType()
+        .add("a", ArrayType(FileType.external))
+        .add("m", MapType(StringType, FileType.external))
+        .add("aa", ArrayType(ArrayType(FileType.external)))
+      withSourceAndReader { (source, reader) =>
+        withClue(s"$layout, $source, $reader: ") {
+          withTempPath { dir =>
+            val path = dir.getCanonicalPath
+            spark.createDataFrame(spark.sparkContext.parallelize(Seq(
+              Row(Seq(value, null), Map("k" -> value, "n" -> null), Seq(Seq(value), null))), 1),
+              written).write.parquet(path)
+            checkAnswer(spark.read.schema(fileSchema).parquet(path), Seq(
+              Row(Seq(expected, null), Map("k" -> expected, "n" -> null),
+                Seq(Seq(expected), null))))
+          }
+        }
+      }
+    }
+  }
+
   test("Parquet tables with a FILE EXTERNAL column") {
     val rows = Seq(Row(1, f1, Row(withInline)), Row(2, null, null), Row(3, inlineOnly, Row(null)))
     val schema = new StructType()
@@ -327,6 +368,37 @@ class ParquetFileTypeSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("V2 aggregate pushdown over a table with a FILE column") {
+    // Footer statistics hold one chunk per leaf column, while a FILE column has one per field, so
+    // only COUNT(*), which needs row counts alone, is answered from them.
+    withSQLConf(
+        SQLConf.USE_V1_SOURCE_LIST.key -> "",
+        SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key -> "true") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        spark.createDataFrame(spark.sparkContext.parallelize(
+          Seq(Row(1, f1, 3L), Row(2, inlineOnly, 4L), Row(3, null, 5L)), 1),
+          new StructType().add("id", IntegerType).add("f", FileType.external).add("x", LongType))
+          .write.parquet(path)
+        val df = spark.read.parquet(path)
+        def pushed(agg: org.apache.spark.sql.DataFrame): Boolean =
+          agg.queryExecution.optimizedPlan.collectFirst {
+            case r: DataSourceV2ScanRelation => r.scan.asInstanceOf[ParquetScan]
+          }.get.pushedAggregate.isDefined
+        // A FILE with a null uri is a non-null value.
+        val countFile = df.selectExpr("COUNT(f)")
+        checkAnswer(countFile, Row(2))
+        assert(!pushed(countFile))
+        val afterFile = df.selectExpr("MAX(x)", "MIN(x)", "COUNT(x)")
+        checkAnswer(afterFile, Row(5L, 3L, 3L))
+        assert(!pushed(afterFile))
+        val countStar = df.selectExpr("COUNT(*)")
+        checkAnswer(countStar, Row(3))
+        assert(pushed(countStar))
+      }
+    }
+  }
+
   test("Parquet does not support FILE when the FILE type is disabled") {
     val format = new ParquetFileFormat()
     assert(format.supportDataType(FileType.external))
@@ -334,6 +406,25 @@ class ParquetFileTypeSuite extends QueryTest with SharedSparkSession {
     withSQLConf(SQLConf.FILE_TYPE_ENABLED.key -> "false") {
       assert(!format.supportDataType(FileType.external))
       assert(!format.supportDataType(ArrayType(new StructType().add("f", FileType.external))))
+    }
+  }
+
+  test("the V2 Parquet source rejects FILE when the FILE type is disabled") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.createDataFrame(spark.sparkContext.parallelize(Seq(Row(1, f1)), 1),
+        new StructType().add("id", IntegerType).add("f", FileType.external)).write.parquet(path)
+      withSQLConf(
+          SQLConf.USE_V1_SOURCE_LIST.key -> "",
+          SQLConf.FILE_TYPE_ENABLED.key -> "false") {
+        checkError(
+          exception = intercept[AnalysisException](spark.read.parquet(path).collect()),
+          condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+          parameters = Map(
+            "columnName" -> "`f`",
+            "columnType" -> "\"FILE EXTERNAL\"",
+            "format" -> "Parquet"))
+      }
     }
   }
 }

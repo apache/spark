@@ -195,9 +195,12 @@ private[parquet] trait ParquetTypeOps extends Serializable {
    * by overriding to true. When false, Spark uses the row-based read path (newConverter)
    * which is always available.
    *
-   * A type that returns true must also supply a batch decoder via [[getVectorUpdater]]
-   * (dispatched from ParquetVectorUpdaterFactory.getUpdater); otherwise the vectorized factory
-   * would not recognize it. TimeType returns true and overrides getVectorUpdater accordingly.
+   * A type whose values reach ParquetVectorUpdaterFactory, that is a type stored as a single
+   * Parquet column, must also supply a batch decoder via [[getVectorUpdater]] when it returns
+   * true; otherwise the vectorized factory would not recognize it. TimeType returns true and
+   * overrides getVectorUpdater accordingly. A struct-backed type ([[parquetStructSchema]]) needs
+   * no updater: its group is read through its struct schema, so the factory sees only the types
+   * of its fields.
    *
    * @param sqlConf the active SQL configuration
    */
@@ -212,7 +215,9 @@ private[parquet] trait ParquetTypeOps extends Serializable {
    * returning true from isBatchReadSupported leaves the vectorized path unreachable (the row path
    * is used), while returning true from isBatchReadSupported without supplying an updater here
    * (and without legacy factory support for the type) routes into a factory that does not
-   * recognize the type. A framework type that opts into vectorized reads must do both.
+   * recognize the type. A framework type stored as a single Parquet column that opts into
+   * vectorized reads must do both; a struct-backed type supplies no updater (see
+   * [[isBatchReadSupported]]).
    *
    * @param descriptor the Parquet column descriptor being read
    */

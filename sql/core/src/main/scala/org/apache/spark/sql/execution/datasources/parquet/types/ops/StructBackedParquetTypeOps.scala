@@ -35,6 +35,10 @@ import org.apache.spark.sql.types.StructType
  *     that receives the schema converter, the time zone and the rebase specs.
  *   - The simple `newConverter` overload, which lacks that context and is never called for a
  *     struct-backed type, fails.
+ *
+ * The vectorized reader reads the group through [[structSchema]], so the updaters are those of
+ * its fields: a struct-backed type that returns true from `isBatchReadSupported` supplies no
+ * `getVectorUpdater`.
  */
 private[parquet] trait StructBackedParquetTypeOps extends ParquetTypeOps {
 
