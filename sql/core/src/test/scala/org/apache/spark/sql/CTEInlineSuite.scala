@@ -91,6 +91,33 @@ abstract class CTEInlineSuiteBase
     }
   }
 
+  test("SPARK-49030: CTE with an unordered limit referenced more than once is not inlined") {
+    withTempView("t") {
+      spark.range(100).toDF("id").createOrReplaceTempView("t")
+      val df = sql(
+        """with v as (select * from t limit 10)
+          |select a.id from v a join v b on a.id = b.id
+        """.stripMargin)
+      assert(df.queryExecution.optimizedPlan.exists(_.isInstanceOf[RepartitionOperation]),
+        "CTE with an unordered LIMIT and multiple references should not be inlined.")
+      // Both sides must see the same rows, so every row joins with itself.
+      assert(df.count() == 10)
+    }
+  }
+
+  test("SPARK-49030: CTE with an ordered limit or a single reference is inlined") {
+    withTempView("t") {
+      spark.range(100).toDF("id").createOrReplaceTempView("t")
+      val ordered = sql(
+        """with v as (select * from t order by id limit 10)
+          |select a.id from v a join v b on a.id = b.id
+        """.stripMargin)
+      assert(!ordered.queryExecution.optimizedPlan.exists(_.isInstanceOf[RepartitionOperation]))
+      val single = sql("with v as (select * from t limit 10) select * from v")
+      assert(!single.queryExecution.optimizedPlan.exists(_.isInstanceOf[RepartitionOperation]))
+    }
+  }
+
   test("SPARK-36447: nested non-deterministic CTEs referenced more than once are not inlined") {
     withTempView("t") {
       Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")

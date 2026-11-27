@@ -22,13 +22,15 @@ import scala.collection.mutable
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.DeduplicateRelations
 import org.apache.spark.sql.catalyst.expressions.{Alias, OuterReference, OuterScopeReference, SubqueryExpression}
-import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, LogicalPlan, Project, Subquery, UnionLoop, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, GlobalLimit, LocalLimit, LogicalPlan, Offset, Project, Sort, Subquery, SubqueryAlias, Tail, UnionLoop, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION}
 
 /**
  * Inlines CTE definitions into corresponding references if either of the conditions satisfies:
- * 1. The CTE definition does not contain any non-deterministic expressions or contains attribute
+ * 1. The CTE definition does not contain any non-deterministic expressions (including a LIMIT,
+ *    OFFSET or TAIL that is not applied on top of a sort, whose result depends on the physical
+ *    row order and may differ across independently evaluated references) or contains attribute
  *    references to an outer query. If this CTE definition references another CTE definition that
  *    has non-deterministic expressions, it is still OK to inline the current CTE definition.
  * 2. The CTE definition is only referenced once throughout the main query and all the subqueries.
@@ -93,9 +95,32 @@ case class InlineCTE(
         // 1) It is fine to inline a CTE if it references another CTE that is non-deterministic;
         // 2) Any `CTERelationRef` that contains `OuterReference` would have been inlined first.
         refCount == 1 ||
-          cteDef.deterministic ||
+          (cteDef.deterministic && !containsUnorderedLimit(cteDef.child)) ||
           cteDef.child.exists(_.expressions.exists(_.isInstanceOf[OuterReference]))
     }))
+  }
+
+  /**
+   * Whether the plan contains a LIMIT, OFFSET or TAIL that is not applied on top of a sort. Such
+   * an operator returns an arbitrary subset of its input, so evaluating it separately for each
+   * reference of a CTE (e.g. in a self join) can yield different rows for each reference.
+   */
+  private def containsUnorderedLimit(plan: LogicalPlan): Boolean = {
+    def isSorted(p: LogicalPlan): Boolean = p match {
+      case _: Sort => true
+      case LocalLimit(_, c) => isSorted(c)
+      case Offset(_, c) => isSorted(c)
+      case Project(_, c) => isSorted(c)
+      case SubqueryAlias(_, c) => isSorted(c)
+      case _ => false
+    }
+    plan.exists {
+      case GlobalLimit(_, c) => !isSorted(c)
+      case LocalLimit(_, c) => !isSorted(c)
+      case Offset(_, c) => !isSorted(c)
+      case Tail(_, c) => !isSorted(c)
+      case _ => false
+    }
   }
 
   private def validateNoOuterReferencesAcrossCTEBoundary(cteDef: CTERelationDef): Unit = {
