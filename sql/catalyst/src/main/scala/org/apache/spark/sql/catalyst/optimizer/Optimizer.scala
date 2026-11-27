@@ -437,7 +437,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
         // (i.e., it is not being constant folded).
         // Note that this does not limit optimization opportunities for the subquery: after
         // decorrelation is done, the subquery's body becomes part of the main plan and all
-        // optimization rules are applied again.
+        // optimization rules are applied again, except those that run only before
+        // RewriteCorrelatedScalarSubquery, see below.
         val projectOverAggregateChild = Project(a.references.toSeq, child)
         val optimizedPlan = Optimizer.this.execute(Subquery.fromExpression(
           s.withNewPlan(projectOverAggregateChild)))
@@ -468,13 +469,15 @@ abstract class Optimizer(catalogManager: CatalogManager)
         // A subquery with a count-bug result computed before decorrelation (see
         // PullupCorrelatedPredicates) gets here also where its top Aggregate has grouping
         // expressions, and such a top is otherwise optimized with the rest of the subquery. The
-        // rules that simplify an Aggregate itself run before RewriteCorrelatedScalarSubquery
-        // moves it into the main plan, so apply them here to the top of such a subquery.
+        // rules that simplify an Aggregate itself, such as EliminateDistinct, run only before
+        // RewriteCorrelatedScalarSubquery moves it into the main plan, so apply them here to the
+        // top of such a subquery, with or without grouping expressions. Other count-bug
+        // subqueries keep their plans.
         val simplifiedAgg = if (s.countBugResult.isDefined) {
+          val excluded = conf.optimizerExcludedRules.toSeq.flatMap(Utils.stringToSeq).toSet
           Seq(EliminateDistinct, RemoveLiteralFromGroupExpressions,
-            RemoveRepetitionFromGroupExpressions).foldLeft(optimizedAgg: LogicalPlan) {
-            (p, rule) => rule(p)
-          }
+            RemoveRepetitionFromGroupExpressions).filterNot(r => excluded.contains(r.ruleName))
+            .foldLeft(optimizedAgg: LogicalPlan)((p, rule) => rule(p))
         } else {
           optimizedAgg
         }

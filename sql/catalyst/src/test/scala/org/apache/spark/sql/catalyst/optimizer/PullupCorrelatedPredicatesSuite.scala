@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, USER_DEFINE
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction => V2AggregateFunction}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, DoubleType, FloatType, IntegerType, LongType, MapType, StringType}
+import org.apache.spark.sql.types.{DataType, DoubleType, IntegerType, LongType, MapType, StringType}
 import org.apache.spark.util.ThreadUtils
 
 // A DeclarativeAggregate whose evaluate expression does not have its data type.
@@ -428,6 +428,8 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
         SQLConf.DECORRELATE_INNER_QUERY_ENABLED.key -> "false").foreach { kv =>
       withSQLConf(kv) {
         assert(countBugResult(correlated(max($"d"))).isEmpty, kv)
+        assert(countBugHandling(correlated(max($"d"))) ==
+          asBefore(countBugHandling(correlated(max($"d")))), kv)
       }
     }
   }
@@ -613,21 +615,28 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     // is then taken as one under a domain join.
     val isNullCount = count(Literal(1), Some($"s".isNull))
     val stringOuter = LocalRelation($"o".string)
+    val floats = LocalRelation($"f".float, $"v".int)
     val lcase = LocalRelation(AttributeReference("t", StringType("UTF8_LCASE"))(), $"v".int)
     Seq(testRelation2.where(Cast($"d", StringType) === $"o").groupBy()(max($"c").as("s")),
-        testRelation2.where(Cast(Cast($"d", FloatType), StringType) === $"o")
-          .groupBy()(max($"c").as("s")),
+        testRelation2.where(Cast($"d", StringType) <=> $"o").groupBy()(max($"c").as("s")),
+        floats.where(Cast($"f", StringType) === $"o").groupBy()(max($"v").as("s")),
         lcase.where(Cast($"t", StringType) === $"o").groupBy()(max($"v").as("s"))).foreach {
       lower =>
+        // Decorrelation adds no domain join here.
+        assert(!subqueryWithOutputR(stringOuter.select(ScalarSubquery(
+          lower.groupBy()(count(Literal(1)).as("r"))).as("sq"))).plan
+          .exists(_.isInstanceOf[DomainJoin]), lower)
         assert(countBugResult(lower, outer = stringOuter) == Some("1"), lower)
         assert(countBugResult(lower, Seq(isNullCount), outer = stringOuter).isEmpty, lower)
-        assert(countBugResult(lower, Seq(max($"s")), Seq($"s"), outer = stringOuter).isEmpty,
+        assert(countBugResult(lower, Seq(isNullCount), Seq($"s"), outer = stringOuter).isEmpty,
           lower)
     }
-    // Not for the column itself, for an expression over an outer column only, or over an inner
-    // column whose values grouping keeps apart.
+    // Not for the column itself, a FLOAT widened to a DOUBLE, under which the merged values stay
+    // equal, an expression over an outer column only, or over an inner column whose values
+    // grouping keeps apart.
     val doubleOuter = LocalRelation($"o".double)
     Seq(testRelation2.where($"d" === $"o") -> doubleOuter,
+        floats.where(Cast($"f", DoubleType) === $"o") -> doubleOuter,
         testRelation2.where($"d" <=> Cast($"o", DoubleType)) -> stringOuter,
         testRelation2.where(Cast($"c", StringType) === $"o") -> stringOuter,
         lcase.where($"t" === Cast($"o", StringType("UTF8_LCASE"))) -> stringOuter).foreach {

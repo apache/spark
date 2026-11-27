@@ -713,8 +713,13 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
             NormalizeFloatingNumbers.needNormalize(dt) || !UnsafeRowUtils.isBinaryStable(dt)
           def readsMergedKey(e: Expression): Boolean =
             e.references.exists(a => newPlan.outputSet.contains(a) && mayMerge(a.dataType))
-          def plainOrOuter(e: Expression): Boolean =
-            e.isInstanceOf[Attribute] || !readsMergedKey(e)
+          // The column itself, or a widening cast of a FLOAT to a DOUBLE, e.g. for b.f = o.d,
+          // under which the values that grouping merges stay equal.
+          def plainOrOuter(e: Expression): Boolean = e match {
+            case _: Attribute => true
+            case Cast(a: Attribute, DoubleType, _, _) if a.dataType == FloatType => true
+            case _ => !readsMergedKey(e)
+          }
           newCond.flatMap(splitConjunctivePredicates).exists {
             case EqualTo(l, r) => !plainOrOuter(l) || !plainOrOuter(r)
             case EqualNullSafe(l, r) => !plainOrOuter(l) || !plainOrOuter(r)
@@ -1132,9 +1137,10 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
    * row for an outer row only if the correlated input is empty for it. That holds if the correlated
    * input has no correlated Aggregate without grouping expressions, whose row decorrelation loses,
    * and if the domain joins that decorrelation adds there anyway, e.g. for a non-equality
-   * correlation, have every outer row (they compute the outer input again;
-   * PullupCorrelatedPredicates uses the result under such domain joins only where it is the
-   * result of every outer row, see rewriteSubQueries). So for such an outer row the correlated
+   * correlation, have every outer row (they compute the outer input again), and no correlation
+   * that decorrelation pulls up reads an expression over an inner column whose values grouping
+   * can merge, e.g. a cast of a DOUBLE to a string (PullupCorrelatedPredicates uses the result in
+   * both cases only where it is the result of every outer row, see rewriteSubQueries). So for such an outer row the correlated
    * input is taken as empty, and the chain is evaluated over it as before decorrelation: an
    * Aggregate without grouping expressions returns one row on empty input, of the results of its
    * aggregate functions over no rows (see evalAggregateFunctionOnEmptyInput), and an Aggregate

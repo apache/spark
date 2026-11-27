@@ -366,7 +366,8 @@ select a1, ( select sum(p)
 from t1 order by a1;
 
 -- with a correlation through a cast of an inner DOUBLE to a string: grouping merges -0.0 into
--- 0.0, so a top that reads the row below keeps the result of before, and COUNT(*) gets the fix
+-- 0.0, so a top that reads the row below keeps the result of before (also the wrong 0 for x,
+-- where 1 is correct), and COUNT(*) gets the fix
 select o.s, ( select count(*) filter (where m is null)
   from (select max(b.v) m from values (cast('-0.0' as double), 1) as b(d, v)
     where cast(b.d as string) = o.s) ) c
@@ -376,6 +377,16 @@ select o.s, ( select count(*)
   from (select max(b.v) m from values (cast('-0.0' as double), 1) as b(d, v)
     where cast(b.d as string) = o.s) ) c
 from values ('-0.0'), ('x') as o(s) order by 1;
+
+-- with an inner FLOAT compared with an outer DOUBLE, through the widening cast that keeps the
+-- merged values equal
+select o.d, ( select count(*) filter (where m is null)
+  from (select max(b.v) m from values (cast('-0.0' as float), 1) as b(f, v) where b.f = o.d) ) c
+from values (-0.0D), (2.0D) as o(d) order by 1;
+
+-- with a top aggregate that fails over no rows, which gets the result over the row of the MAX
+select a1, ( select 10 / count(*) from (select max(b2) m from t2 where t1.a1 = t2.b1) ) a
+from t1 order by a1;
 
 -- with outer values that compare equal but differ, -0.0 and 0.0, correlated through a string
 select cast(o.d as string) d, ( select count(*) filter (where m is null)

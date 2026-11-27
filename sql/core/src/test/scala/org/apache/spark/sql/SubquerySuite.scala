@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, CreateNamedStruct, Equa
   PlanExpression, Rand, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, GeneratePredicate}
+import org.apache.spark.sql.catalyst.optimizer.EliminateDistinct
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftOuter, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LocalLimit, LogicalPlan, Project, Sort, Union}
 import org.apache.spark.sql.execution._
@@ -4086,18 +4087,22 @@ class SubquerySuite extends SharedSparkSession
       sql("CREATE TEMP VIEW bd AS SELECT * FROM VALUES (CAST('-0.0' AS DOUBLE), 1) AS bd(d, v)")
       sql("CREATE TEMP VIEW bc AS SELECT CAST(s AS STRING) COLLATE UTF8_LCASE c, v " +
         "FROM VALUES ('a', 1), ('A', 2) AS t(s, v)")
-      sql("CREATE TEMP VIEW o AS SELECT * FROM VALUES ('-0.0'), ('A'), ('x') AS o(s)")
+      sql("CREATE TEMP VIEW o AS SELECT * FROM VALUES ('-0.0'), ('a'), ('A'), ('x') AS o(s)")
+      // For bc, grouping keeps one of 'a' and 'A', so one of the two rows is missed either way.
       Seq("bd" -> "CAST(bd.d AS STRING)", "bc" -> "CAST(bc.c AS STRING)").foreach {
         case (inner, key) =>
-          val matched = if (inner == "bd") "-0.0" else "A"
-          checkAnswer(sql(s"SELECT (SELECT COUNT(*) FILTER (WHERE m IS NULL) FROM " +
-            s"(SELECT MAX($inner.v) m FROM $inner WHERE $key = '$matched'))"), Row(0))
+          val matched = if (inner == "bd") Seq("-0.0") else Seq("a", "A")
+          matched.foreach { m =>
+            checkAnswer(sql(s"SELECT (SELECT COUNT(*) FILTER (WHERE m IS NULL) FROM " +
+              s"(SELECT MAX($inner.v) m FROM $inner WHERE $key = '$m'))"), Row(0))
+          }
           checkAnswer(sql(s"SELECT o.s, (SELECT COUNT(*) FILTER (WHERE m IS NULL) FROM " +
             s"(SELECT MAX($inner.v) m FROM $inner WHERE $key = o.s)) FROM o " +
-            s"WHERE o.s = '$matched'"), Row(matched, 0))
+            s"WHERE o.s IN (${matched.map(m => s"'$m'").mkString(", ")})"),
+            matched.map(Row(_, 0)))
           checkAnswer(sql(s"SELECT o.s, (SELECT COUNT(*) FROM (SELECT MAX($inner.v) m " +
             s"FROM $inner WHERE $key = o.s)) FROM o"),
-            Seq(Row("-0.0", 1), Row("A", 1), Row("x", 1)))
+            Seq(Row("-0.0", 1), Row("a", 1), Row("A", 1), Row("x", 1)))
       }
     }
   }
@@ -4105,11 +4110,11 @@ class SubquerySuite extends SharedSparkSession
   test("SPARK-60501: the top aggregate of a subquery with a computed result is simplified like " +
       "others") {
     // The top aggregate is kept for the count bug, and still loses a DISTINCT that does not
-    // change its result and repeated grouping keys, also where it has a GROUP BY.
+    // change its result, also without a GROUP BY, and literal and repeated grouping keys.
     withTempView("a", "b") {
       sql("CREATE TEMP VIEW a AS SELECT * FROM VALUES (1), (2) AS a(k)")
       sql("CREATE TEMP VIEW b AS SELECT * FROM VALUES (1, 100L), (1, 200L) AS b(k, v)")
-      Seq(" GROUP BY m, m", "").foreach { groupBy =>
+      Seq(" GROUP BY m, m", " GROUP BY m, 'x'", "").foreach { groupBy =>
         val df = sql("SELECT a.k, (SELECT COLLECT_SET(DISTINCT m) FROM (SELECT MAX(b.v) m " +
           s"FROM b WHERE b.k = a.k)$groupBy) FROM a")
         checkAnswer(df, Seq(Row(1, Seq(200L)), Row(2, Seq())))
@@ -4120,6 +4125,17 @@ class SubquerySuite extends SharedSparkSession
         })), groupBy)
         assert(aggs.forall(a => a.groupingExpressions.distinct.size == a.groupingExpressions.size),
           groupBy)
+        assert(aggs.forall(_.groupingExpressions.forall(!_.foldable)), groupBy)
+      }
+      // A rule excluded by the conf is not applied there either.
+      withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> EliminateDistinct.ruleName) {
+        val df = sql("SELECT a.k, (SELECT COLLECT_SET(DISTINCT m) FROM (SELECT MAX(b.v) m " +
+          "FROM b WHERE b.k = a.k)) FROM a")
+        checkAnswer(df, Seq(Row(1, Seq(200L)), Row(2, Seq())))
+        assert(df.queryExecution.optimizedPlan.exists(_.expressions.exists(_.exists {
+          case ae: AggregateExpression => ae.isDistinct
+          case _ => false
+        })))
       }
     }
   }
