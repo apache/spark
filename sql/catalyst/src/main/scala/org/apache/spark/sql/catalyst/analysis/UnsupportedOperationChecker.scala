@@ -190,13 +190,22 @@ object UnsupportedOperationChecker extends Logging {
               // An input counts unless the operator's event times come only from other inputs.
               lazy val sources = eventTimeSources(subPlan, j)
               joinInputWithoutStateCutoff(j,
-                  input => sources.forall(_.exists(input.outputSet.contains))).foreach { side =>
-                throwError("Detected pattern of possible 'correctness' issue: the state of the " +
-                  s"$side input of a stream-stream join has no cutoff, so the join can emit its " +
-                  "old rows below its output watermark, and a later stateful operator drops them " +
-                  "as late. Add a watermark in the join keys or a range condition that bounds " +
-                  "that input by the other input's watermark, or set " +
-                  "`spark.sql.streaming.statefulOperator.checkCorrectness.enabled` to false.")(j)
+                  input => sources.forall(_.exists(input.outputSet.contains))).foreach {
+                case (side, nestedOnly) =>
+                  val fix = if (nestedOnly) {
+                    "Its event time is only inside a struct, array or map column, which state " +
+                      "eviction does not use, so keep it as a top-level column of that input " +
+                      "and bound it by a range condition on the other input's watermark, or add " +
+                      "a watermark in the join keys"
+                  } else {
+                    "Add a watermark in the join keys or a range condition that bounds that " +
+                      "input by the other input's watermark"
+                  }
+                  throwError("Detected pattern of possible 'correctness' issue: the state of " +
+                    s"the $side input of a stream-stream join has no cutoff, so the join can " +
+                    "emit its old rows below its output watermark, and a later stateful operator " +
+                    s"drops them as late. $fix, or set " +
+                    "`spark.sql.streaming.statefulOperator.checkCorrectness.enabled` to false.")(j)
               }
             case _ =>
           }
@@ -212,21 +221,21 @@ object UnsupportedOperationChecker extends Logging {
   // it: no watermark in the join keys, and no range condition that bounds the input by the
   // watermark of the other input. Eviction only uses a top-level event-time column, so an input
   // whose event time is only nested in a struct, array or map has no cutoff. A left semi join
-  // only emits left rows.
+  // only emits left rows. Returns the side, and whether its event time is only nested.
   // TODO: An input evicted by another column is not checked yet, such as the right input of
   //   `leftKey = rightKey AND leftTime = rightTs`, evicted by rightTs, not its event time.
   private def joinInputWithoutStateCutoff(
-      join: Join, counts: LogicalPlan => Boolean): Option[String] = join match {
+      join: Join, counts: LogicalPlan => Boolean): Option[(String, Boolean)] = join match {
     case Join(left, right, joinType, condition, _) if left.isStreaming && right.isStreaming &&
         !StreamingJoinHelper.isWatermarkInJoinKeys(join) =>
       Seq(("left", left, right), ("right", right, left)).take(if (joinType == LeftSemi) 1 else 2)
-        .filter { case (_, input, _) => counts(input) }
         .collectFirst {
           case (side, input, other) if input.output.exists(hasEventTimeCol) &&
               StreamingJoinHelper.getStateValueWatermark(
-                input.outputSet, other.outputSet, condition, Some(1000000)).isEmpty => side
+                input.outputSet, other.outputSet, condition, Some(1000000)).isEmpty &&
+              counts(input) => (side, false)
           case (side, input, _) if !input.output.exists(hasEventTimeCol) &&
-              input.output.exists(a => nestsEventTime(a.dataType)) => side
+              input.output.exists(a => nestsEventTime(a.dataType)) && counts(input) => (side, true)
         }
     case _ => None
   }

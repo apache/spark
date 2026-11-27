@@ -24,14 +24,14 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, CreateArray, CreateNamedStruct, Explode, Expression, GetArrayItem, GetStructField, Literal, MonotonicallyIncreasingID, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, CreateArray, CreateNamedStruct, Explode, Expression, GetArrayItem, GetMapValue, GetStructField, Literal, MonotonicallyIncreasingID, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StatefulProcessor, TimeMode, TimerValues}
-import org.apache.spark.sql.types.{ArrayType, IntegerType, LongType, Metadata, MetadataBuilder, StructType, TimestampType}
+import org.apache.spark.sql.types.{ArrayType, IntegerType, LongType, MapType, Metadata, MetadataBuilder, StringType, StructType, TimestampType}
 import org.apache.spark.unsafe.types.CalendarInterval
 
 /** A dummy command for testing unsupported operations. */
@@ -1113,6 +1113,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
         val e = intercept[AnalysisException](check())
         assert(e.getMessage.contains(
           "the state of the left input of a stream-stream join has no cutoff"))
+        assert(e.getMessage.contains("Add a watermark in the join keys or a range condition"))
       } else {
         check()
       }
@@ -1244,32 +1245,44 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
   // column, so that input has no cutoff, even when a range bounds an unwatermarked copy of its
   // time. With no watermark metadata in the struct, the input has no event time. The time read
   // above the join is an event time either way.
-  private def timeFromStruct(fieldMetadata: Metadata, inArray: Boolean, withCopy: Boolean) = {
+  private def timeFromStruct(fieldMetadata: Metadata, holder: String, withCopy: Boolean) = {
     val structType = new StructType().add("lt", TimestampType, nullable = true, fieldMetadata)
-    val payload =
-      AttributeReference("payload", if (inArray) ArrayType(structType) else structType)()
+    val payload = AttributeReference("payload", holder match {
+      case "an array" => ArrayType(structType)
+      case "a map" => MapType(StringType, structType)
+      case "a struct" => new StructType().add("inner", structType)
+      case _ => structType
+    })()
+    val struct = holder match {
+      case "an array" => GetArrayItem(payload, Literal(0))
+      case "a map" => GetMapValue(payload, Literal("k"))
+      case "a struct" => GetStructField(payload, 0, Some("inner"))
+      case _ => payload
+    }
     val copy = AttributeReference("lc", TimestampType)()
     val join = joinOf(Seq(leftKey, payload) ++ Seq(copy).filter(_ => withCopy),
       Seq(rightKey, rightTime),
       if (withCopy) leftKey === rightKey && copy > rightTime else leftKey === rightKey)
-    val time = Alias(GetStructField(if (inArray) GetArrayItem(payload, Literal(0)) else payload,
-      0, Some("lt")), "t")(explicitMetadata = Some(watermarkMetadata))
+    val time = Alias(GetStructField(struct, 0, Some("lt")), "t")(
+      explicitMetadata = Some(watermarkMetadata))
     Aggregate(Seq(time.toAttribute), Seq(time.toAttribute), Project(Seq(time), join))
   }
-  Seq(("a struct", false, false), ("a struct inside an array", true, false),
-    ("a struct next to an unwatermarked copy that a range bounds", false, true)
-  ).foreach { case (name, inArray, withCopy) =>
+  Seq(("a struct", "", false), ("a struct inside an array", "an array", false),
+    ("a struct inside a map", "a map", false), ("a struct inside a struct", "a struct", false),
+    ("a struct next to an unwatermarked copy that a range bounds", "", true)
+  ).foreach { case (name, holder, withCopy) =>
     test(s"join output watermark: key-only join of an input with its time only in $name") {
       val e = intercept[AnalysisException](
         UnsupportedOperationChecker.checkStreamStreamJoinOutputWatermark(
-          timeFromStruct(watermarkMetadata, inArray, withCopy), Append))
+          timeFromStruct(watermarkMetadata, holder, withCopy), Append))
       assert(e.getMessage.contains(
         "the state of the left input of a stream-stream join has no cutoff"))
+      assert(e.getMessage.contains("Its event time is only inside a struct, array or map column"))
     }
   }
   test("join output watermark: accept a join of an input with a struct without an event time") {
     UnsupportedOperationChecker.checkStreamStreamJoinOutputWatermark(
-      timeFromStruct(Metadata.empty, inArray = false, withCopy = false), Append)
+      timeFromStruct(Metadata.empty, holder = "", withCopy = false), Append)
   }
 
   // A path ends at another operator that drops late rows only if its own check traces the

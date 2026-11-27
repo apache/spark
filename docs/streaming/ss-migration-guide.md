@@ -38,7 +38,8 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   path to the join passes another stateful operator, such as flatMapGroupsWithState without an
   event-time timeout, or an operator none of whose inputs outputs all the columns it follows.
   Add a watermark in the join keys, or a range condition that bounds that input by the other
-  input's watermark. Setting
+  input's watermark. An input that has its event time only inside a struct, array or map column
+  needs that event time kept as a top-level column before a range condition can bound it. Setting
   `spark.sql.streaming.statefulOperator.checkCorrectness.enabled` to false runs such a query with
   a warning, and also turns the existing check of chained stateful operators into a warning.
   Queries restarted from checkpoints written before Spark 4.5 only log a warning.
