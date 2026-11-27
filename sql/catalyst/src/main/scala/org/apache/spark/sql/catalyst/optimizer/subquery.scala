@@ -977,11 +977,12 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
    * Stands for a value of the row that `evalSubqueryOnEmptyCorrelatedInput` computes that is not
    * a literal, e.g. one that fails or has an outer reference, when it is passed to the level
    * above, and for the result of an aggregate function that cannot be computed (see
-   * evalAggregateFunctionOnEmptyInput and evalAggregateOnOneRow). An expression that needs its value is not foldable, so a result that needs the value
-   * is not a literal and is not taken, as for the value itself, while the value is not copied
-   * into each use, which would make the work double with each level that uses it twice, e.g.
-   * `d + d`. Unlike the value, it does not let evaluation skip a value that fails, e.g. in
-   * `COALESCE(1, d)`, so such a result or grouping key is not taken either.
+   * evalAggregateFunctionOnEmptyInput and evalAggregateOnOneRow). An expression that needs its
+   * value is not foldable, so a result that needs the value is not a literal and is not taken,
+   * as for the value itself, while the value is not copied into each use, which would make the
+   * work double with each level that uses it twice, e.g. `d + d`. Unlike the value, it does not
+   * let evaluation skip a value that fails, e.g. in `COALESCE(1, d)`, so such a result or
+   * grouping key is not taken either.
    */
   private case class NonLiteralValue(dataType: DataType, nullable: Boolean)
     extends LeafExpression with Unevaluable
