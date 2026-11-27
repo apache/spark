@@ -92,10 +92,13 @@ class PythonDataSourceV2 extends NamedTableProvider {
   // its lookup joins again in every micro-batch, and once more when it starts, each time on a new
   // scan builder of the same table. As the read info of a batch read is reused while its scan
   // pushes nothing, a plan is reused unless its planning call pushes filters into the lookup
-  // reader: Spark pushes no limit into a lookup. The key holds the pushdown configurations, so a
-  // change of them plans again, and the schema and the candidates, so that two lookups of one data
-  // source never share a plan. A planning call that fails is not cached, so it fails again.
-  private val lookupPlans: Cache[PythonLookupPlanKey, PythonDataSourceLookupPlan] =
+  // reader: Spark pushes no limit into a lookup. The plans live on this object, which the loaded
+  // DataFrame keeps, so every planning with the same inputs shares one, also in another query
+  // over the DataFrame. The key holds the pushdown configurations, so a change of them plans
+  // again, and the schema and the candidates, so that lookups with different inputs never share
+  // a plan. A planning call that fails is not cached, so it fails again. The cache is built at
+  // the first lookup planning, so a data source that plans no lookup does not pay for it.
+  private lazy val lookupPlans: Cache[PythonLookupPlanKey, PythonDataSourceLookupPlan] =
     CacheBuilder.newBuilder().maximumSize(PythonDataSourceV2.MAX_CACHED_PLANS).build()
 
   /** Plans a lookup in Python, or reuses the plan of a call with the same inputs. */

@@ -180,11 +180,13 @@ class PythonDataSourceExternalLookupExecutionSuite extends PythonDataSourceSuite
   }
 
   // The configurations that the assertions of the tests depend on, which a test may override:
-  // lookups on, and Python pushdown off, so that a plan is reused across micro-batches.
+  // lookups on, Python pushdown off, so that a plan is reused across micro-batches, and the
+  // startup check on, which plans a lookup when a query starts.
   private val pinnedConfs = Seq(
     SQLConf.PYTHON_EXTERNAL_LOOKUP_ENABLED.key -> "true",
     SQLConf.PYTHON_FILTER_PUSHDOWN_ENABLED.key -> "false",
-    SQLConf.PYTHON_LIMIT_PUSHDOWN_ENABLED.key -> "false")
+    SQLConf.PYTHON_LIMIT_PUSHDOWN_ENABLED.key -> "false",
+    SQLConf.JOIN_EXTERNAL_LOOKUP_STARTUP_CHECK_ENABLED.key -> "true")
 
   /**
    * Runs `f` with the lookup source registered, a lookup table with the options, and a new
@@ -704,6 +706,9 @@ class PythonDataSourceExternalLookupExecutionSuite extends PythonDataSourceSuite
         parameters = Map(
           "action" -> "plan", "type" -> "lookup", "msg" -> "(?s).*ZeroDivisionError.*"),
         matchPVals = true)
+      // One planning when the query started, which did not stop it, and one in the micro-batch,
+      // which planned in Python again, as a failed planning is not kept.
+      assert(events(markerDir) === Seq("plan", "plan"))
     }
   }
 }

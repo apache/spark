@@ -122,7 +122,9 @@ class PythonDataSourceExternalLookupRealTimeModeSuite extends StreamRealTimeMode
     spark.dataSource.registerPython(
       dataSourceName, createUserDefinedPythonDataSource(dataSourceName, lookupSourceScript))
     withTempDir { markerDir =>
-      withSQLConf(SQLConf.PYTHON_EXTERNAL_LOOKUP_REAL_TIME_MODE_ENABLED.key -> "true") {
+      withSQLConf(
+          SQLConf.PYTHON_EXTERNAL_LOOKUP_ENABLED.key -> "true",
+          SQLConf.PYTHON_EXTERNAL_LOOKUP_REAL_TIME_MODE_ENABLED.key -> "true") {
         val input = LowLatencyMemoryStream.singlePartition[Int]
         val query = runStreamingQuery(queryName, joined(input, markerDir, options, streamKey))
         try {
@@ -203,20 +205,23 @@ class PythonDataSourceExternalLookupRealTimeModeSuite extends StreamRealTimeMode
 
   test("real-time mode sends each stream row's request to Python as it reads the row") {
     val clock = useManualClock()
-    // The source allows two parameter rows per request, but by default a real-time request takes
-    // one stream row, so the join sends it, and emits its output, while the batch still runs.
-    withJoin("python_lookup_rtm_one_row", "maxRows" -> "2")() { (input, query, markerDir) =>
-      val ids = Seq(1, 3, 2, 4)
-      ids.indices.foreach { n =>
-        input.addData(ids(n))
-        awaitQuery(query) {
-          requests(markerDir).length == n + 1 &&
-            outputs.sorted == joinOutputs(ids.take(n + 1): _*).sorted
+    // The source allows two parameter rows per request, but a real-time request takes one
+    // stream row, the default, so the join sends it, and emits its output, while the batch still
+    // runs.
+    withSQLConf(SQLConf.JOIN_EXTERNAL_LOOKUP_REAL_TIME_MODE_MAX_BATCH_ROWS.key -> "1") {
+      withJoin("python_lookup_rtm_one_row", "maxRows" -> "2")() { (input, query, markerDir) =>
+        val ids = Seq(1, 3, 2, 4)
+        ids.indices.foreach { n =>
+          input.addData(ids(n))
+          awaitQuery(query) {
+            requests(markerDir).length == n + 1 &&
+              outputs.sorted == joinOutputs(ids.take(n + 1): _*).sorted
+          }
         }
+        assert(requests(markerDir).map(_._1) === Seq(1, 1, 1, 1))
+        endBatch(query, clock)
+        assert(outputs.sorted === joinOutputs(ids: _*).sorted)
       }
-      assert(requests(markerDir).map(_._1) === Seq(1, 1, 1, 1))
-      endBatch(query, clock)
-      assert(outputs.sorted === joinOutputs(ids: _*).sorted)
     }
   }
 
@@ -248,17 +253,22 @@ class PythonDataSourceExternalLookupRealTimeModeSuite extends StreamRealTimeMode
 
   test("one Python worker serves every request of a real-time batch") {
     useManualClock()
-    withJoin("python_lookup_rtm_one_worker")() { (input, query, markerDir) =>
-      val ids = Seq(1, 2, 5, 1, 2, 6)
-      ids.indices.foreach { n =>
-        input.addData(ids(n))
-        awaitQuery(query)(outputs.sorted == joinOutputs(ids.take(n + 1): _*).sorted)
+    // One stream row per request, and the lookup cache on, which the count of requests relies on.
+    withSQLConf(
+        SQLConf.JOIN_EXTERNAL_LOOKUP_REAL_TIME_MODE_MAX_BATCH_ROWS.key -> "1",
+        SQLConf.JOIN_EXTERNAL_LOOKUP_CACHE_ENABLED.key -> "true") {
+      withJoin("python_lookup_rtm_one_worker")() { (input, query, markerDir) =>
+        val ids = Seq(1, 2, 5, 1, 2, 6)
+        ids.indices.foreach { n =>
+          input.addData(ids(n))
+          awaitQuery(query)(outputs.sorted == joinOutputs(ids.take(n + 1): _*).sorted)
+        }
+        // Keys 1 and 2 come again within the task, which serves them from its cache. The four
+        // other requests all reach the same worker, also while the long-running task waits for
+        // input between them.
+        awaitQuery(query)(requests(markerDir).length == 4)
+        assert(requests(markerDir).map(_._2).distinct.length === 1)
       }
-      // Keys 1 and 2 come again within the task, which serves them from its cache. The four other
-      // requests all reach the same worker, also while the long-running task waits for input
-      // between them.
-      awaitQuery(query)(requests(markerDir).length == 4)
-      assert(requests(markerDir).map(_._2).distinct.length === 1)
     }
   }
 }

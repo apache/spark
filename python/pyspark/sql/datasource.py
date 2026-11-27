@@ -1167,21 +1167,23 @@ class DataSourceLookupReader(ABC):
     :meth:`DataSource.lookupReader` and calls these methods on it, each at most once, in this
     order: :meth:`pushFilters`, only while Python filter pushdown is on and there is a filter to
     push; :meth:`selectLookupPredicates`; and :meth:`maxParameterRowsPerRequest`, only after a
-    selection that Spark accepts. A plan, with its reader, can serve several plannings of one
-    query; see below for when Spark reuses it. Spark then pickles the planned reader and, on the
+    selection that Spark accepts. A plan, with its reader, can serve several plannings, also of
+    several queries; see below for when Spark reuses it. Spark then pickles the planned reader and, on the
     executors, calls :meth:`lookup` and :meth:`close` on a copy of it per input partition. So
     the reader must stay picklable, and changes that the planning methods make to `self` are
     visible to :meth:`lookup`. Create connections and other resources lazily, in the first
     :meth:`lookup` call, not in `__init__` or in a planning method.
 
-    A streaming query plans its lookups when it starts and in every micro-batch. As for the read
-    of a batch read that pushes nothing, Spark plans a lookup in Python once for the same inputs
-    and reuses that plan, with its reader, for the start and the later micro-batches, unless the
-    planning pushes filters into the reader: while `spark.sql.python.filterPushdown.enabled` is
-    true and the lookup side has a filter that Spark passes to Python, it plans in Python each
-    time. So by default the planning methods run once per query, and what they set on the reader
-    or read from outside, such as a snapshot or a credential, stays as it was for the whole
-    query. In real-time mode, a query runs lookup joins with Python data sources only when
+    A streaming query plans its lookups when it starts and in every micro-batch. Spark keeps a
+    plan, with its reader, on the data source of the loaded DataFrame, and reuses it for every
+    planning with the same inputs: the start and the later micro-batches of a query, and also
+    another query over the same DataFrame, such as one started again after a stop. It plans in
+    Python again each time only when the planning pushes filters into the reader: while
+    `spark.sql.python.filterPushdown.enabled` is true and the lookup side has a filter that Spark
+    passes to Python. Spark may still plan again at any time, for example after a change of a
+    pushdown configuration. So do not rely on how often the planning methods run, and get
+    resources that expire, such as a credential, in :meth:`lookup`. In real-time mode, a query
+    runs lookup joins with Python data sources only when
     `spark.sql.python.externalLookup.realTimeMode.enabled` is true.
 
     For each parameter row, :meth:`lookup` must return every stored row that matches the
