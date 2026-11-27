@@ -44,7 +44,7 @@ object UnionByNameTransformer extends SQLConfHelper {
   /**
    * Projects the children of a by-name union, whose outputs are `leftOutput` and `rightOutput`, so
    * that their columns line up by name. The right child is always projected; the left child only
-   * when `allowMissingCol` adds columns or nested fields to it. `newAlias` builds new columns.
+   * when `allowMissingCol` is true and aligning changes its output. `newAlias` builds new columns.
    *
    * The alignment is done in the following steps:
    *  1. Check that neither side has duplicate column names.
