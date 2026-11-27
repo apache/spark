@@ -31,21 +31,38 @@ import org.apache.spark.util.ArrayImplicits._
 class DatabaseAlreadyExistsException(db: String)
     extends NamespaceAlreadyExistsException(Array(db))
 
+object NamespaceAlreadyExistsException {
+
+  /**
+   * Creates the exception with a message rendered elsewhere, such as by a Spark Connect server
+   * whose error condition this process does not define.
+   */
+  private[sql] def withRenderedMessage(
+      message: String,
+      errorClass: String,
+      messageParameters: Map[String, String],
+      sqlState: Option[String]): NamespaceAlreadyExistsException =
+    new NamespaceAlreadyExistsException(message, Some(errorClass), messageParameters, sqlState)
+}
+
 // any changes to this class should be backward compatible as it may be used by external connectors
 class NamespaceAlreadyExistsException private (
     message: String,
     errorClass: Option[String],
-    messageParameters: Map[String, String])
+    messageParameters: Map[String, String],
+    sqlState: Option[String])
     extends AnalysisException(
       message,
       errorClass = errorClass,
-      messageParameters = messageParameters) {
+      messageParameters = messageParameters,
+      sqlState = sqlState) {
 
   def this(errorClass: String, messageParameters: Map[String, String]) = {
     this(
       SparkThrowableHelper.getMessage(errorClass, messageParameters),
       Some(errorClass),
-      messageParameters)
+      messageParameters,
+      sqlState = None)
   }
 
   def this(namespace: Array[String]) = {
@@ -55,17 +72,34 @@ class NamespaceAlreadyExistsException private (
   }
 }
 
+object TableAlreadyExistsException {
+
+  /**
+   * Creates the exception with a message rendered elsewhere, such as by a Spark Connect server
+   * whose error condition this process does not define.
+   */
+  private[sql] def withRenderedMessage(
+      message: String,
+      errorClass: String,
+      messageParameters: Map[String, String],
+      cause: Option[Throwable],
+      sqlState: Option[String]): TableAlreadyExistsException =
+    new TableAlreadyExistsException(message, cause, Some(errorClass), messageParameters, sqlState)
+}
+
 // any changes to this class should be backward compatible as it may be used by external connectors
 class TableAlreadyExistsException private (
     message: String,
     cause: Option[Throwable],
     errorClass: Option[String],
-    messageParameters: Map[String, String])
+    messageParameters: Map[String, String],
+    sqlState: Option[String])
     extends AnalysisException(
       message,
       cause = cause,
       errorClass = errorClass,
-      messageParameters = messageParameters) {
+      messageParameters = messageParameters,
+      sqlState = sqlState) {
 
   def this(
       errorClass: String,
@@ -75,7 +109,8 @@ class TableAlreadyExistsException private (
       SparkThrowableHelper.getMessage(errorClass, messageParameters),
       cause,
       Some(errorClass),
-      messageParameters)
+      messageParameters,
+      sqlState = None)
   }
 
   def this(db: String, table: String) = {
@@ -111,16 +146,38 @@ class TableAlreadyExistsException private (
   }
 }
 
+object TempTableAlreadyExistsException {
+
+  /**
+   * Creates the exception with a message rendered elsewhere, such as by a Spark Connect server
+   * whose error condition this process does not define.
+   */
+  private[sql] def withRenderedMessage(
+      message: String,
+      errorClass: String,
+      messageParameters: Map[String, String],
+      cause: Option[Throwable],
+      sqlState: Option[String]): TempTableAlreadyExistsException =
+    new TempTableAlreadyExistsException(
+      message,
+      cause,
+      Some(errorClass),
+      messageParameters,
+      sqlState)
+}
+
 class TempTableAlreadyExistsException private (
     message: String,
     cause: Option[Throwable],
     errorClass: Option[String],
-    messageParameters: Map[String, String])
+    messageParameters: Map[String, String],
+    sqlState: Option[String])
     extends AnalysisException(
       message,
       cause = cause,
       errorClass = errorClass,
-      messageParameters = messageParameters) {
+      messageParameters = messageParameters,
+      sqlState = sqlState) {
 
   def this(
       errorClass: String,
@@ -130,7 +187,8 @@ class TempTableAlreadyExistsException private (
       SparkThrowableHelper.getMessage(errorClass, messageParameters),
       cause,
       Some(errorClass),
-      messageParameters)
+      messageParameters,
+      sqlState = None)
   }
 
   def this(table: String) = {
