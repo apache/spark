@@ -47,7 +47,7 @@ import org.apache.spark.unsafe.types.UTF8String
  *
  * @param ft
  *   The FileType with its mode
- * @since 4.4.0
+ * @since 4.5.0
  */
 case class FileTypeOps(override val ft: FileType) extends FileTypeApiOps(ft) with TypeOps {
 
