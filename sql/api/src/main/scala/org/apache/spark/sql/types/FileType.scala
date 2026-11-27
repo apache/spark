@@ -58,10 +58,10 @@ import org.apache.spark.annotation.Unstable
  *
  * The fields other than `inline` can be accessed by name, as in `f.uri`, and an absent field is
  * NULL. A FILE casts only to a FILE of unknown mode: a cast to STRING or BINARY, which reads the
- * referenced bytes, is planned. A struct of the fields other than `inline`, in their order, and
- * a variant object cast to a FILE of unknown mode, and the value must have a uri. A FILE of any
- * mode can be written to a FILE EXTERNAL column of a table, as the file is external to the table
- * that stores it.
+ * referenced bytes, is planned. A struct of the fields other than `inline`, in their order, or a
+ * variant object casts to a FILE of unknown mode; the value must have a uri. A FILE of any mode
+ * can be written to a FILE EXTERNAL column of a table, as the file is external to the table that
+ * stores it.
  *
  * @param mode
  *   the mode for this FileType column

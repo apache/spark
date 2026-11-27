@@ -3279,6 +3279,11 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       cast(parseVariant("""{"uri":"a","URI":"b","size":5}"""), FileType()),
       "CAST_TO_FILE_TYPE.DUPLICATE_FIELD",
       Map("sourceType" -> toSQLType(VariantType), "fieldName" -> "`uri`"))
+    // The error names the FILE field, not the key as the variant spells it.
+    checkErrorInExpression[SparkRuntimeException](
+      cast(parseVariant("""{"uri":"a","SIZE":1,"Size":2}"""), FileType()),
+      "CAST_TO_FILE_TYPE.DUPLICATE_FIELD",
+      Map("sourceType" -> toSQLType(VariantType), "fieldName" -> "`size`"))
   }
 
   test("cast variant to nested FILE") {

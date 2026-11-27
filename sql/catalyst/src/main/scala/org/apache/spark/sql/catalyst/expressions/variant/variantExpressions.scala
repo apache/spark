@@ -899,7 +899,7 @@ case object VariantGet {
               if (seen(idx)) {
                 if (!castArgs.failOnError) return null
                 throw QueryExecutionErrors.castToFileTypeDuplicateFieldError(
-                  VariantType, field.key)
+                  VariantType, FileType.PUBLIC_FIELDS(idx).name)
               }
               seen(idx) = true
               row.update(idx, cast(field.value, FileType.PUBLIC_FIELDS(idx).dataType, castArgs))
