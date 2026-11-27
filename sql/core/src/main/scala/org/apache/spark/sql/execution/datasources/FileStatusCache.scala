@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.util.concurrent.TimeUnit
+import java.time.Duration
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.jdk.CollectionConverters._
@@ -141,7 +141,7 @@ private class SharedInMemoryCache(maxSizeInBytes: Long, cacheTTL: Long) extends 
       .maximumWeight(maxSizeInBytes / weightScale)
 
     if (cacheTTL > 0) {
-      builder = builder.expireAfterWrite(cacheTTL, TimeUnit.SECONDS)
+      builder = builder.expireAfterWrite(Duration.ofSeconds(cacheTTL))
     }
 
     builder.build[(ClientId, Path), Array[FileStatus]]()

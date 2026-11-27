@@ -18,8 +18,9 @@ package org.apache.spark.sql.connect.ml
 
 import java.io.File
 import java.nio.file.{Files, Path, Paths}
+import java.time.Duration
 import java.util.UUID
-import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, TimeUnit}
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 
 import scala.collection.mutable
@@ -101,7 +102,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
         .weigher((key: String, value: CacheItem) => {
           Math.ceil(value.sizeBytes.toDouble / 1024).toInt
         })
-        .expireAfterAccess(getOffloadingTimeoutMinute, TimeUnit.MINUTES)
+        .expireAfterAccess(Duration.ofMinutes(getOffloadingTimeoutMinute))
         .build[String, CacheItem]()
         .asMap()
     } else {

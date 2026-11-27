@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.execution.joins
 
-import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
+import java.time.Duration
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
 import scala.collection.mutable
@@ -523,7 +524,7 @@ class ExternalLookupJoinEvaluatorFactory(
         })
         .ticker(cacheTicker)
       val expiring = if (cacheOptions.ttlMillis > 0) {
-        builder.expireAfterWrite(cacheOptions.ttlMillis, TimeUnit.MILLISECONDS)
+        builder.expireAfterWrite(Duration.ofMillis(cacheOptions.ttlMillis))
       } else {
         builder
       }

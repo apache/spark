@@ -391,7 +391,7 @@ private[spark] class Executor(
 
   val isolatedSessionCache: Cache[String, IsolatedSessionState] = CacheBuilder.newBuilder()
     .maximumSize(conf.get(EXECUTOR_ISOLATED_SESSION_CACHE_SIZE))
-    .expireAfterAccess(30, TimeUnit.MINUTES)
+    .expireAfterAccess(java.time.Duration.ofMinutes(30))
     .removalListener(new RemovalListener[String, IsolatedSessionState]() {
       override def onRemoval(
           notification: RemovalNotification[String, IsolatedSessionState]): Unit = {
