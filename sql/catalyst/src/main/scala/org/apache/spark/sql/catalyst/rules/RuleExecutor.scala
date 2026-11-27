@@ -235,7 +235,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
 
     batches.foreach { batch =>
       val batchStartPlan = curPlan
-      var iteration = 1
+      var iteration = 0
       var lastPlan = curPlan
       var continue = true
 
@@ -282,16 +282,22 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
             result
         }
         iteration += 1
-        if (iteration > batch.strategy.maxIterations) {
+        if (curPlan.fastEquals(lastPlan)) {
+          logTrace(
+            s"Fixed point reached for batch ${batch.name} after $iteration iterations.")
+          continue = false
+        }
+
+        if (iteration >= batch.strategy.maxIterations) {
           // Only log if this is a rule that is supposed to run more than once.
-          if (iteration != 2) {
+          if (continue && iteration != 1) {
             val endingMsg = if (batch.strategy.maxIterationsSetting == null) {
               log"."
             } else {
               log", please set '${MDC(NUM_ITERATIONS, batch.strategy.maxIterationsSetting)}' " +
                 log"to a larger value."
             }
-            val log = log"Max iterations (${MDC(NUM_ITERATIONS, iteration - 1)}) " +
+            val log = log"Max iterations (${MDC(NUM_ITERATIONS, iteration)}) " +
               log"reached for batch ${MDC(BATCH_NAME, batch.name)}" +
               endingMsg
             if (Utils.isTesting || batch.strategy.errorOnExceed) {
@@ -308,11 +314,6 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
           continue = false
         }
 
-        if (curPlan.fastEquals(lastPlan)) {
-          logTrace(
-            s"Fixed point reached for batch ${batch.name} after ${iteration - 1} iterations.")
-          continue = false
-        }
         lastPlan = curPlan
       }
 

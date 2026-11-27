@@ -1391,6 +1391,20 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     }
   }
 
+  test("SPARK-62409 - Analysis requires exactly max iterations (> 1)") {
+    // Query below requires 3 analyzer iterations.
+    withSQLConf(SQLConf.ANALYZER_MAX_ITERATIONS.key -> "3") {
+      val testAnalyzer = new Analyzer(
+        new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin))
+
+      val plan = testRelation2.select(
+        $"a" / Literal(2) as "div1",
+        $"a" / $"b" as "div2")
+
+      testAnalyzer.execute(plan)
+    }
+  }
+
   test("SPARK-30886 Deprecate two-parameter TRIM/LTRIM/RTRIM") {
     Seq("trim", "ltrim", "rtrim").foreach { f =>
       withSQLConf(SQLConf.MANAGE_PARSER_CACHES.key -> "false") { // Avoid additional logging
