@@ -548,25 +548,29 @@ class DataFrameAsOfJoinSuite extends SharedSparkSession
 
   // A positional rename written for the old output lists both key columns, so it does not fit
   // the new output. Fails if the error changes, or if the legacy flag no longer makes it fit.
-  test("usingColumns, a positional toDF rename for the old output needs the legacy flag") {
-    val trades = Seq((5, "A", 1)).toDF("ts", "sym", "qty").asInstanceOf[classic.DataFrame]
-    val quotes = Seq((2, "A", 100)).toDF("ts", "sym", "bid").asInstanceOf[classic.DataFrame]
-    def renamed(): DataFrame = usingJoin(trades, quotes, Seq("sym"), "left")
-      .toDF("ts", "sym", "qty", "ts2", "sym2", "bid")
-    val e = intercept[AnalysisException] {
-      renamed()
+  gridTest("usingColumns, a positional toDF rename for the old output needs the legacy flag")(
+    asOfConfs) { case (singlePass, sortMerge, ansi) =>
+    withAsOfConf(singlePass, sortMerge, ansi) {
+      val trades = Seq((5, "A", 1)).toDF("ts", "sym", "qty").asInstanceOf[classic.DataFrame]
+      val quotes = Seq((2, "A", 100)).toDF("ts", "sym", "bid").asInstanceOf[classic.DataFrame]
+      def renamed(): DataFrame = usingJoin(trades, quotes, Seq("sym"), "left")
+        .toDF("ts", "sym", "qty", "ts2", "sym2", "bid")
+      checkError(
+        exception = intercept[AnalysisException] {
+          renamed()
+        },
+        condition = "ASSIGNMENT_ARITY_MISMATCH",
+        parameters = Map("numTarget" -> "5", "numExpr" -> "6"))
+      val legacy = withSQLConf(
+          SQLConf.LEGACY_DATAFRAME_AS_OF_JOIN_KEEP_BOTH_USING_COLUMNS.key -> "true") {
+        renamed()
+      }
+      checkRows(legacy, Seq(Row(5, "A", 1, 2, "A", 100)))
+      // A rename of the new output works without the flag.
+      checkRows(
+        usingJoin(trades, quotes, Seq("sym"), "left").toDF("sym", "ts", "qty", "ts2", "bid"),
+        Seq(Row("A", 5, 1, 2, 100)))
     }
-    assert(e.getCondition == "ASSIGNMENT_ARITY_MISMATCH")
-    assert(e.getMessageParameters.asScala.toMap == Map("numTarget" -> "5", "numExpr" -> "6"))
-    val legacy = withSQLConf(
-        SQLConf.LEGACY_DATAFRAME_AS_OF_JOIN_KEEP_BOTH_USING_COLUMNS.key -> "true") {
-      renamed()
-    }
-    checkRows(legacy, Seq(Row(5, "A", 1, 2, "A", 100)))
-    // A rename of the new output works without the flag.
-    checkRows(
-      usingJoin(trades, quotes, Seq("sym"), "left").toDF("sym", "ts", "qty", "ts2", "bid"),
-      Seq(Row("A", 5, 1, 2, 100)))
   }
 
   // Fails with AMBIGUOUS_REFERENCE if the output keeps the key of both sides.

@@ -356,10 +356,12 @@ class StreamingAsOfJoinSuite extends StreamTest {
     // A join with a streaming side keeps both key columns, so the old names fit.
     assert(joinTradesWithQuotes(MemoryStream[(Int, String, Int)]).toDF(names: _*).columns.toSeq ==
       names)
-    val e = intercept[AnalysisException] {
-      batchTradeWithQuote().toDF(names: _*)
-    }
-    assert(e.getCondition == "ASSIGNMENT_ARITY_MISMATCH")
+    checkError(
+      exception = intercept[AnalysisException] {
+        batchTradeWithQuote().toDF(names: _*)
+      },
+      condition = "ASSIGNMENT_ARITY_MISMATCH",
+      parameters = Map("numTarget" -> "5", "numExpr" -> "6"))
     withTempDir { checkpoint =>
       copyCheckpoint(batchJoinInStreamCheckpoint, checkpoint)
       val input = MemoryStream[Int]
