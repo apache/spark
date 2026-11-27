@@ -19,7 +19,7 @@ import base64
 import json
 import typing
 from dataclasses import dataclass, field
-from typing import IO, Type, Union
+from typing import IO, List, Type, Union
 
 from pyspark.errors import PySparkAssertionError, PySparkValueError
 from pyspark.errors.exceptions.base import PySparkNotImplementedError
@@ -27,6 +27,7 @@ from pyspark.logger.worker_io import capture_outputs
 from pyspark.serializers import UTF8Deserializer, read_bool, read_int, write_int
 from pyspark.sql.datasource import (
     DataSource,
+    DataSourceLookupReader,
     DataSourceReader,
     EqualNullSafe,
     EqualTo,
@@ -115,6 +116,48 @@ def deserializeFilter(jsonDict: dict) -> Filter:
     return filter
 
 
+def read_filters(infile: IO) -> List[FilterRef]:
+    """
+    Reads the filters that the JVM sends as a JSON list, in the format of
+    `PythonDataSourceFilters.toJson`.
+    """
+    filter_dicts = json.loads(utf8_deserializer.loads(infile))
+    return [FilterRef(deserializeFilter(f)) for f in filter_dicts]
+
+
+def push_filters(
+    reader: Union[DataSourceReader, DataSourceLookupReader], filters: List[FilterRef]
+) -> List[int]:
+    """
+    Pushes `filters` down to `reader` and returns the indices of the filters that it supports.
+
+    `pushFilters` is not called when there is nothing to push, so that a reader planning a
+    limit-only scan does not observe a spurious empty pushFilters call.
+    """
+    unsupported_filters = set(
+        FilterRef(f)
+        for f in (reader.pushFilters([ref.filter for ref in filters]) if filters else [])
+    )
+    supported_filter_indices = []
+    for i, filter in enumerate(filters):
+        if filter in unsupported_filters:
+            unsupported_filters.remove(filter)
+        else:
+            supported_filter_indices.append(i)
+
+    # If it returned any filters that are not in the original filters, raise an error.
+    if len(unsupported_filters) > 0:
+        raise PySparkValueError(
+            errorClass="DATA_SOURCE_EXTRANEOUS_FILTERS",
+            messageParameters={
+                "type": type(reader).__name__,
+                "input": str(list(filters)),
+                "extraneous": str(list(unsupported_filters)),
+            },
+        )
+    return supported_filter_indices
+
+
 def _main(infile: IO, outfile: IO) -> None:
     """
     Main method for planning a data source read with filter and limit pushdown.
@@ -185,35 +228,9 @@ def _main(infile: IO, outfile: IO) -> None:
                 },
             )
 
-        # Receive the pushdown filters.
-        json_str = utf8_deserializer.loads(infile)
-        filter_dicts = json.loads(json_str)
-        filters = [FilterRef(deserializeFilter(f)) for f in filter_dicts]
-
-        # Push down the filters and get the indices of the unsupported filters. `pushFilters` is
-        # not called when there is nothing to push, so that a reader planning a limit-only scan
-        # does not observe a spurious empty pushFilters call.
-        unsupported_filters = set(
-            FilterRef(f)
-            for f in (reader.pushFilters([ref.filter for ref in filters]) if filters else [])
-        )
-        supported_filter_indices = []
-        for i, filter in enumerate(filters):
-            if filter in unsupported_filters:
-                unsupported_filters.remove(filter)
-            else:
-                supported_filter_indices.append(i)
-
-        # If it returned any filters that are not in the original filters, raise an error.
-        if len(unsupported_filters) > 0:
-            raise PySparkValueError(
-                errorClass="DATA_SOURCE_EXTRANEOUS_FILTERS",
-                messageParameters={
-                    "type": type(reader).__name__,
-                    "input": str(list(filters)),
-                    "extraneous": str(list(unsupported_filters)),
-                },
-            )
+        # Receive the pushdown filters, and push them down.
+        filters = read_filters(infile)
+        supported_filter_indices = push_filters(reader, filters)
 
         # Receive the limit to push down. -1 means there is no limit.
         limit = read_int(infile)

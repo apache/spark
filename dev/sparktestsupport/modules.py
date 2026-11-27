@@ -968,6 +968,8 @@ pyspark_structured_streaming = Module(
         "python/pyspark/sql/streaming",
         "python/pyspark/sql/pandas",
         "python/pyspark/sql/worker",
+        # Tested by pyspark.sql.tests.test_python_datasource_lookup.
+        "examples/src/main/python/sql/streaming/structured_python_lookup_join.py",
     ],
     python_test_goals=[
         # doctests
@@ -976,6 +978,7 @@ pyspark_structured_streaming = Module(
         "pyspark.sql.streaming.listener",
         # unittests
         "pyspark.sql.tests.test_python_streaming_datasource",
+        "pyspark.sql.tests.test_python_datasource_lookup",
         "pyspark.sql.tests.streaming.test_streaming",
         "pyspark.sql.tests.streaming.test_streaming_foreach",
         "pyspark.sql.tests.streaming.test_streaming_foreach_batch",
@@ -1545,6 +1548,7 @@ pyspark_structured_streaming_connect = Module(
     python_test_goals=[
         # unittests
         "pyspark.sql.tests.connect.test_parity_python_streaming_datasource",
+        "pyspark.sql.tests.connect.test_parity_python_datasource_lookup",
         "pyspark.sql.tests.connect.streaming.test_listener",
         "pyspark.sql.tests.connect.streaming.test_parity_streaming",
         "pyspark.sql.tests.connect.streaming.test_parity_listener",

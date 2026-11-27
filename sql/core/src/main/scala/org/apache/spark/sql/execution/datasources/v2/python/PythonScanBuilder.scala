@@ -16,7 +16,8 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.python
 
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownLimit}
+import org.apache.spark.sql.connector.expressions.filter.Predicate
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsExternalLookup, SupportsPushDownFilters, SupportsPushDownLimit}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
@@ -24,14 +25,20 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 
+/**
+ * @param lookupOnly Whether the data source serves lookups but no batch reads, so that the
+ *                   builder never builds a batch scan, only lookup and micro-batch scans.
+ */
 class PythonScanBuilder(
     ds: PythonDataSourceV2,
     shortName: String,
     outputSchema: StructType,
-    options: CaseInsensitiveStringMap)
+    options: CaseInsensitiveStringMap,
+    lookupOnly: Boolean = false)
     extends ScanBuilder
     with SupportsPushDownFilters
-    with SupportsPushDownLimit {
+    with SupportsPushDownLimit
+    with SupportsExternalLookup {
   private var supportedFilters: Array[Filter] = Array.empty
   // All filters handed to `pushFilters`, kept so that `pushLimit` can replay them and bring the
   // Python reader back to the same state before calling `pushLimit` on it.
@@ -51,6 +58,8 @@ class PythonScanBuilder(
   // distinct from `readInfo.isEmpty` when both pushdowns are disabled -- in that case, no
   // pushdown pass ran and `PythonScan` plans the read later instead, so build() must not plan.
   private var deferredPlanning: Boolean = false
+  // The lookup planned in `selectLookupPredicates`, which makes the scan a lookup scan.
+  private var lookupPlan: Option[PythonDataSourceLookupPlan] = None
 
   override def build(): Scan = {
     if (deferredPlanning && readInfo.isEmpty) {
@@ -64,7 +73,8 @@ class PythonScanBuilder(
       checkFiltersReplayedDeterministically(result)
       readInfo = result.readInfo
     }
-    new PythonScan(ds, shortName, outputSchema, options, supportedFilters, pushedLimit, readInfo)
+    new PythonScan(
+      ds, shortName, outputSchema, options, supportedFilters, pushedLimit, readInfo, lookupPlan)
   }
 
   // Optionally called by DSv2 once to push down filters before the scan is built.
@@ -73,6 +83,13 @@ class PythonScanBuilder(
       return filters
     }
     allFilters = filters
+    if (lookupOnly) {
+      // A lookup-only data source has no batch reader to push the filters into. Spark builds no
+      // batch scan from this builder, and `selectLookupPredicates` pushes the filters into the
+      // lookup reader instead. Spark evaluates every filter of a lookup scan again on
+      // the returned rows, so reporting none as pushed here changes no result.
+      return filters
+    }
 
     val dataSource = ds.getOrCreateDataSourceInPython(shortName, options, Some(outputSchema))
     ds.source.pushdownFiltersInPython(dataSource, outputSchema, filters) match {
@@ -142,4 +159,25 @@ class PythonScanBuilder(
   // Spark always applies the LIMIT again after the scan: a Python data source is not trusted to
   // return at most `limit` rows, and it is free to over-deliver.
   override def isPartiallyPushed(): Boolean = true
+
+  // Called by Spark only on the builder of a lookup scan, after `pushFilters` and at most once.
+  // Spark calls `pushFilters` before it knows whether the scan is a lookup, so for a data source
+  // that also serves batch reads, that call pushed the filters into the batch reader. The lookup
+  // plan replays them into the lookup reader instead, whose answer only decides which rows the
+  // reader may omit, and which filters the scan reports as pushed: Spark evaluates every filter
+  // of a lookup scan again on the returned rows. Spark calls no `pushLimit` on a lookup builder.
+  // As for the read info of a batch read, which is reused while its scan pushes nothing, the data
+  // source reuses the plan of an earlier call with the same inputs, such as that of the previous
+  // micro-batch of a streaming query, unless the call pushes filters into the lookup reader.
+  override def selectLookupPredicates(candidates: Array[Predicate]): Array[Int] = {
+    val plan = ds.getOrCreateLookupPlan(shortName, options, outputSchema, allFilters, candidates)
+    lookupPlan = Some(plan)
+    supportedFilters = plan.pushedFilterIndexes.map(allFilters).toArray
+    // A lookup scan plans no batch read.
+    readInfo = None
+    deferredPlanning = false
+    // The reader's positions in `candidates`, in its order, which Spark checks as for a Scala
+    // connector.
+    plan.selectedIndexes.toArray
+  }
 }

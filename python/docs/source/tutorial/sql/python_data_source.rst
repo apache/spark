@@ -487,9 +487,298 @@ This is a streaming data writer that write the metadata information of each micr
            with open(os.path.join(self.path, f"{batchId}.txt"), "w") as file:
                file.write(f"failed in batch {batchId}")
 
+Lookup Joins
+------------
+
+.. currentmodule:: pyspark.sql.datasource
+
+A lookup join enriches a stream with data that an external store serves by key, such as a
+database, a key-value store or a web service. For each batch of stream rows, Spark sends the join
+keys to the data source and joins the rows that it returns. Spark never reads the whole source.
+
+Use a lookup join for the static side of a stream-static join when that side is too large or
+changes too often to read in full for each micro-batch, and the store answers queries by key
+quickly. Spark plans a lookup join only for the static side of a stream-static join, in
+micro-batch queries and, for now only when it is turned on, in real-time mode (see below). It
+supports inner, left outer, left semi and left anti joins, with the stream on the left and the
+lookup side on the right. A join of another shape over a lookup side fails rather than falling
+back to a batch read.
+
+To serve lookups, a data source implements :meth:`DataSource.lookupReader`, which returns a
+:class:`DataSourceLookupReader`. Spark finds lookup support by looking at the data source class;
+it does not create an instance to check. There are two modes:
+
+- **Lookup-only**: the data source implements ``lookupReader()`` but not ``reader()``. Spark
+  reads it by lookups in every supported stream-static join, with no hint, and rejects a batch
+  read of it.
+- **Hint mode**: the data source implements both. Spark reads it by batch reads, and by lookups
+  only in a join whose lookup side carries the ``EXTERNAL_LOOKUP`` hint:
+
+  .. code-block:: python
+
+      offers = spark.read.format("offers").load().hint("EXTERNAL_LOOKUP")
+      joined = events.join(offers, offers.user_id == events.user_id, "left")
+
+  In SQL, name the lookup relation in the hint: ``SELECT /*+ EXTERNAL_LOOKUP(o) */ ...``.
+
+Walk-through: A SQLite Lookup Reader
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+The example ``examples/src/main/python/sql/streaming/structured_python_lookup_join.py`` joins a
+stream of events ``(user_id, segment, day)`` with offers stored in SQLite:
+
+.. code-block:: python
+
+    events.join(
+        offers,
+        (offers.user_id == events.user_id)
+        & offers.segment.eqNullSafe(events.segment)
+        & (offers.valid_from <= events.day)
+        & (events.day < offers.valid_until),
+        "left",
+    )
+
+where ``offers`` carries the hint and the filter ``country = 'KR'``.
+
+.. warning::
+    The example is a demo, not a pattern for a connector. SQLite is a file, not a service: the
+    driver ships a read-only copy of the file to every executor, and each executor reads its own
+    copy, so changes to the source file after the query starts are not seen. A real lookup
+    connector calls a network service from ``lookup()``, such as Postgres, Redis or an HTTP API.
+
+Spark plans the lookup on the driver. It calls the planning methods of the reader in this order,
+and the reader may keep what it learns on ``self``:
+
+1. :meth:`DataSourceLookupReader.pushFilters` receives the filters on lookup-side columns, as
+   :meth:`DataSourceReader.pushFilters` does, and returns the filters that it does not serve.
+   Spark calls it only when ``spark.sql.python.filterPushdown.enabled`` is true, and fails the
+   query if the reader overrides it while the configuration is false. Unlike a batch read, Spark
+   checks every filter again on the returned rows, also the pushed ones, so a pushed filter only
+   lets the reader omit rows. The example serves ``country = 'KR'`` in its SQL:
+
+   .. code-block:: python
+
+       def pushFilters(self, filters):
+           for f in filters:
+               is_country = isinstance(f, EqualTo) and f.attribute == ("country",)
+               if is_country and isinstance(f.value, str):
+                   self.country = f.value
+               else:
+                   yield f
+
+2. :meth:`DataSourceLookupReader.selectLookupPredicates` receives the candidate predicates
+   that Spark found in the join condition and the lookup-side filters. Each candidate compares a
+   lookup column with a :class:`LookupParameter`, a value that Spark binds for each
+   lookup, such as ``EqualTo(("user_id",), LookupParameter(...))``. The reader returns the
+   positions of the candidates that it serves, in the order of the fields of every parameter
+   row. Spark evaluates the candidates that are not selected on the returned rows. The example
+   selects ``user_id = ?``, ``segment <=> ?`` and, with the option ``select_range``, the range
+   ``valid_from <= ?``. It leaves ``valid_until > ?`` and the constant ``country = ?`` to Spark:
+
+   .. code-block:: python
+
+       def selectLookupPredicates(self, candidates):
+           def find(cls, column):
+               return next(
+                   (
+                       i
+                       for i, c in enumerate(candidates)
+                       if type(c) is cls and c.attribute == (column,)
+                   ),
+                   None,
+               )
+
+           chosen = [find(EqualTo, "user_id"), find(EqualNullSafe, "segment")]
+           if self.select_range:
+               chosen.append(find(LessThanOrEqual, "valid_from"))
+           chosen = [i for i in chosen if i is not None]
+           if not chosen or candidates[chosen[0]].attribute != ("user_id",):
+               return []  # no access path fits: the query fails
+           self.on = [
+               (candidates[i].attribute[0], SQL_OPS[type(candidates[i])]) for i in chosen
+           ]
+           return chosen
+
+   Selecting a range whose value reads a stream column makes every request hold one parameter
+   row, and turns off Spark's lookup cache for the join. Leave such a range unselected when the
+   equalities alone serve the lookup well.
+
+3. :meth:`DataSourceLookupReader.maxParameterRowsPerRequest` returns the largest number of
+   parameter rows that one request may hold. The default is 1000, Spark's own cap.
+
+   .. warning::
+       If your backend limits the number of values in one call, such as the number of ``?``
+       markers in a SQL statement or the keys of one multi-get, override
+       ``maxParameterRowsPerRequest()`` and return a number that fits, counting every selected
+       predicate. A request with more values than the backend accepts fails the task.
+
+   The example fits SQLite's limit of 999 markers, the default before SQLite 3.32. Each
+   parameter row takes one marker per selected predicate and one for its ordinal, and the
+   pushed filter takes one more:
+
+   .. code-block:: python
+
+       def maxParameterRowsPerRequest(self):
+           fixed = 1 if self.country is not None else 0
+           return (SQLITE_MAX_MARKERS - fixed) // (len(self.on) + 1)
+
+Spark then pickles the reader. On the executors, it calls :meth:`DataSourceLookupReader.lookup`
+once per request, on a copy of the reader per input partition, and
+:meth:`DataSourceLookupReader.close` after the last request. ``lookup`` receives a list of
+tuples, one per distinct parameter row and one value per selected predicate. A ``TIMESTAMP``
+value arrives as a naive ``datetime`` in the worker's local time, so two instants in the hour
+that a daylight-saving change repeats can make two tuples equal: do not rely on distinct tuples
+when a selected parameter is a ``TIMESTAMP``. Only the fields of ``<=>`` predicates can be
+``None``, and a ``None`` there matches a stored NULL. The example sends one SQL statement per
+request, not one per key: the parameter rows become a ``VALUES`` table with their ordinals,
+joined to the stored table. It yields one ``(ordinal, row)`` pair per result row, where the
+ordinal is the position of the matched parameter row in ``parameters``:
+
+.. code-block:: python
+
+    def lookup(self, parameters):
+        for row in self._query(parameters):  # SELECT p.ord, o.user_id, ... FROM p JOIN offers o
+            yield row[0], row[1:]
+
+    def close(self):
+        if self.conn is not None:
+            self.conn.close()
+
+An ordinal may appear several times, once per matching stored row, and an ordinal that does not
+appear is a miss. Spark checks the selected predicates and the lookup-side filters again on each
+returned row, so extra rows are harmless, but Spark cannot recover a missing row.
+
+**Shipping files to the executors**: the example opens its connection lazily, in the first
+``lookup`` call, on the executor. The planning methods run on the driver, so a connection that
+they open would have to be pickled. The example ships the SQLite file with
+``spark.sparkContext.addFile(path)`` (or ``spark-submit --files``), and with
+``spark.addArtifacts(path, file=True)`` in Spark Connect. It keeps only the file name in the
+reader, and finds the executor's copy with ``SparkFiles.get(name)``:
+
+.. code-block:: python
+
+    def connect(file_name):
+        path = SparkFiles.get(file_name)
+        return sqlite3.connect(f"file:{path}?mode=ro&immutable=1", uri=True)
+
+Run the example with ``bin/spark-submit`` and it prints:
+
+.. code-block:: text
+
+    +-------+-------+---+----------+
+    |user_id|segment|day|     offer|
+    +-------+-------+---+----------+
+    |      1|   gold|  2|    gold-1|   valid_from 5 > day 2: only one match
+    |      1|   gold|  6|    gold-1|   several matches for one parameter row
+    |      1|   gold|  6|    gold-5|
+    |      2|   NULL|  6|no-segment|   NULL segment matched through <=>
+    |      3|   gold|  6|      NULL|   miss: the US offer fails country = 'KR'
+    |      4|   gold|  6|      NULL|   miss: valid only from day 9
+    |      5|   gold|  6|      NULL|   miss: unknown user
+    +-------+-------+---+----------+
+
+Arrow Results
+~~~~~~~~~~~~~
+As ``read()`` can, ``lookup()`` can yield PyArrow ``RecordBatch`` objects instead of pairs. There
+is no separate reader class: the first value that ``lookup`` yields decides the form for the
+whole call. Parameters are always a list of tuples. In each batch:
+
+- Column 0 is the ordinal of each row. It can be of any integer type, and cannot hold nulls.
+- The other columns are those of the read schema, in order, with their names and exactly the
+  Arrow types that a batch of ``read()`` must have. For example, a ``STRING`` column must be
+  ``string``, not ``large_string``, and a ``TIMESTAMP`` column ``timestamp[us, tz=UTC]``.
+
+Spark checks every batch, not only the first. The example yields batches with the option
+``arrow``:
+
+.. code-block:: python
+
+    import pyarrow as pa
+
+    names = ["ordinal"] + COLUMNS
+    types = [pa.int32(), pa.int64(), pa.string(), pa.int64(), pa.int64()]
+    types += [pa.string(), pa.string()]
+    while rows := cursor.fetchmany(1000):
+        columns = zip(*rows)
+        arrays = [pa.array(values, t) for values, t in zip(columns, types)]
+        yield pa.RecordBatch.from_arrays(arrays, names=names)
+
+The Lookup Contract
+~~~~~~~~~~~~~~~~~~~
+Check a lookup reader against this list:
+
+- The reader stays picklable. Create connections and other resources lazily, in the first
+  ``lookup`` call, not in ``__init__`` or in a planning method.
+- ``selectLookupPredicates`` returns distinct positions in the list of candidates, and leaves
+  that list unchanged. Do not select a predicate that the backend cannot evaluate exactly as
+  Spark does.
+- ``maxParameterRowsPerRequest`` returns a positive ``int`` that fits the limits of the backend.
+- For each parameter row, ``lookup`` returns every stored row that passes the pushed filters and
+  satisfies all selected predicates, with no cap on the number of rows. A stored row that matches
+  several parameter rows is returned once per ordinal.
+- Every returned row carries the stored values of the columns that the selected predicates read.
+- The result of a lookup depends only on its parameter row: Spark may reuse it for an equal
+  parameter row, and may send a request again when it retries a task.
+- ``lookup`` raises an exception when it cannot answer. Spark never takes a failure as a miss.
+- Spark may stop reading the result early, for example when a semi join has decided every stream
+  row. It then closes the generator, so ``try``/``finally`` and ``with`` blocks run.
+- ``close()`` returns within ``spark.python.task.killTimeout``. Do not rely on it for
+  correctness: when a task is killed, or after ``lookup`` raises an exception, Spark ends the
+  Python worker without calling it.
+- Do not rely on how often the planning methods run. As for a batch read of a Python data
+  source, Spark plans the lookup once when a streaming query starts and reuses the plan while
+  ``spark.sql.python.filterPushdown.enabled`` and ``spark.sql.python.limitPushdown.enabled`` are
+  false, the default. Otherwise, it plans again in every micro-batch.
+
+Caching and Real-Time Mode
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+Spark caches the complete result of each key, also a miss, within a task, per input partition,
+so each micro-batch starts with an empty cache. The configurations
+``spark.sql.join.externalLookup.cache.enabled``, ``.cache.maxBytes`` and ``.cache.ttl`` set it
+up, and the hint overrides them for one join with options of the form ``key=value``:
+
+.. code-block:: python
+
+    offers.hint("EXTERNAL_LOOKUP", "cache_enabled=false")
+
+A join whose reader selects a range on a stream value caches nothing.
+
+In real-time mode, Spark sends each stream row's request as soon as it reads the row, by
+default, so ``lookup`` usually receives one parameter row, and the cache serves keys that
+repeat. ``spark.sql.join.externalLookup.realTimeMode.maxBatchRows`` sets a larger request size.
+A real-time task runs for the whole batch, and one Python worker serves all its requests.
+For now, real-time mode runs lookup joins with Python data sources only when the internal
+configuration ``spark.sql.python.externalLookup.realTimeMode.enabled`` is true; otherwise, the
+query fails with ``EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.PYTHON_REAL_TIME_MODE``.
+
+Errors
+~~~~~~
+- A mistake in the planning results stops a streaming query when it starts, before its first
+  micro-batch, also without data. Spark raises the subclasses of
+  ``DATA_SOURCE_INVALID_EXTERNAL_LOOKUP`` for a broken contract, such as a selected position
+  that is not one of a candidate (``INVALID_SELECTED_PREDICATE_POSITION``) or that repeats
+  (``DUPLICATE_SELECTED_PREDICATE``), a list of candidates that ``selectLookupPredicates``
+  changed (``MODIFIED_CANDIDATES``), ``None`` (``NULL_RESULT``) or a value of the wrong type
+  (``INVALID_RESULT_TYPE``) from a planning method, or a non-positive
+  ``maxParameterRowsPerRequest`` (``NON_POSITIVE_MAX_PARAMETER_ROWS``). It raises
+  ``EXTERNAL_LOOKUP_JOIN_UNSUPPORTED`` for a join that cannot be a lookup join, for example when
+  the reader selects no predicate (``NO_LOOKUP_PREDICATE``) or the join type is not supported.
+- An exception that the reader raises while Spark plans the lookup fails the first micro-batch.
+- An exception that ``lookup`` raises fails the task, and Spark retries it as any task.
+- Results that break the contract fail the task: an ordinal outside the parameter rows
+  (``DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.INVALID_INPUT_ORDINAL``), a NULL in a field that the
+  schema declares ``NOT NULL`` (``...NULL_IN_NOT_NULL_FIELD``), a value that is not a pair or a
+  wrong ordinal (``DATA_SOURCE_INVALID_RETURN_TYPE``), or a batch that does not match the schema
+  (``DATA_SOURCE_RETURN_SCHEMA_MISMATCH``).
+- An exception that ``close()`` raises fails the task, and so does a ``close()`` that does not
+  return within ``spark.python.task.killTimeout`` (``PYTHON_DATA_SOURCE_ERROR``). When the task
+  has failed already, its failure stays the task's error, and the failure of ``close()`` is
+  added to it as suppressed.
+
+.. currentmodule:: pyspark.sql
+
 Serialization Requirement
 -------------------------
-User defined DataSource, DataSourceReader, DataSourceWriter, DataSourceStreamReader and DataSourceStreamWriter and their methods must be able to be serialized by pickle.
+User defined DataSource, DataSourceReader, DataSourceWriter, DataSourceStreamReader, DataSourceStreamWriter and DataSourceLookupReader and their methods must be able to be serialized by pickle.
 
 For libraries that are used inside a method, they must be imported inside the method. For example, TaskContext must be imported inside the read() method in the code below.
 
