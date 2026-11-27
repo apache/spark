@@ -26,6 +26,11 @@ package org.apache.spark.network.client;
  */
 public interface BaseResponseCallback {
 
-  /** Exception either propagated from server or raised on client side. */
+  /**
+   * Exception either propagated from server or raised on client side.
+   *
+   * This is also called, with the thrown error, after {@code onSuccess} throws. An implementation
+   * that commits its result before {@code onSuccess} can throw must tolerate this call.
+   */
   void onFailure(Throwable e);
 }

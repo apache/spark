@@ -79,6 +79,10 @@ private[sql] object UpCastRule {
 
     case (from: UserDefinedType[_], to: UserDefinedType[_]) if to.acceptsType(from) => true
 
+    // A FILE up-casts to a FILE of unknown mode, as the value does not change: an encoder of
+    // FileRef reads a FILE EXTERNAL column as a FILE of unknown mode.
+    case (_: FileType, FileType(FileTypeMode.UNKNOWN)) => true
+
     case _ => false
   }
 

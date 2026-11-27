@@ -59,7 +59,6 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSourceV2Relation, ExtractV2Table}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
-import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.metricview.logical.MetricViewPlaceholder
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -165,6 +164,12 @@ case class AnalysisContext(
     // 2. If we are not resolving a view, this field will be updated everytime the analyzer
     //    lookup a temporary function. And export to the view metadata.
     referredTempFunctionNames: mutable.Set[String] = mutable.Set.empty,
+    // The temporary functions that resolution built in this analysis, including in the SQL
+    // functions it expands but not in views. Unlike `referredTempFunctionNames`, a lookup that only
+    // checks whether a function exists does not add to it. A persistent SQL function rejects them
+    // unless `spark.sql.legacy.allowTempFunctionInPersistedSQLFunction` is set. Insertion order
+    // keeps the name the error reports deterministic.
+    boundTempFunctionNames: mutable.Set[String] = mutable.LinkedHashSet.empty,
     referredTempVariableNames: Seq[Seq[String]] = Seq.empty,
     // The temporary variables that the analyzed plan does not mention: those that an IDENTIFIER
     // clause reads, which `ResolveIdentifierClause` records only in fixed-point analysis, like
@@ -492,6 +497,30 @@ object Analyzer {
     }
     functionConf
   }
+
+  /**
+   * Replaces references to the aliases in `sqlFunctionInputs` with the aliased input expressions.
+   */
+  def inlineSQLFunctionInputs(
+      expression: Expression,
+      sqlFunctionInputs: Seq[NamedExpression]): Expression =
+    replaceSQLFunctionInputAttributes(expression, buildSQLFunctionInputAliasMap(sqlFunctionInputs))
+
+  /** Maps the attribute of each alias in `sqlFunctionInputs` to the aliased input expression. */
+  def buildSQLFunctionInputAliasMap(
+      sqlFunctionInputs: Seq[NamedExpression]): Map[Attribute, Expression] =
+    sqlFunctionInputs.collect { case alias: Alias => alias.toAttribute -> alias.child }.toMap
+
+  /**
+   * Replaces the attributes in `aliasMap` with the input expressions they map to. The input
+   * expressions cannot reference the alias attributes, so replacements are not traversed again.
+   */
+  def replaceSQLFunctionInputAttributes(
+      expression: Expression,
+      aliasMap: Map[Attribute, Expression]): Expression =
+    expression.transformUpWithPruning(_.containsPattern(ATTRIBUTE_REFERENCE)) {
+      case attribute: Attribute => aliasMap.getOrElse(attribute, attribute)
+    }
 }
 
 /**
@@ -611,6 +640,8 @@ class Analyzer(
         self.singlePassResolverExtensions
       override val singlePassMetadataResolverExtensions: Seq[ResolverExtension] =
         self.singlePassMetadataResolverExtensions
+      override def singlePassHintResolutionRules: Seq[Rule[LogicalPlan]] =
+        self.singlePassHintResolutionRules
       override val singlePassPostHocResolutionRules: Seq[Rule[LogicalPlan]] =
         self.singlePassPostHocResolutionRules
       override val singlePassExtendedResolutionChecks: Seq[LogicalPlan => Unit] =
@@ -682,7 +713,8 @@ class Analyzer(
 
   /**
    * Like [[execute]], but also returns the temporary variables recorded via IDENTIFIER clauses
-   * during this analysis (`AnalysisContext.referredTempVariableNamesUnderIdentifier`).
+   * during this analysis (`AnalysisContext.referredTempVariableNamesUnderIdentifier`), and the
+   * temporary functions that function resolution built (`AnalysisContext.boundTempFunctionNames`).
    *
    * SQL function creation analyzes the body, inspects it, and only then runs `checkAnalysis`, so
    * it cannot go through [[executeAndCheckReferredTempVariablesUnderIdentifier]]. It still needs
@@ -691,17 +723,21 @@ class Analyzer(
    *
    * Only the variables read by the body itself are returned. A SQL function that the body calls
    * is expanded in a context of its own, so a variable it reads through an IDENTIFIER clause stays
-   * that function's dependency rather than becoming one of the function under creation.
+   * that function's dependency rather than becoming one of the function under creation. Temporary
+   * functions, by contrast, include those built while expanding a called function.
    */
-  def executeWithReferredTempVariablesUnderIdentifier(
+  def executeWithReferredTempObjects(
       plan: LogicalPlan,
-      isPersistentSQLFunctionBody: Boolean = false): (LogicalPlan, Seq[Seq[String]]) = {
+      isPersistentSQLFunctionBody: Boolean = false)
+      : (LogicalPlan, Seq[Seq[String]], Seq[String]) = {
     AnalysisContext.withNewAnalysisContext {
       AnalysisContext.withSharingIdentifierVariablesWithNestedSQLFunctions(share = false) {
         AnalysisContext.withPersistentSQLFunctionBody(isPersistentSQLFunctionBody) {
           val analyzed = executeSameContext(plan)
-          // Read the accumulator before the context is restored on exit.
-          (analyzed, AnalysisContext.get.referredTempVariableNamesUnderIdentifier.toSeq)
+          // Read the accumulators before the context is restored on exit.
+          val context = AnalysisContext.get
+          (analyzed, context.referredTempVariableNamesUnderIdentifier.toSeq,
+            context.boundTempFunctionNames.toSeq)
         }
       }
     }
@@ -755,6 +791,16 @@ class Analyzer(
    * See [[ResolverExtension]] for more info.
    */
   val singlePassMetadataResolverExtensions: Seq[ResolverExtension] = Nil
+
+  /**
+   * Rules for the "Hints" batch of the single-pass Resolver. They are applied before the relation
+   * metadata is resolved, which is the position the fixed-point "Hints" batch has relative to
+   * `ResolveSQLOnFile`.
+   *
+   * Defaults to [[hintResolutionRules]], so that the two analyzers stay in sync by default.
+   * Override to run a different set of rules under the single-pass Resolver.
+   */
+  def singlePassHintResolutionRules: Seq[Rule[LogicalPlan]] = hintResolutionRules
 
   /**
    * Override to provide rules to do post-hoc resolution. This batch is to run right after the
@@ -1514,17 +1560,10 @@ class Analyzer(
       case r @ RelationChanges(u: UnresolvedRelation, ctx) =>
         relationResolution.resolveChangelog(u, ctx).getOrElse(r)
 
-      case u @ UnresolvedTable(identifier, cmd, suggestAlternative) =>
-        relationResolution.lookupTableOrView(identifier).map {
-          case v: ResolvedPersistentView =>
-            val nameParts = v.catalog.name() +: v.identifier.asMultipartIdentifier
-            throw QueryCompilationErrors.expectTableNotViewError(
-              nameParts, cmd, suggestAlternative, u)
-          case _: ResolvedTempView =>
-            throw QueryCompilationErrors.expectTableNotViewError(
-              identifier, cmd, suggestAlternative, u)
-          case table => table
-        }.getOrElse(u)
+      case u: UnresolvedTable =>
+        relationResolution.lookupTableOrView(u.multipartIdentifier)
+          .map(DdlTargetValidation.validateTable(u, _))
+          .getOrElse(u)
 
       // The child of `AddCheckConstraint` reads its target to validate the existing data, so the
       // target is an `UnresolvedRelation` that can resolve to a view, unlike `UnresolvedTable`.
@@ -1547,13 +1586,10 @@ class Analyzer(
           case other => other
         }.getOrElse(u)
 
-      case u @ UnresolvedTableOrView(identifier, cmd, allowTempView, _) =>
-        relationResolution.lookupTableOrView(identifier).map {
-          case _: ResolvedTempView if !allowTempView =>
-            throw QueryCompilationErrors.expectPermanentViewNotTempViewError(
-              identifier, cmd, u)
-          case other => other
-        }.getOrElse(u)
+      case u: UnresolvedTableOrView =>
+        relationResolution.lookupTableOrView(u.multipartIdentifier)
+          .map(DdlTargetValidation.validateTableOrView(u, _))
+          .getOrElse(u)
     }
 
     def resolveRelation(
@@ -2451,18 +2487,9 @@ class Analyzer(
         UNRESOLVED_TABLE_VALUED_FUNCTION, UNRESOLVED_TVF_ALIASES, UNRESOLVED_JSON_CONSTRUCTOR),
       ruleId) {
       // Resolve scalar/table functions and get the function metadata for DESCRIBE FUNCTION.
-      case u @ UnresolvedFunctionName(nameParts, _, _) =>
-        functionResolution.lookupBuiltinOrTempFunction(nameParts, None)
-          .orElse(functionResolution.lookupBuiltinOrTempTableFunction(nameParts)).map { info =>
-          ResolvedNonPersistentFunc(nameParts.head, V1Function.metadataOnly(info))
-        }.getOrElse {
-          val CatalogAndIdentifier(catalog, ident) =
-            relationResolution.expandIdentifier(nameParts)
-          val fullName = catalog.name +: ident.namespace :+ ident.name
-          CatalogV2Util.loadFunction(catalog, ident).map { func =>
-            ResolvedPersistentFunc(catalog.asFunctionCatalog, ident, func)
-          }.getOrElse(u.copy(possibleQualifiedName = Some(fullName.toImmutableArraySeq)))
-        }
+      case unresolvedFunctionName: UnresolvedFunctionName =>
+        functionResolution.resolveFunctionName(
+          unresolvedFunctionName, lookupCatalog = Analyzer.this)
 
       // Resolve table-valued function references.
       case u: UnresolvedTableValuedFunction if u.functionArgs.forall(_.resolved) =>
@@ -3097,10 +3124,11 @@ class Analyzer(
         if (joinCond != j.condition) {
           // Join condition cannot have non-deterministic expressions. We can safely
           // replace the aliases with the original SQL function input expressions.
-          val aliasMap = projectList.collect { case a: Alias => a.toAttribute -> a.child }.toMap
-          val newJoinCond = joinCond.map(_.transform {
-            case a: Attribute => aliasMap.getOrElse(a, a)
-          })
+          val newJoinCond = joinCond match {
+            case Some(condition) =>
+              Some(Analyzer.inlineSQLFunctionInputs(condition, projectList.toSeq))
+            case None => None
+          }
           j.copy(left = newLeft, right = newRight, condition = newJoinCond)
         } else {
           assert(projectList.isEmpty)

@@ -18,6 +18,9 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.types.ops.FileTypeOps
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.UTC_OPT
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -162,5 +165,24 @@ class ToPrettyStringSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(ToPrettyString(Literal(1000L, TimeType())), "00:00:00.000001")
     checkEvaluation(ToPrettyString(Literal(
       (23 * 3600 + 59 * 60 + 59) * 1000000000L, TimeType())), "23:59:59")
+  }
+
+  test("File as pretty strings") {
+    val file = FileTypeOps.fromFileRef(new FileRef("/a.txt", null, 3L, null, null))
+    val json = """{"uri":"/a.txt","size":3}"""
+    val input = InternalRow(
+      file,
+      new GenericArrayData(Array[Any](file, null)),
+      ArrayBasedMapData(Array[Any](UTF8String.fromString("k")), Array[Any](file)),
+      InternalRow(1, file))
+    val types = Seq(
+      FileType.external,
+      ArrayType(FileType()),
+      MapType(StringType, FileType()),
+      new StructType().add("id", IntegerType).add("f", FileType()))
+    val expected = Seq(json, s"[$json, NULL]", s"{k -> $json}", s"{1, $json}")
+    types.zip(expected).zipWithIndex.foreach { case ((dt, str), i) =>
+      checkEvaluation(ToPrettyString(BoundReference(i, dt, nullable = true)), str, input)
+    }
   }
 }

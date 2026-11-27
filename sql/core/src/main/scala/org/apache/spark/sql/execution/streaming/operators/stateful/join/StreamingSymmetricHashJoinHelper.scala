@@ -23,12 +23,16 @@ import org.apache.spark.{Partition, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{RDD, ZippedPartitionsBaseRDD, ZippedPartitionsPartition}
 import org.apache.spark.sql.catalyst.analysis.StreamingJoinHelper
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet, BoundReference, Expression, NamedExpression, PredicateHelper}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet, Between, BinaryComparison, BoundReference, Cast, Expression, GreaterThanOrEqual, LessThanOrEqual, Literal, NamedExpression, PredicateHelper, TimestampAddInterval}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, WatermarkSupport}
 import org.apache.spark.sql.execution.streaming.operators.stateful.WatermarkSupport.watermarkExpression
 import org.apache.spark.sql.execution.streaming.state.{StateStoreCheckpointInfo, StateStoreCoordinatorRef, StateStoreProviderId}
+import org.apache.spark.sql.types.{CalendarIntervalType, DayTimeIntervalType, TimestampType}
+import org.apache.spark.unsafe.types.CalendarInterval
 
 
 /**
@@ -294,6 +298,88 @@ object StreamingSymmetricHashJoinHelper extends Logging {
     val rightStateWatermarkPredicate =
       getOneSideStateWatermarkPredicate(rightAttributes, rightKeys, leftAttributes)
     JoinStateWatermarkPredicates(leftStateWatermarkPredicate, rightStateWatermarkPredicate)
+  }
+
+  /**
+   * For the right input of a left semi join, cutoffs at the late-events watermark that are exact
+   * today: no left row that passes late filtering can match a right row at or below them. Returns
+   * a predicate on the right join key and a predicate on the right input row, either of which
+   * can be absent.
+   *
+   * The key cutoff applies when the left input's late-filtered column is the left join key at an
+   * ordinal: the right key at that ordinal must then be above the late-events watermark. The
+   * value cutoff is on the right event time, solved only from conjuncts that compare it with the
+   * left input's late-filtered column, each shifted only by literal intervals without a month
+   * part, and with no cast other than one from timestamp to timestamp. A day part counts only in
+   * a time zone with a fixed offset, such as UTC, where Spark adds a day as 24 hours, as the
+   * solver counts it. Any other conjunct can give a cutoff that is too high, so it gives none
+   * here: for example a bound on another right column, an interval with whole days in a time
+   * zone with daylight saving time, or a truncating cast.
+   * TODO(SPARK-61344, SPARK-61381): derive exact cutoffs for those conditions too.
+   */
+  def getLeftSemiExactRightCutoffs(
+      leftAttributes: Seq[Attribute],
+      rightAttributes: Seq[Attribute],
+      leftKeys: Seq[Expression],
+      rightKeys: Seq[Expression],
+      condition: Option[Expression],
+      eventTimeWatermarkForLateEvents: Option[Long],
+      useFirstEventTimeColumn: Boolean): (Option[Expression], Option[Expression]) = {
+    // The column the left input's late filter compares with the late-events watermark.
+    val leftLateFiltered = WatermarkSupport.findEventTimeColumn(leftAttributes,
+      allowMultipleEventTimeColumns = useFirstEventTimeColumn)
+    val rightEventTime = WatermarkSupport.findEventTimeColumn(rightAttributes,
+      allowMultipleEventTimeColumns = useFirstEventTimeColumn)
+
+    val keyCutoff = leftLateFiltered.flatMap { column =>
+      leftKeys.indexWhere(_.semanticEquals(column)) match {
+        case ordinal if ordinal >= 0 =>
+          val rightKey = BoundReference(
+            ordinal, rightKeys(ordinal).dataType, rightKeys(ordinal).nullable)
+          watermarkExpression(Some(rightKey), eventTimeWatermarkForLateEvents)
+        case _ => None
+      }
+    }
+
+    // Whether the expression is the column shifted only by literal intervals that the solver
+    // counts exactly: no months, and whole days only where the zone that the shift adds them in
+    // has a fixed offset. Elsewhere a day can be 23 or 25 hours, but the solver counts 24.
+    def addsDaysExactly(shift: TimestampAddInterval): Boolean =
+      shift.timeZoneId.exists(zone => DateTimeUtils.getZoneId(zone).getRules.isFixedOffset)
+    def isExactShiftOf(e: Expression, column: Attribute): Boolean = e match {
+      case a: Attribute => a.semanticEquals(column)
+      case Cast(child, TimestampType, _, _) if child.dataType == TimestampType =>
+        isExactShiftOf(child, column)
+      case s @ TimestampAddInterval(start, Literal(micros: Long, _: DayTimeIntervalType), _) =>
+        (-MICROS_PER_DAY < micros && micros < MICROS_PER_DAY || addsDaysExactly(s)) &&
+          isExactShiftOf(start, column)
+      case s @ TimestampAddInterval(start, Literal(i: CalendarInterval, CalendarIntervalType), _) =>
+        i.months == 0 && (i.days == 0 || addsDaysExactly(s)) && isExactShiftOf(start, column)
+      case _ => false
+    }
+    def conjuncts(e: Expression): Seq[Expression] = e match {
+      case And(left, right) => conjuncts(left) ++ conjuncts(right)
+      case Between(input, lower, upper, _) =>
+        Seq(GreaterThanOrEqual(input, lower), LessThanOrEqual(input, upper))
+      case other => Seq(other)
+    }
+    val valueCutoff = for {
+      left <- leftLateFiltered
+      right <- rightEventTime
+      watermark <- eventTimeWatermarkForLateEvents
+      cutoff <- condition.toSeq.flatMap(conjuncts).filter {
+        case c: BinaryComparison =>
+          isExactShiftOf(c.left, right) && isExactShiftOf(c.right, left) ||
+            isExactShiftOf(c.left, left) && isExactShiftOf(c.right, right)
+        case _ => false
+      }.flatMap { conjunct =>
+        StreamingJoinHelper.getStateValueWatermark(AttributeSet(Seq(right)),
+          AttributeSet(Seq(left)), Some(conjunct), Some(watermark))
+      }.maxOption
+      expr <- watermarkExpression(Some(right), Some(cutoff))
+    } yield expr
+
+    (keyCutoff, valueCutoff)
   }
 
   private[join] def findJoinKeyOrdinalForWatermark(

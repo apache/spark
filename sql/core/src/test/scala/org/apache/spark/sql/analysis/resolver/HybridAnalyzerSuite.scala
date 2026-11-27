@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.analysis.resolver._
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.NormalizePlan
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -585,5 +586,45 @@ class HybridAnalyzerSuite extends HybridAnalyzerSuiteBase {
       checkCounter == 1,
       s"Expected check to be invoked 1 time, but was invoked $checkCounter times"
     )
+  }
+
+  test("fromLegacyAnalyzer passes the single-pass hint resolution rules to the Resolver") {
+    val invokedRules = Seq.newBuilder[String]
+
+    def recordingRule(name: String): Rule[LogicalPlan] = new Rule[LogicalPlan] {
+      override def apply(plan: LogicalPlan): LogicalPlan = {
+        invokedRules += name
+        plan
+      }
+    }
+
+    // The two sequences differ, so the rules that ran tell which of them each analyzer received.
+    val legacyAnalyzer = new Analyzer(spark.sessionState.catalogManager) {
+      override val hintResolutionRules: Seq[Rule[LogicalPlan]] = Seq(recordingRule("legacy"))
+      override def singlePassHintResolutionRules: Seq[Rule[LogicalPlan]] =
+        Seq(recordingRule("single-pass"))
+    }
+
+    Seq(false -> "legacy", true -> "single-pass").foreach { case (singlePass, expectedRule) =>
+      invokedRules.clear()
+      withSQLConf(
+        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString
+      ) {
+        assertPlansEqual(
+          HybridAnalyzer
+            .fromLegacyAnalyzer(legacyAnalyzer, new QueryPlanningTracker)
+            .apply(unresolvedPlan),
+          resolvedPlan
+        )
+      }
+
+      // The rules do not change the plan, so the "Hints" batch stops after one iteration.
+      assert(
+        invokedRules.result() == Seq(expectedRule),
+        s"unexpected rules invoked with singlePass=$singlePass: ${invokedRules.result()}"
+      )
+    }
   }
 }

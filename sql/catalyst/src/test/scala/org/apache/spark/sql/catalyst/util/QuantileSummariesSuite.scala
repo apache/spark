@@ -103,6 +103,77 @@ class QuantileSummariesSuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-61530: preserve NaN ordering during insertion, compression and merging") {
+    val inputs = Seq(
+      Seq(1.0, Double.NaN),
+      Seq(Double.NaN, Double.NaN),
+      Seq(1.0, 2.0, 3.0, 4.0, Double.NaN),
+      Seq(Double.NaN, Double.PositiveInfinity, -0.0, 0.0, Double.NegativeInfinity, Double.NaN))
+
+    def checkSummary(summary: QuantileSummaries, data: Seq[Double]): Unit = {
+      assert(summary.count == data.size)
+      assert(summary.sampled.map(_.g).sum == summary.count)
+      val expected = data.sortWith(SQLOrderingUtil.compareDoubles(_, _) < 0)
+      val percentiles = Seq(0.0) ++ (1 to data.size).map(_.toDouble / data.size)
+      val actual = summary.query(percentiles).get
+      assert(actual.zip(expected.head +: expected).forall { case (a, e) =>
+        SQLOrderingUtil.compareDoubles(a, e) == 0
+      })
+    }
+
+    for (data <- inputs; values <- Seq(data, data.reverse)) {
+      checkSummary(buildSummary(values, 0.0, 10), values)
+      checkSummary(buildCompressSummary(values, 0.0, 10), values)
+      for (split <- 0 to values.size) {
+        val left = buildSummary(values.take(split), 0.0, 10)
+        val right = buildSummary(values.drop(split), 0.0, 10)
+        checkSummary(left.merge(right), values)
+        checkSummary(right.merge(left), values)
+      }
+    }
+  }
+
+  test("SPARK-61530: reuse unchanged samples when merging NaN summaries") {
+    val values = (1 to 8).map(_.toDouble)
+    val finite = buildSummary(values, 0.0001, 100)
+    for (nanFirst <- Seq(false, true)) {
+      var summary = finite
+      for (nanCount <- 1 to 3) {
+        val nan = buildSummary(Seq(Double.NaN), 0.0001, 100)
+        summary = if (nanFirst) nan.merge(summary) else summary.merge(nan)
+        val expected = values ++ Seq.fill(nanCount)(Double.NaN)
+        assert(summary.count == expected.size)
+        assert(summary.sampled.length == expected.size)
+        summary.sampled.zip(expected).foreach { case (sample, value) =>
+          assert(SQLOrderingUtil.compareDoubles(sample.value, value) == 0)
+          assert(sample.g == 1)
+          assert(sample.delta == 0)
+        }
+        finite.sampled.zip(summary.sampled).foreach { case (original, merged) =>
+          assert(original eq merged, "An unchanged finite sample should be reused")
+        }
+        val quantiles = summary.query(Seq(0.0, 0.5, 1.0)).get
+        val expectedQuantiles = Seq(values.head, expected((expected.size - 1) / 2), Double.NaN)
+        assert(quantiles.zip(expectedQuantiles).forall { case (actual, value) =>
+          SQLOrderingUtil.compareDoubles(actual, value) == 0
+        })
+      }
+    }
+  }
+
+  test("SPARK-61530: retain delta adjustments when merging overlapping summaries") {
+    import QuantileSummaries.Stats
+
+    val left = buildSummary(Seq(-10.0, 10.0), 0.25, 100)
+    val right = buildSummary(Seq(0.0, 20.0), 0.25, 100)
+    for (summary <- Seq(left.merge(right), right.merge(left))) {
+      assert(summary.count == 4)
+      assert(summary.sampled.toSeq == Seq(
+        Stats(-10.0, 1, 0), Stats(0.0, 1, 1), Stats(10.0, 1, 1), Stats(20.0, 1, 0)))
+      assert(summary.query(Seq(0.0, 1.0)).get == Seq(-10.0, 20.0))
+    }
+  }
+
   for {
     (seq_name, data) <- Seq(increasing, decreasing, random)
     epsi <- Seq(0.1, 0.0001) // With a significant value and with full precision

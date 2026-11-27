@@ -413,6 +413,9 @@ object DatasetManager extends Logging {
           desiredSchema = outputSchema,
           properties = mergedProperties,
           mergeWithExistingSchema = isTableIncrementallyUpdated,
+          // The legacy setting restores keeping the table's metadata, as in Spark 4.4.
+          mergeWithDesiredMetadata =
+            !context.spark.sessionState.conf.legacyPipelinesKeepStreamingTableColumnMetadata,
           caseSensitive = effectiveCaseSensitive
         )
       case None =>
@@ -531,6 +534,12 @@ object DatasetManager extends Logging {
             desiredSchema = auxiliaryTableSpec.schema,
             properties = auxiliaryTableSpec.properties,
             mergeWithExistingSchema = true,
+            // The auxiliary schema is derived from the target's inferred schema, not from a
+            // declaration, and nothing reads the auxiliary table's column comments. Keep its
+            // persisted metadata on shared columns, so that comment drift in the source never
+            // alters this table, nor fails the update when the drift sits under nested complex
+            // types that `diffSchemas` cannot evolve.
+            mergeWithDesiredMetadata = false,
             caseSensitive = caseSensitive
           )
         case None =>
@@ -662,6 +671,9 @@ object DatasetManager extends Logging {
    * @param mergeWithExistingSchema whether the effective schema is the merge of the existing and
    *                                desired schemas (additive evolution) rather than the desired
    *                                schema as-is.
+   * @param mergeWithDesiredMetadata whether shared columns take their metadata from the desired
+   *                                schema (see `mergeSchemasWithDataMetadata`) rather than keeping
+   *                                the table's.
    * @param caseSensitive           whether the additive schema merge treats field names differing
    *                                only in case as distinct columns. Callers should pass the
    *                                effective `spark.sql.caseSensitive` used to resolve the schema
@@ -679,9 +691,15 @@ object DatasetManager extends Logging {
       desiredSchema: StructType,
       properties: Map[String, String],
       mergeWithExistingSchema: Boolean,
+      mergeWithDesiredMetadata: Boolean,
       caseSensitive: Boolean): Unit = {
     val currentSchema = v2ColumnsToStructType(existingTable.columns())
-    val targetSchema = if (mergeWithExistingSchema) {
+    val targetSchema = if (mergeWithExistingSchema && mergeWithDesiredMetadata) {
+      // Only comment changes are applied; other metadata changes (e.g. defaults, SPARK-59269) are
+      // only logged.
+      SchemaMergingUtils.mergeSchemasWithDataMetadata(currentSchema, desiredSchema, caseSensitive)
+    } else if (mergeWithExistingSchema) {
+      // Shared columns keep the existing table's metadata.
       SchemaMergingUtils.mergeSchemas(currentSchema, desiredSchema, caseSensitive)
     } else {
       desiredSchema
@@ -691,6 +709,18 @@ object DatasetManager extends Logging {
     // non-merging paths (materialized views, full refresh), `targetSchema` is the declared schema
     // as-is, where exact-name matching keeps a case-only rename visible as a schema change.
     val columnChanges = diffSchemas(currentSchema, targetSchema)
+    // A comment change can remove a comment that was set directly on the table, which the
+    // pipeline cannot restore, so record which columns had theirs changed.
+    val columnsWithCommentChange = columnChanges.collect {
+      case c: TableChange.UpdateColumnComment => c.fieldNames().mkString(".")
+    }
+    if (columnsWithCommentChange.nonEmpty) {
+      logInfo(
+        log"Updating the comments of columns " +
+        log"${MDC(LogKeys.COLUMN_NAMES, columnsWithCommentChange.mkString(", "))} of table " +
+        log"${MDC(LogKeys.TABLE_NAME, tableIdentifier)} to match the pipeline's schema."
+      )
+    }
 
     val existingProperties = existingTable.properties()
 
