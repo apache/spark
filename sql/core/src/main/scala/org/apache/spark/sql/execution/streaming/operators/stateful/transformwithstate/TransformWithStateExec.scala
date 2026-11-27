@@ -587,7 +587,7 @@ case class TransformWithStateExec(
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
 
     val providerId = {
-      val tempDirPath = Utils.createTempDir().getAbsolutePath
+      val tempDirPath = TransformWithStateExec.createBatchTempDirPath()
       new StateStoreProviderId(
         StateStoreId(tempDirPath, 0, partitionId), getStateInfo.queryRunId)
     }
@@ -676,6 +676,8 @@ case class TransformWithStateExec(
 
 // scalastyle:off argcount
 object TransformWithStateExec {
+
+  private[sql] def createBatchTempDirPath(): String = Utils.createTempDir().toURI.toString
 
   // Plan logical transformWithState for batch queries
   def generateSparkPlanForBatchQueries(
