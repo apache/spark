@@ -342,7 +342,9 @@ object CodeCompiler extends Logging {
    * A compile whose result its caller may discard ([[trial]]). What the compile would report of
    * the code - its updates of the codegen metrics, which describe the code that runs, its "Code
    * generated in" log line with the compile time, and its reports of methods past the JIT limit -
-   * is held here, in the order made, for the caller to make if it keeps the code.
+   * is held here, in the order made, for the caller to make if it keeps the code. Each compile
+   * into the compile cache runs under one of its own, which the cache keeps with the class
+   * ([[held]]).
    *
    * @param failureExpected whether a failure to compile is an answer the caller asks for, which the
    *                        compile then logs at debug level rather than as an error.
@@ -353,14 +355,23 @@ object CodeCompiler extends Logging {
 
     private[codegen] def hold(report: () => Unit): Unit = reports += report
 
+    /** Holds what a class's compile held, whether this trial compiled it or found it cached. */
+    private[codegen] def holdAll(held: HeldCompile): Unit = {
+      methods ++= held.methods
+      reports ++= held.reports
+    }
+
     private[codegen] def recordMethod(methodName: String, size: Int): Unit =
       methods += ((methodName, size))
 
+    /** What this trial holds, for the compile cache to keep with the class ([[held]]). */
+    private[codegen] def heldCompile: HeldCompile = new HeldCompile(methods.toSeq, reports.toSeq)
+
     /**
-     * The bytecode size of every method the compile produced, by its name in the source, the
-     * largest where a name is in more than one class; empty where the compile was a hit in the
-     * compile cache, which produces nothing. Janino names a private method of an inner class with
-     * a `$` after its name in the source.
+     * The bytecode size of every method the compile produced, also where the class was found in
+     * the compile cache, by its name in the source, the largest where a name is in more than one
+     * class. Janino names a private method of an inner class with a `$` after its name in the
+     * source.
      */
     def methodSizes: Map[String, Int] =
       methods.groupMapReduce(_._1.stripSuffix("$"))(_._2)(math.max)
@@ -368,6 +379,11 @@ object CodeCompiler extends Logging {
     /** Makes the reports and metric updates the compile held back, for the code kept. */
     def report(): Unit = reports.foreach(_())
   }
+
+  /** What the compile of a class held ([[held]]): its method sizes, and its reports in order. */
+  private[codegen] final class HeldCompile(
+      val methods: Seq[(String, Int)],
+      val reports: Seq[() => Unit])
 
   private val currentTrial = new ThreadLocal[TrialCompile]
 
@@ -385,6 +401,20 @@ object CodeCompiler extends Logging {
   private[sql] def trial[T](failureExpected: Boolean)(body: => T): (Try[T], TrialCompile) = {
     val trial = new TrialCompile(failureExpected)
     (withTrial(trial)(Try(body)), trial)
+  }
+
+  /**
+   * Runs `body`, a compile into the compile cache, under a trial of its own, which the cache keeps
+   * with the class so that a trial finding the class there holds the same. Outside a caller's
+   * trial, the reports are made as the compile ends, those made before a failure included.
+   */
+  private[codegen] def held[T](body: => T): (T, HeldCompile) = {
+    val outsideTrial = currentTrial.get == null
+    val trial = new TrialCompile(failureExpected)
+    val result = try withTrial(trial)(body) finally {
+      if (outsideTrial) trial.report()
+    }
+    (result, trial.heldCompile)
   }
 
   /** The trial the calling thread compiles under, or null outside one. */
