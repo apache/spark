@@ -24,7 +24,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, TimestampType}
 
 /**
- * End-to-end tests for the SQL:2016 `JSON_TABLE` table-valued function (flat, non-nested subset).
+ * End-to-end tests for the SQL:2016 `JSON_TABLE` table-valued function.
  */
 class JsonTableSuite extends QueryTest with SharedSparkSession {
 
@@ -887,4 +887,314 @@ class JsonTableSuite extends QueryTest with SharedSparkSession {
         """.stripMargin),
       Seq(Row(true, 1), Row(true, 2)))
   }
+
+  test("SPARK-62414: NESTED PATH keeps a row whose nested path matches nothing") {
+    // A missing key, an empty array, a JSON null and a non-array all match nothing for `[*]`.
+    val json = """{"orders":[{"id":1,"items":[{"sku":"a","qty":2},{"sku":"b","qty":1}]},""" +
+      """{"id":2,"items":[]},{"id":3},{"id":4,"items":null},{"id":5,"items":{"sku":"c"}},""" +
+      """{"id":6,"items":[{"sku":"d"}]}]}"""
+    val df = sql(
+      s"""
+         |SELECT * FROM json_table('$json', '$$.orders[*]'
+         |  COLUMNS (
+         |    order_id BIGINT PATH '$$.id',
+         |    NESTED PATH '$$.items[*]' COLUMNS (
+         |      sku STRING PATH '$$.sku',
+         |      qty INT    PATH '$$.qty'))) t
+       """.stripMargin)
+    assert(df.collect().toSeq == Seq(
+      Row(1L, "a", 2), Row(1L, "b", 1), Row(2L, null, null), Row(3L, null, null),
+      Row(4L, null, null), Row(5L, null, null), Row(6L, "d", null)))
+    assert(df.schema.map(f => (f.name, f.dataType)) ==
+      Seq(("order_id", LongType), ("sku", StringType), ("qty", IntegerType)))
+  }
+
+  test("SPARK-62414: sibling NESTED PATHs follow one another instead of multiplying") {
+    // MySQL's example: two nested paths over the same array.
+    checkRowsInOrder(
+      """
+        |SELECT * FROM json_table(
+        |  '[{"a":1,"b":[11,111]},{"a":2,"b":[22,222]}]', '$[*]'
+        |  COLUMNS (
+        |    a INT PATH '$.a',
+        |    NESTED PATH '$.b[*]' COLUMNS (b1 INT PATH '$'),
+        |    NESTED PATH '$.b[*]' COLUMNS (b2 INT PATH '$'))) t
+      """.stripMargin,
+      Seq(
+        Row(1, 11, null), Row(1, 111, null), Row(1, null, 11), Row(1, null, 111),
+        Row(2, 22, null), Row(2, 222, null), Row(2, null, 22), Row(2, null, 222)))
+    // A sibling without rows adds no row; a row without any nested row is kept once.
+    checkRowsInOrder(
+      """
+        |SELECT * FROM json_table(
+        |  '[{"id":1,"x":[1,2],"y":[]},{"id":2,"y":["p"]},{"id":3,"x":[],"y":5}]', '$[*]'
+        |  COLUMNS (
+        |    id INT PATH '$.id',
+        |    NESTED PATH '$.x[*]' COLUMNS (x INT PATH '$'),
+        |    NESTED PATH '$.y[*]' COLUMNS (y STRING PATH '$'))) t
+      """.stripMargin,
+      Seq(Row(1, 1, null), Row(1, 2, null), Row(2, null, "p"), Row(3, null, null)))
+  }
+
+  test("SPARK-62414: FOR ORDINALITY counts the rows of its own level for each parent row") {
+    // MySQL's example.
+    val df = sql(
+      """
+        |SELECT * FROM json_table(
+        |  '[{"a":"a_val","b":[{"c":"c_val","l":[1,2]}]},
+        |    {"a":"a_val","b":[{"c":"c_val","l":[11]},{"c":"c_val","l":[22]}]}]',
+        |  '$[*]' COLUMNS (
+        |    top_ord FOR ORDINALITY,
+        |    apath VARCHAR(10) PATH '$.a',
+        |    NESTED PATH '$.b[*]' COLUMNS (
+        |      bpath VARCHAR(10) PATH '$.c',
+        |      ord FOR ORDINALITY,
+        |      NESTED PATH '$.l[*]' COLUMNS (lpath VARCHAR(10) PATH '$')))) t
+      """.stripMargin)
+    assert(df.collect().toSeq == Seq(
+      Row(1L, "a_val", "c_val", 1L, "1"), Row(1L, "a_val", "c_val", 1L, "2"),
+      Row(2L, "a_val", "c_val", 1L, "11"), Row(2L, "a_val", "c_val", 2L, "22")))
+    // Only the top-level counter is always set; a nested one is NULL on a NULL-extended row.
+    assert(df.schema.map(_.nullable) == Seq(false, true, true, true, true))
+    checkRowsInOrder(
+      """
+        |SELECT * FROM json_table('[{"a":[5,6]},{"a":[]}]', '$[*]'
+        |  COLUMNS (o FOR ORDINALITY, NESTED PATH '$.a[*]' COLUMNS (n FOR ORDINALITY))) t
+      """.stripMargin,
+      Seq(Row(1L, 1L), Row(1L, 2L), Row(2L, null)))
+
+    // PostgreSQL's example: siblings with their own counters, and `PATH` omitted after NESTED.
+    checkRowsInOrder(
+      """
+        |SELECT * FROM json_table(
+        |  '{"favorites":[{
+        |    "movies":[{"name":"One","director":"John Doe"},{"name":"Two","director":"Don Joe"}],
+        |    "books":[{"name":"Mystery","authors":[{"name":"Brown Dan"}]},
+        |             {"name":"Wonder","authors":[{"name":"Jun Murakami"},{"name":"Craig Doe"}]}]
+        |  }]}',
+        |  '$.favorites[*]' COLUMNS (
+        |    user_id FOR ORDINALITY,
+        |    NESTED '$.movies[*]' COLUMNS (
+        |      movie_id FOR ORDINALITY,
+        |      mname STRING PATH '$.name',
+        |      director STRING),
+        |    NESTED '$.books[*]' COLUMNS (
+        |      book_id FOR ORDINALITY,
+        |      bname STRING PATH '$.name',
+        |      NESTED '$.authors[*]' COLUMNS (
+        |        author_id FOR ORDINALITY,
+        |        author_name STRING PATH '$.name')))) t
+      """.stripMargin,
+      Seq(
+        Row(1L, 1L, "One", "John Doe", null, null, null, null),
+        Row(1L, 2L, "Two", "Don Joe", null, null, null, null),
+        Row(1L, null, null, null, 1L, "Mystery", 1L, "Brown Dan"),
+        Row(1L, null, null, null, 2L, "Wonder", 1L, "Jun Murakami"),
+        Row(1L, null, null, null, 2L, "Wonder", 2L, "Craig Doe")))
+  }
+
+  test("SPARK-62414: nested columns are output where their NESTED PATH is declared") {
+    val df = sql(
+      """
+        |SELECT * FROM json_table('[{"a":1,"n":[{"b":2}],"c":3}]', '$[*]'
+        |  COLUMNS (a INT, NESTED PATH '$.n[*]' COLUMNS (b INT), c INT)) t
+      """.stripMargin)
+    assert(df.columns.toSeq == Seq("a", "b", "c"))
+    checkAnswer(df, Seq(Row(1, 2, 3)))
+  }
+
+  test("SPARK-62414: NESTED PATH without [*] reads one row") {
+    // A JSON null is one row, as for the row path; EXISTS is NULL only on a NULL-extended row.
+    checkRowsInOrder(
+      """
+        |SELECT * FROM json_table(
+        |  '[{"id":1,"addr":{"city":"x"}},{"id":2},{"id":3,"addr":null},{"id":4,"addr":"s"}]',
+        |  '$[*]' COLUMNS (
+        |    id INT,
+        |    NESTED PATH '$.addr' COLUMNS (
+        |      n FOR ORDINALITY,
+        |      city STRING PATH '$.city',
+        |      has_city BOOLEAN EXISTS PATH '$.city',
+        |      addr STRING PATH '$'))) t
+      """.stripMargin,
+      Seq(
+        Row(1, 1L, "x", true, """{"city":"x"}"""), Row(2, null, null, null, null),
+        Row(3, 1L, null, false, null), Row(4, 1L, null, false, "s")))
+  }
+
+  test("SPARK-62414: NESTED PATH sharing its path with other columns") {
+    // The array of a nested path is also read by a column, and by a column below it.
+    checkRowsInOrder(
+      """
+        |SELECT * FROM json_table('[{"tags":["a","b"]},{"tags":["c"]},{"tags":"d"}]', '$[*]'
+        |  COLUMNS (
+        |    tags STRING PATH '$.tags',
+        |    first STRING PATH '$.tags[0]',
+        |    NESTED PATH '$.tags[*]' COLUMNS (tag STRING PATH '$'),
+        |    NESTED PATH '$.tags' COLUMNS (whole STRING PATH '$'))) t
+      """.stripMargin,
+      Seq(
+        Row("""["a","b"]""", "a", "a", null), Row("""["a","b"]""", "a", "b", null),
+        Row("""["a","b"]""", "a", null, """["a","b"]"""),
+        Row("""["c"]""", "c", "c", null), Row("""["c"]""", "c", null, """["c"]"""),
+        Row("d", null, null, "d")))
+    // Nested paths over the row itself.
+    checkRowsInOrder(
+      """
+        |SELECT * FROM json_table('[[1,2],[3]]', '$[*]'
+        |  COLUMNS (
+        |    o FOR ORDINALITY,
+        |    NESTED PATH '$[*]' COLUMNS (v INT PATH '$'),
+        |    NESTED PATH '$' COLUMNS (n INT PATH '$[1]'))) t
+      """.stripMargin,
+      Seq(Row(1L, 1, null), Row(1L, 2, null), Row(1L, null, 2), Row(2L, 3, null),
+        Row(2L, null, null)))
+  }
+
+  test("SPARK-62414: NESTED PATH matches a cross-check with explode_outer") {
+    import testImplicits._
+    withTempView("docs") {
+      // Items are missing, empty or of 1 to 3 elements, some of which lack `v`.
+      (0 until 40).map { i =>
+        val items = i % 5 match {
+          case 0 => ""
+          case 1 => ""","items":[]"""
+          case n => (1 to n - 1).map(j => if (j == 2) "{}" else s"""{"v":${i * 10 + j}}""")
+            .mkString(""","items":[""", ",", "]")
+        }
+        s"""{"id":$i$items}"""
+      }.toDF("j").createOrReplaceTempView("docs")
+      checkAnswer(
+        sql(
+          """
+            |SELECT t.* FROM docs, LATERAL json_table(docs.j, '$'
+            |  COLUMNS (id INT, NESTED PATH '$.items[*]' COLUMNS (n FOR ORDINALITY, v INT))) t
+          """.stripMargin),
+        sql(
+          """
+            |SELECT s.d.id, CAST(pos + 1 AS BIGINT), item.v
+            |FROM (SELECT from_json(j, 'id INT, items ARRAY<STRUCT<v: INT>>') AS d FROM docs) s
+            |LATERAL VIEW OUTER posexplode(s.d.items) p AS pos, item
+          """.stripMargin))
+    }
+  }
+
+  test("SPARK-62414: column names must be unique across nested COLUMNS clauses") {
+    Seq(
+      "id INT, NESTED PATH '$.n[*]' COLUMNS (id INT)",
+      "NESTED PATH '$.n[*]' COLUMNS (x INT), NESTED PATH '$.m[*]' COLUMNS (X INT)").foreach {
+      columns =>
+        val e = intercept[ParseException] {
+          sql(s"SELECT * FROM json_table('{}', '$$' COLUMNS ($columns)) t")
+        }
+        assert(e.getCondition == "INVALID_SQL_SYNTAX.DUPLICATE_JSON_TABLE_COLUMN", columns)
+    }
+  }
+
+  test("SPARK-62414: invalid nested paths are rejected") {
+    val e1 = intercept[AnalysisException] {
+      sql(
+        """
+          |SELECT * FROM json_table('{}', '$'
+          |  COLUMNS (NESTED PATH '$.a[*].b[*]' COLUMNS (x INT PATH '$'))) t
+        """.stripMargin).collect()
+    }
+    assert(e1.getCondition == "DATATYPE_MISMATCH.INVALID_JSON_TABLE_PATH")
+    assert(e1.getMessageParameters.get("location") == "nested path")
+    assert(e1.getMessageParameters.get("path") == "'$.a[*].b[*]'")
+    assert(e1.getMessage.contains(
+      "JSON_TABLE({}, '$' COLUMNS (NESTED PATH '$.a[*].b[*]' COLUMNS (x INT PATH '$')) " +
+        "NULL ON ERROR)"))
+    // A column path within a nested path is checked as well.
+    val e2 = intercept[AnalysisException] {
+      sql(
+        """
+          |SELECT * FROM json_table('{}', '$'
+          |  COLUMNS (NESTED PATH '$.a[*]' COLUMNS (x INT PATH '$.y[*]'))) t
+        """.stripMargin).collect()
+    }
+    assert(e2.getCondition == "DATATYPE_MISMATCH.INVALID_JSON_TABLE_PATH")
+    assert(e2.getMessageParameters.get("location") == "column 'x'")
+  }
+
+  test("SPARK-62414: malformed input within a nested array follows ON ERROR") {
+    Seq(
+      """[{"a":1,"b":[1,2}]""",
+      """[{"a":1,"b":[1,2]}] garbage""",
+      """[{"a":1,"b":[1,""").foreach { json =>
+      val query = s"SELECT * FROM json_table('$json', '$$[*]' COLUMNS (" +
+        "a INT PATH '$.a', NESTED PATH '$.b[*]' COLUMNS (b INT PATH '$'))"
+      checkAnswer(sql(s"$query) t"), Seq.empty)
+      val e = intercept[SparkException](sql(s"$query ERROR ON ERROR) t").collect())
+      assert(errorConditions(e).contains("MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION"), json)
+    }
+  }
+
+  test("SPARK-62414: nested column casts honor ANSI mode") {
+    val query =
+      """
+        |SELECT * FROM json_table('[{"b":["x"]}]', '$[*]'
+        |  COLUMNS (NESTED PATH '$.b[*]' COLUMNS (v INT PATH '$'))) t
+      """.stripMargin
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      checkAnswer(sql(query), Seq(Row(null)))
+    }
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val e = intercept[SparkThrowable](sql(query).collect())
+      assert(errorConditions(e.asInstanceOf[Throwable]).contains("CAST_INVALID_INPUT"))
+    }
+  }
+
+  test("SPARK-62414: nested rows are cast as they are pulled") {
+    import org.apache.spark.sql.catalyst.InternalRow
+    import org.apache.spark.sql.catalyst.expressions.{JsonTable, JsonTableColumn,
+      JsonTableColumnKind, JsonTableErrorMode, JsonTableNestedColumns, Literal}
+    // The ANSI cast of "x" fails, but only once its row is pulled.
+    val jsonTable = JsonTable(
+      Literal("""{"a":[1,"x"]}"""),
+      "$",
+      Seq(JsonTableNestedColumns(
+        "$.a[*]", Seq(JsonTableColumn("v", IntegerType, Some("$"), JsonTableColumnKind.Value)))),
+      JsonTableErrorMode.NullOnError,
+      ansiEnabled = true)
+    val rows = jsonTable.eval(InternalRow.empty).iterator
+    assert(rows.next().getInt(0) == 1)
+    intercept[SparkThrowable](rows.next())
+  }
+
+  test("SPARK-62414: NESTED is a non-reserved keyword") {
+    checkAnswer(
+      sql(
+        """
+          |SELECT * FROM json_table('{"nested":1,"path":[2]}', '$'
+          |  COLUMNS (nested INT, NESTED PATH '$.path[*]' COLUMNS (path INT PATH '$'))) t
+        """.stripMargin),
+      Seq(Row(1, 2)))
+  }
+
+  test("SPARK-62414: large nested arrays over many input rows") {
+    val n = 2000
+    val inner = (1 to n).mkString("[", ",", "]")
+    withTempView("docs") {
+      spark.range(0, 20)
+        .selectExpr(s"""concat('[{"id":', id, ',"v":$inner}]') AS j""")
+        .createOrReplaceTempView("docs")
+      checkAnswer(
+        sql(
+          """
+            |SELECT count(*), sum(t.v), max(t.o) FROM docs,
+            |LATERAL json_table(docs.j, '$[*]'
+            |  COLUMNS (id INT, NESTED PATH '$.v[*]' COLUMNS (o FOR ORDINALITY, v INT PATH '$'))) t
+          """.stripMargin),
+        Seq(Row(20L * n, 20L * n * (n + 1) / 2, n.toLong)))
+    }
+  }
+
+  private def checkRowsInOrder(query: String, expected: Seq[Row]): Unit = {
+    assert(sql(query).collect().toSeq == expected)
+  }
+
+  private def errorConditions(e: Throwable): Seq[String] =
+    Iterator.iterate(e)(_.getCause).takeWhile(_ != null)
+      .collect { case t: SparkThrowable => t.getCondition }.toSeq
 }

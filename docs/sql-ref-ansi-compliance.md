@@ -721,6 +721,7 @@ Below is a list of all the keywords in Spark SQL.
 |NANOSECONDS|non-reserved|non-reserved|non-reserved|
 |NATURAL|reserved|strict-non-reserved|reserved|
 |NEAREST|non-reserved|non-reserved|non-reserved|
+|NESTED|non-reserved|non-reserved|non-reserved|
 |NEXT|non-reserved|non-reserved|non-reserved|
 |NO|non-reserved|non-reserved|reserved|
 |NONE|non-reserved|non-reserved|reserved|

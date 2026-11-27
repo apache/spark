@@ -577,20 +577,23 @@ object JsonQueryLookup {
 }
 
 /**
- * A prefix trie over the (wildcard-free) column paths of a single `JSON_TABLE` invocation, built
- * once via [[JsonTableEvaluator.buildPathTrie]] and reused for every row. It lets
- * [[JsonTableEvaluator.navigateAll]] resolve all columns in a single traversal of a row item
- * instead of re-parsing the item once per column.
+ * A prefix trie over the (wildcard-free) column paths and nested paths of one COLUMNS clause of a
+ * `JSON_TABLE` invocation, built once via [[JsonTableEvaluator.buildPathTrie]] and reused for every
+ * row. It lets [[JsonTableEvaluator.navigateAll]] resolve all columns and nested paths in a single
+ * traversal of a row item instead of re-parsing the item once per column.
  *
  * Each node groups the paths that share a common prefix: `named`/`indexed` hold the object-key and
- * array-index steps to child nodes, and `terminals` lists the result-slot indices of the columns
- * whose path ends exactly at this node.
+ * array-index steps to child nodes, `terminals` lists the result-slot indices of the columns whose
+ * path ends exactly at this node, and `nested` the indices of the nested paths whose rows are read
+ * from the value at this node.
  */
 private[expressions] final class JsonTablePathTrie {
   // Result-slot indices of columns whose path terminates at this node.
   var terminals: List[Int] = Nil
   // Whether a value column (not just EXISTS columns) ends here, so the matched value is read.
   var needsValue: Boolean = false
+  // Indices into `JsonTableLevel.nested` of the nested paths that read the value at this node.
+  var nested: List[Int] = Nil
   // Object-key children, keyed by field name.
   val named: mutable.HashMap[String, JsonTablePathTrie] = mutable.HashMap.empty
   // Array-index children, keyed by index.
@@ -598,8 +601,44 @@ private[expressions] final class JsonTablePathTrie {
 
   def hasChildren: Boolean = named.nonEmpty || indexed.nonEmpty
 
-  /** True if no column path was inserted (e.g. an ordinality-only table): nothing to resolve. */
-  def isEmpty: Boolean = terminals.isEmpty && !hasChildren
+  /** True if no path was inserted (e.g. an ordinality-only table): nothing to resolve. */
+  def isEmpty: Boolean = terminals.isEmpty && nested.isEmpty && !hasChildren
+}
+
+/**
+ * One COLUMNS clause of a `JSON_TABLE`: the top-level clause, or that of a `NESTED PATH`. `trie`
+ * holds the paths of its value/EXISTS columns, by slot, and of its nested paths, by index into
+ * `nested`. `columns` maps each slot (one per column of the clause, including ordinality columns)
+ * to the index of its output column.
+ */
+private[expressions] final class JsonTableLevel(
+    val trie: JsonTablePathTrie,
+    val columns: Array[Int],
+    val nested: Array[JsonTableNestedPath])
+
+/**
+ * A `NESTED PATH` of a [[JsonTableLevel]]: the value at its path is one row of `level`, or, if the
+ * path ends in `[*]` (`explode`), each element of that array is.
+ */
+private[expressions] final class JsonTableNestedPath(
+    val explode: Boolean,
+    val level: JsonTableLevel)
+
+/**
+ * The resolved row of a [[JsonTableLevel]]: `values` holds the result of each slot (ordinality
+ * slots stay `Missing`), and `nested` the rows of each nested path of the level, or null where a
+ * nested path has no rows.
+ */
+private[expressions] final class JsonTableRow(level: JsonTableLevel) {
+  val values: Array[JsonPathResult] =
+    Array.fill[JsonPathResult](level.columns.length)(JsonPathResult.Missing)
+  val nested: Array[mutable.ArrayBuffer[JsonTableRow]] =
+    if (level.nested.isEmpty) null else new Array(level.nested.length)
+
+  def addNested(k: Int, row: JsonTableRow): Unit = {
+    if (nested(k) == null) nested(k) = mutable.ArrayBuffer.empty
+    nested(k) += row
+  }
 }
 
 /**
@@ -623,10 +662,11 @@ object PositionResult {
  * points, each with its own path constraints -- so `containerPath` is NOT wildcard-free in general:
  *
  *   - [[evaluateRows]] -- `JSON_TABLE` rows: given the input, a wildcard-free container path,
- *     whether the row path ended in `[*]`, and the trie of the column paths, resolves the columns
- *     of every row that the [[org.apache.spark.sql.catalyst.expressions.JsonTable]] generator
- *     produces. `$.items[*]` (containerPath `$.items`, `explodeRoot` = true) explodes an array into
- *     rows; `$` or `$.x` (`explodeRoot` = false) yields exactly one row.
+ *     whether the row path ended in `[*]`, and the COLUMNS clauses as a [[JsonTableLevel]],
+ *     resolves the columns and nested rows of every row that the
+ *     [[org.apache.spark.sql.catalyst.expressions.JsonTable]] generator produces. `$.items[*]`
+ *     (containerPath `$.items`, `explodeRoot` = true) explodes an array into rows; `$` or `$.x`
+ *     (`explodeRoot` = false) yields exactly one row.
  *   - [[lookup]] -- `JSON_VALUE` single-scalar extraction, over a wildcard-free path
  *     (`explodeRoot` = false).
  *   - [[pathExists]] -- `JSON_EXISTS` existence test. Here `containerPath` MAY contain wildcards
@@ -645,11 +685,10 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
   import SharedFactory._
 
   /**
-   * Resolves the columns of every row selected by the row path, returning the per-column results
-   * of each row (see [[navigateAll]]), or `None` if the JSON is null or malformed, or if `[*]` was
-   * applied to a non-array (the caller maps `None` to the configured ON ERROR behavior). A
-   * well-formed input whose row path matches nothing returns no rows. The slots of columns that
-   * are not in `trie` (ordinality columns) stay `Missing`.
+   * Resolves the columns and nested rows of every row selected by the row path (see
+   * [[navigateAll]]), or returns `None` if the JSON is null or malformed, or if `[*]` was applied
+   * to a non-array (the caller maps `None` to the configured ON ERROR behavior). A well-formed
+   * input whose row path matches nothing returns no rows.
    *
    * A single parser positions at the row source, resolves each row's columns directly from it
    * (no row is serialized and parsed again), and then checks with [[drainToRootEnd]] that nothing
@@ -659,12 +698,11 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
    */
   final def evaluateRows(
       json: UTF8String,
-      trie: JsonTablePathTrie,
-      numColumns: Int): Option[Iterator[Array[JsonPathResult]]] = {
+      level: JsonTableLevel): Option[Iterator[JsonTableRow]] = {
     if (json == null) return None
     val parser = CreateJacksonParser.utf8String(jsonFactory, json)
     try {
-      resolveRows(parser, trie, numColumns)
+      resolveRows(parser, level)
     } catch {
       case _: JsonProcessingException => None
     } finally {
@@ -674,37 +712,62 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
 
   private def resolveRows(
       parser: JsonParser,
-      trie: JsonTablePathTrie,
-      numColumns: Int): Option[Iterator[Array[JsonPathResult]]] = {
+      level: JsonTableLevel): Option[Iterator[JsonTableRow]] = {
     if (parser.nextToken() == null) return None // empty or whitespace-only
-    val rows = mutable.ArrayBuffer.empty[Array[JsonPathResult]]
-    // Resolves the columns of the row at the parser's current token, consuming the row.
-    def resolveRow(): Unit = {
-      val out = Array.fill[JsonPathResult](numColumns)(JsonPathResult.Missing)
-      // No path columns (e.g. an ordinality-only table): nothing to resolve within the row.
-      if (trie.isEmpty) skipRest(parser) else navigateAll(parser, trie, out)
-      rows += out
-    }
+    val rows = mutable.ArrayBuffer.empty[JsonTableRow]
     positionAt(parser, containerPath) match {
       case PositionResult.Missing =>
         // The row path matched nothing: no rows, if the input is well-formed (checked below).
       case PositionResult.NullValue =>
         // The container is JSON null. `[*]` over a non-array is an error; otherwise one row.
         if (explodeRoot) return None
-        resolveRow()
+        rows += resolveRow(parser, level)
       case PositionResult.AtValue if !explodeRoot =>
-        resolveRow()
+        rows += resolveRow(parser, level)
       case PositionResult.AtValue =>
         // `[*]` requires an array; a non-array match is an error.
         if (parser.currentToken != JsonToken.START_ARRAY) return None
         var token = parser.nextToken()
         while (token != JsonToken.END_ARRAY) {
           if (token == null) return None // truncated
-          resolveRow()
+          rows += resolveRow(parser, level)
           token = parser.nextToken()
         }
     }
     if (drainToRootEnd(parser)) Some(rows.iterator) else None
+  }
+
+  // Resolves the row of `level` at the parser's current token, consuming it.
+  private def resolveRow(parser: JsonParser, level: JsonTableLevel): JsonTableRow = {
+    val row = new JsonTableRow(level)
+    // No path columns or nested paths (e.g. an ordinality-only level): nothing to read.
+    if (level.trie.isEmpty) skipRest(parser) else navigateAll(parser, level.trie, level, row)
+    row
+  }
+
+  /**
+   * Adds the rows of the `k`-th nested path of `level` read from the value at the parser's current
+   * token to `row`, consuming the value. `[*]` over a non-array, including a JSON null, matches
+   * nothing (as in MySQL), so `row` is kept with NULL nested columns rather than failing the whole
+   * input as the row path does.
+   */
+  private def resolveNested(
+      parser: JsonParser,
+      level: JsonTableLevel,
+      k: Int,
+      row: JsonTableRow): Unit = {
+    val nested = level.nested(k)
+    if (!nested.explode) {
+      row.addNested(k, resolveRow(parser, nested.level))
+    } else if (parser.currentToken == JsonToken.START_ARRAY) {
+      var token = parser.nextToken()
+      while (token != null && token != JsonToken.END_ARRAY) {
+        row.addNested(k, resolveRow(parser, nested.level))
+        token = parser.nextToken()
+      }
+    } else {
+      skipRest(parser)
+    }
   }
 
   /**
@@ -1065,10 +1128,11 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
   }
 
   /**
-   * Resolves every column of `trie` against the value at the parser's current token in a single
-   * traversal, writing each matched terminal's [[JsonPathResult]] into `out` at its slot index, and
-   * consumes the value. Only the simple wildcard-free instruction set produced for `JSON_TABLE`
-   * paths is modeled by the trie (`Key`/`Named` object steps and `Subscript`/`Index` array steps).
+   * Resolves every column and nested path of `trie` against the value at the parser's current
+   * token in a single traversal, writing each matched terminal's [[JsonPathResult]] into `row` at
+   * its slot index and adding the rows of each matched nested path, and consumes the value. Only
+   * the simple wildcard-free instruction set produced for `JSON_TABLE` paths is modeled by the trie
+   * (`Key`/`Named` object steps and `Subscript`/`Index` array steps).
    *
    * Slots left untouched keep their initial `Missing`. A matched value is stored as the text that a
    * value column casts (see [[valueText]]), or as [[JsonPathResult.Present]] when only `EXISTS`
@@ -1077,55 +1141,69 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
   private def navigateAll(
       parser: JsonParser,
       trie: JsonTablePathTrie,
-      out: Array[JsonPathResult]): Unit = {
-    val isNull = parser.currentToken == JsonToken.VALUE_NULL
-
-    if (!trie.hasChildren) {
-      // Leaf node: every column terminates here, so just record the current value (or null) and
-      // consume it. This is the common case for disjoint column paths.
-      if (trie.terminals.nonEmpty) {
-        val result = if (isNull) {
-          JsonPathResult.NullValue
-        } else if (trie.needsValue) {
-          JsonPathResult.Found(valueText(parser))
-        } else {
+      level: JsonTableLevel,
+      row: JsonTableRow): Unit = {
+    parser.currentToken match {
+      case JsonToken.START_OBJECT | JsonToken.START_ARRAY =>
+        // A value column, each nested path, and the deeper paths each consume an object or array.
+        val readsValue = trie.terminals.nonEmpty && trie.needsValue
+        val readers = (if (readsValue) 1 else 0) + trie.nested.length +
+          (if (trie.hasChildren) 1 else 0)
+        // Only EXISTS columns end here, so the value is not needed.
+        if (trie.terminals.nonEmpty && !readsValue) setTerminals(trie, row, JsonPathResult.Present)
+        if (readers == 0) {
           skipRest(parser)
-          JsonPathResult.Present
-        }
-        trie.terminals.foreach(out(_) = result)
-      } else {
-        skipRest(parser)
-      }
-    } else if (trie.terminals.nonEmpty && !isNull) {
-      // A column path both ends here and extends deeper (e.g. `$.a` alongside `$.a.b`).
-      parser.currentToken match {
-        case JsonToken.START_OBJECT | JsonToken.START_ARRAY if trie.needsValue =>
-          // Serialize the value once for the terminals, then parse that fragment to resolve the
-          // deeper columns -- this rare prefix overlap is the only place a value is parsed more
-          // than once, and even then the deeper columns are resolved in a single sub-traversal.
-          val result = JsonPathResult.Found(serializeCurrentValue(parser))
-          trie.terminals.foreach(out(_) = result)
-          Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, result.text)) { sub =>
-            sub.nextToken()
-            descendInto(sub, trie, out)
+        } else if (readers == 1) {
+          if (readsValue) {
+            setTerminals(trie, row, JsonPathResult.Found(serializeCurrentValue(parser)))
+          } else if (trie.hasChildren) {
+            descendInto(parser, trie, level, row)
+          } else {
+            resolveNested(parser, level, trie.nested.head, row)
           }
-        case JsonToken.START_OBJECT | JsonToken.START_ARRAY =>
-          // Only EXISTS columns end here, so the value is not needed: descend directly.
-          trie.terminals.foreach(out(_) = JsonPathResult.Present)
-          descendInto(parser, trie, out)
-        case _ =>
-          // A scalar has no children, so the deeper columns stay Missing.
-          val result =
-            if (trie.needsValue) JsonPathResult.Found(valueText(parser)) else JsonPathResult.Present
-          trie.terminals.foreach(out(_) = result)
-      }
-    } else {
-      // Descend for the deeper columns. Any terminal ending at this node resolves to `NullValue`:
-      // the earlier `!isNull` branch already handled non-null terminals, so a terminal reaching
-      // here means the value is a JSON null. Descendant-only slots that do not match stay `Missing`
-      // (a null has no children, so `descendInto` skips it and leaves them untouched).
-      if (trie.terminals.nonEmpty) trie.terminals.foreach(out(_) = JsonPathResult.NullValue)
-      descendInto(parser, trie, out)
+        } else {
+          // Several readers of one value (e.g. `$.a` alongside `$.a.b`): serialize it once and
+          // parse that fragment again for each reader. This rare overlap is the only place a value
+          // is parsed more than once.
+          val text = serializeCurrentValue(parser)
+          if (readsValue) setTerminals(trie, row, JsonPathResult.Found(text))
+          trie.nested.foreach(k => reparse(text)(resolveNested(_, level, k, row)))
+          if (trie.hasChildren) reparse(text)(descendInto(_, trie, level, row))
+        }
+      case token =>
+        // A scalar or JSON null is a single token, which reading does not consume, so every
+        // reader reads it in place. Deeper paths do not match it and stay Missing.
+        if (trie.terminals.nonEmpty) {
+          val result = if (token == JsonToken.VALUE_NULL) {
+            JsonPathResult.NullValue
+          } else if (trie.needsValue) {
+            JsonPathResult.Found(valueText(parser))
+          } else {
+            JsonPathResult.Present
+          }
+          setTerminals(trie, row, result)
+        }
+        if (trie.nested.nonEmpty) trie.nested.foreach(resolveNested(parser, level, _, row))
+    }
+  }
+
+  // A loop rather than `foreach`, to not allocate a closure per matched value.
+  private def setTerminals(
+      trie: JsonTablePathTrie,
+      row: JsonTableRow,
+      result: JsonPathResult): Unit = {
+    var terminals = trie.terminals
+    while (terminals.nonEmpty) {
+      row.values(terminals.head) = result
+      terminals = terminals.tail
+    }
+  }
+
+  // Reads `text`, a value serialized by `serializeCurrentValue`, with a new parser.
+  private def reparse(text: UTF8String)(read: JsonParser => Unit): Unit = {
+    Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, text)) { parser =>
+      parser.nextToken()
+      read(parser)
     }
   }
 
@@ -1153,7 +1231,8 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
   private def descendInto(
       parser: JsonParser,
       trie: JsonTablePathTrie,
-      out: Array[JsonPathResult]): Unit = {
+      level: JsonTableLevel,
+      row: JsonTableRow): Unit = {
     parser.currentToken match {
       case JsonToken.START_OBJECT if trie.named.isEmpty =>
         // No object-key columns descend here (only array-index paths): skip the whole object.
@@ -1169,7 +1248,7 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
           val child = trie.named.get(name)
           parser.nextToken() // move onto the field value
           if (child.isDefined && consumed.add(name)) {
-            navigateAll(parser, child.get, out)
+            navigateAll(parser, child.get, level, row)
           } else {
             parser.skipChildren()
           }
@@ -1186,7 +1265,7 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
         while (token != null && token != JsonToken.END_ARRAY) {
           val child = trie.indexed.get(i)
           if (child.isDefined) {
-            navigateAll(parser, child.get, out)
+            navigateAll(parser, child.get, level, row)
           } else {
             parser.skipChildren()
           }
@@ -1220,35 +1299,44 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
   }
 
   /**
-   * Builds the prefix trie that lets [[evaluateRows]] resolve every column path in one pass. The
-   * `paths` are indexed by result slot; a slot whose `include` is false (an ordinality column,
-   * which has no JSON path) contributes nothing to the trie -- note this is distinct from a root
-   * path `$`, which is an *empty but included* path that must resolve to the whole item. A slot
-   * whose `needsValue` is false (an EXISTS column) only needs to know whether its path matches.
-   * Call once per `JSON_TABLE` invocation and reuse the result for every row.
+   * Builds the prefix trie that lets [[evaluateRows]] resolve every column path and nested path of
+   * a COLUMNS clause in one pass. The `paths` are indexed by result slot; a slot whose `include` is
+   * false (an ordinality column, which has no JSON path) contributes nothing to the trie -- note
+   * this is distinct from a root path `$`, which is an *empty but included* path that must resolve
+   * to the whole item. A slot whose `needsValue` is false (an EXISTS column) only needs to know
+   * whether its path matches. `nestedPaths` are the container paths of the nested paths (without
+   * any trailing `[*]`), by index. Call once per `JSON_TABLE` invocation and reuse the result for
+   * every row.
    */
   def buildPathTrie(
       paths: Array[Seq[PathInstruction]],
       include: Array[Boolean],
-      needsValue: Array[Boolean]): JsonTablePathTrie = {
+      needsValue: Array[Boolean],
+      nestedPaths: Seq[Seq[PathInstruction]]): JsonTablePathTrie = {
     val root = new JsonTablePathTrie
     var slot = 0
     while (slot < paths.length) {
-      if (include(slot)) insertPath(root, paths(slot), slot, needsValue(slot))
+      if (include(slot)) {
+        nodeAt(root, paths(slot)).foreach { node =>
+          node.terminals ::= slot
+          node.needsValue ||= needsValue(slot)
+        }
+      }
       slot += 1
+    }
+    nestedPaths.zipWithIndex.foreach { case (path, k) =>
+      nodeAt(root, path).foreach(node => node.nested ::= k)
     }
     root
   }
 
-  private def insertPath(
+  // The node at the end of `path`, created as needed, or None for a path the trie cannot hold.
+  private def nodeAt(
       root: JsonTablePathTrie,
-      path: Seq[PathInstruction],
-      slot: Int,
-      needsValue: Boolean): Unit = {
+      path: Seq[PathInstruction]): Option[JsonTablePathTrie] = {
     var node = root
     var rest = path
-    var valid = true
-    while (rest.nonEmpty && valid) {
+    while (rest.nonEmpty) {
       rest match {
         case Key :: Named(name) :: tail =>
           node = node.named.getOrElseUpdate(name, new JsonTablePathTrie)
@@ -1257,15 +1345,12 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
           node = node.indexed.getOrElseUpdate(index, new JsonTablePathTrie)
           rest = tail
         case _ =>
-          // Should not happen: JSON_TABLE column paths are validated to be simple and
-          // wildcard-free. Drop the slot rather than mis-resolve it (it will read as Missing).
-          valid = false
+          // Should not happen: JSON_TABLE paths are validated to be simple and wildcard-free.
+          // Drop the path rather than mis-resolve it (its column reads as Missing).
+          return None
       }
     }
-    if (valid) {
-      node.terminals ::= slot
-      node.needsValue ||= needsValue
-    }
+    Some(node)
   }
 }
 

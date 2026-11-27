@@ -3371,13 +3371,14 @@ class AstBuilder extends DataTypeAstBuilder
     val jsonExpr = expression(jt.jsonExpr)
     val rowPath = string(visitStringLit(jt.rowPath))
 
-    val columns = jt.jsonTableColumn.asScala.map(buildJsonTableColumn).toSeq
-    // Column names must be unique within a single JSON_TABLE. Whether two names that differ only
-    // in case collide follows the configured resolver, so `a` and `A` stay distinct under
-    // `spark.sql.caseSensitive`.
+    val columns = buildJsonTableColumns(jt.jsonTableColumns)
+    val outputColumns = JsonTableColumnDefinition.flatten(columns)
+    // Column names must be unique within a single JSON_TABLE, including those of nested paths, as
+    // all of them are output columns. Whether two names that differ only in case collide follows
+    // the configured resolver, so `a` and `A` stay distinct under `spark.sql.caseSensitive`.
     val normalize: String => String =
       if (conf.caseSensitiveAnalysis) identity else _.toLowerCase(Locale.ROOT)
-    val duplicate = columns.groupBy(c => normalize(c.name)).collectFirst {
+    val duplicate = outputColumns.groupBy(c => normalize(c.name)).collectFirst {
       case (_, cols) if cols.length > 1 => cols.head.name
     }
     duplicate.foreach { name =>
@@ -3397,7 +3398,7 @@ class AstBuilder extends DataTypeAstBuilder
       unrequiredChildIndex = Nil,
       outer = false,
       qualifier = None,
-      generatorOutput = columns.map(c => UnresolvedAttribute.quoted(c.name)),
+      generatorOutput = outputColumns.map(c => UnresolvedAttribute.quoted(c.name)),
       child = OneRowRelation())
     mayApplyAliasPlan(jt.tableAlias, generate)
   }
@@ -3411,12 +3412,16 @@ class AstBuilder extends DataTypeAstBuilder
    */
   private def implicitJsonTablePath(name: String): String = s"$$['$name']"
 
+  private def buildJsonTableColumns(ctx: JsonTableColumnsContext): Seq[JsonTableColumnDefinition] =
+    ctx.jsonTableColumn.asScala.map(buildJsonTableColumn).toSeq
+
   /**
-   * Build a single [[JsonTableColumn]] from a `jsonTableColumn` grammar context. A value column
-   * with no explicit PATH gets an implicit path derived from its name (see
+   * Build a single [[JsonTableColumnDefinition]] from a `jsonTableColumn` grammar context. A value
+   * column with no explicit PATH gets an implicit path derived from its name (see
    * [[implicitJsonTablePath]]), matching the SQL standard / Oracle behavior.
    */
-  private def buildJsonTableColumn(ctx: JsonTableColumnContext): JsonTableColumn = withOrigin(ctx) {
+  private def buildJsonTableColumn(
+      ctx: JsonTableColumnContext): JsonTableColumnDefinition = withOrigin(ctx) {
     ctx match {
       case ord: JsonTableOrdinalityColumnContext =>
         JsonTableColumn(
@@ -3446,6 +3451,10 @@ class AstBuilder extends DataTypeAstBuilder
             typedVisit[DataType](v.dataType)),
           path = Some(path),
           kind = JsonTableColumnKind.Value)
+      case n: JsonTableNestedColumnsContext =>
+        JsonTableNestedColumns(
+          path = string(visitStringLit(n.path)),
+          columns = buildJsonTableColumns(n.jsonTableColumns))
     }
   }
 
