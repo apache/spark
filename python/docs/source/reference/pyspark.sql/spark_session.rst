@@ -54,6 +54,7 @@ See also :class:`SparkSession`.
     SparkSession.dataSource
     SparkSession.emptyDataFrame
     SparkSession.getActiveSession
+    SparkSession.getOrCreateDataFrame
     SparkSession.getTags
     SparkSession.interruptAll
     SparkSession.interruptOperation

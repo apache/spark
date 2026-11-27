@@ -164,6 +164,12 @@ case class AnalysisContext(
     // 2. If we are not resolving a view, this field will be updated everytime the analyzer
     //    lookup a temporary function. And export to the view metadata.
     referredTempFunctionNames: mutable.Set[String] = mutable.Set.empty,
+    // The temporary functions that resolution built in this analysis, including in the SQL
+    // functions it expands but not in views. Unlike `referredTempFunctionNames`, a lookup that only
+    // checks whether a function exists does not add to it. A persistent SQL function rejects them
+    // unless `spark.sql.legacy.allowTempFunctionInPersistedSQLFunction` is set. Insertion order
+    // keeps the name the error reports deterministic.
+    boundTempFunctionNames: mutable.Set[String] = mutable.LinkedHashSet.empty,
     referredTempVariableNames: Seq[Seq[String]] = Seq.empty,
     // The temporary variables that the analyzed plan does not mention: those that an IDENTIFIER
     // clause reads, which `ResolveIdentifierClause` records only in fixed-point analysis, like
@@ -634,6 +640,8 @@ class Analyzer(
         self.singlePassResolverExtensions
       override val singlePassMetadataResolverExtensions: Seq[ResolverExtension] =
         self.singlePassMetadataResolverExtensions
+      override def singlePassHintResolutionRules: Seq[Rule[LogicalPlan]] =
+        self.singlePassHintResolutionRules
       override val singlePassPostHocResolutionRules: Seq[Rule[LogicalPlan]] =
         self.singlePassPostHocResolutionRules
       override val singlePassExtendedResolutionChecks: Seq[LogicalPlan => Unit] =
@@ -705,7 +713,8 @@ class Analyzer(
 
   /**
    * Like [[execute]], but also returns the temporary variables recorded via IDENTIFIER clauses
-   * during this analysis (`AnalysisContext.referredTempVariableNamesUnderIdentifier`).
+   * during this analysis (`AnalysisContext.referredTempVariableNamesUnderIdentifier`), and the
+   * temporary functions that function resolution built (`AnalysisContext.boundTempFunctionNames`).
    *
    * SQL function creation analyzes the body, inspects it, and only then runs `checkAnalysis`, so
    * it cannot go through [[executeAndCheckReferredTempVariablesUnderIdentifier]]. It still needs
@@ -714,17 +723,21 @@ class Analyzer(
    *
    * Only the variables read by the body itself are returned. A SQL function that the body calls
    * is expanded in a context of its own, so a variable it reads through an IDENTIFIER clause stays
-   * that function's dependency rather than becoming one of the function under creation.
+   * that function's dependency rather than becoming one of the function under creation. Temporary
+   * functions, by contrast, include those built while expanding a called function.
    */
-  def executeWithReferredTempVariablesUnderIdentifier(
+  def executeWithReferredTempObjects(
       plan: LogicalPlan,
-      isPersistentSQLFunctionBody: Boolean = false): (LogicalPlan, Seq[Seq[String]]) = {
+      isPersistentSQLFunctionBody: Boolean = false)
+      : (LogicalPlan, Seq[Seq[String]], Seq[String]) = {
     AnalysisContext.withNewAnalysisContext {
       AnalysisContext.withSharingIdentifierVariablesWithNestedSQLFunctions(share = false) {
         AnalysisContext.withPersistentSQLFunctionBody(isPersistentSQLFunctionBody) {
           val analyzed = executeSameContext(plan)
-          // Read the accumulator before the context is restored on exit.
-          (analyzed, AnalysisContext.get.referredTempVariableNamesUnderIdentifier.toSeq)
+          // Read the accumulators before the context is restored on exit.
+          val context = AnalysisContext.get
+          (analyzed, context.referredTempVariableNamesUnderIdentifier.toSeq,
+            context.boundTempFunctionNames.toSeq)
         }
       }
     }
@@ -778,6 +791,16 @@ class Analyzer(
    * See [[ResolverExtension]] for more info.
    */
   val singlePassMetadataResolverExtensions: Seq[ResolverExtension] = Nil
+
+  /**
+   * Rules for the "Hints" batch of the single-pass Resolver. They are applied before the relation
+   * metadata is resolved, which is the position the fixed-point "Hints" batch has relative to
+   * `ResolveSQLOnFile`.
+   *
+   * Defaults to [[hintResolutionRules]], so that the two analyzers stay in sync by default.
+   * Override to run a different set of rules under the single-pass Resolver.
+   */
+  def singlePassHintResolutionRules: Seq[Rule[LogicalPlan]] = hintResolutionRules
 
   /**
    * Override to provide rules to do post-hoc resolution. This batch is to run right after the

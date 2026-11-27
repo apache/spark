@@ -670,17 +670,6 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS =
-    buildConf("spark.sql.optimizer.splitProjectionForExpensiveFilters")
-    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
-    .doc("When true, split a projection into several projections with the filters which " +
-      "reference its expensive (UDF, etc.) elements in between, so an expensive element is only " +
-      "evaluated for the rows which survived the filters below it. Costs an extra operator per " +
-      s"split, and only applies when ${AVOID_DOUBLE_FILTER_EVAL.key} is also enabled.")
-    .version("4.4.0")
-    .booleanConf
-    .createWithDefault(true)
-
   val REGEX_PATTERN_COST_ESTIMATE_VERSION =
     buildConf("spark.sql.optimizer.regexPatternCostEstimateVersion")
     .internal()
@@ -1938,6 +1927,46 @@ object SQLConf {
         "evaluated in the order of the condition on every row, not only on rows where a " +
         "conjunct is NULL.")
       .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
+  val EVALUATE_NOT_NULL_CHECKS_IN_ORDER =
+    buildConf("spark.sql.optimizer.evaluateNotNullChecksInOrder")
+      .internal()
+      .doc("When true, an IS NOT NULL check in a filter condition, including the FILTER clause " +
+        "of an aggregate function, is evaluated in the order of the condition, as the " +
+        "interpreted evaluation does, so that it drops a row before an error that a later " +
+        "conjunct raises on the row. With whole-stage codegen, a check that cannot raise an " +
+        "error is evaluated at its position before a conjunct that can raise one, is " +
+        "nondeterministic, calls a user-defined function, or evaluates a column that the same " +
+        "stage computes on demand by an expression that can raise, instead of just before the " +
+        "first conjunct that references its column; a check whose column the same stage has " +
+        "not computed yet, by an expression that can raise, keeps the latter placement, except " +
+        "after a conjunct that can be NULL, as when false. So does a check that can raise an " +
+        "error itself, so a check after it can drop a row on which the interpreted evaluation " +
+        "raises the error of that check. Also, a check on a column is still evaluated before " +
+        "the first conjunct that references the column, even when it is written after it, " +
+        "for example `isnotnull(x)` before `coalesce(x, 1) + y > 0` in " +
+        "`coalesce(x, 1) + y > 0 AND x > 0`. A predicate that the optimizer " +
+        "infers from the condition is placed just before the first conjunct at which the " +
+        "conjuncts so far imply it, instead of at the front of the condition, so with " +
+        "whole-stage codegen off it is evaluated after the nondeterministic or user-defined " +
+        "function conjuncts that precede that one, and after the ones that can raise an " +
+        "error: for example, an inferred `isnotnull(x)` no longer drops a row with a NULL `x` " +
+        "before `y + 1 > 0` raises on it in `y + 1 > 0 AND x > 0`. To place the inferred " +
+        "predicates, the optimizer computes the constraints of up to every prefix of the " +
+        "condition, which grows quadratically with the number of conjuncts, e.g. about 0.1 " +
+        "seconds for 200 conjuncts. A predicate pushed down " +
+        "to a DSv2 data source is still evaluated before the others, by the source or after " +
+        "the scan, while " +
+        "after the scan of a DSv1 source, a pushed predicate that the source does not handle " +
+        "is evaluated after the ones that cannot be pushed down. When false, with whole-stage " +
+        "codegen, a check is evaluated just before the first conjunct that references its " +
+        "column, or after all conjuncts, except after a conjunct that can be NULL (see " +
+        s"${LEGACY_FILTER_SHORT_CIRCUIT_ON_NULL_CONJUNCT.key}), so a conjunct before that " +
+        "position can raise an error on a row that the check rejects.")
+      .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
@@ -4548,6 +4577,19 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val STATEFUL_OPERATOR_SHUFFLE_BEFORE_CARTESIAN_PRODUCT_ENABLED =
+    buildConf("spark.sql.streaming.statefulOperator.shuffleBeforeCartesianProduct.enabled")
+      .internal()
+      .doc("When true, a Cartesian product that reads the output of a stateful operator in the " +
+        "same stage reads it through a shuffle instead. A Cartesian product runs one task per " +
+        "pair of input partitions, so without the shuffle each state store partition is loaded " +
+        "by one task per partition of the other input, and those tasks wait on each other for " +
+        "the same state store.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val STATEFUL_OPERATOR_USE_STRICT_DISTRIBUTION =
     buildConf("spark.sql.streaming.statefulOperator.useStrictDistribution")
       .internal()
@@ -4846,6 +4888,19 @@ object SQLConf {
         "resolution rules.")
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_ALLOW_TEMP_FUNCTION_IN_PERSISTED_SQL_FUNCTION =
+    buildConf("spark.sql.legacy.allowTempFunctionInPersistedSQLFunction")
+      .internal()
+      .doc("When true, CREATE FUNCTION for a persistent SQL function rejects only the temporary " +
+        "function references that earlier versions detected, and accepts the others again, such " +
+        "as a call to a temporary table function, a call through an IDENTIFIER clause, or a use " +
+        "through another SQL function. Called from a session without the temporary function, " +
+        "such a function fails or calls another function of the same name.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
 
@@ -7186,6 +7241,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val PROPAGATE_EMPTY_RELATION_CAN_PRUNE_STREAMING_UNION_CHILDREN =
+    buildConf("spark.sql.optimizer.propagateEmptyRelationCanPruneStreamingUnionChildren")
+      .internal()
+      .doc("Allow PropagateEmptyRelation to remove the empty children of a streaming Union, " +
+        "such as a source without data in a micro-batch. This flag is to restore prior " +
+        "behavior for streaming queries whose checkpoint was written with it.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
@@ -7892,6 +7958,21 @@ object SQLConf {
         "can be converted to TimestampNTZType when JDBC read option preferTimestampNTZ is " +
         "true; otherwise, converted to TimestampType regardless of preferTimestampNTZ.")
       .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_JDBC_ROUND_INTEGRAL_CAST_PUSHDOWN =
+    buildConf("spark.sql.legacy.jdbc.roundIntegralCastPushdown.enabled")
+      .internal()
+      .doc("When true, casts pushed down to a JDBC data source compile to the SQL that Spark 4.4 " +
+        "sent. A cast from a fractional type to an integral type then follows the database's own " +
+        "semantics, so databases that round it return different results than Spark, which " +
+        "truncates toward zero. Such casts are pushed down again to dialects that can't " +
+        "truncate, and so are casts from datetime types to numeric types, although databases " +
+        "convert them differently than Spark. Casts that the database rejects fail again, or, " +
+        "in an aggregate, are evaluated by Spark.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
@@ -10543,6 +10624,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyJdbcTimeMappingEnabled: Boolean =
     getConf(LEGACY_JDBC_TIME_MAPPING_ENABLED)
 
+  def legacyJdbcRoundIntegralCastPushdown: Boolean =
+    getConf(LEGACY_JDBC_ROUND_INTEGRAL_CAST_PUSHDOWN)
+
   override def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value =
     getConf(SQLConf.LEGACY_TIME_PARSER_POLICY)
 
@@ -10597,6 +10681,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyFilterShortCircuitOnNullConjunct: Boolean =
     getConf(LEGACY_FILTER_SHORT_CIRCUIT_ON_NULL_CONJUNCT)
+
+  def evaluateNotNullChecksInOrder: Boolean = getConf(EVALUATE_NOT_NULL_CHECKS_IN_ORDER)
 
   def autoBroadcastJoinThreshold: Long = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 
@@ -11195,9 +11281,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def charVarcharStandardSemantics: Boolean = getConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS)
 
   def avoidDoubleFilterEval: Boolean = getConf(AVOID_DOUBLE_FILTER_EVAL)
-
-  def splitProjectionForExpensiveFilters: Boolean =
-    getConf(SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS)
 
   def structPredicateDecomposeEnabled: Boolean = getConf(STRUCT_PREDICATE_DECOMPOSE_ENABLED)
 

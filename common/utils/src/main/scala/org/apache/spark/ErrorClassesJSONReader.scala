@@ -19,6 +19,8 @@ package org.apache.spark
 
 import java.net.URL
 
+import scala.util.Try
+
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.core.`type`.TypeReference
 import com.fasterxml.jackson.databind.json.JsonMapper
@@ -75,6 +77,14 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
     }
     errorMessage
   }
+
+  /**
+   * Returns whether [[getErrorMessage]] renders `errorClass` with `messageParameters` without
+   * throwing. It renders the message instead of checking each failure condition, so that it keeps
+   * matching [[getErrorMessage]] when those conditions change.
+   */
+  def canRender(errorClass: String, messageParameters: Map[String, Any]): Boolean =
+    Try(getErrorMessage(errorClass, messageParameters)).isSuccess
 
   def getMessageParameters(errorClass: String): Seq[String] = {
     val messageTemplate = getMessageTemplate(errorClass)

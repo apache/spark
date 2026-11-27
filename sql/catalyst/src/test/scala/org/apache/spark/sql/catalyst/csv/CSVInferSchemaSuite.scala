@@ -324,4 +324,25 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
       assert(inferSchema.inferField(timeType, "2023-01-01") == StringType)
     }
   }
+
+  test("SPARK-59546: TimeType inference handles custom and unusable formats") {
+    Seq("true", "false").foreach { enabled =>
+      withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> enabled) {
+        val options = new CSVOptions(Map("timeFormat" -> "EEE HH:mm"),
+          columnPruning = false, defaultTimeZoneId = "UTC")
+        val inferSchema = new CSVInferSchema(options)
+        assert(inferSchema.inferField(NullType, "plain") == StringType)
+        // An unusable format skips TIME rather than falling back to the default formatter.
+        assert(inferSchema.inferField(NullType, "12:13:14") == TimestampType)
+      }
+    }
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      val options = new CSVOptions(Map("timeFormat" -> "hh:mm:ss"),
+        columnPruning = false, defaultTimeZoneId = "UTC")
+      val inferSchema = new CSVInferSchema(options)
+      val timeType = TimeType(TimeType.DEFAULT_PRECISION)
+      assert(inferSchema.inferField(NullType, "11:30:01") == timeType)
+      assert(inferSchema.inferField(timeType, "17:30:01") == StringType)
+    }
+  }
 }

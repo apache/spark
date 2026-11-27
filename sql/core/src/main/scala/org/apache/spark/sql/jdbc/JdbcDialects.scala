@@ -459,10 +459,63 @@ abstract class JdbcDialect extends Serializable with Logging {
     }
 
     override def visitCast(expr: String, exprDataType: DataType, dataType: DataType): String = {
-      val databaseTypeDefinition =
-        getJDBCType(dataType).map(_.databaseTypeDefinition).getOrElse(dataType.typeName)
-      s"CAST($expr AS $databaseTypeDefinition)"
+      val mappedType = getJDBCType(dataType).map(_.databaseTypeDefinition)
+      val legacyIntegralCastPushdown = JdbcUtils.legacyIntegralCastPushdown
+      val (fromElement, toElement) = elementTypes(exprDataType, dataType)
+      if (!legacyIntegralCastPushdown && fromElement.isInstanceOf[DatetimeType] &&
+          toElement.isInstanceOf[NumericType] && !castsDatetimeToNumericLikeSpark) {
+        cannotPushCast(exprDataType, dataType, "the dialect doesn't declare that the database " +
+          "converts datetimes to numbers like Spark (JdbcDialect.castsDatetimeToNumericLikeSpark)")
+      }
+      if (!legacyIntegralCastPushdown && isFractionalToIntegral(exprDataType, dataType)) {
+        val databaseTypeDefinition = mappedType.getOrElse(dataType match {
+          // Spark's names `short` and `long` aren't valid SQL types. TINYINT isn't portable either,
+          // so ByteType keeps Spark's name.
+          case ShortType => "SMALLINT"
+          case IntegerType => "INTEGER"
+          case LongType => "BIGINT"
+          case _ => dataType.typeName
+        })
+        val value = exprDataType match {
+          case d: DecimalType if d.scale == 0 => expr
+          case f: FractionalType =>
+            truncateFractionalValue(expr, f).getOrElse(cannotPushCast(exprDataType, dataType,
+              "the dialect has no way to truncate the fraction like Spark " +
+                "(JdbcDialect.truncateFractionalValue)"))
+        }
+        s"CAST($value AS $databaseTypeDefinition)"
+      } else {
+        // The fraction can't be truncated inside an array cast, so such a cast is pushed only when
+        // the database's own cast already truncates.
+        val elementDropsFraction = !legacyIntegralCastPushdown &&
+          isFractionalToIntegral(fromElement, toElement) && (fromElement match {
+            case d: DecimalType => d.scale != 0
+            case _ => true
+          })
+        if (elementDropsFraction &&
+            !truncateFractionalValue(expr, fromElement.asInstanceOf[NumericType]).contains(expr)) {
+          cannotPushCast(exprDataType, dataType, "the database's cast doesn't truncate the " +
+            "elements like Spark (JdbcDialect.truncateFractionalValue)")
+        }
+        // TODO(SPARK-62090): casts from other types still spell unmapped targets with Spark's
+        // `short` and `long`, which most databases reject.
+        s"CAST($expr AS ${mappedType.getOrElse(dataType.typeName)})"
+      }
     }
+
+    protected def isFractionalToIntegral(from: DataType, to: DataType): Boolean =
+      from.isInstanceOf[FractionalType] && to.isInstanceOf[IntegralType]
+
+    // The innermost element types of a cast between arrays, or the types themselves otherwise.
+    private def elementTypes(from: DataType, to: DataType): (DataType, DataType) =
+      (from, to) match {
+        case (ArrayType(f, _), ArrayType(t, _)) => elementTypes(f, t)
+        case _ => (from, to)
+      }
+
+    protected def cannotPushCast(from: DataType, to: DataType, reason: String): Nothing =
+      throw new UnsupportedOperationException(
+        s"Spark evaluates CAST(${from.sql} AS ${to.sql}) instead of pushing it down: $reason")
 
     override def visitSQLFunction(funcName: String, inputs: Array[Expression]): String = {
       if (isSupportedFunction(funcName)) {
@@ -543,6 +596,35 @@ abstract class JdbcDialect extends Serializable with Logging {
       }
     }
   }
+
+  /**
+   * Truncates `expr` toward zero, so that a cast from a fractional type to an integral type that
+   * is pushed down matches Spark, which truncates rather than rounds. Dialects for databases that
+   * round such casts return the database's truncating function, and dialects for databases whose
+   * cast already truncates return `expr` unchanged. The default returns `None`, so Spark evaluates
+   * casts that drop a fraction instead of pushing them down. Casts from a `DECIMAL` with scale 0
+   * have no fraction to drop and are pushed down without calling this. A cast between arrays whose
+   * element cast drops a fraction is pushed down only when this returns `expr` unchanged for the
+   * element type, since the fraction can't be truncated inside the cast. Only the default
+   * `compileExpression` calls this; a dialect that overrides `compileExpression` with its own
+   * expression builder must handle these casts in that builder's `visitCast`.
+   * @param expr The SQL string of the value being cast.
+   * @param from The type of the value being cast: `FloatType`, `DoubleType`, or a `DecimalType`
+   *             with a nonzero scale.
+   * @return The SQL string to cast instead of `expr`, or `None` if the database can't truncate it.
+   */
+  @Since("4.5.0")
+  def truncateFractionalValue(expr: String, from: NumericType): Option[String] = None
+
+  /**
+   * Whether the database converts TIMESTAMP and TIME values to numbers as Spark does, for example
+   * a TIMESTAMP to seconds since the epoch. Spark pushes down a cast of such a value to a numeric
+   * type only when this is true; the default is false. Only the default `compileExpression` reads
+   * this; a dialect that overrides `compileExpression` with its own expression builder must handle
+   * these casts in that builder's `visitCast`.
+   */
+  @Since("4.5.0")
+  def castsDatetimeToNumericLikeSpark: Boolean = false
 
   /**
    * Returns whether the database supports function.
