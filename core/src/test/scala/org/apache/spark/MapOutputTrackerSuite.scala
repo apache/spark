@@ -1148,6 +1148,69 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
+  for ((numMaps, numReducers, expectLocality) <- Seq(
+      (999, 1, true), (1000, 1, false), (1001, 1, false),
+      (1, 999, true), (1, 1000, false), (1, 1001, false),
+      (999, 999, true), (1000, 1000, false))) {
+    test(s"getMapLocation locality thresholds: $numMaps maps, $numReducers reducers") {
+      val newConf = new SparkConf(false)
+        .set(SHUFFLE_REDUCE_LOCALITY_ENABLE, true)
+        .set(PUSH_BASED_SHUFFLE_ENABLED, false)
+        .set("spark.ui.enabled", "false")
+      val rpcEnv = createRpcEnv("test")
+      val tracker = newTrackerMaster(newConf)
+      try {
+        tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
+          new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, newConf))
+        sc = new SparkContext("local", "MapOutputTrackerSuite", newConf.clone())
+        // Real shuffle dependencies provide partition counts without submitting any Spark jobs.
+        val rdd = sc.parallelize(Seq(1 -> 1), numMaps)
+        val dep = new ShuffleDependency[Int, Int, Int](rdd, new HashPartitioner(numReducers))
+        tracker.registerShuffle(dep.shuffleId, numMaps, numReducers)
+        tracker.registerMapOutput(dep.shuffleId, 0,
+          MapStatus(BlockManagerId("exec-1", "hostA", 1000), Array.fill(numReducers)(1L), 0))
+
+        // The policy uses the whole shuffle's task counts, even for a one-map read range.
+        val expected = if (expectLocality) Seq("hostA") else Nil
+        assert(tracker.getMapLocation(dep, 0, 1) === expected)
+      } finally {
+        tracker.stop()
+        rpcEnv.shutdown()
+      }
+    }
+  }
+
+  test("getMapLocation preserves range validation, missing outputs and host deduplication") {
+    val newConf = new SparkConf(false)
+      .set(SHUFFLE_REDUCE_LOCALITY_ENABLE, true)
+      .set(PUSH_BASED_SHUFFLE_ENABLED, false)
+      .set("spark.ui.enabled", "false")
+    val rpcEnv = createRpcEnv("test")
+    val tracker = newTrackerMaster(newConf)
+    try {
+      tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
+        new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, newConf))
+      sc = new SparkContext("local", "MapOutputTrackerSuite", newConf.clone())
+      val rdd = sc.parallelize(Seq(1 -> 1), 3)
+      val dep = new ShuffleDependency[Int, Int, Int](rdd, new HashPartitioner(1))
+      tracker.registerShuffle(dep.shuffleId, 3, 1)
+      for (mapIndex <- Seq(0, 2)) {
+        tracker.registerMapOutput(dep.shuffleId, mapIndex,
+          MapStatus(BlockManagerId(s"exec-$mapIndex", "hostA", 1000), Array(1L), mapIndex))
+      }
+      assert(tracker.getMapLocation(dep, 0, 3) === Seq("hostA"))
+      assert(tracker.getMapLocation(dep, 1, 2) === Nil)
+      for ((start, end) <- Seq((-1, 1), (0, 4), (2, 2), (2, 1))) {
+        assert(tracker.getMapLocation(dep, start, end) === Nil)
+      }
+      tracker.unregisterShuffle(dep.shuffleId)
+      assert(tracker.getMapLocation(dep, 0, 3) === Nil)
+    } finally {
+      tracker.stop()
+      rpcEnv.shutdown()
+    }
+  }
+
   test("SPARK-44109: Remove duplicate preferred locations of each RDD partition") {
     val rpcEnv = createRpcEnv("test")
     val tracker = newTrackerMaster()

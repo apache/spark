@@ -1309,23 +1309,26 @@ private[spark] class MapOutputTrackerMaster(
   def getMapLocation(
       dep: ShuffleDependency[_, _, _],
       startMapIndex: Int,
-      endMapIndex: Int): Seq[String] =
-  {
-    if (!shuffleLocalityEnabled) return Nil
-
-    val shuffleStatus = shuffleStatuses.get(dep.shuffleId).orNull
-    if (shuffleStatus != null) {
-      shuffleStatus.withMapStatuses { statuses =>
-        if (startMapIndex < endMapIndex &&
-          (startMapIndex >= 0 && endMapIndex <= statuses.length)) {
-          val statusesPicked = statuses.slice(startMapIndex, endMapIndex).filter(_ != null)
-          statusesPicked.map(_.location.host).distinct.toImmutableArraySeq
-        } else {
-          Nil
-        }
-      }
-    } else {
+      endMapIndex: Int): Seq[String] = {
+    if (!shuffleLocalityEnabled ||
+        dep.rdd.partitions.length >= SHUFFLE_PREF_MAP_THRESHOLD ||
+        dep.partitioner.numPartitions >= SHUFFLE_PREF_REDUCE_THRESHOLD) {
       Nil
+    } else {
+      val shuffleStatus = shuffleStatuses.get(dep.shuffleId).orNull
+      if (shuffleStatus != null) {
+        shuffleStatus.withMapStatuses { statuses =>
+          if (startMapIndex < endMapIndex &&
+              (startMapIndex >= 0 && endMapIndex <= statuses.length)) {
+            val statusesPicked = statuses.slice(startMapIndex, endMapIndex).filter(_ != null)
+            statusesPicked.map(_.location.host).distinct.toImmutableArraySeq
+          } else {
+            Nil
+          }
+        }
+      } else {
+        Nil
+      }
     }
   }
 
