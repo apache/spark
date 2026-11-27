@@ -128,21 +128,22 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     // We do not test with configSet.
     withJdbcStatement() { statement =>
 
-      configSet.foreach { case (k, v) =>
-        statement.execute(s"SET $k = $v")
-      }
+      val caseConfigSet = configSet ++ (
+        testCase match {
+          case _: SQLQueryTestSuite#PgSQLTest =>
+            Seq(
+              (SQLConf.ANSI_ENABLED.key, "true"),
+              (SQLConf.LEGACY_INTERVAL_ENABLED.key, "true"))
+          case _: SQLQueryTestSuite#NonAnsiTest =>
+            Seq((SQLConf.ANSI_ENABLED.key, "false"))
+          case _: SQLQueryTestSuite#TimestampNTZTest =>
+            Seq((SQLConf.TIMESTAMP_TYPE.key, TimestampTypes.TIMESTAMP_NTZ.toString))
+          case _ =>
+            Seq((SQLConf.ANSI_ENABLED.key, "true"))
+        })
 
-      testCase match {
-        case _: SQLQueryTestSuite#PgSQLTest =>
-          statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = true")
-          statement.execute(s"SET ${SQLConf.LEGACY_INTERVAL_ENABLED.key} = true")
-        case _: SQLQueryTestSuite#NonAnsiTest =>
-          statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = false")
-        case _: SQLQueryTestSuite#TimestampNTZTest =>
-          statement.execute(s"SET ${SQLConf.TIMESTAMP_TYPE.key} = " +
-            s"${TimestampTypes.TIMESTAMP_NTZ.toString}")
-        case _ =>
-          statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = true")
+      caseConfigSet.foreach { case (k, v) =>
+        statement.execute(s"SET $k = $v")
       }
 
       val rowCounts = new Array[Int](queries.size)
@@ -157,6 +158,10 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
             schema = Some(""),
             output = output.mkString("\n").replaceAll("\\s+$", ""))
         }
+      }
+
+      caseConfigSet.foreach { case (k, _) =>
+        statement.execute(s"RESET $k")
       }
 
       // Read back the golden file.
