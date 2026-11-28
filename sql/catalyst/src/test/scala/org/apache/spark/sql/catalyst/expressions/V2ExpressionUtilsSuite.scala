@@ -135,6 +135,35 @@ class V2ExpressionUtilsSuite extends SparkFunSuite {
       parameters = Map("expr" -> "DATE_TRUNC('MONTH', a)"))
   }
 
+  test("SPARK-61341: build LIKE for STARTS_WITH, ENDS_WITH and CONTAINS only with a string " +
+      "literal pattern") {
+    val builder = new V2ExpressionSQLBuilder()
+    def predicate(name: String, pattern: V2Expression): V2Predicate =
+      new V2Predicate(name, Array[V2Expression](FieldReference("email"), pattern))
+
+    val literal = LiteralValue(UTF8String.fromString("ab_"), StringType)
+    assert(builder.build(predicate("STARTS_WITH", literal)) === raw"email LIKE 'ab\_%' ESCAPE '\'")
+    assert(builder.build(predicate("ENDS_WITH", literal)) === raw"email LIKE '%ab\_' ESCAPE '\'")
+    assert(builder.build(predicate("CONTAINS", literal)) === raw"email LIKE '%ab\_%' ESCAPE '\'")
+
+    Seq("STARTS_WITH", "ENDS_WITH", "CONTAINS").foreach { name =>
+      Seq(
+        FieldReference("email") -> "email",
+        // A one-character column name made toString fail with StringIndexOutOfBoundsException.
+        FieldReference("a") -> "a",
+        LiteralValue(null, StringType) -> "NULL").foreach { case (pattern, patternSQL) =>
+        val p = predicate(name, pattern)
+        assert(p.toString === s"$name(email, $patternSQL)")
+        checkError(
+          exception = intercept[SparkIllegalArgumentException] {
+            builder.build(p)
+          },
+          condition = "UNEXPECTED_V2_EXPRESSION",
+          parameters = Map("expr" -> s"$name(email, $patternSQL)"))
+      }
+    }
+  }
+
   test("SPARK-59721: resolveRefOpt returns None for an unresolvable reference") {
     val plan = LocalRelation(AttributeReference("a", StringType)())
     assert(V2ExpressionUtils.resolveRefOpt(FieldReference("a"), plan).isDefined)

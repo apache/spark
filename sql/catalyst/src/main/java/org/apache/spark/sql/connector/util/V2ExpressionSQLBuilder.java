@@ -46,6 +46,7 @@ import org.apache.spark.sql.connector.expressions.aggregate.GeneralAggregateFunc
 import org.apache.spark.sql.connector.expressions.aggregate.Sum;
 import org.apache.spark.sql.connector.expressions.aggregate.UserDefinedAggregateFunc;
 import org.apache.spark.sql.types.DataType;
+import org.apache.spark.sql.types.StringType;
 
 /**
  * The builder to generate SQL from V2 expressions.
@@ -131,9 +132,20 @@ public class V2ExpressionSQLBuilder {
         }
         case "IS_NULL" -> visitIsNull(visitIsNullOperand(e.children()[0]));
         case "IS_NOT_NULL" -> visitIsNotNull(visitIsNullOperand(e.children()[0]));
-        case "STARTS_WITH" -> visitStartsWith(build(e.children()[0]), build(e.children()[1]));
-        case "ENDS_WITH" -> visitEndsWith(build(e.children()[0]), build(e.children()[1]));
-        case "CONTAINS" -> visitContains(build(e.children()[0]), build(e.children()[1]));
+        case "STARTS_WITH", "ENDS_WITH", "CONTAINS" -> {
+          // The LIKE pattern is built from the value of the pattern argument, so it must be a
+          // string literal. Any other pattern, such as a column, is not supported.
+          if (!isNonNullStringLiteral(e.children()[1])) {
+            yield visitUnexpectedExpr(expr);
+          }
+          String l = build(e.children()[0]);
+          String r = build(e.children()[1]);
+          yield switch (name) {
+            case "STARTS_WITH" -> visitStartsWith(l, r);
+            case "ENDS_WITH" -> visitEndsWith(l, r);
+            default -> visitContains(l, r);
+          };
+        }
         case "BOOLEAN_EXPRESSION" ->
           build(expr.children()[0]);
         case "+", "*", "/", "%", "&", "|", "^" ->
@@ -252,6 +264,11 @@ public class V2ExpressionSQLBuilder {
 
   protected String visitIsNotNull(String v) {
     return v + " IS NOT NULL";
+  }
+
+  private static boolean isNonNullStringLiteral(Expression e) {
+    return e instanceof Literal<?> literal && literal.value() != null &&
+      literal.dataType() instanceof StringType;
   }
 
   protected String visitStartsWith(String l, String r) {
