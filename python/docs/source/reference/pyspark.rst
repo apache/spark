@@ -264,6 +264,7 @@ Management
     SparkConf.toDebugString
     SparkFiles.get
     SparkFiles.getRootDirectory
+    StorageLevel.fromString
     StorageLevel.DISK_ONLY
     StorageLevel.DISK_ONLY_2
     StorageLevel.DISK_ONLY_3

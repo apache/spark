@@ -39,6 +39,7 @@ from typing import (
 )
 
 from pyspark import inheritable_thread_target, keyword_only, since
+from pyspark.errors import PySparkValueError
 from pyspark.ml import functions as MF
 from pyspark.ml.base import Estimator, Model, PredictionModel, Predictor, _PredictorParams
 from pyspark.ml.common import inherit_doc
@@ -3472,7 +3473,7 @@ class MultilayerPerceptronClassificationTrainingSummary(
     pass
 
 
-class _OneVsRestParams(_ClassifierParams, HasWeightCol):
+class _OneVsRestParams(_ClassifierParams, HasWeightCol, HasIntermediateStorageLevel):
     """
     Params for :py:class:`OneVsRest` and :py:class:`OneVsRestModelModel`.
     """
@@ -3559,10 +3560,12 @@ class OneVsRest(
         classifier: Optional[Classifier[CM]] = None,
         weightCol: Optional[str] = None,
         parallelism: int = 1,
+        intermediateStorageLevel: str = "MEMORY_AND_DISK",
     ):
         """
         __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 rawPredictionCol="rawPrediction", classifier=None, weightCol=None, parallelism=1):
+                 rawPredictionCol="rawPrediction", classifier=None, weightCol=None, \
+                 parallelism=1, intermediateStorageLevel="MEMORY_AND_DISK")
         """
         super().__init__()
         self._setDefault(parallelism=1)
@@ -3581,10 +3584,12 @@ class OneVsRest(
         classifier: Optional[Classifier[CM]] = None,
         weightCol: Optional[str] = None,
         parallelism: int = 1,
+        intermediateStorageLevel: str = "MEMORY_AND_DISK",
     ) -> "OneVsRest":
         """
         setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                  rawPredictionCol="rawPrediction", classifier=None, weightCol=None, parallelism=1):
+                  rawPredictionCol="rawPrediction", classifier=None, weightCol=None, \
+                  parallelism=1, intermediateStorageLevel="MEMORY_AND_DISK")
         Sets params for OneVsRest.
         """
         kwargs = self._input_kwargs
@@ -3633,7 +3638,24 @@ class OneVsRest(
         """
         return self._set(parallelism=value)
 
+    @since("4.5.0")
+    def setIntermediateStorageLevel(self, value: str) -> "OneVsRest":
+        """
+        Sets the value of :py:attr:`intermediateStorageLevel`.
+        """
+        return self._set(intermediateStorageLevel=value)
+
     def _fit(self, dataset: DataFrame) -> "OneVsRestModel":
+        storageLevel = StorageLevel.fromString(self.getIntermediateStorageLevel())
+        if storageLevel == StorageLevel.NONE:
+            raise PySparkValueError(
+                errorClass="VALUE_ALLOWED",
+                messageParameters={
+                    "arg_name": "intermediateStorageLevel",
+                    "disallowed_value": "'NONE'",
+                },
+            )
+
         labelCol = self.getLabelCol()
         featuresCol = self.getFeaturesCol()
         predictionCol = self.getPredictionCol()
@@ -3662,7 +3684,7 @@ class OneVsRest(
 
         with _cache_spark_dataset(
             multiclassLabeled,
-            storageLevel=StorageLevel.MEMORY_AND_DISK,
+            storageLevel=storageLevel,
             enable=handlePersistence,
         ) as multiclassLabeled:
 
@@ -3747,6 +3769,7 @@ class OneVsRest(
             rawPredictionCol=rawPredictionCol,
             classifier=classifier,
             parallelism=parallelism,
+            intermediateStorageLevel=java_stage.getIntermediateStorageLevel(),
         )
         if java_stage.isDefined(java_stage.getParam("weightCol")):
             py_stage.setWeightCol(java_stage.getWeightCol())
@@ -3767,6 +3790,7 @@ class OneVsRest(
         )
         _java_obj.setClassifier(cast(_JavaClassifier, self.getClassifier())._to_java())
         _java_obj.setParallelism(self.getParallelism())
+        _java_obj.setIntermediateStorageLevel(self.getIntermediateStorageLevel())
         _java_obj.setFeaturesCol(self.getFeaturesCol())
         _java_obj.setLabelCol(self.getLabelCol())
         _java_obj.setPredictionCol(self.getPredictionCol())
@@ -3886,6 +3910,13 @@ class OneVsRestModel(
         """
         return self._set(rawPredictionCol=value)
 
+    @since("4.5.0")
+    def setIntermediateStorageLevel(self, value: str) -> "OneVsRestModel":
+        """
+        Sets the value of :py:attr:`intermediateStorageLevel`.
+        """
+        return self._set(intermediateStorageLevel=value)
+
     def __init__(self, models: List[ClassificationModel]):
         super().__init__()
         self.models = models
@@ -3913,6 +3944,16 @@ class OneVsRestModel(
         )
 
     def _transform(self, dataset: DataFrame) -> DataFrame:
+        storageLevel = StorageLevel.fromString(self.getIntermediateStorageLevel())
+        if storageLevel == StorageLevel.NONE:
+            raise PySparkValueError(
+                errorClass="VALUE_ALLOWED",
+                messageParameters={
+                    "arg_name": "intermediateStorageLevel",
+                    "disallowed_value": "'NONE'",
+                },
+            )
+
         # determine the input columns: these need to be passed through
         origCols = dataset.columns
 
@@ -3924,7 +3965,7 @@ class OneVsRestModel(
         handlePersistence = dataset.storageLevel == StorageLevel(False, False, False, False)
         with _cache_spark_dataset(
             newDataset,
-            storageLevel=StorageLevel.MEMORY_AND_DISK,
+            storageLevel=storageLevel,
             enable=handlePersistence,
         ) as newDataset:
             # update the accumulator column with the result of prediction of models
@@ -3998,7 +4039,10 @@ class OneVsRestModel(
             JavaParams._from_java(model) for model in java_stage.models()
         ]
         py_stage = cls(models=models).setPredictionCol(predictionCol).setFeaturesCol(featuresCol)
-        py_stage._set(labelCol=labelCol)
+        py_stage._set(
+            labelCol=labelCol,
+            intermediateStorageLevel=java_stage.getIntermediateStorageLevel(),
+        )
         if java_stage.isDefined(java_stage.getParam("weightCol")):
             py_stage._set(weightCol=java_stage.getWeightCol())
         py_stage._set(classifier=classifier)
@@ -4034,6 +4078,7 @@ class OneVsRestModel(
         _java_obj.set("classifier", cast(_JavaClassifier, self.getClassifier())._to_java())
         _java_obj.set("featuresCol", self.getFeaturesCol())
         _java_obj.set("labelCol", self.getLabelCol())
+        _java_obj.set("intermediateStorageLevel", self.getIntermediateStorageLevel())
         _java_obj.set("predictionCol", self.getPredictionCol())
         if self.isDefined(self.weightCol) and self.getWeightCol():
             _java_obj.set("weightCol", self.getWeightCol())

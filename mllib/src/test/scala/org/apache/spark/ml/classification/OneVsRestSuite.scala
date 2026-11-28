@@ -96,9 +96,15 @@ class OneVsRestSuite extends MLTest with DefaultReadWriteTest {
     assert(ova.getLabelCol === "label")
     assert(ova.getPredictionCol === "prediction")
     assert(ova.getRawPredictionCol === "rawPrediction")
+    assert(ova.getIntermediateStorageLevel === "MEMORY_AND_DISK")
+    ova.setIntermediateStorageLevel("DISK_ONLY")
+    assert(ova.getIntermediateStorageLevel === "DISK_ONLY")
     val ovaModel = ova.fit(dataset)
 
     MLTestingUtils.checkCopyAndUids(ova, ovaModel)
+    assert(ovaModel.getIntermediateStorageLevel === "DISK_ONLY")
+    ovaModel.setIntermediateStorageLevel("MEMORY_ONLY")
+    assert(ovaModel.getIntermediateStorageLevel === "MEMORY_ONLY")
 
     assert(ovaModel.numClasses === numClasses)
     val transformedDataset = ovaModel.transform(dataset)
@@ -279,12 +285,14 @@ class OneVsRestSuite extends MLTest with DefaultReadWriteTest {
       .setLabelCol("myLabel")
       .setFeaturesCol("myFeature")
       .setPredictionCol("myPrediction")
+      .setIntermediateStorageLevel("DISK_ONLY")
 
     val ova2 = testDefaultReadWrite(ova, testParams = false)
     assert(ova.uid === ova2.uid)
     assert(ova.getFeaturesCol === ova2.getFeaturesCol)
     assert(ova.getLabelCol === ova2.getLabelCol)
     assert(ova.getPredictionCol === ova2.getPredictionCol)
+    assert(ova2.getIntermediateStorageLevel === "DISK_ONLY")
 
     ova2.getClassifier match {
       case lr2: LogisticRegression =>
@@ -329,9 +337,10 @@ class OneVsRestSuite extends MLTest with DefaultReadWriteTest {
     }
 
     val lr = new LogisticRegression().setMaxIter(10).setRegParam(0.01)
-    val ova = new OneVsRest().setClassifier(lr)
+    val ova = new OneVsRest().setClassifier(lr).setIntermediateStorageLevel("DISK_ONLY")
     val ovaModel = ova.fit(dataset)
     val newOvaModel = testDefaultReadWrite(ovaModel, testParams = false)
+    assert(newOvaModel.getIntermediateStorageLevel === "DISK_ONLY")
     checkModelData(ovaModel, newOvaModel)
   }
 
