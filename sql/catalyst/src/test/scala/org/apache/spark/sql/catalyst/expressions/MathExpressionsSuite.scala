@@ -488,6 +488,90 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkConsistencyBetweenInterpretedAndCodegen(Factorial.apply _, IntegerType)
   }
 
+  test("gcd") {
+    checkEvaluation(Gcd(Literal(24L), Literal(36L)), 12L)
+    checkEvaluation(Gcd(Literal(36L), Literal(24L)), 12L)
+    checkEvaluation(Gcd(Literal(17L), Literal(5L)), 1L)
+    // The result is non-negative regardless of the inputs' signs.
+    checkEvaluation(Gcd(Literal(-24L), Literal(36L)), 12L)
+    checkEvaluation(Gcd(Literal(24L), Literal(-36L)), 12L)
+    checkEvaluation(Gcd(Literal(-24L), Literal(-36L)), 12L)
+    // Zero is divisible by everything, so it acts as the identity.
+    checkEvaluation(Gcd(Literal(0L), Literal(0L)), 0L)
+    checkEvaluation(Gcd(Literal(0L), Literal(-7L)), 7L)
+    checkEvaluation(Gcd(Literal(7L), Literal(0L)), 7L)
+    checkEvaluation(Gcd(Literal(Long.MaxValue), Literal(Long.MaxValue)), Long.MaxValue)
+    checkEvaluation(Gcd(Literal.create(null, LongType), Literal(5L)), null)
+    checkEvaluation(Gcd(Literal(5L), Literal.create(null, LongType)), null)
+    // The only overflowing inputs are those whose result would be -Long.MinValue. As elsewhere in
+    // Spark, the overflow raises under ANSI mode and yields null otherwise.
+    Seq(
+      (Long.MinValue, 0L),
+      (0L, Long.MinValue),
+      (Long.MinValue, Long.MinValue)).foreach { case (left, right) =>
+      checkExceptionInExpression[SparkArithmeticException](
+        Gcd(Literal(left), Literal(right), ansiEnabled = true), "ARITHMETIC_OVERFLOW")
+      checkEvaluation(Gcd(Literal(left), Literal(right), ansiEnabled = false), null)
+    }
+    checkEvaluation(Gcd(Literal(Long.MinValue), Literal(2L)), 2L)
+    checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+      (left, right) => Gcd(left, right), LongType, LongType)
+  }
+
+  test("lcm") {
+    checkEvaluation(Lcm(Literal(4L), Literal(6L)), 12L)
+    checkEvaluation(Lcm(Literal(6L), Literal(4L)), 12L)
+    checkEvaluation(Lcm(Literal(17L), Literal(5L)), 85L)
+    // The result is non-negative regardless of the inputs' signs.
+    checkEvaluation(Lcm(Literal(-4L), Literal(6L)), 12L)
+    checkEvaluation(Lcm(Literal(4L), Literal(-6L)), 12L)
+    checkEvaluation(Lcm(Literal(-4L), Literal(-6L)), 12L)
+    // Zero has no non-zero multiple in common with anything.
+    checkEvaluation(Lcm(Literal(0L), Literal(0L)), 0L)
+    checkEvaluation(Lcm(Literal(0L), Literal(5L)), 0L)
+    checkEvaluation(Lcm(Literal(5L), Literal(0L)), 0L)
+    checkEvaluation(Lcm(Literal(Long.MaxValue), Literal(Long.MaxValue)), Long.MaxValue)
+    checkEvaluation(Lcm(Literal.create(null, LongType), Literal(5L)), null)
+    checkEvaluation(Lcm(Literal(5L), Literal.create(null, LongType)), null)
+    // Dividing by the gcd before multiplying keeps a representable result in range: the naive
+    // product 2^62 * 2 would overflow, while the least common multiple 2^62 does not.
+    checkEvaluation(Lcm(Literal(1L << 62), Literal(2L)), 1L << 62)
+    // Genuinely unrepresentable results still overflow. Long.MaxValue and Long.MaxValue - 2 are
+    // both odd and differ by 2, so they are coprime and their product is far out of range.
+    Seq(
+      (Long.MaxValue, Long.MaxValue - 2L),
+      (Long.MinValue, Long.MinValue),
+      (Long.MinValue, 3L)).foreach { case (left, right) =>
+      checkExceptionInExpression[SparkArithmeticException](
+        Lcm(Literal(left), Literal(right), ansiEnabled = true), "ARITHMETIC_OVERFLOW")
+      checkEvaluation(Lcm(Literal(left), Literal(right), ansiEnabled = false), null)
+    }
+    checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+      (left, right) => Lcm(left, right), LongType, LongType)
+  }
+
+  test("gcd and lcm input types") {
+    // Narrower integral arguments are widened to BIGINT.
+    checkEvaluation(Gcd(Literal(24.toByte), Literal(36.toShort)), 12L)
+    checkEvaluation(Lcm(Literal(4), Literal(6L)), 12L)
+    checkEvaluation(Gcd(Literal(Int.MinValue), Literal(0)), 2147483648L)
+    checkEvaluation(Lcm(Literal(Int.MaxValue), Literal(Int.MaxValue - 2)),
+      Int.MaxValue.toLong * (Int.MaxValue - 2))
+    Seq(ByteType, ShortType, IntegerType).foreach { dt =>
+      checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+        (left, right) => Gcd(left, right), dt, dt)
+      checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+        (left, right) => Lcm(left, right), dt, dt)
+    }
+    // Fractional arguments fail type checking instead of being truncated.
+    Seq(Literal(7.5), Literal(7.5f), Literal(BigDecimal("7.5"))).foreach { fractional =>
+      assert(Gcd(fractional, Literal(15L)).checkInputDataTypes().isFailure)
+      assert(Gcd(Literal(15L), fractional).checkInputDataTypes().isFailure)
+      assert(Lcm(fractional, Literal(3L)).checkInputDataTypes().isFailure)
+      assert(Lcm(Literal(3L), fractional).checkInputDataTypes().isFailure)
+    }
+  }
+
   test("rint") {
     testUnary(Rint, math.rint)
     checkConsistencyBetweenInterpretedAndCodegen(Rint, DoubleType)

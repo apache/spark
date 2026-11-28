@@ -925,3 +925,351 @@ SELECT POSITIVE(null)
 struct<(+ NULL):double>
 -- !query output
 NULL
+
+
+-- !query
+SELECT gcd(24, 36)
+-- !query schema
+struct<gcd(24, 36):bigint>
+-- !query output
+12
+
+
+-- !query
+SELECT gcd(17, 5)
+-- !query schema
+struct<gcd(17, 5):bigint>
+-- !query output
+1
+
+
+-- !query
+SELECT gcd(-24, 36)
+-- !query schema
+struct<gcd(-24, 36):bigint>
+-- !query output
+12
+
+
+-- !query
+SELECT gcd(24, -36)
+-- !query schema
+struct<gcd(24, -36):bigint>
+-- !query output
+12
+
+
+-- !query
+SELECT gcd(-24, -36)
+-- !query schema
+struct<gcd(-24, -36):bigint>
+-- !query output
+12
+
+
+-- !query
+SELECT gcd(0, 0)
+-- !query schema
+struct<gcd(0, 0):bigint>
+-- !query output
+0
+
+
+-- !query
+SELECT gcd(0, -7)
+-- !query schema
+struct<gcd(0, -7):bigint>
+-- !query output
+7
+
+
+-- !query
+SELECT gcd(7, 0)
+-- !query schema
+struct<gcd(7, 0):bigint>
+-- !query output
+7
+
+
+-- !query
+SELECT gcd(null, 5)
+-- !query schema
+struct<gcd(NULL, 5):bigint>
+-- !query output
+NULL
+
+
+-- !query
+SELECT gcd(5, null)
+-- !query schema
+struct<gcd(5, NULL):bigint>
+-- !query output
+NULL
+
+
+-- !query
+SELECT gcd(CAST(24 AS TINYINT), CAST(36 AS SMALLINT))
+-- !query schema
+struct<gcd(CAST(24 AS TINYINT), CAST(36 AS SMALLINT)):bigint>
+-- !query output
+12
+
+
+-- !query
+SELECT gcd(7.5, 15)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"7.5\"",
+    "inputType" : "\"DECIMAL(2,1)\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"INTEGRAL\"",
+    "sqlExpr" : "\"gcd(7.5, 15)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 19,
+    "fragment" : "gcd(7.5, 15)"
+  } ]
+}
+
+
+-- !query
+SELECT gcd(7.5D, 15)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"7.5\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"INTEGRAL\"",
+    "sqlExpr" : "\"gcd(7.5, 15)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 20,
+    "fragment" : "gcd(7.5D, 15)"
+  } ]
+}
+
+
+-- !query
+SELECT gcd(15, 7.5D)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"7.5\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"INTEGRAL\"",
+    "sqlExpr" : "\"gcd(15, 7.5)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 20,
+    "fragment" : "gcd(15, 7.5D)"
+  } ]
+}
+
+
+-- !query
+SELECT lcm(4, 6)
+-- !query schema
+struct<lcm(4, 6):bigint>
+-- !query output
+12
+
+
+-- !query
+SELECT lcm(17, 5)
+-- !query schema
+struct<lcm(17, 5):bigint>
+-- !query output
+85
+
+
+-- !query
+SELECT lcm(-4, 6)
+-- !query schema
+struct<lcm(-4, 6):bigint>
+-- !query output
+12
+
+
+-- !query
+SELECT lcm(4, -6)
+-- !query schema
+struct<lcm(4, -6):bigint>
+-- !query output
+12
+
+
+-- !query
+SELECT lcm(-4, -6)
+-- !query schema
+struct<lcm(-4, -6):bigint>
+-- !query output
+12
+
+
+-- !query
+SELECT lcm(0, 0)
+-- !query schema
+struct<lcm(0, 0):bigint>
+-- !query output
+0
+
+
+-- !query
+SELECT lcm(0, 5)
+-- !query schema
+struct<lcm(0, 5):bigint>
+-- !query output
+0
+
+
+-- !query
+SELECT lcm(5, 0)
+-- !query schema
+struct<lcm(5, 0):bigint>
+-- !query output
+0
+
+
+-- !query
+SELECT lcm(null, 5)
+-- !query schema
+struct<lcm(NULL, 5):bigint>
+-- !query output
+NULL
+
+
+-- !query
+SELECT lcm(5, null)
+-- !query schema
+struct<lcm(5, NULL):bigint>
+-- !query output
+NULL
+
+
+-- !query
+SELECT lcm(CAST(4 AS TINYINT), 6L)
+-- !query schema
+struct<lcm(CAST(4 AS TINYINT), 6):bigint>
+-- !query output
+12
+
+
+-- !query
+SELECT lcm(2.9, 3)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"2.9\"",
+    "inputType" : "\"DECIMAL(2,1)\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"INTEGRAL\"",
+    "sqlExpr" : "\"lcm(2.9, 3)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 18,
+    "fragment" : "lcm(2.9, 3)"
+  } ]
+}
+
+
+-- !query
+SELECT lcm(2.9D, 3)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"2.9\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"INTEGRAL\"",
+    "sqlExpr" : "\"lcm(2.9, 3)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 19,
+    "fragment" : "lcm(2.9D, 3)"
+  } ]
+}
+
+
+-- !query
+SELECT lcm(3, 2.9D)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"2.9\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"INTEGRAL\"",
+    "sqlExpr" : "\"lcm(3, 2.9)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 19,
+    "fragment" : "lcm(3, 2.9D)"
+  } ]
+}
+
+
+-- !query
+SELECT lcm(4611686018427387904L, 2L)
+-- !query schema
+struct<lcm(4611686018427387904, 2):bigint>
+-- !query output
+4611686018427387904
+
+
+-- !query
+SELECT lcm(9223372036854775807L, 9223372036854775805L)
+-- !query schema
+struct<lcm(9223372036854775807, 9223372036854775805):bigint>
+-- !query output
+NULL
