@@ -559,6 +559,10 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
   // ----- shared localize-path tests (run when `localizesEntries`) ------------
 
   if (localizesEntries) {
+    // With the default empty prefix the temp-dir tests below match the wrong directories.
+    require(archiveTempDirPrefix.nonEmpty,
+      "a suite that sets localizesEntries must also set archiveTempDirPrefix")
+
     // The merge-gated block above owns this test when a format unions by name; localize-path
     // formats (Parquet) set `supportsSchemaMerge` off, so provide it here instead.
     if (!supportsSchemaMerge) {
