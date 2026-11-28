@@ -581,9 +581,9 @@ case class ApplyColumnarRulesAndInsertTransitions(
       RowToColumnarExec(ensureOutputsRowBased(plan))
     } else if (!plan.isInstanceOf[RowToColumnarTransition]) {
       plan match {
-        // A scan reads the aggregate of its per-partition bloom filter as rows, one for each
-        // group. A transition to columnar there would keep a batch of vectors for each key a task
-        // reads, until the task ends.
+        // A scan executes the aggregate of its per-partition bloom filter as rows. So this keeps
+        // the aggregate row-based, and puts a transition to rows over one that a columnar rule
+        // made return only batches.
         case scan: BatchScanExec => scan.withNewChildren(scan.children.map(ensureOutputsRowBased))
         case _ => plan.withNewChildren(plan.children.map(ensureOutputsColumnar))
       }
