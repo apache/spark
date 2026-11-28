@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.execution.command.v1
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.ClusterBySpec
+import org.apache.spark.sql.connector.FakeV2ProviderWithCustomSchema
 import org.apache.spark.sql.connector.expressions.FieldReference
 import org.apache.spark.sql.execution.command
 
@@ -48,4 +50,39 @@ trait AlterTableClusterBySuiteBase extends command.AlterTableClusterBySuiteBase
 class AlterTableClusterBySuite extends AlterTableClusterBySuiteBase
     with CommandSuiteBase {
   override def commandVersion: String = super[AlterTableClusterBySuiteBase].commandVersion
+
+  private val partitioningAndErrors = Seq(
+    "PARTITIONED BY (p)" -> "SPECIFY_CLUSTER_BY_WITH_PARTITIONED_BY_IS_NOT_ALLOWED",
+    "CLUSTERED BY (p) INTO 2 BUCKETS" -> "SPECIFY_CLUSTER_BY_WITH_BUCKETING_IS_NOT_ALLOWED")
+
+  private val providers = Seq("parquet", classOf[FakeV2ProviderWithCustomSchema].getName)
+
+  for (provider <- providers; (layout, error) <- partitioningAndErrors) {
+    test(s"SPARK-62285: reject ALTER TABLE CLUSTER BY with $provider and $layout") {
+      withNamespaceAndTable("ns", "table") { tbl =>
+        sql(s"CREATE TABLE $tbl (id INT, p INT) USING $provider $layout")
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"ALTER TABLE $tbl CLUSTER BY (id)")
+          },
+          condition = error,
+          parameters = Map.empty)
+        sql(s"ALTER TABLE $tbl CLUSTER BY NONE")
+        val ddl = sql(s"SHOW CREATE TABLE $tbl").head().getString(0)
+        sql(s"DROP TABLE $tbl")
+        sql(ddl)
+      }
+    }
+  }
+
+  test("SPARK-62285: reject conflicting clustering and partition transforms") {
+    withNamespaceAndTable("ns", "table") { tbl =>
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"CREATE TABLE $tbl (id INT, p INT) USING PARQUET PARTITIONED BY (p, cluster_by(id))")
+        },
+        condition = "SPECIFY_CLUSTER_BY_WITH_PARTITIONED_BY_IS_NOT_ALLOWED",
+        parameters = Map.empty)
+    }
+  }
 }

@@ -59,7 +59,10 @@ private[sql] case class V1Table(v1Table: CatalogTable) extends Table {
       partitions += spec.asTransform
     }
 
-    v1Table.clusterBySpec.foreach { spec =>
+    // CLUSTER BY NONE can clear clustering on a partitioned or bucketed table.
+    v1Table.clusterBySpec.filter { spec =>
+      spec.columnNames.nonEmpty || partitions.isEmpty
+    }.foreach { spec =>
       partitions += spec.asTransform
     }
 

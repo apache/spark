@@ -67,9 +67,12 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     case AlterTableClusterBy(ResolvedTable(catalog, _, table: V1Table, _), clusterBySpecOpt)
         if supportsV1Command(catalog) =>
-      // FILE is not comparable, so it cannot be a clustering column.
-      clusterBySpecOpt.foreach(
-        TypeUtils.checkNoFileTypeClusteringColumn(table.schema, _, conf.resolver))
+      clusterBySpecOpt.foreach { spec =>
+        ClusterBySpec.validateTableLayout(
+          table.catalogTable.partitionColumnNames.nonEmpty, table.catalogTable.bucketSpec.nonEmpty)
+        // FILE is not comparable, so it cannot be a clustering column.
+        TypeUtils.checkNoFileTypeClusteringColumn(table.schema, spec, conf.resolver)
+      }
       val prop = Map(ClusterBySpec.toProperty(table.schema,
         clusterBySpecOpt.getOrElse(ClusterBySpec(Nil)), conf.resolver))
       AlterTableSetPropertiesCommand(table.catalogTable.identifier, prop, isView = false)
