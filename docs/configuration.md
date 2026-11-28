@@ -1673,6 +1673,17 @@ Apart from these, the following properties are also available, and may be useful
   <td>1.0.0</td>
 </tr>
 <tr>
+  <td><code>spark.eventLog.failOnError</code></td>
+  <td>true</td>
+  <td>
+    Whether a failure to initialize event logging (for example, the event log directory does not
+    exist, is not writable, or is over quota) fails <code>SparkContext</code> initialization, if
+    <code>spark.eventLog.enabled</code> is true. When set to false, Spark logs the error and
+    continues without event logging; the application will not appear in the History Server.
+  </td>
+  <td>4.5.0</td>
+</tr>
+<tr>
   <td><code>spark.eventLog.overwrite</code></td>
   <td>false</td>
   <td>

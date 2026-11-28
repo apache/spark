@@ -213,6 +213,16 @@ package object config {
     .stringConf
     .createWithDefault(EventLoggingListener.DEFAULT_LOG_DIR)
 
+  private[spark] val EVENT_LOG_FAIL_ON_ERROR = ConfigBuilder("spark.eventLog.failOnError")
+    .doc("When true, a failure to initialize event logging (for example, the event log " +
+      "directory does not exist, is not writable, or is over quota) fails SparkContext " +
+      "initialization. When false, Spark logs the error and continues without event " +
+      "logging; the application will not appear in the History Server.")
+    .version("4.5.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+    .booleanConf
+    .createWithDefault(true)
+
   private[spark] val EVENT_LOG_COMPRESS =
     ConfigBuilder("spark.eventLog.compress")
       .version("1.0.0")
