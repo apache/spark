@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.variant.VariantExpressionEvalUtils
 import org.apache.spark.sql.execution.datasources.parquet.SparkShreddingUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.types.variant.Variant
+import org.apache.spark.types.variant.{Variant, VariantUtil}
 import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 
 class VariantWriteShreddingSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -147,6 +147,18 @@ class VariantWriteShreddingSuite extends SparkFunSuite with ExpressionEvalHelper
     // Allow scale to decrease if there are trailing zeros
     testWithSchema("12.3400", DecimalType(4, 2), Row(emptyMetadata, null, Decimal("12.34")))
     testWithSchema("12.3410", DecimalType(4, 2), Row(emptyMetadata, untypedValue("12.3410"), null))
+    // A decimal4 may have a scale larger than 9. It shreds the same as the same value encoded by
+    // Spark, which uses a decimal8 because the scale is 13.
+    val decimal4 = new VariantVal(
+      Array[Byte](VariantUtil.primitiveHeader(VariantUtil.DECIMAL4), 13, 0xD2.toByte, 0x04, 0, 0),
+      emptyMetadata)
+    Seq(decimal4, parseJson("0.0000000001234")).foreach { v =>
+      testWithSchema(v, DecimalType(13, 13),
+        Row(emptyMetadata, null, Decimal("0.0000000001234")))
+      testWithSchema(v, DecimalType(20, 15),
+        Row(emptyMetadata, null, Decimal("0.000000000123400")))
+      testWithSchema(v, DecimalType(10, 10), Row(emptyMetadata, untypedValue(v), null))
+    }
 
     // The string 1 is not numeric
     testWithSchema("\"1\"", IntegerType, Row(emptyMetadata, untypedValue("\"1\""), null))
