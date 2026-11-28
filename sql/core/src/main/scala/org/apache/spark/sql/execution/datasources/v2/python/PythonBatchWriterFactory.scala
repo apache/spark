@@ -64,7 +64,8 @@ case class PythonBatchWriterFactory(
       }
 
       override def write(record: InternalRow): Unit =
-        SparkException.internalError("write method for Python data source should not be called.")
+        throw SparkException.internalError(
+          "write method for Python data source should not be called.")
 
       override def commit(): WriterCommitMessage = {
         commitMessage.asInstanceOf[WriterCommitMessage]
