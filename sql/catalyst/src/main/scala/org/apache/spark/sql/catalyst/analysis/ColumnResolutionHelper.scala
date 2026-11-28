@@ -763,8 +763,13 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     //   - `AddMetadataColumns` adds a hidden key to the `output` of the USING join
     //     wrapper that hides it, and a metadata column to the `output` of a relation.
     //     That node introduces the attribute in its `metadataOutput`, so it stays hidden.
-    val introducedHidden = AttributeSet(p.metadataOutput) --
-      p.children.flatMap(_.metadataOutput)
+    //   - Pipe SET's `PipeSetInput` introduces its input row in its `metadataOutput` so that a
+    //     later qualified reference can reach a column the SET replaces. The row is still its
+    //     visible output, so a candidate there stays regular.
+    val introducedHidden = p match {
+      case _: PipeSetInput => AttributeSet.empty
+      case _ => AttributeSet(p.metadataOutput) -- p.children.flatMap(_.metadataOutput)
+    }
     val visible = p.outputSet -- introducedHidden
     val filtered = candidates.flatMap { c =>
       val hidden = c.hidden || !c.expr.references.subsetOf(visible)

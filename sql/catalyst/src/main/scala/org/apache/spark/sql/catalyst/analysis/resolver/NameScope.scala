@@ -419,7 +419,9 @@ class NameScope(
    */
   def isStarQualifiedByTable(unresolvedStar: UnresolvedStarBase): Boolean = {
     unresolvedStar.isQualifiedByTable(
-      childOperatorOutput = output,
+      // The input row a pipe SET retained still belongs to its table, unlike hidden USING join
+      // keys.
+      childOperatorOutput = output ++ hiddenOutput.filter(_.pipeSetRetained),
       resolver = nameComparator
     )
   }
@@ -1179,6 +1181,7 @@ class NameScopeStack(
 
     val refreshedHiddenOutput = prevScope.hiddenOutput.map { attribute =>
       outputLookup.get(attribute.exprId) match {
+        case _ if attribute.qualifiedAccessOnly => attribute
         case null => attribute
         case outputAttribute => outputAttribute
       }

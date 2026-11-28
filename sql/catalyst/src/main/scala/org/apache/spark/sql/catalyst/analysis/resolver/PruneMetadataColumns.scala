@@ -94,20 +94,16 @@ object PruneMetadataColumns extends Rule[LogicalPlan] {
    */
   private def pruneMetadataColumnsInProject(project: Project, neededAttributes: HashSet[ExprId]) = {
     val existingExprIds = new HashSet[ExprId]
-    val newProjectList = if (!neededAttributes.isEmpty) {
-      project.projectList.collect {
-        case namedExpression: NamedExpression if !namedExpression.toAttribute.qualifiedAccessOnly =>
-          existingExprIds.add(namedExpression.exprId)
-          namedExpression
-        case namedExpression: NamedExpression
-            if namedExpression.toAttribute.qualifiedAccessOnly && neededAttributes.contains(
-              namedExpression.exprId
-            ) && !existingExprIds.contains(namedExpression.exprId) =>
-          existingExprIds.add(namedExpression.exprId)
-          namedExpression
-      }
-    } else {
-      project.projectList
+    val newProjectList = project.projectList.collect {
+      case namedExpression: NamedExpression if !namedExpression.toAttribute.qualifiedAccessOnly =>
+        existingExprIds.add(namedExpression.exprId)
+        namedExpression
+      case namedExpression: NamedExpression
+          if namedExpression.toAttribute.qualifiedAccessOnly && neededAttributes.contains(
+            namedExpression.exprId
+          ) && !existingExprIds.contains(namedExpression.exprId) =>
+        existingExprIds.add(namedExpression.exprId)
+        namedExpression
     }
     val projectWithNewChildren =
       withNewChildrenPrunedByNeededAttributes(project, newProjectList).asInstanceOf[Project]
@@ -115,7 +111,15 @@ object PruneMetadataColumns extends Rule[LogicalPlan] {
       projectWithNewChildren.copy(projectList = newProjectList)
     }
     newProject.copyTagsFrom(project)
-    newProject
+    // A Project that restores a Join's output at a boundary is redundant once pruning removed
+    // every column appended below the Join, and fixed-point does not have it.
+    if (newProject.containsTag(ResolverTag.PROJECT_FOR_JOIN_OUTPUT_AT_BOUNDARY) &&
+        newProject.sameOutput(newProject.child) &&
+        newProject.output.map(_.name) == newProject.child.output.map(_.name)) {
+      newProject.child
+    } else {
+      newProject
+    }
   }
 
   /**

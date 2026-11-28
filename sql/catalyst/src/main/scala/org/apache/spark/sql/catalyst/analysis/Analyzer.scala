@@ -47,7 +47,7 @@ import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, Origin}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{toPrettySQL, trimTempResolvedColumn}
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, trimTempResolvedColumn, MetadataColumnHelper}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 // `View` is excluded to avoid clashing with the logical-plan `View` imported via
 // `org.apache.spark.sql.catalyst.plans.logical._`.
@@ -991,6 +991,7 @@ class Analyzer(
       UpdateOuterReferences),
     Batch("Cleanup", fixedPoint,
       CleanupAliases),
+    Batch("Eliminate Resolved Pipe SET Inputs", Once, EliminateResolvedPipeSetInputs),
     Batch("HandleSpecialCommand", Once,
       HandleSpecialCommand),
     Batch("Remove watermark for batch query", Once,
@@ -2224,7 +2225,11 @@ class Analyzer(
                     resolvesToCountBuiltin &&
                     f.arguments.length == 1) {
                   f.arguments.foreach {
-                    case u: UnresolvedStar if u.isQualifiedByTable(child.output, resolver) =>
+                    // The input row a pipe SET retained still belongs to its table, unlike
+                    // hidden USING join keys.
+                    case u: UnresolvedStar if u.isQualifiedByTable(
+                        child.output ++ child.metadataOutput.filter(_.pipeSetRetained),
+                        resolver) =>
                       throw QueryCompilationErrors
                         .singleTableStarInCountNotAllowedError(u.target.get.mkString("."))
                     case _ => // do nothing

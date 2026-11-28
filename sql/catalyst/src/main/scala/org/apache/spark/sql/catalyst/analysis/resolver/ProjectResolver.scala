@@ -17,8 +17,17 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.expressions.Expression
+import scala.collection.mutable
+
+import org.apache.spark.sql.catalyst.expressions.{
+  Attribute,
+  Expression,
+  ExprId,
+  NamedExpression,
+  PipeSetInput
+}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -72,6 +81,30 @@ class ProjectResolver(operatorResolver: Resolver, expressionResolver: Expression
       val resolvedProjectList =
         expressionResolver.resolveProjectList(unresolvedProject.projectList, unresolvedProject)
 
+      // A projection that is not the top-level operator carries the input row that a pipe SET
+      // retained, so that a later qualified reference can still reach it, as fixed-point does by
+      // adding it to every projection below the reference. PruneMetadataColumns removes the
+      // columns nothing references.
+      val retainedPipeSetOutput =
+        if (unresolvedProject.containsTag(ResolverTag.TOP_LEVEL_OPERATOR)) {
+          Seq.empty
+        } else {
+          resolvedChild match {
+            case pipeSetInput: PipeSetInput =>
+              pipeSetInput.metadataOutput.filter(_.pipeSetRetained)
+            case _ =>
+              val retainedHiddenOutput = scopes.current.hiddenOutput.filter(_.pipeSetRetained)
+              if (retainedHiddenOutput.isEmpty) {
+                Seq.empty
+              } else {
+                // The projection only carries values here; qualified star expansion reads the
+                // repeated positions of the retained row from the scope's hidden output.
+                val childOutput = resolvedChild.outputSet
+                retainedHiddenOutput.filter(childOutput.contains).distinctBy(_.exprId)
+              }
+          }
+        }
+
       val resolvedChildWithMetadataColumns = retainOriginalJoinOutput(
         plan = resolvedChild,
         outputExpressions = resolvedProjectList.expressions,
@@ -90,8 +123,16 @@ class ProjectResolver(operatorResolver: Resolver, expressionResolver: Expression
           resolvedChildWithMetadataColumns = resolvedChildWithMetadataColumns
         )
       } else {
+        val retainedProjectList =
+          if (retainedPipeSetOutput.isEmpty) {
+            Seq.empty
+          } else {
+            missingRetainedOutput(retainedPipeSetOutput, resolvedProjectList.expressions)
+          }
         val resolvedProject =
-          Project(resolvedProjectList.expressions, resolvedChildWithMetadataColumns)
+          Project(
+            resolvedProjectList.expressions ++ retainedProjectList,
+            resolvedChildWithMetadataColumns)
 
         (resolvedProject, resolvedProjectList)
       }
@@ -106,6 +147,32 @@ class ProjectResolver(operatorResolver: Resolver, expressionResolver: Expression
     )
 
     resolvedOperator
+  }
+
+  /**
+   * Returns retained attributes that are not already produced by the visible project list.
+   * Matching is occurrence-based because a projection can repeat one expression ID.
+   */
+  private def missingRetainedOutput(
+      retainedOutput: Seq[Attribute],
+      visibleOutput: Seq[NamedExpression]): Seq[Attribute] = {
+    val visibleOccurrencesByExprId = mutable.HashMap.empty[ExprId, Int]
+    visibleOutput.foreach { visibleExpression =>
+      val exprId = visibleExpression.exprId
+      visibleOccurrencesByExprId.updateWith(exprId) {
+        case Some(occurrences) => Some(occurrences + 1)
+        case None => Some(1)
+      }
+    }
+    retainedOutput.filter { retainedAttribute =>
+      visibleOccurrencesByExprId.get(retainedAttribute.exprId) match {
+        case Some(occurrences) if occurrences > 0 =>
+          visibleOccurrencesByExprId.update(retainedAttribute.exprId, occurrences - 1)
+          false
+        case _ =>
+          true
+      }
+    }
   }
 
   /**

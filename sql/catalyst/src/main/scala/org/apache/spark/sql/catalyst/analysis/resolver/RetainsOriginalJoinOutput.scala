@@ -21,8 +21,16 @@ import java.util.{HashMap, HashSet}
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, ExprId, NamedExpression}
-import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, ExprId, NamedExpression}
+import org.apache.spark.sql.catalyst.plans.logical.{
+  Join,
+  LogicalPlan,
+  Project,
+  SubqueryAlias,
+  UnaryNode,
+  WithCTE
+}
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util._
 
 trait RetainsOriginalJoinOutput {
@@ -30,11 +38,13 @@ trait RetainsOriginalJoinOutput {
   /**
    * This method adds a [[Project]] node on top of a [[Join]], if [[Join]]'s output has been
    * changed when metadata columns are added to [[Project]] nodes below the [[Join]]. This is
-   * necessary in order to stay compatible with fixed-point analyzer. Instead of doing this in
-   * [[JoinResolver]] we must do this here, because while resolving [[Join]] we still don't know if
-   * we should add a [[Project]] or not. A top-level [[Join]] has no operator above it, so
-   * [[JoinResolver]] wraps it itself (see `JoinResolver.retainTopLevelJoinOutput`). For example
-   * consider the following query:
+   * necessary in order to stay compatible with fixed-point analyzer. For an intermediate
+   * [[Join]], this must be done after resolving the parent because the parent determines whether
+   * the metadata column is part of its output. A top-level [[Join]] whose condition references
+   * hidden output is wrapped by [[JoinResolver]] itself (see
+   * `JoinResolver.retainTopLevelJoinOutput`), and other boundaries where no parent can consume
+   * the hidden output use `retainOriginalJoinOutputAtBoundary`. For example consider the
+   * following query:
    *
    * {{{
    * -- tables: nt1(k, v1), nt2(k, v2), nt3(k, v3)
@@ -131,6 +141,71 @@ trait RetainsOriginalJoinOutput {
         Project(scopes.current.output, join)
       case other => other
     }
+  }
+
+  /**
+   * Restores the visible output of a [[Join]] at a boundary that discards hidden output. Descend
+   * through operators that preserve their child's output so the [[Project]] is placed directly on
+   * top of the [[Join]], matching fixed-point analysis. A [[SubqueryAlias]] is already a boundary
+   * and restores its child while it is being resolved. An existing [[Project]] is trimmed at the
+   * boundary instead of descending through it because operators below may still reference its
+   * hidden attributes.
+   */
+  def retainOriginalJoinOutputAtBoundary(
+      plan: LogicalPlan,
+      outputExpressions: Seq[NamedExpression]): LogicalPlan = plan match {
+    case join: Join =>
+      val project = Project(outputExpressions, join)
+      if (project.sameOutput(join)) {
+        join
+      } else {
+        // Columns appended below the join may still be pruned later, which can leave this
+        // Project redundant. PruneMetadataColumns then removes it, as fixed-point never adds it.
+        project.setTagValue(ResolverTag.PROJECT_FOR_JOIN_OUTPUT_AT_BOUNDARY, ())
+        project
+      }
+    case withCte: WithCTE =>
+      val newPlan = retainOriginalJoinOutputAtBoundary(withCte.plan, outputExpressions)
+      if (newPlan eq withCte.plan) {
+        withCte
+      } else {
+        withCte.withNewPlan(newPlan)
+      }
+    case _: SubqueryAlias =>
+      plan
+    case project: Project =>
+      // Entries can share an expression ID under different names, as in `SELECT col1, COL1`, so
+      // each output expression takes the next unused entry with its ID.
+      val unusedProjectListByExpressionId = project.projectList.groupBy(_.exprId).map {
+        case (exprId, entries) => exprId -> entries.iterator
+      }
+      val newProjectList = outputExpressions.map { outputExpression =>
+        unusedProjectListByExpressionId.get(outputExpression.exprId) match {
+          case Some(unusedEntries) if unusedEntries.hasNext => unusedEntries.next()
+          case _ => outputExpression
+        }
+      }
+      if (newProjectList == project.projectList) {
+        project
+      } else {
+        val newProject = CurrentOrigin.withOrigin(project.origin) {
+          project.copy(projectList = newProjectList)
+        }
+        newProject.copyTagsFrom(project)
+        newProject
+      }
+    case unaryNode: UnaryNode
+        if unaryNode.sameOutput(unaryNode.child) && unaryNode.references.subsetOf(
+          AttributeSet(outputExpressions.map(_.toAttribute))
+        ) =>
+      val newChild = retainOriginalJoinOutputAtBoundary(unaryNode.child, outputExpressions)
+      if (newChild eq unaryNode.child) {
+        unaryNode
+      } else {
+        unaryNode.withNewChildren(Seq(newChild))
+      }
+    case _ =>
+      plan
   }
 
   /**

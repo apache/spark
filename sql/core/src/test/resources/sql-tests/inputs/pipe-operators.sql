@@ -365,12 +365,169 @@ values (0), (1) lhs(a)
 |> limit 2
 |> select lhs.a, rhs.a, z2;
 
+-- A table alias refers to the original value of a column affected by SET.
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> select t.a;
+
+-- Unqualified names expose assigned values while qualified names expose the original row.
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> select a, t.a, t.b;
+
+-- A trailing alias does not expose the retained input row in the visible schema.
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> as u;
+
+-- A qualified column takes precedence over a visible struct field with the same multipart name.
+select 1 as x, named_struct('x', 2) as col
+|> as col
+|> set x = x + 1
+|> select x, col.x;
+
+-- Retaining the original row does not change the visible SET schema or unqualified star.
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> select *;
+
+-- A qualified star returns the original row in its original column order.
+values (1, 2, 3) as t(a, b, c)
+|> set b = 20
+|> select t.*;
+
+-- The alias continues to refer to the input row across sequential assignments.
+values (1, 10) as t(a, b)
+|> set a = a + 1, b = b + 1
+|> select a, b, t.*;
+
+-- Repeated source attributes retain every position in a qualified star.
+values (1, 2) as s(a, b)
+|> select a, a, b
+|> as t
+|> set b = 3
+|> select t.*;
+
+-- Qualified source values remain available through intervening pipe operators.
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> where t.a = 1
+|> select a, t.a;
+
+-- Qualified source values do not cross a DISTINCT boundary.
+values (1), (2) as t(a)
+|> set a = 0
+|> select distinct a
+|> select t.a;
+
+-- An explicitly selected source value becomes part of the DISTINCT key.
+values (1), (2) as t(a)
+|> set a = 0
+|> select distinct a, t.a
+|> select t.a
+|> order by t.a;
+
+-- A one-row SET input remains eligible for a nondeterministic lateral subquery.
+values (0) as t(x)
+|> set x = x + 1
+|> join lateral (select x + rand(0) as y)
+|> select x, y >= x as y_at_least_x;
+
+-- Both sides of a USING join retain qualified access to an assigned key.
+values (1, 10) as lhs(k, l)
+|> inner join values (1, 20) as rhs(k, r) using (k)
+|> set k = k + 1
+|> select k, lhs.k, rhs.k, l, r;
+
+-- A qualified star in COUNT remains invalid when SET replaces every visible qualified column.
+values (1) as t(a)
+|> set a = a + 1
+|> aggregate count(t.*);
+
+-- An unselected metadata column remains available after SET.
+table t
+|> set x = x + 1
+|> select x, _metadata.file_name is not null as has_file_name
+|> order by x;
+
+-- A selected metadata column remains qualified-accessible after SET replaces it.
+table t
+|> select *, _metadata
+|> set _metadata = 1
+|> select x, _metadata,
+     t._metadata.file_name is not null as original_metadata_available
+|> order by x;
+
+-- A visible column takes precedence over a retained column with the same qualified name.
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> inner join values (5) as t(a) on true
+|> select t.a;
+
+-- A qualified star over a USING join lists the hidden key first, also when a projection
+-- re-exposes it.
+values (1, 10) as t1(k, v)
+|> inner join values (1, 20) as t2(k, w) using (k)
+|> select *, t2.k
+|> select t2.*;
+
+-- Qualified source values remain available past a later SELECT or DROP.
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> select b
+|> select t.a;
+
+values (1, 10) as t(a, b)
+|> set b = 0
+|> drop a
+|> select t.a;
+
+-- Set operations do not include retained source values.
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> union all values (2, 20);
+
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> intersect values (2, 10);
+
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> except values (2, 20);
+
+-- A join after SET whose condition references no source value keeps the join output.
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> inner join values (1, 20) as u(c, d) on a = u.c + 1;
+
+-- The legacy configuration hides the replaced source values.
+set spark.sql.legacy.pipeOperatorHideReplacedColumns=true;
+
+values (1, 2, 3) as t(a, b, c)
+|> set b = 20
+|> select t.*;
+
+select 1 as x, named_struct('x', 2) as col
+|> as col
+|> set x = x + 1
+|> select x, col.x;
+
+values (1, 10) as t(a, b)
+|> drop a
+|> select t.*;
+
+set spark.sql.legacy.pipeOperatorHideReplacedColumns=false;
+
 -- SET operators: negative tests.
 ---------------------------------
 
 -- SET with a column name that does not exist in the input relation.
 table t
 |> set z = 1;
+
+-- Aggregate functions are not allowed in SET.
+values (1), (2) as t(x)
+|> set x = sum(x);
 
 -- SET with a column name that matches two copies of the same column.
 select x, x from t
@@ -464,6 +621,11 @@ table t
 |> as v
 |> eval z = v.x + 1
 |> select v.x, z;
+
+-- A table alias refers to the original value of a column replaced by EVAL, as with SET.
+values (1, 10) as t(a, b)
+|> eval a = a + 1, c = b + 1
+|> select a, t.a, t.b, c;
 
 -- EVAL matches only the columns that * expands to, so a hidden metadata column such as _metadata
 -- is not replaced: a new column with that name is appended, and later references resolve to it.
@@ -594,6 +756,25 @@ select 1 as x, named_struct('x', 2, 'y', 3) as col
 -- Multi-level nested struct field drop.
 select 1 as x, named_struct('middle', named_struct('inner', 2)) as outer
 |> drop outer.middle.inner;
+
+-- A table alias refers to the original value of a dropped column, as with SET.
+values (1, 10) as t(a, b)
+|> drop a
+|> select t.a;
+
+values (1, 10) as lhs(k, l)
+|> inner join values (1, 20) as rhs(k, r) using (k)
+|> drop k
+|> select lhs.k;
+
+-- A qualified star after DROP returns the original row; an unqualified star does not.
+values (1, 2, 3) as t(a, b, c)
+|> drop b
+|> select t.*;
+
+values (1, 2, 3) as t(a, b, c)
+|> drop b
+|> select *;
 
 -- DROP operators: negative tests.
 ----------------------------------

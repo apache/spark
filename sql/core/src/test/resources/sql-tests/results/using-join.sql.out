@@ -555,3 +555,47 @@ one	1	one	1	5
 one	5	one	1	1
 one	5	one	1	5
 two	22	two	2	22
+
+
+-- !query
+FROM VALUES (1, 10) AS nt1(k, v1) JOIN VALUES (1, 20) AS nt2(k, v2) USING (k)
+  JOIN VALUES (1, 30) AS nt3(k, v3) ON nt1.k = nt3.k
+-- !query schema
+struct<k:int,v1:int,v2:int,k:int,v3:int>
+-- !query output
+1	10	20	1	30
+
+
+-- !query
+SELECT * FROM (
+  FROM VALUES (1, 10) AS nt1(k, v1) JOIN VALUES (1, 20) AS nt2(k, v2) USING (k)
+    JOIN VALUES (1, 30) AS nt3(k, v3) ON nt1.k = nt3.k) AS q
+-- !query schema
+struct<k:int,v1:int,v2:int,k:int,v3:int>
+-- !query output
+1	10	20	1	30
+
+
+-- !query
+SELECT rhs.k FROM VALUES (1) AS lhs(k) JOIN VALUES (1) AS rhs(k) USING (k)
+  JOIN VALUES (2) AS rhs(k) ON true
+-- !query schema
+struct<k:int>
+-- !query output
+2
+
+
+-- !query
+WITH c AS (SELECT 1 AS k, 2 AS v) SELECT c.k FROM c JOIN c USING (k)
+-- !query schema
+struct<k:int>
+-- !query output
+1
+
+
+-- !query
+SELECT count(t2.*) FROM VALUES (1, 2) AS t1(k, v) JOIN VALUES (1) AS t2(k) USING (k)
+-- !query schema
+struct<count(k):bigint>
+-- !query output
+1

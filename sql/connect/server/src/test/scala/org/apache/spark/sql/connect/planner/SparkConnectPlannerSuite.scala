@@ -1402,4 +1402,79 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       intercepted.getMessage.contains("No handler found for extension type: " +
         "type.googleapis.com/google.protobuf.StringValue"))
   }
+
+  private def sqlRelation(query: String, planId: Long): proto.Relation =
+    proto.Relation
+      .newBuilder()
+      .setSql(proto.SQL.newBuilder().setQuery(query))
+      .setCommon(proto.RelationCommon.newBuilder().setPlanId(planId))
+      .build()
+
+  private def selectRelation(input: proto.Relation, column: String): proto.Relation = {
+    val expression = if (column.endsWith("*")) {
+      proto.Expression
+        .newBuilder()
+        .setUnresolvedStar(UnresolvedStar.newBuilder().setUnparsedTarget(column))
+    } else {
+      proto.Expression
+        .newBuilder()
+        .setUnresolvedAttribute(
+          proto.Expression.UnresolvedAttribute.newBuilder().setUnparsedIdentifier(column))
+    }
+    proto.Relation
+      .newBuilder()
+      .setProject(proto.Project.newBuilder().setInput(input).addExpressions(expression))
+      .build()
+  }
+
+  test("SPARK-59146: pipe SET retained columns do not reach DataFrame operations on SQL") {
+    val setRelation = sqlRelation("VALUES (1, 10) AS t(a, b) |> SET a = a + 1", planId = 1L)
+
+    val error = intercept[AnalysisException] {
+      Dataset.ofRows(spark, transform(selectRelation(setRelation, "t.a")))
+    }
+    assert(error.getCondition === "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+
+    val qualifiedStar = Dataset.ofRows(spark, transform(selectRelation(setRelation, "t.*")))
+    assert(qualifiedStar.schema.fieldNames === Array("b"))
+    assert(qualifiedStar.collect() === Array(Row(10)))
+
+    // References inside the SQL statement still reach the retained columns.
+    val insideStatement = sqlRelation(
+      "VALUES (1, 10) AS t(a, b) |> SET a = a + 1 |> SELECT a, t.a", planId = 2L)
+    assert(Dataset.ofRows(spark, transform(insideStatement)).collect() === Array(Row(2, 1)))
+
+    // A hidden USING join key below the SET stays reachable, as in classic Spark.
+    val joinQuery = "VALUES (1, 10) AS l(k, v) |> INNER JOIN VALUES (1, 20) AS r(k, w) " +
+      "USING (k) |> SET v = v + 1"
+    val hiddenKey =
+      Dataset.ofRows(spark, transform(selectRelation(sqlRelation(joinQuery, 3L), "r.k")))
+    assert(hiddenKey.collect() === Array(Row(1)))
+    assert(spark.sql(joinQuery).select("r.k").collect() === Array(Row(1)))
+  }
+
+  test("SPARK-59146: a cached pipe SET relation hides retained columns in single-pass analysis") {
+    withSQLConf(
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true",
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+      SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+      val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+      val planner = new SparkConnectPlanner(sessionHolder)
+      val setRelation = sqlRelation("VALUES (1, 10) AS t(a, b) |> SET a = a + 1", planId = 4L)
+
+      // Analyze the relation on its own first, as a schema request does, so that the plan cache
+      // holds the plan that this analysis tagged.
+      val schema = Dataset
+        .ofRows(sessionHolder.session, planner.transformRelation(setRelation, cachePlan = true))
+        .schema
+      assert(schema.fieldNames === Array("a", "b"))
+
+      val error = intercept[AnalysisException] {
+        Dataset.ofRows(
+          sessionHolder.session,
+          planner.transformRelation(selectRelation(setRelation, "t.a"), cachePlan = true))
+      }
+      assert(error.getCondition === "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+    }
+  }
 }
