@@ -1575,6 +1575,9 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
 
   override def arguments: Seq[Expression] = left :: right :: Nil
 
+  // `right` is evaluated only if `left` is not null.
+  override def alwaysEvaluatedArguments: Seq[Expression] = left :: Nil
+
   override def argumentTypes: Seq[AbstractDataType] = MapType :: MapType :: Nil
 
   override def functions: Seq[Expression] = function :: Nil
@@ -1804,6 +1807,9 @@ case class ZipWith(left: Expression, right: Expression, function: Expression)
   def functionForEval: Expression = functionsForEval.head
 
   override def arguments: Seq[Expression] = left :: right :: Nil
+
+  // `right` is evaluated only if `left` is not null.
+  override def alwaysEvaluatedArguments: Seq[Expression] = left :: Nil
 
   override def argumentTypes: Seq[AbstractDataType] = ArrayType :: ArrayType :: Nil
 
