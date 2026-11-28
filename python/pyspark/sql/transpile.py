@@ -35,6 +35,91 @@ keeps the option matrix small; prefer doing so. To bound plan growth,
 functions with more than three untyped parameters only emit the
 all-numeric and all-string variants.
 
+Constructs that short-circuit in Python -- ``and`` / ``or`` and chained
+comparisons such as ``0 <= x <= 100`` -- must keep the ``raise_error`` NULL guard
+in a later operand from firing on rows Python never reaches. Two folds do that:
+
+* ``&`` / ``|``, for ``and`` / ``or``. ``And`` skips its right operand when the
+  left is exactly ``false`` (``Or``: exactly ``true``) in both ``eval`` and
+  ``doGenCode``. A NULL left operand still evaluates the right, so every operand
+  before the last must be a provably non-NULL boolean (see
+  ``_is_never_null_boolean``).
+* A sequential CASE WHEN (``CASE WHEN NOT v1 THEN v1 ... ELSE vN END``; for
+  ``or``, ``WHEN v1 THEN v1``), for the links of a chain and for ``and`` /
+  ``or`` in a body that holds a chain or a comparison over a non-basic operand
+  (see ``_needs_atomic_boolops``). Each later operand sits in a branch that runs
+  only once the earlier ones have not decided the result. Under strict null
+  strictness (the default) every comparison link is total, so no condition is
+  NULL. Under ``transpileNullStrictness=loose`` an ordering link is NULL for a
+  NULL operand and a CASE WHEN would skip it, so loose takes ``&`` / ``|``,
+  whose three-valued logic propagates the NULL. Calls and arithmetic can still raise
+  under loose and the optimizer can drop or hoist an ``&`` / ``|`` operand (see
+  below), so an atomic loose fold in a body holding either falls
+  back to interpreted Python.
+
+The CASE WHEN is not split or reordered by the optimizer:
+``splitConjunctivePredicates`` matches only ``And``, ``BooleanSimplification``'s
+patterns match ``And`` / ``Or``, and subexpression elimination takes a CASE
+WHEN's first condition plus what every condition (or every value) shares, which
+is already in the first condition. So no rule can move a later guard ahead of
+the operands that gate it. ``SimplifyConditionals`` does replace a CASE WHEN
+whose values all equal its ELSE with that value, dropping the conditions and
+their guards, so each branch returns its own operand (which is the stop value
+there) rather than a literal that a last operand such as ``... and False`` could
+equal. The price is pushdown: the predicate moves only as a whole, and over
+nullable operands its guards make it throwable, so it stays above a join
+(SPARK-60903).
+
+An if/ternary is a CASE WHEN whose values are its branches, so that rule drops
+its test, and the errors the test raises, once both branches are one expression.
+The source cannot rule that out: the call makes any two branches one by binding
+their parameters to one argument, as ``f(x, x, c)`` does for ``a if 0 < c < 10
+else b``. So in a body that takes the CASE WHEN fold, a test that can raise gets
+a third branch: ``CASE WHEN t THEN body WHEN NOT t THEN orelse
+ELSE raise_error(...) END``. ``t`` is never NULL, so the ELSE is never reached, but
+no branch equals it and the test stays. A test that cannot raise keeps two
+branches, since dropping it loses nothing, and the expression stays as
+pushable as its operands. An if/ternary in a body that lowered before chains did
+keeps two branches as well, and with them its plan, which leaves this OPEN
+there: measured, ``a if c > 0 else b`` called as ``f(x, x, c)`` returns ``x`` for
+a NULL ``c`` where Python raises TypeError.
+
+The ``&`` / ``|`` fold keeps per-conjunct pushdown, which is why the ``and`` /
+``or`` bodies that lowered before chains did keep it. But its short-circuit is an
+EVALUATION-time property, and the optimizer does not fully preserve it. Measured
+on that fold, not reasoned about:
+
+* Predicate pushdown through a JOIN -- CLOSED by SPARK-58627: ``RaiseError`` now
+  overrides ``throwable``, so a guard is no longer pushed below a join onto rows
+  the join drops. ``test_udf_transpile_boolop_short_circuits`` is the regression
+  test.
+* Predicate pushdown through an AGGREGATE, WINDOW, UNION or watermark -- CLOSED
+  by SPARK-60633: a throwable conjunct written after one that stays above the
+  operator now stays above it too.
+* BooleanSimplification -- OPEN. It matches conjuncts with ``semanticEquals``,
+  which needs ``deterministic`` and ignores ``throwable``; ``RaiseError`` is
+  deterministic. Common-factor elimination (``(a && b) || (a && c) => a && (b
+  || c)``) hoists a shared guard to the FRONT of a conjunction: ``(a < b and
+  b < c) or (d < b and b < c)`` on ``(5, 1, None, 7)`` raises where Python
+  returns False. Absorption (``(a && b) || b => b``) drops a guard instead:
+  ``(a < b and b < c) or (b < c)`` on ``(None, 0, 1)`` returns True where Python
+  would raise TypeError -- a silently wrong answer, not a spurious error.
+* Subexpression elimination -- OPEN. ``spark.sql.subexpressionElimination.enabled``
+  defaults true while ``...skipForShortcutExpr`` defaults FALSE, so a conjunct
+  living only in a short-circuited position is hoisted and evaluated
+  unconditionally. This rule never consults ``Expression.throwable``.
+* NaN ordering -- OPEN, and a value-level difference rather than a fold one:
+  Spark orders NaN above every value where Python's NaN comparisons are all
+  False (SPARK-58781). Equality matches Python since SPARK-59091's NaN guard.
+
+The two OPEN rules are INDEPENDENTLY sufficient, which is worth knowing before
+reaching for a conf to prove a theory: on the common-factor repro, each of
+``skipForShortcutExpr=true``, ``subexpressionElimination.enabled=false`` and
+excluding ``BooleanSimplification`` still raises on its own. Both need a common
+subexpression inside an ``&`` / ``|``, which a user-written ``and`` / ``or``
+that repeats a guarded operand (``(a < b and b < c) or (d < b and b < c)``)
+hands them.
+
 ``len(s)`` lowers to Catalyst ``length`` for a string operand (SPARK-55214).
 Other ``len`` arguments (numbers, lists, ...) stay interpreted Python.
 ``len(None)`` raises (via ``raise_error`` on NULL), matching CPython.
@@ -102,8 +187,10 @@ An argument the body never reads is not computed at all.
 
 import ast
 import contextlib
+import functools
 import inspect
 import itertools
+import operator
 import sys
 import textwrap
 import threading
@@ -166,6 +253,41 @@ def _wider_numeric(lc: str, rc: str) -> str:
     return "integer"
 
 
+# At most 64 operators over 65 operands; longer chains fall back to Python.
+_MAX_COMPARISON_OPS = 64
+
+# Bound on the Catalyst tree one application of a UDF builds, summed over its
+# options (see `_materialized_weight`), for bodies whose expansion compounds
+# (see `_expansion_compounds`). Lowerings reference operand Columns more
+# than once and `ColumnNodeToExpressionConverter` does not memoize, so the shared
+# Column DAG expands into a tree for every option each time the UDF is applied --
+# outside `_transpile_func`'s fallback `except`. `(x < 0) < ((x < 0) < ...)` is
+# 2d + 1 links but ~2^d nodes (4^d with `==`). The JVM's `Column.equalTo` walks
+# its operands' trees too, so one option's size also bounds the lowering itself.
+_MAX_MATERIALIZED_WEIGHT = 1 << 16
+
+# A subtree whose estimated weight passes this many times its AST node count
+# marks its body as compounding (see `_expansion_compounds`).
+_COMPOUND_RATIO = 32
+
+# Nodes a lowering adds around its operands (`when` / raise_error, NULL guard, ...).
+_NODE_OVERHEAD = 4
+
+# How often a comparison link reads each operand: `_lower_eq` four times (two
+# `isNull`, the NaN guard and the comparison), `is` only the subject,
+# `_lower_value_compare` (the default) twice.
+_OPERAND_READS: dict[type, int] = {ast.Eq: 4, ast.NotEq: 4, ast.Is: 1, ast.IsNot: 1}
+
+# The four ordering comparisons: same lowering, differing only in the operator
+# and the symbol used to name it in an error message.
+_ORDERING_OPS: dict[type, Tuple[Callable[[Any, Any], Column], str]] = {
+    ast.Lt: (operator.lt, "<"),
+    ast.LtE: (operator.le, "<="),
+    ast.Gt: (operator.gt, ">"),
+    ast.GtE: (operator.ge, ">="),
+}
+
+
 class AbstractTranspiler(object):
     """Base class for transpilers. All experimental."""
 
@@ -173,6 +295,9 @@ class AbstractTranspiler(object):
     # Specify the "friendly" name a user can add to spark.sql.experimental.optimizer.pyTranspilers
     # to enable this transpiler.
     variety: str = ""
+    # Whether the last `_transpile_from_ast` lowered a NULL guard that raises at
+    # runtime; `_transpile_func` warns about the guards of the options it keeps.
+    _null_guard_emitted: bool = False
 
     @classmethod
     def register(cls) -> None:
@@ -197,6 +322,56 @@ class AbstractTranspiler(object):
         also the list ``param_categories`` is keyed by.
         """
         pass
+
+
+def _expansion_compounds(body: ast.AST, atomic: bool) -> bool:
+    """Return True when some subtree of ``body`` weighs more than
+    ``_COMPOUND_RATIO`` times its AST node count.
+
+    References that multiply per nesting level make a subtree's weight outgrow
+    its node count geometrically, whereas a flat run of terms keeps the ratio of
+    one term however many there are, so its size stays proportional to the
+    source; such a flat body is not bounded by ``_MAX_MATERIALIZED_WEIGHT``. A
+    single term that nests two multi-read lowerings, such as
+    ``x % (y % z) == 0``, already passes the ratio and counts as compounding.
+    """
+    return any(
+        _materialized_weight(node, atomic) > _COMPOUND_RATIO * sum(1 for _ in ast.walk(node))
+        for node in ast.walk(body)
+    )
+
+
+def _materialized_weight(node: ast.AST, atomic: bool = False) -> int:
+    """Rough size of the Catalyst tree ``_convert_chunk`` emits for ``node``.
+
+    A child is charged once per reference its parent's lowering makes, since the
+    JVM expands every reference. ``atomic`` says that the body's ``and`` / ``or``
+    take the CASE WHEN fold (see ``_needs_atomic_boolops``).
+    """
+    weigh = functools.partial(_materialized_weight, atomic=atomic)
+    match node:
+        case ast.Compare(left=left, ops=ops, comparators=comps):
+            weights = [weigh(n) for n in [left, *comps]]
+            links = [
+                _OPERAND_READS.get(type(op), 2) * (lhs + rhs) + _NODE_OVERHEAD
+                for op, lhs, rhs in zip(ops, weights, weights[1:])
+            ]
+            # `_short_circuit` reads every link before the last twice.
+            return 2 * sum(links) - links[-1]
+        case ast.BoolOp(values=values) if atomic:
+            weights = [weigh(v) for v in values]
+            return 1 + 2 * sum(weights) - weights[-1]
+        case ast.IfExp(test=test) | ast.If(test=test) if atomic:
+            # `_convert_if_like` reads a test that can raise twice.
+            branches = sum(weigh(n) for n in ast.iter_child_nodes(node) if n is not test)
+            return 2 * weigh(test) + branches + _NODE_OVERHEAD
+        case ast.BinOp(left=left, op=ast.Mod(), right=right):
+            # `sb * pmod(sb * a, abs(b))` with `sb` reading `b` twice.
+            return weigh(left) + 5 * weigh(right) + 2 * _NODE_OVERHEAD
+        case ast.Call(func=ast.Name(id="len"), args=[arg], keywords=[]):
+            return 2 * weigh(arg) + _NODE_OVERHEAD
+        case _:
+            return 1 + sum(map(weigh, ast.iter_child_nodes(node)))
 
 
 def _is_definitely_basic_type(node: ast.AST) -> bool:
@@ -226,17 +401,22 @@ def _is_definitely_boolean(node: ast.AST) -> bool:
     """Return True when ``node`` is statically guaranteed to produce a Python
     ``bool`` (or ``None``, which round-trips through ``coalesce``).
 
-    Used to gate ``if``/ternary lowering: we only allow the test expression
-    into Catalyst's ``when(coalesce(test, false), ...)`` form when it provably
-    produces a boolean. Everything else (bare Name, arithmetic, other calls,
-    subscript, ...) must force a fallback to interpreted Python instead of
-    silently diverging.
+    Gates ``if``/ternary tests and ``not``, and labels boolean-producing
+    expressions as the "bool" category: we only let the expression into
+    Catalyst's ``when(coalesce(test, false), ...)`` form when it provably
+    produces a boolean. ``and`` / ``or`` need more of every operand before the
+    last -- Spark's ``NULL AND false`` is ``false`` where Python's ``None and
+    False`` is ``None`` -- so those gate on the stricter
+    ``_is_never_null_boolean``. For ``not`` and the last ``and`` / ``or``
+    operand, anything else (bare Name, arithmetic, other calls, ...) falls back
+    to interpreted Python; an if/ternary test takes ``_truthiness_col`` instead.
     """
     match node:
         case ast.Constant(value=v):
             return v is None or isinstance(v, bool)
         case ast.Compare(left=left, comparators=comparators):
-            # All comparison operators of simple types bool
+            # All comparison operators of simple types bool. Chained comparisons
+            # included: every operand still has to be a basic type.
             return all(_is_definitely_basic_type(v) for v in comparators + [left])
         case ast.BoolOp(values=values):
             return all(_is_definitely_boolean(v) for v in values)
@@ -251,6 +431,104 @@ def _is_definitely_boolean(node: ast.AST) -> bool:
             return _STRING_METHODS[method][2] == "bool"
         case _:
             return False
+
+
+def _is_never_null_boolean(node: ast.AST) -> bool:
+    """Return True when ``node`` lowers to a boolean column that is never NULL.
+
+    Stricter than ``_is_definitely_boolean``, which also accepts operands that
+    may evaluate to NULL. ``and`` / ``or`` need that of every operand before the
+    last: Spark's ``NULL AND false`` is ``false`` where Python's ``None and
+    False`` is ``None``, and rejecting a bare ``None`` operand is not enough
+    because a ternary can evaluate to one (``(True if c else None) and x``). The
+    last operand is returned as it is, NULL included, so it may be NULL.
+
+    ``not`` and if/ternary *tests* do not need this: both wrap the operand in
+    ``coalesce``, so both handle NULL explicitly. ``not`` gates on
+    ``_is_definitely_boolean``; an if/ternary test that fails that gate falls to
+    ``_truthiness_col`` (SPARK-56925), which coalesces in every category, so a
+    bare ``if x`` is total too.
+
+    This answers "would it be NULL?", not "can it be lowered at all" -- it says
+    True for shapes ``_convert_chunk`` goes on to refuse, such as ``x in "abc"``.
+    """
+    match node:
+        case ast.Constant(value=v):
+            # A literal None is "boolean" for coalesce purposes but IS NULL.
+            return isinstance(v, bool)
+        case ast.Compare():
+            # Under strict null strictness every comparison lowering is total
+            # (see ``_lower_compare_pair``), so only the operand shapes still
+            # need checking. Under loose an ordering comparison can be NULL,
+            # which is that setting's documented difference from Python.
+            return _is_definitely_boolean(node)
+        case ast.UnaryOp(op=ast.Not()):
+            # Lowered as ``coalesce(~operand, lit(True))``, which is total.
+            return True
+        case ast.BoolOp(values=values):
+            return all(_is_never_null_boolean(v) for v in values)
+        case ast.IfExp(body=body, orelse=orelse):
+            return _is_never_null_boolean(body) and _is_never_null_boolean(orelse)
+        case ast.Call(func=ast.Attribute(attr=method)) if method in _STRING_METHODS:
+            # ``s.startswith(p)`` / ``s.endswith(p)`` (SPARK-59816) raise on a NULL
+            # operand under either null strictness, so they are never NULL.
+            return _STRING_METHODS[method][2] == "bool"
+        case _:
+            return False
+
+
+def _is_none_constant(node: ast.AST) -> bool:
+    """Return True for the literal ``None``."""
+    return isinstance(node, ast.Constant) and node.value is None
+
+
+def _needs_atomic_boolops(body: ast.AST) -> bool:
+    """Return True when ``body`` holds a chained comparison or a comparison over
+    a non-basic operand (a comparison, ``and`` / ``or``, ternary, ...).
+
+    Such a body only lowers since chained and nested comparisons do, so it has no
+    ``&`` / ``|`` plan to preserve, and its ``and`` / ``or`` take the sequential
+    CASE WHEN fold that the optimizer cannot split (see the module docstring).
+    """
+    return any(
+        isinstance(n, ast.Compare) and (len(n.ops) > 1 or not _is_definitely_boolean(n))
+        for n in ast.walk(body)
+    )
+
+
+def _holds_raising_lowering(body: ast.AST) -> bool:
+    """Conservatively flag calls and arithmetic, which can raise whatever the
+    null strictness.
+    """
+    return any(
+        isinstance(n, (ast.Call, ast.BinOp))
+        or (isinstance(n, ast.UnaryOp) and isinstance(n.op, (ast.UAdd, ast.USub)))
+        for n in ast.walk(body)
+    )
+
+
+def _short_circuit(operands: List[Column], stop_on: bool) -> Column:
+    """Fold boolean ``operands`` so that each is evaluated only when every
+    earlier one differs from ``stop_on``, which is then the result:
+    ``CASE WHEN NOT o1 THEN o1 ... ELSE oN END`` for ``stop_on=False``
+    (``and``, chain links) and ``CASE WHEN o1 THEN o1 ... ELSE oN END`` for
+    ``stop_on=True`` (``or``). Every operand before the last must be non-NULL: a
+    NULL condition takes no branch, so the fold would skip it. That holds only
+    under strict null strictness (see ``CatalystTranspiler._fold_boolean``).
+
+    A branch returns its operand, which equals ``stop_on`` there, and not the
+    literal: ``SimplifyConditionals`` replaces a CASE WHEN whose values all equal
+    its ELSE, and a last operand that is or folds to ``stop_on`` (``... and
+    False``) would make every literal branch do so, deleting the earlier
+    operands' NULL guards.
+    """
+    first, *rest = operands
+    if not rest:
+        return first
+    fold = when(first if stop_on else ~first, first)
+    for operand in rest[:-1]:
+        fold = fold.when(operand if stop_on else ~operand, operand)
+    return fold.otherwise(rest[-1])
 
 
 def _truthiness_col(cat: Optional[str], c: Column) -> Optional[Column]:
@@ -341,6 +619,8 @@ class CatalystTranspiler(AbstractTranspiler):
         self._category_cache: dict[int, str] = {}
         self._nonnull_params: frozenset = frozenset()
         self._null_guard_emitted: bool = False
+        self._atomic_boolops: bool = False
+        self._holds_raising_lowering: bool = False
 
     # TODO (SPARK-55218): handle implicit-None return bodies like
     # ``def f(x): x + x`` -- no return statement means return None;
@@ -360,6 +640,17 @@ class CatalystTranspiler(AbstractTranspiler):
         if len(statements) == 0:
             return lit(None)
         return self._convert_chunk(params, statements[0])
+
+    def _convert_test(self, params: List[str], test: ast.AST) -> Tuple[Column, bool]:
+        """Lower the test of an if/ternary, and say whether evaluating it can
+        raise: it lowered a NULL guard, or it holds a call or arithmetic.
+        """
+        emitted_before = self._null_guard_emitted
+        self._null_guard_emitted = False
+        test_col = self._convert_chunk(params, test)
+        can_raise = self._null_guard_emitted or _holds_raising_lowering(test)
+        self._null_guard_emitted = self._null_guard_emitted or emitted_before
+        return test_col, can_raise
 
     def _is_nonnull_node(self, params: List[str], node: ast.AST) -> bool:
         """Return True when ``node`` is statically known to produce a non-null value.
@@ -412,7 +703,7 @@ class CatalystTranspiler(AbstractTranspiler):
                     return _wider_numeric(body_c, else_c)
                 return None
             return body_c if body_c is not None else else_c
-        if isinstance(node, ast.Constant) and node.value is None:
+        if _is_none_constant(node):
             return None
         # Comparisons / ``not`` / boolean ops produce a boolean column; classify
         # them as "bool" (``_category``'s catch-all would mislabel them numeric).
@@ -432,6 +723,7 @@ class CatalystTranspiler(AbstractTranspiler):
         test_node: ast.AST,
         body_node: Optional[ast.AST],
         else_node: Optional[ast.AST],
+        test_can_raise: bool,
     ) -> Column:
         # Determine the boolean guard for the CASE WHEN.
         # Two paths:
@@ -474,13 +766,25 @@ class CatalystTranspiler(AbstractTranspiler):
                     f"{else_cat}); the lowered CASE WHEN has no common type under ANSI, "
                     "so the transpiler falls back to interpreted Python"
                 )
-        return when(safe_test, body_col).otherwise(else_col)
+        if not (self._atomic_boolops and test_can_raise):
+            return when(safe_test, body_col).otherwise(else_col)
+        # `SimplifyConditionals` replaces a CASE WHEN whose values all equal its
+        # ELSE, which would drop the test and the errors it raises whenever the
+        # call binds both branches to one argument. No branch equals this ELSE,
+        # and `safe_test` is never NULL, so it is never reached (see the module
+        # docstring).
+        unreachable = raise_error(
+            lit("Python UDF transpiler: internal error, an if/ternary test evaluated to NULL.")
+        )
+        return when(safe_test, body_col).when(~safe_test, else_col).otherwise(unreachable)
 
     def _lower_eq(
         self,
         params: List[str],
         left_node: ast.AST,
         right_node: ast.AST,
+        left_col: Column,
+        right_col: Column,
         equal: bool,
     ) -> Column:
         """Lower ``==`` / ``!=`` with Python's None- and NaN-equality semantics.
@@ -522,8 +826,6 @@ class CatalystTranspiler(AbstractTranspiler):
                     "Python compares across types as unequal while Spark would coerce "
                     "or fail analysis, so the transpiler falls back to interpreted Python"
                 )
-        left_col = self._convert_chunk(params, left_node)
-        right_col = self._convert_chunk(params, right_node)
         left_null = left_col.isNull()
         right_null = right_col.isNull()
         # NaN guard: Python's `NaN == NaN` is False (IEEE 754 reflexivity fails),
@@ -561,6 +863,8 @@ class CatalystTranspiler(AbstractTranspiler):
         params: List[str],
         left_node: ast.AST,
         right_node: ast.AST,
+        left_col: Column,
+        right_col: Column,
         op: Callable[[Column, Column], Column],
         op_repr: str,
     ) -> Column:
@@ -589,8 +893,9 @@ class CatalystTranspiler(AbstractTranspiler):
         ``spark.sql.experimental.optimizer.transpileNullStrictness`` controls
         this guard. Under ``strict`` (the default) a NULL operand raises,
         matching Python's TypeError. Under ``loose`` the guard is skipped and
-        NULL propagates as NULL, allowing more UDFs to transpile at the cost of
-        that semantic difference on NULL inputs.
+        NULL propagates as NULL, at the cost of that semantic difference on NULL
+        inputs. Loose also changes how chains and ``and`` / ``or`` fold, and
+        makes some of those bodies fall back (see ``_fold_boolean``).
         """
         lc = self._category(params, left_node)
         rc = self._category(params, right_node)
@@ -600,8 +905,6 @@ class CatalystTranspiler(AbstractTranspiler):
                 f"({lc} vs {rc}); Python would raise TypeError, so the "
                 "transpiler falls back to interpreted Python"
             )
-        left_col = self._convert_chunk(params, left_node)
-        right_col = self._convert_chunk(params, right_node)
         if self._is_nonnull_node(params, left_node) and self._is_nonnull_node(params, right_node):
             return op(left_col, right_col)
         if self._null_strictness == "loose":
@@ -614,6 +917,97 @@ class CatalystTranspiler(AbstractTranspiler):
         )
         self._null_guard_emitted = True
         return when(null_guard, raise_error(err)).otherwise(op(left_col, right_col))
+
+    def _fold_boolean(self, operands: List[Column], is_or: bool, atomic: bool) -> Column:
+        """Fold the lowered operands of an ``and`` / ``or``, or the links of a
+        chain (``is_or=False``): the sequential CASE WHEN when ``atomic``,
+        otherwise ``&`` / ``|`` (see the module docstring).
+
+        The CASE WHEN needs every operand before the last non-NULL, which
+        comparison links are only under strict null strictness. Under loose an
+        ordering link is NULL for a NULL operand, and a CASE WHEN would skip it
+        and answer from the later operands, so loose folds with ``&`` / ``|``:
+        their three-valued logic propagates the NULL, and no ordering
+        ``raise_error`` guard is left for the optimizer to move. Calls and
+        arithmetic can still raise under loose, though, and BooleanSimplification,
+        subexpression elimination and partition pruning can drop or hoist an
+        ``&`` / ``|`` operand, so an atomic fold in such a body falls back.
+        TODO (SPARK-54783): take the CASE WHEN there when every operand before
+        the last is never NULL under loose.
+        """
+        if not atomic or len(operands) == 1:
+            return functools.reduce(operator.or_ if is_or else operator.and_, operands)
+        if self._null_strictness != "loose":
+            return _short_circuit(operands, stop_on=is_or)
+        if self._holds_raising_lowering:
+            raise UnsupportedOperationException(
+                "under transpileNullStrictness=loose a chained or nested comparison "
+                "folds with `&` / `|`, which the optimizer may reorder around the "
+                "calls or arithmetic in this body, so the UDF falls back to interpreted "
+                "Python"
+            )
+        return functools.reduce(operator.or_ if is_or else operator.and_, operands)
+
+    def _lower_compare_pair(
+        self,
+        params: List[str],
+        op: ast.cmpop,
+        left_node: ast.AST,
+        right_node: ast.AST,
+        left_col: Column,
+        right_col: Column,
+    ) -> Column:
+        """Lower ONE adjacent comparison of a (possibly chained) ``ast.Compare``,
+        given its operands' lowered Columns.
+
+        Under strict null strictness the result is never NULL, which callers
+        rely on (under loose, ``_lower_value_compare`` returns NULL for a NULL
+        operand and ``_fold_boolean`` folds accordingly): ``is`` / ``is not`` emit
+        ``isNull`` / ``isNotNull``, ``_lower_eq`` answers every NULL combination
+        with a boolean literal, and ``_lower_value_compare`` raises rather than
+        returning NULL. Its non-NULL branch cannot yield NULL either, because
+        equal operand categories plus the category contract that
+        ``ResolveTranspiledPythonUDFOptions`` enforces on the JVM side
+        (non-decimal ``NumericType`` for "numeric", UTF8_BINARY ``StringType``
+        for "string") leave numeric widening as the only coercion Catalyst
+        inserts, and under ANSI a failing cast raises. That is what lets the
+        strict chain fold wrap each link in ``NOT link`` with no ``coalesce``.
+        """
+        match op:
+            case ast.Is() | ast.IsNot():
+                # Only lower `x is None` / `None is x` (and their
+                # `is not` variants) to isNull/isNotNull. For any
+                # other comparator (e.g. `x is 0`, `x is y`) Python
+                # performs an object-identity check that has no SQL
+                # equivalent, so we must fall back to interpreted
+                # Python rather than silently emitting a null check.
+                is_none_left = _is_none_constant(left_node)
+                is_none_right = _is_none_constant(right_node)
+                if not (is_none_left or is_none_right):
+                    raise UnsupportedOperationException(
+                        "`is`/`is not` is only supported when one "
+                        "operand is the literal None; other identity "
+                        "checks (e.g. `x is 0`, `x is y`) cannot be "
+                        "lowered to SQL and the UDF falls back to "
+                        "interpreted Python"
+                    )
+                subject_col = right_col if is_none_left else left_col
+                return subject_col.isNull() if isinstance(op, ast.Is) else subject_col.isNotNull()
+            case ast.Eq() | ast.NotEq():
+                return self._lower_eq(
+                    params, left_node, right_node, left_col, right_col, isinstance(op, ast.Eq)
+                )
+            case ast.Lt() | ast.LtE() | ast.Gt() | ast.GtE():
+                op_fn, op_str = _ORDERING_OPS[type(op)]
+                return self._lower_value_compare(
+                    params, left_node, right_node, left_col, right_col, op_fn, op_str
+                )
+            case _:
+                # Reached only if Python gains a new `cmpop`: the other eight are
+                # handled above and `in` / `not in` are refused by the caller.
+                raise UnsupportedOperationException(
+                    f"comparison operator {type(op).__name__} is not supported by the transpiler"
+                )
 
     def _category(self, params: List[str], node: ast.AST) -> str:
         """Infer the scalar category of ``node`` under the current
@@ -721,7 +1115,7 @@ class CatalystTranspiler(AbstractTranspiler):
                 # unifies with any type in the lowered CASE WHEN); mismatched or
                 # all-None branches raise so the variant is dropped.
                 def branch_category(b: ast.AST) -> Optional[str]:
-                    if isinstance(b, ast.Constant) and b.value is None:
+                    if _is_none_constant(b):
                         return None
                     return self._category(params, b)
 
@@ -743,11 +1137,19 @@ class CatalystTranspiler(AbstractTranspiler):
                         "ternary with all-None branches has no usable column category"
                     )
                 return result_cat
+            case ast.Compare():
+                # Checked by node kind, not through `_is_definitely_boolean`: that
+                # also demands basic-type operands, so it misses `(a < b) == True`,
+                # which then reached the numeric catch-all below and let a boolean
+                # body satisfy a numeric declared return type -- emitting
+                # `cast(<boolean> as bigint)` where the interpreted path returns
+                # NULL. EVERY Python comparison evaluates to a bool.
+                return "bool"
             case _ if _is_definitely_boolean(node):
-                # Comparisons, `not`, and boolean ops produce a boolean column.
-                # Labeling them "numeric" (the old catch-all) let booleans into
+                # `not` and boolean ops produce a boolean column. Labeling them
+                # "numeric" (the old catch-all) let booleans into
                 # arithmetic/equality lowerings where ANSI analysis fails (e.g.
-                # `(x > 0) + 1`, valid Python) instead of falling back.
+                # `(not (x > 0)) + 1`, valid Python) instead of falling back.
                 return "bool"
             case _:
                 # Remaining nodes (unsupported calls, subscripts, ...) don't
@@ -803,53 +1205,42 @@ class CatalystTranspiler(AbstractTranspiler):
             case ast.BoolOp(op=op, values=values):
                 # Python `and` / `or` short-circuit and return one of the
                 # operands rather than a strict boolean. For the booleans
-                # produced by Compare / UnaryOp(Not) / nested BoolOps this
-                # maps cleanly onto Spark Column `&` / `|`. For
-                # non-boolean operands (including bare parameter names whose
-                # runtime type is unknown) the right semantics would require
-                # Python's truthiness rules (0 / "" / None / [] all
-                # falsy), which we can't faithfully reproduce without the
-                # input column types -- Spark's `&` / `|` would silently
-                # do bitwise instead. Require all operands to be statically
-                # known boolean so the caller falls back to interpreted
-                # Python rather than producing a plan whose results diverge.
-                if not all(_is_definitely_boolean(v) for v in values):
+                # produced by Compare / UnaryOp(Not) / nested BoolOps, this maps
+                # cleanly onto `&` / `|`. For non-boolean operands (including
+                # bare parameter names whose runtime type is unknown) the right
+                # semantics would need Python's truthiness rules (0 / "" / None /
+                # [] all falsy), which we can't reproduce without the input
+                # column types -- Spark's `&` / `|` require boolean operands.
+                #
+                # Every operand before the last must also never be NULL: Spark's
+                # `NULL AND false` is `false` where Python's `None and False` is
+                # `None`. The last is returned as it is (`true AND v` is `v`), so
+                # it may be NULL; a literal None there has no boolean type.
+                # TODO (SPARK-54783): lower a possibly-NULL earlier operand `a` by
+                # folding to `CASE WHEN coalesce(a, false) THEN rest ELSE a END`
+                # (`and`) / `... THEN true ELSE rest END` (`or`), which returns
+                # Python's value, instead of falling back.
+                *earlier, last = values
+                if not (
+                    all(_is_never_null_boolean(v) for v in earlier)
+                    and _is_definitely_boolean(last)
+                    and not _is_none_constant(last)
+                ):
                     raise UnsupportedOperationException(
-                        "`and` / `or` operand type is not statically known "
-                        "to be boolean; Spark's `&` / `|` are bitwise, not "
-                        "Python truthiness, so the transpiler refuses to "
-                        "lower this and the UDF falls back to interpreted "
-                        "Python"
-                    )
-                # A literal None operand short-circuits differently: Python's
-                # `None and (x > 0)` returns None regardless of x, but Spark's
-                # three-valued `null AND false` is false (and `null OR true` is
-                # true), so the lowered form diverges. `_is_definitely_boolean`
-                # accepts None for `not`/if-test contexts where coalesce handles
-                # it; here it must force a fallback instead.
-                if any(isinstance(v, ast.Constant) and v.value is None for v in values):
-                    raise UnsupportedOperationException(
-                        "literal None operand in `and` / `or` cannot be lowered: "
-                        "Spark's three-valued logic diverges from Python's "
-                        "short-circuit-return-operand semantics, so the UDF "
-                        "falls back to interpreted Python"
+                        "each `and` / `or` operand must be statically known to be a boolean, "
+                        "never NULL before the last operand, and the last not a literal None; "
+                        "Python's short-circuit returns the operand itself (so "
+                        "`None and x` is None) while Spark's `&` / `|` build "
+                        "logical And / Or over three-valued logic, so the "
+                        "transpiler refuses to lower this and the UDF falls back "
+                        "to interpreted Python"
                     )
                 cols = [self._convert_chunk(params, v) for v in values]
-                if isinstance(op, ast.And):
-                    result = cols[0]
-                    for c in cols[1:]:
-                        result = result & c
-                    return result
-                if isinstance(op, ast.Or):
-                    result = cols[0]
-                    for c in cols[1:]:
-                        result = result | c
-                    return result
-                raise UnsupportedOperationException(f"BoolOp operator {op} is not supported")
+                return self._fold_boolean(cols, isinstance(op, ast.Or), self._atomic_boolops)
             case ast.IfExp(test=test, body=body_expr, orelse=orelse_expr):
                 # Ternary `body if test else orelse` -- shares the
                 # NULL-as-falsy lowering with the if-statement case.
-                test_col = self._convert_chunk(params, test)
+                test_col, test_can_raise = self._convert_test(params, test)
                 body_nonnull, else_nonnull = _null_narrowed(params, test)
                 saved_nonnull = self._nonnull_params
                 self._nonnull_params = saved_nonnull | body_nonnull
@@ -858,10 +1249,17 @@ class CatalystTranspiler(AbstractTranspiler):
                 else_col = self._convert_chunk(params, orelse_expr)
                 self._nonnull_params = saved_nonnull
                 return self._convert_if_like(
-                    params, test_col, body_col, else_col, test, body_expr, orelse_expr
+                    params,
+                    test_col,
+                    body_col,
+                    else_col,
+                    test,
+                    body_expr,
+                    orelse_expr,
+                    test_can_raise,
                 )
             case ast.If(test, success, orelse):
-                test_col = self._convert_chunk(params, test)
+                test_col, test_can_raise = self._convert_test(params, test)
                 body_nonnull, else_nonnull = _null_narrowed(params, test)
                 saved_nonnull = self._nonnull_params
                 self._nonnull_params = saved_nonnull | body_nonnull
@@ -877,62 +1275,48 @@ class CatalystTranspiler(AbstractTranspiler):
                     test,
                     success[0] if success else None,
                     orelse[0] if orelse else None,
+                    test_can_raise,
                 )
             case ast.Compare(left, ops, comps):
-                if len(ops) != 1 or len(comps) != 1:
+                # `in` / `not in` are container membership rather than value comparisons,
+                # though one can be a link of a chain; they need their own NULL analysis: `in`
+                # semantics depend on the container -- equality for tuple/list,
+                # substring containment for str -- and a `None` probe can raise
+                # (`None in "abc"` -> TypeError). Not lowered yet, so refuse and
+                # fall back.
+                if any(isinstance(o, (ast.In, ast.NotIn)) for o in ops):
                     raise UnsupportedOperationException(
-                        "chained comparisons (e.g. `a < b < c`) are not supported by the transpiler"
+                        "`in` / `not in` is not supported by the transpiler; the "
+                        "UDF falls back to interpreted Python"
                     )
-                comp = comps[0]
-                match ops[0]:
-                    case ast.Is() | ast.IsNot():
-                        # Only lower `x is None` / `None is x` (and their
-                        # `is not` variants) to isNull/isNotNull. For any
-                        # other comparator (e.g. `x is 0`, `x is y`) Python
-                        # performs an object-identity check that has no SQL
-                        # equivalent, so we must fall back to interpreted
-                        # Python rather than silently emitting a null check.
-                        is_none_left = isinstance(left, ast.Constant) and left.value is None
-                        is_none_right = isinstance(comp, ast.Constant) and comp.value is None
-                        if not (is_none_left or is_none_right):
-                            raise UnsupportedOperationException(
-                                "`is`/`is not` is only supported when one "
-                                "operand is the literal None; other identity "
-                                "checks (e.g. `x is 0`, `x is y`) cannot be "
-                                "lowered to SQL and the UDF falls back to "
-                                "interpreted Python"
-                            )
-                        subject_node = comp if is_none_left else left
-                        subject_col = self._convert_chunk(params, subject_node)
-                        if isinstance(ops[0], ast.Is):
-                            return subject_col.isNull()
-                        else:
-                            return subject_col.isNotNull()
-                    case ast.Eq():
-                        return self._lower_eq(params, left, comp, equal=True)
-                    case ast.NotEq():
-                        return self._lower_eq(params, left, comp, equal=False)
-                    case ast.Lt():
-                        return self._lower_value_compare(
-                            params, left, comp, lambda l, r: l < r, "<"
+                if len(ops) > _MAX_COMPARISON_OPS:
+                    raise UnsupportedOperationException(
+                        f"chained comparison has {len(ops)} operators; the "
+                        f"transpiler lowers at most {_MAX_COMPARISON_OPS}, so the "
+                        "UDF falls back to interpreted Python"
+                    )
+                # `a OP1 b OP2 c` is `(a OP1 b) and (b OP2 c)` with `b` evaluated
+                # once. Each operand is lowered once and its Column handed to both
+                # adjacent links; reading it twice is safe because SPARK-58626
+                # gives a repeated argument one column per row (before it,
+                # `50 < x < 60` over `rand(7) * 100` was ~30% true where Python is
+                # ~10%).
+                #
+                # Under strict null strictness the links fold to a sequential
+                # CASE WHEN rather than `&` (see the module docstring): every
+                # link is total there, so no condition is NULL.
+                nodes = [left, *comps]
+                cols = [self._convert_chunk(params, n) for n in nodes]
+                return self._fold_boolean(
+                    [
+                        self._lower_compare_pair(
+                            params, op, nodes[i], nodes[i + 1], cols[i], cols[i + 1]
                         )
-                    case ast.LtE():
-                        return self._lower_value_compare(
-                            params, left, comp, lambda l, r: l <= r, "<="
-                        )
-                    case ast.Gt():
-                        return self._lower_value_compare(
-                            params, left, comp, lambda l, r: l > r, ">"
-                        )
-                    case ast.GtE():
-                        return self._lower_value_compare(
-                            params, left, comp, lambda l, r: l >= r, ">="
-                        )
-                    case _:
-                        raise UnsupportedOperationException(
-                            f"comparison operator {type(ops[0]).__name__} "
-                            "is not supported by the transpiler"
-                        )
+                        for i, op in enumerate(ops)
+                    ],
+                    is_or=False,
+                    atomic=True,
+                )
             case ast.BinOp(left=left, op=op, right=right):
                 # Operator selection is driven by the operand *categories* under
                 # the current input-type variant (see ``_category``): Python's
@@ -1108,6 +1492,8 @@ class CatalystTranspiler(AbstractTranspiler):
                 "functions with more than one top-level statement are not "
                 "supported by the transpiler"
             )
+        self._atomic_boolops = _needs_atomic_boolops(function_body[0])
+        self._holds_raising_lowering = _holds_raising_lowering(function_body[0])
         # Refuse variants whose body category does not MATCH the declared
         # return type's category. Two distinct failure modes hide here:
         #
@@ -1155,15 +1541,6 @@ class CatalystTranspiler(AbstractTranspiler):
                     "interpreted Python"
                 )
         converted = self._convert_chunk(params, function_body[0])
-        if self._null_guard_emitted:
-            warnings.warn(
-                "Python UDF transpiler: the transpiled UDF includes a NULL guard "
-                "that raises at runtime when a NULL input is encountered. Add an "
-                "`if x is not None` guard around comparisons, or filter NULLs "
-                "upstream, to avoid this.",
-                UserWarning,
-                stacklevel=2,
-            )
         # Cast to the declared return type so the rewritten plan reports a
         # known data type to the optimizer's plan validator (otherwise it
         # sees an UnresolvedFunction tree and reports VOID, which fails
@@ -1639,6 +2016,27 @@ def _transpile_func(
         combos = _param_category_combos(function_ast, public_params)
         # Maybe multiple transpilers (think CUDA, etc.).
         transpilers = _get_transpilers(session)
+        # A flat body's size stays proportional to its source, so only one whose
+        # expansion compounds is weighed (see `_expansion_compounds`).
+        atomic = _needs_atomic_boolops(function_ast)
+        compounds = _expansion_compounds(function_ast, atomic)
+        weight = _materialized_weight(function_ast, atomic) if compounds else 0
+        guarded = False
+
+        def too_heavy(options: int) -> Optional[str]:
+            if options * weight <= _MAX_MATERIALIZED_WEIGHT:
+                return None
+            return (
+                f"applying this UDF would materialize about {options * weight} "
+                f"expression nodes across {options} transpiled option(s), more than "
+                f"{_MAX_MATERIALIZED_WEIGHT}, so it falls back to interpreted Python; "
+                "nesting multiplies the size per level"
+            )
+
+        # Checked for a single option before lowering anything (see
+        # `_MAX_MATERIALIZED_WEIGHT`), and again below for the options kept.
+        if refusal := too_heavy(1):
+            return ([], [refusal], [], [], [])
         for transpiler in transpilers:
             for combo in combos:
                 try:
@@ -1647,11 +2045,26 @@ def _transpile_func(
                     )
                     if transpiled_column is not None:
                         transpiled.append(transpiled_column)
+                        guarded = guarded or transpiler._null_guard_emitted
                         input_categories.append(
                             [combo.get(i, "numeric") for i in range(len(public_params))]
                         )
                 except Exception as e:
                     errors.append(str(e))
+        # Every option is built each time the UDF is applied, before the JVM
+        # prunes them to the one matching the bound types, so bound their sum.
+        if refusal := too_heavy(len(transpiled)):
+            return ([], [refusal], [], [], [])
+        # Only now, so that the warning describes an option that is kept.
+        if guarded:
+            warnings.warn(
+                "Python UDF transpiler: the transpiled UDF includes a NULL guard "
+                "that raises at runtime when a NULL input is encountered. Add an "
+                "`if x is not None` guard around comparisons, or filter NULLs "
+                "upstream, to avoid this.",
+                UserWarning,
+                stacklevel=2,
+            )
         return (
             transpiled,
             errors,
