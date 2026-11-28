@@ -42,6 +42,7 @@ public class TransportConf {
   private final String SPARK_NETWORK_SASL_TIMEOUT_KEY;
   private final String SPARK_NETWORK_IO_MAXRETRIES_KEY;
   private final String SPARK_NETWORK_IO_RETRYWAIT_KEY;
+  private final String SPARK_NETWORK_IO_HOSTLOCALDIRSRETRY_ENABLED_KEY;
   private final String SPARK_NETWORK_IO_LAZYFD_KEY;
   private final String SPARK_NETWORK_VERBOSE_METRICS;
   private final String SPARK_NETWORK_IO_ENABLETCPKEEPALIVE_KEY;
@@ -66,6 +67,8 @@ public class TransportConf {
     SPARK_NETWORK_SASL_TIMEOUT_KEY = getConfKey("sasl.timeout");
     SPARK_NETWORK_IO_MAXRETRIES_KEY = getConfKey("io.maxRetries");
     SPARK_NETWORK_IO_RETRYWAIT_KEY = getConfKey("io.retryWait");
+    SPARK_NETWORK_IO_HOSTLOCALDIRSRETRY_ENABLED_KEY =
+      getConfKey("io.hostLocalDirsRetry.enabled");
     SPARK_NETWORK_IO_LAZYFD_KEY = getConfKey("io.lazyFD");
     SPARK_NETWORK_VERBOSE_METRICS = getConfKey("io.enableVerboseMetrics");
     SPARK_NETWORK_IO_ENABLETCPKEEPALIVE_KEY = getConfKey("io.enableTcpKeepAlive");
@@ -163,6 +166,14 @@ public class TransportConf {
    */
   public int ioRetryWaitTimeMs() {
     return (int) JavaUtils.timeStringAsSec(conf.get(SPARK_NETWORK_IO_RETRYWAIT_KEY, "5s")) * 1000;
+  }
+
+  /**
+   * Whether the host local dirs lookup, an idempotent RPC, is retried on connection level
+   * failures according to the retry configs above.
+   */
+  public boolean hostLocalDirsRetryEnabled() {
+    return conf.getBoolean(SPARK_NETWORK_IO_HOSTLOCALDIRSRETRY_ENABLED_KEY, true);
   }
 
   /**

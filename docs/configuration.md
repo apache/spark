@@ -1271,6 +1271,25 @@ Apart from these, the following properties are also available, and may be useful
   <td>1.2.0</td>
 </tr>
 <tr>
+  <td><code>spark.shuffle.io.hostLocalDirsRetry.enabled</code></td>
+  <td>true</td>
+  <td>
+    Whether the host local directories lookup made by host-local shuffle reads and by push-based
+    shuffle's push-merged-local reads is retried on connection level failures according to
+    <code>spark.shuffle.io.maxRetries</code> and <code>spark.shuffle.io.retryWait</code>. The lookup
+    is an idempotent RPC, and retrying it recovers from a pooled connection which the remote
+    service closed while it was idle. Each attempt is bounded by the connection creation, TLS
+    handshake, authentication and request timeouts, so a failed lookup can take
+    (<code>maxRetries</code> + 1) attempts plus the retry waits. While the retry is active, a
+    failure to create the lookup's connection that is not retried, such as an authentication
+    timeout, completes the lookup exceptionally and surfaces as a shuffle fetch failure for
+    host-local reads or as the fallback to the original blocks for push-merged-local reads
+    (matching block fetches), rather than failing the task; setting this to <code>false</code>
+    restores the previous behavior.
+  </td>
+  <td>4.5.0</td>
+</tr>
+<tr>
   <td><code>spark.shuffle.io.numConnectionsPerPeer</code></td>
   <td>1</td>
   <td>
@@ -1294,8 +1313,9 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.shuffle.io.retryWait</code></td>
   <td>5s</td>
   <td>
-    (Netty only) How long to wait between retries of fetches. The maximum delay caused by retrying
-    is 15 seconds by default, calculated as <code>maxRetries * retryWait</code>.
+    (Netty only) How long to wait between retries of fetches. The maximum delay caused by the
+    retry waits is 15 seconds by default, calculated as <code>maxRetries * retryWait</code>;
+    connection and request attempts are bounded separately by their own timeouts.
   </td>
   <td>1.2.1</td>
 </tr>
@@ -1510,6 +1530,9 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     If enabled (and <code>spark.shuffle.useOldFetchProtocol</code> is disabled, shuffle blocks requested from those block managers
     which are running on the same host are read from the disk directly instead of being fetched as remote blocks over the network.
+    The lookup of the host-local directories is retried on connection level failure according to
+    <code>spark.shuffle.io.maxRetries</code> and <code>spark.shuffle.io.retryWait</code> when
+    <code>spark.shuffle.io.hostLocalDirsRetry.enabled</code> is true.
   </td>
   <td>3.0.0</td>
 </tr>
