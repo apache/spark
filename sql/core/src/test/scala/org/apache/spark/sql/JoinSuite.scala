@@ -2189,6 +2189,24 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
       checkAnswer(left.join(right, condition), Row(1, -0.0, 1, 0.0))
     }
   }
+
+  test("SPARK-62226: do not evaluate a condition on the rows that a filter between inner joins " +
+    "removes as NULL") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTable("tb1", "tb2", "tb3") {
+        Seq((1, 5, 1, 1)).toDF("k", "f", "x", "v").write.saveAsTable("tb1")
+        Seq[(Int, Option[Int], Int)]((1, None, 1)).toDF("k", "g", "w").write.saveAsTable("tb2")
+        Seq((1, 1)).toDF("k", "z").write.saveAsTable("tb3")
+        val (t1, t2, t3) = (spark.table("tb1"), spark.table("tb2"), spark.table("tb3"))
+        // `f > g OR x > 5` is NULL on the only row, so the filter removes it, and the division by
+        // zero above the filter is not evaluated on it.
+        val df = t1.join(t2, t1("k") === t2("k")).where(t1("f") > t2("g") || t1("x") > 5)
+          .join(t3, t1("k") === t3("k"))
+          .where(lit(10) / (t1("v") - t2("w")) > 0)
+        checkAnswer(df, Nil)
+      }
+    }
+  }
 }
 
 class ThreadLeakInSortMergeJoinSuite

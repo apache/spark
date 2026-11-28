@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.catalyst.planning
 
+import scala.collection.mutable
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.optimizer.JoinSelectionHelper
+import org.apache.spark.sql.catalyst.optimizer.{ConstantFolding, JoinSelectionHelper}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.Table
@@ -288,10 +290,17 @@ object ExtractAllEquiJoinKeys {
  *
  * A filter or inner join below the top one whose condition has a conjunct that may not move (see
  * `PredicateHelper.splitMovable`) is not flattened, but is one of the plans, with its condition.
+ * A condition above a filter whose condition can be NULL, that can fail and only reads columns of
+ * the filter, can be returned as `If(<condition of the filter>, <condition>, false)` (see `guard`).
  *
  * Note: This pattern currently only works for left-deep trees.
  */
 object ExtractFiltersAndInnerJoins extends PredicateHelper {
+
+  // The plans, the conditions and the flattened filters, lowest first, each with its conjuncts as
+  // written.
+  private type Flattened =
+    (Seq[(LogicalPlan, InnerLike)], Seq[Expression], Seq[(Seq[Expression], LogicalPlan)])
 
   /**
    * Flatten all inner joins, which are next to each other, but the ones below a filter or inner
@@ -301,16 +310,117 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
    * flattened left-deep tree.
    */
   def flattenJoin(plan: LogicalPlan, parentJoinType: InnerLike = Inner)
-      : (Seq[(LogicalPlan, InnerLike)], Seq[Expression]) = plan match {
-    case Join(left, right, joinType: InnerLike, cond, hint) if hint == JoinHint.NONE =>
-      val (plans, conditions) = flattenBelow(left, joinType)
-      (plans ++ Seq((right, joinType)), conditions ++
-        cond.toSeq.flatMap(splitConjunctivePredicates))
-    case Filter(filterCondition, j @ Join(_, _, _: InnerLike, _, hint)) if hint == JoinHint.NONE =>
-      val (plans, conditions) = flattenBelow(j, Inner)
-      (plans, conditions ++ splitConjunctivePredicates(filterCondition))
+      : (Seq[(LogicalPlan, InnerLike)], Seq[Expression]) = {
+    val (plans, conditions, _) = flatten(plan, parentJoinType)
+    (plans, conditions)
+  }
 
-    case _ => (Seq((plan, parentJoinType)), Seq.empty)
+  private def flatten(plan: LogicalPlan, parentJoinType: InnerLike): Flattened = plan match {
+    case Join(left, right, joinType: InnerLike, cond, hint) if hint == JoinHint.NONE =>
+      val (plans, conditions, filters) = flattenBelow(left, joinType)
+      val newPlans = plans ++ Seq((right, joinType))
+      (newPlans, conditions ++ guard(cond.toSeq.flatMap(splitConjunctivePredicates), conditions,
+        filters, newPlans.map(_._1), plan), filters)
+    case Filter(filterCondition, j @ Join(_, _, _: InnerLike, _, hint)) if hint == JoinHint.NONE =>
+      val (plans, conditions, filters) = flattenBelow(j, Inner)
+      val conjuncts = splitConjunctivePredicates(filterCondition)
+      // The top filter is added too, but no condition is above it.
+      (plans, conditions ++ guard(conjuncts, conditions, filters, plans.map(_._1), plan),
+        filters :+ (conjuncts, plan))
+
+    case _ => (Seq((plan, parentJoinType)), Seq.empty, Seq.empty)
+  }
+
+  /**
+   * Guards `conditions`, the ones of `plan`, a join or filter over `plans` above the flattened
+   * `filters`, written after the conditions `before`. A filter removes a row on which its
+   * condition is NULL, but in the join condition that `ReorderJoin` puts the filter condition in,
+   * a condition above the filter can follow it, and `NULL AND x` evaluates `x`. So a condition that
+   * can fail after `ConstantFolding`, which `splitMovable` does not move after a barrier, is
+   * returned as `If(<filter condition>, <condition>, false)` for each lower filter whose condition
+   * can be NULL, the lowest one outermost, which evaluates it only where they are TRUE, wherever it
+   * is put. `IS NOT NULL` checks of the columns that make it NULL follow it, as `If` hides them
+   * from `InferFiltersFromConstraints`, but not of a column that can fail (see `failableOutput`),
+   * as a check pushed below the projection that computes it would compute it on every row. Only
+   * the filter conjuncts that can go into a join condition (see `canEvaluateWithinJoin`) count,
+   * as one that can not, e.g. an IN subquery, never precedes the condition in one, and a copy of
+   * its subquery would be computed again.
+   *  - A condition that only reads one of `plans` is pushed down to it, with the conjuncts of the
+   *    filters that only read that plan, so only those that can be NULL guard it.
+   *  - Any other condition that only reads columns of a filter whose condition can be NULL, or no
+   *    column, is guarded by all of them.
+   *
+   * The others are left as is: one that also reads a plan joined above the filters, e.g. a key of
+   * a join above them, which reordering can still evaluate ahead of them, as when the filter
+   * condition is FALSE; an equality whose sides read different plans, which can be a join key,
+   * and as a key is computed on every row of each side anyway; one that `ReorderJoin` keeps in a
+   * filter above all the joins or out of the join conditions, which only sees the rows that the
+   * filters keep; and the ones of a streaming plan, whose joins need their keys and event time
+   * conditions as written. The condition of a lower join guards nothing, as in
+   * `PushPredicateThroughJoin`.
+   */
+  private def guard(
+      conditions: Seq[Expression],
+      before: Seq[Expression],
+      filters: Seq[(Seq[Expression], LogicalPlan)],
+      plans: Seq[LogicalPlan],
+      plan: LogicalPlan): Seq[Expression] = {
+    lazy val nullable = filters.map { case (conjuncts, filter) =>
+      (conjuncts.filter(canEvaluateWithinJoin), filter)
+    }.filter(_._1.exists(_.nullable))
+    if (conditions.isEmpty || plan.isStreaming || nullable.isEmpty) {
+      conditions
+    } else {
+      def isBarrier(e: Expression): Boolean = !e.deterministic || e.throwable
+      def canFail(e: Expression): Boolean = {
+        // `failed` keeps a part that fails to fold from being tagged, as it may be shared.
+        val folded = ConstantFolding.constantFolding(e, isConditionalBranch = true,
+          failed = java.util.Collections.newSetFromMap(
+            new java.util.IdentityHashMap[Expression, java.lang.Boolean]()))
+        splitMovable(Seq(folded), Seq(plan), afterBarrier = true)._2.nonEmpty
+      }
+      def canBeKey(e: Expression): Boolean = e match {
+        case Equality(l, r) =>
+          val (left, right) = (plans.filter(p => l.references.exists(p.outputSet.contains)),
+            plans.filter(p => r.references.exists(p.outputSet.contains)))
+          left.nonEmpty && right.nonEmpty && !left.exists(p => right.exists(_ eq p))
+        case _ => false
+      }
+      lazy val failable = failableOutput(plan)
+      var afterBarrier = before.exists(isBarrier)
+      val checked = mutable.Set.empty[ExprId]
+      conditions.flatMap { cond =>
+        afterBarrier ||= isBarrier(cond)
+        val refs = cond.references
+        val guards = if (afterBarrier || !canEvaluateWithinJoin(cond) || canBeKey(cond) ||
+            !canFail(cond)) {
+          Nil
+        } else {
+          plans.find(p => refs.nonEmpty && refs.subsetOf(p.outputSet)) match {
+            case Some(p) =>
+              nullable.flatMap(_._1.filter(c => c.nullable && c.references.subsetOf(p.outputSet)))
+            case None if nullable.exists(f => refs.subsetOf(f._2.outputSet)) =>
+              nullable.map(_._1.reduce(And))
+            case None => Nil
+          }
+        }
+        if (guards.isEmpty) {
+          Seq(cond)
+        } else {
+          val notNull = nullIntolerantColumns(cond).filter { a =>
+            a.nullable && !failable.contains(a) && checked.add(a.exprId)
+          }
+          guards.foldRight(cond)(If(_, _, Literal.FalseLiteral)) +: notNull.map(IsNotNull)
+        }
+      }
+    }
+  }
+
+  // The columns that make `e` NULL when they are NULL, as `InferFiltersFromConstraints` finds.
+  private def nullIntolerantColumns(e: Expression): Seq[Attribute] = e match {
+    case a: Attribute => Seq(a)
+    case _ if e.nullIntolerant => e.children.flatMap(nullIntolerantColumns)
+    case _ => Nil
   }
 
   /**
@@ -321,17 +431,16 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
    * is an `Inner` plan also under a cross join, so that `StarSchemaDetection`, which only reorders
    * `Inner` base tables, does not join it after them.
    */
-  private def flattenBelow(plan: LogicalPlan, parentJoinType: InnerLike)
-      : (Seq[(LogicalPlan, InnerLike)], Seq[Expression]) = {
+  private def flattenBelow(plan: LogicalPlan, parentJoinType: InnerLike): Flattened = {
     val condition = plan match {
       case Join(_, _, _: InnerLike, cond, JoinHint.NONE) => cond
       case Filter(cond, Join(_, _, _: InnerLike, _, JoinHint.NONE)) => Some(cond)
       case _ => None
     }
     if (condition.exists(hasImmovableConjunct(_, plan.children))) {
-      (Seq((plan, Inner)), Seq.empty)
+      (Seq((plan, Inner)), Seq.empty, Seq.empty)
     } else {
-      flattenJoin(plan, parentJoinType)
+      flatten(plan, parentJoinType)
     }
   }
 
