@@ -96,3 +96,216 @@ SHOW COLLATIONS LIKE 'non_existing_collation_pattern'
 struct<NAME:string,LANGUAGE:string,COUNTRY:string,ACCENT_SENSITIVITY:string,CASE_SENSITIVITY:string,PAD_ATTRIBUTE:string,ICU_VERSION:string>
 -- !query output
 
+
+
+-- !query
+CREATE DATABASE show_listing_db
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TABLE show_listing_db.show_listing_table(id INT) USING parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SHOW SCHEMAS LIKE 'show_listing*'
+-- !query schema
+struct<namespace:string>
+-- !query output
+show_listing_db
+
+
+-- !query
+DECLARE show_listing_schema = 'show_listing_db'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SHOW TABLES IN IDENTIFIER(show_listing_schema) LIKE 'show_listing*'
+-- !query schema
+struct<namespace:string,tableName:string,isTemporary:boolean>
+-- !query output
+show_listing_table
+
+
+-- !query
+DROP TEMPORARY VARIABLE show_listing_schema
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SHOW TABLES IN show_listing_db AS JSON
+-- !query schema
+struct<json_metadata:string>
+-- !query output
+{"tables":[{"name":"show_listing_table","namespace":["show_listing_db"],"isTemporary":false}]}
+
+
+-- !query
+SHOW TABLES IN show_listing_missing_db AS JSON
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
+{
+  "errorClass" : "SCHEMA_NOT_FOUND",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "schemaName" : "`spark_catalog`.`show_listing_missing_db`"
+  }
+}
+
+
+-- !query
+CREATE FUNCTION show_listing_db.show_listing_function() RETURNS INT RETURN 1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SHOW USER FUNCTIONS IN show_listing_db
+-- !query schema
+struct<function:string>
+-- !query output
+spark_catalog.show_listing_db.show_listing_function
+
+
+-- !query
+SHOW SYSTEM FUNCTIONS LIKE 'abs'
+-- !query schema
+struct<function:string>
+-- !query output
+abs
+
+
+-- !query
+SHOW FUNCTIONS LIKE show_listing_db.show_listing_function
+-- !query schema
+struct<function:string>
+-- !query output
+spark_catalog.show_listing_db.show_listing_function
+
+
+-- !query
+SHOW PROCEDURES IN show_listing_db
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "MISSING_CATALOG_ABILITY.PROCEDURES",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "plugin" : "spark_catalog"
+  }
+}
+
+
+-- !query
+SHOW VIEWS IN show_listing_db.nested_namespace
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NESTED_DATABASE_UNSUPPORTED_BY_V1_SESSION_CATALOG",
+  "sqlState" : "42K05",
+  "messageParameters" : {
+    "namespace" : "`show_listing_db`.`nested_namespace`"
+  }
+}
+
+
+-- !query
+SET spark.sql.legacy.keepCommandOutputSchema=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.keepCommandOutputSchema	true
+
+
+-- !query
+SHOW TABLES IN show_listing_db
+-- !query schema
+struct<database:string,tableName:string,isTemporary:boolean>
+-- !query output
+show_listing_table
+
+
+-- !query
+SHOW NAMESPACES LIKE 'show_listing*'
+-- !query schema
+struct<databaseName:string>
+-- !query output
+show_listing_db
+
+
+-- !query
+SET spark.sql.legacy.useV1Command=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.useV1Command	true
+
+
+-- !query
+SHOW TABLES IN show_listing_db
+-- !query schema
+struct<database:string,tableName:string,isTemporary:boolean>
+-- !query output
+show_listing_table
+
+
+-- !query
+RESET spark.sql.legacy.useV1Command
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+RESET spark.sql.legacy.keepCommandOutputSchema
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP FUNCTION show_listing_db.show_listing_function
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE show_listing_db.show_listing_table
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP DATABASE show_listing_db
+-- !query schema
+struct<>
+-- !query output
+
