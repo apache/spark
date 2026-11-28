@@ -20,29 +20,27 @@ package org.apache.spark.sql.execution.arrow
 import java.io.DataOutputStream
 
 import org.apache.arrow.memory.BufferAllocator
+import org.apache.arrow.util.AutoCloseables
 import org.apache.arrow.vector.{VectorSchemaRoot, VectorUnloader}
 import org.apache.arrow.vector.ipc.ArrowStreamWriter
 
-import org.apache.spark.TaskContext
 import org.apache.spark.sql.execution.arrow.{ArrowWriter => SparkArrowWriter}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
 
 
+/**
+ * The Arrow writer of one group that the grouped and cogrouped Python runners write. The runner
+ * closes it at the end of the group, and in a task completion listener, registered once for all
+ * its groups, if the task completes before the end of the group.
+ */
 case class ArrowWriterWrapper(
     var streamWriter: ArrowStreamWriter,
     var arrowWriter: SparkArrowWriter,
     var root: VectorSchemaRoot,
     var allocator: BufferAllocator,
-    var unloader: VectorUnloader,
-    context: TaskContext) {
+    var unloader: VectorUnloader) {
   @volatile var isClosed = false
-
-  // Register a listener to close the ArrowStreamWriter when the task completes. This
-  // ensures that the ArrowStreamWriter is closed even if the task fails or is interrupted.
-  context.addTaskCompletionListener[Unit](_ => {
-    this.close();
-  })
 
   /*
   * Idempotent method to release the resources. Access to any member object is invalid
@@ -65,25 +63,31 @@ case class ArrowWriterWrapper(
 }
 
 object ArrowWriterWrapper {
+  /**
+   * Creates the Arrow stream of a group and writes its schema. If that fails, it closes what it
+   * allocated before rethrowing, since the caller does not get the wrapper to close.
+   */
   def createAndStartArrowWriter(
       schema: StructType,
       timeZoneId: String,
       allocatorOwner: String,
       largeVarTypes: Boolean,
-      dataOut: DataOutputStream,
-      context: TaskContext): ArrowWriterWrapper = {
+      dataOut: DataOutputStream): ArrowWriterWrapper = {
     val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId, largeVarTypes)
     val allocator = ArrowUtils.rootAllocator.newChildAllocator(
       s"stdout writer for $allocatorOwner", 0, Long.MaxValue)
-    val root = VectorSchemaRoot.create(arrowSchema, allocator)
-    // Create the wrapper, which adds the task completion listener that closes `root` and
-    // `allocator`, before anything that can fail: allocating the vectors, or writing the schema,
-    // e.g. when the writer is interrupted.
-    // Unloader will be set by the caller after creation
-    val wrapper = ArrowWriterWrapper(null, null, root, allocator, null, context)
-    wrapper.arrowWriter = SparkArrowWriter.create(root)
-    wrapper.streamWriter = new ArrowStreamWriter(root, null, dataOut)
-    wrapper.streamWriter.start()
-    wrapper
+    var root: VectorSchemaRoot = null
+    try {
+      root = VectorSchemaRoot.create(arrowSchema, allocator)
+      val arrowWriter = SparkArrowWriter.create(root)
+      val streamWriter = new ArrowStreamWriter(root, null, dataOut)
+      streamWriter.start()
+      // Unloader will be set by the caller after creation
+      ArrowWriterWrapper(streamWriter, arrowWriter, root, allocator, null)
+    } catch {
+      case t: Throwable =>
+        AutoCloseables.close(t, root, allocator)
+        throw t
+    }
   }
 }
