@@ -54,7 +54,8 @@ class BloomFilterImplV3 extends BloomFilterImplV2 {
   private static final long GOLDEN_GAMMA = 0x9E3779B97F4A7C15L;
 
   // A bit position from `state`. The 64-bit finalizer of MurmurHash3 mixes it, and `reduce` maps
-  // the mix below `bitSize`.
+  // the mix below `bitSize`. Each position gets a mix of its own. Positions stepped from one or two
+  // mixed values of the item would again have only a few patterns in a small filter.
   private static long bitIndex(long state, long bitSize) {
     long z = (state ^ (state >>> 33)) * 0xff51afd7ed558ccdL;
     z = (z ^ (z >>> 33)) * 0xc4ceb9fe1a85ec53L;

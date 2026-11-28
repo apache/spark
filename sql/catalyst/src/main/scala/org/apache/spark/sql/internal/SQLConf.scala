@@ -1099,7 +1099,8 @@ object SQLConf {
       .doc("The binary format version of the bloom filters that runtime bloom filter joins and " +
         "`DataFrameStatFunctions.bloomFilter` build. Version 3 keeps the expected false " +
         "positive probability of small filters. Spark versions before 4.5 cannot read it, Spark " +
-        "Connect clients of those versions included. Version 2 is what those versions build.")
+        "Connect clients of those versions included. Spark 4.1 to 4.4 build and read version 2. " +
+        "Earlier versions read only version 1.")
       .version("4.5.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .intConf

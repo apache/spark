@@ -31,6 +31,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BinaryType, LongType}
 import org.apache.spark.tags.ExtendedSQLTest
+import org.apache.spark.util.sketch.BloomFilter
 
 /**
  * Query tests for the Bloom filter aggregate and filter function.
@@ -320,21 +321,25 @@ class BloomFilterAggregateQuerySuite extends SharedSparkSession with AdaptiveSpa
   }
 
   test("SPARK-62421: bloom_filter_agg builds the version that the legacy conf sets") {
-    // The version number is the first integer of a serialized filter.
-    def versionOf(bytes: Array[Byte]): Int = java.nio.ByteBuffer.wrap(bytes).getInt
-    def check(version: Int): Unit = {
+    // The filter `BloomFilter.create` builds of 0 to 9, with `version`, the sizes and seed 0.
+    def filterOf(version: BloomFilter.Version, numItems: Long, numBits: Long): BloomFilter = {
+      val filter = BloomFilter.create(version, numItems, numBits, 0)
+      (0L until 10L).foreach(filter.putLong)
+      filter
+    }
+    def check(version: BloomFilter.Version): Unit = {
+      // Without sizes, `bloom_filter_agg` takes the default ones.
       val bytes = spark.sql("SELECT bloom_filter_agg(CAST(id AS LONG)) FROM range(10)")
         .head().getAs[Array[Byte]](0)
-      assert(versionOf(bytes) == version)
-      val filter = spark.range(10).stat.bloomFilter("id", 10, 0.03)
-      val out = new java.io.ByteArrayOutputStream()
-      filter.writeTo(out)
-      assert(versionOf(out.toByteArray) == version)
-      assert((0L until 10L).forall(filter.mightContainLong))
+      assert(BloomFilter.readFrom(bytes) == filterOf(version,
+        conf.getConf(SQLConf.RUNTIME_BLOOM_FILTER_EXPECTED_NUM_ITEMS),
+        conf.getConf(SQLConf.RUNTIME_BLOOM_FILTER_NUM_BITS)))
+      assert(spark.range(10).stat.bloomFilter("id", 10, 0.03) ==
+        filterOf(version, 10, BloomFilter.optimalNumOfBits(10, 0.03)))
     }
-    check(3)
+    check(BloomFilter.Version.V3)
     withSQLConf(SQLConf.LEGACY_BLOOM_FILTER_AGGREGATE_VERSION.key -> "2") {
-      check(2)
+      check(BloomFilter.Version.V2)
     }
   }
 
