@@ -447,7 +447,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             if name:
                 data = data.rename(name)
 
-            if index:
+            if index is not None:
                 data = data.reindex(index)
 
             if dtype:
