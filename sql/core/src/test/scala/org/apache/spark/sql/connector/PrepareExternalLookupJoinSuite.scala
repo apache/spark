@@ -23,8 +23,9 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.FormExternalLookupJoin
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap,
-  AttributeReference, AttributeSet, BindReferences, Cast, Coalesce, EqualTo, EvalMode, Expression,
-  ExternalUserDefinedFunction, Literal, NamedExpression, Not, Predicate => CatalystPredicate, Upper}
+  AttributeReference, AttributeSet, BindReferences, Cast, Coalesce, ColumnarUDF, EqualTo, EvalMode,
+  Expression, ExternalUserDefinedFunction, Literal, NamedExpression, Not,
+  Predicate => CatalystPredicate, Upper}
 import org.apache.spark.sql.catalyst.optimizer.ColumnPruning
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftAnti, LeftOuter, LeftSemi,
   PlanTest}
@@ -756,6 +757,33 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
     checkError(
       exception = prepareError(lookupJoin(lookup, condition, LeftOuter)),
       condition = "UNSUPPORTED_FEATURE.EXTERNAL_UDF_IN_ON_CLAUSE",
+      parameters = Map("joinType" -> "LEFT OUTER"))
+  }
+
+  test("a columnar UDF over lookup columns in the join condition") {
+    val lookup = lookupRelation(PlanningExternalLookupTable())
+    val lookupId = lookup.output.head
+    val lookupUDF = ColumnarUDF(
+      name = "lookup_udf",
+      function = None,
+      engineImplementations = Nil,
+      inputTypes = Seq(lookupId.dataType),
+      dataType = BooleanType,
+      children = Seq(lookupId))
+    val condition = stream.output.head === lookupId && lookupUDF
+
+    // An inner join evaluates it above the lookup join, where ExtractColumnarUDFs extracts it.
+    PrepareExternalLookupJoin(lookupJoin(lookup, condition)) match {
+      case Filter(filterCondition, join: PreparedExternalLookupJoin) =>
+        assert(filterCondition == lookupUDF)
+        assert(join.residualCondition.isEmpty)
+      case other => fail(s"Expected a filter above a prepared external lookup join: $other")
+    }
+    // A left outer join cannot. The call reads lookup columns only, so the error is not the
+    // one of a call over both sides of a join.
+    checkError(
+      exception = prepareError(lookupJoin(lookup, condition, LeftOuter)),
+      condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.COLUMNAR_UDF_IN_CONDITION",
       parameters = Map("joinType" -> "LEFT OUTER"))
   }
 

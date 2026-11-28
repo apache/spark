@@ -109,6 +109,8 @@ object NormalizePlan extends PredicateHelper {
         lv.copy(exprId = ExprId(0), value = null)
       case udf: PythonUDF =>
         udf.copy(resultId = ExprId(0))
+      case udf: ColumnarUDF =>
+        udf.copy(resultId = ExprId(0))
       case udaf: PythonUDAF =>
         udaf.copy(resultId = ExprId(0))
       case agg: PythonAggregate =>

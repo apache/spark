@@ -186,6 +186,52 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = e)
   }
 
+  def columnarUDFNotExecutableError(name: String, kinds: Seq[String]): Throwable = {
+    new SparkUnsupportedOperationException(
+      errorClass = "COLUMNAR_UDF_NOT_EXECUTABLE",
+      messageParameters = Map(
+        "name" -> toSQLId(name), "kinds" -> kinds.mkString("[", ", ", "]")))
+  }
+
+  def columnarUDFNotSerializableError(name: String, cause: Throwable): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "COLUMNAR_UDF_NOT_SERIALIZABLE",
+      messageParameters = Map("name" -> toSQLId(name)),
+      cause = cause)
+  }
+
+  def columnarUDFResultIsArgumentError(name: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "COLUMNAR_UDF_RESULT_IS_ARGUMENT",
+      messageParameters = Map("name" -> toSQLId(name)))
+  }
+
+  def columnarUDFResultReusedError(name: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "COLUMNAR_UDF_RESULT_REUSED",
+      messageParameters = Map("name" -> toSQLId(name)))
+  }
+
+  def columnarUDFResultTooShortError(name: String, actualRows: Int, expectedRows: Int)
+      : Throwable = {
+    new SparkRuntimeException(
+      errorClass = "COLUMNAR_UDF_RESULT_TOO_SHORT",
+      messageParameters = Map(
+        "name" -> toSQLId(name),
+        "actualRows" -> actualRows.toString,
+        "expectedRows" -> expectedRows.toString))
+  }
+
+  def columnarUDFResultTypeMismatchError(
+      name: String, actualType: Option[DataType], expectedType: DataType): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "COLUMNAR_UDF_RESULT_TYPE_MISMATCH",
+      messageParameters = Map(
+        "name" -> toSQLId(name),
+        "actualType" -> actualType.map(toSQLType).getOrElse("NULL"),
+        "expectedType" -> toSQLType(expectedType)))
+  }
+
   def pythonUDFRowSizeExceededError(
       maxRowSize: Long, actualRowSize: Long): RuntimeException = {
     new SparkRuntimeException(

@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.optimizer._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.execution.columnar.udf.ExtractColumnarUDFs
 import org.apache.spark.sql.execution.datasources.{MarkSingleTaskExecution, PruneFileSourcePartitions, PullOutVariantExtractions, PushVariantIntoScan, SchemaPruning, V1Writes}
 import org.apache.spark.sql.execution.datasources.v2.{GroupBasedRowLevelOperationScanPlanning, OptimizeMetadataOnlyDeleteFromTable, PrepareExternalLookupJoin, V2ScanPartitioningAndOrdering, V2ScanRelationPushDown, V2Writes}
 import org.apache.spark.sql.execution.dynamicpruning.{CleanupDynamicPruningFilters, PartitionPruning, RowLevelOperationRuntimeGroupFiltering}
@@ -124,6 +125,7 @@ class SparkOptimizer(
         ExtractGroupingPythonUDFFromAggregate,
         ExtractPythonUDFs,
         ExtractPythonUDTFs,
+        ExtractColumnarUDFs,
         // The eval-python node may be between Project/Filter and the scan node, which breaks
         // column pruning and filter push-down. Here we rerun the related optimizer rules.
         ColumnPruning,
@@ -163,6 +165,7 @@ class SparkOptimizer(
       ExtractExternalUDFFromWindow.ruleName,
       PlanExternalUDFs.ruleName,
       ExtractPythonUDFs.ruleName,
+      ExtractColumnarUDFs.ruleName,
       GroupBasedRowLevelOperationScanPlanning.ruleName,
       // A join over a lookup-only table can only run once these rules have formed and prepared
       // its external lookup join.

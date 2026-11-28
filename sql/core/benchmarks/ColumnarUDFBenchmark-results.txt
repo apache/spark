@@ -1,0 +1,39 @@
+================================================================================================
+Columnar UDF
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.8 on Mac OS X 26.7.1
+Apple M4 Max
+add_one(bigint): bigint:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Scala UDF                                           191            196           6        104.6           9.6       1.0X
+columnar UDF                                        144            150           5        138.4           7.2       1.3X
+built-in expression                                 130            135           5        153.3           6.5       1.5X
+scan and aggregate only                             127            129           1        157.1           6.4       1.5X
+
+OpenJDK 64-Bit Server VM 21.0.8 on Mac OS X 26.7.1
+Apple M4 Max
+mix(bigint): bigint:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Scala UDF                                           258            261           2         77.4          12.9       1.0X
+columnar UDF                                        211            223          14         94.9          10.5       1.2X
+scan and aggregate only                             126            128           2        158.6           6.3       2.0X
+
+OpenJDK 64-Bit Server VM 21.0.8 on Mac OS X 26.7.1
+Apple M4 Max
+shout(string): string:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Scala UDF                                          1631           1643           9         12.3          81.5       1.0X
+columnar UDF                                        631            642           9         31.7          31.5       2.6X
+built-in expression                                1848           1873          21         10.8          92.4       0.9X
+scan and aggregate only                             256            257           1         78.2          12.8       6.4X
+
+OpenJDK 64-Bit Server VM 21.0.8 on Mac OS X 26.7.1
+Apple M4 Max
+fnv(string): bigint:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Scala UDF                                          1038           1048          12         19.3          51.9       1.0X
+columnar UDF                                        500            512          10         40.0          25.0       2.1X
+scan and aggregate only                             256            259           2         78.1          12.8       4.1X
+
+

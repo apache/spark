@@ -24,7 +24,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, DynamicPruning, DynamicPruningExpression, Expression, ExpressionSet, GetStructField, Literal, NamedExpression, PythonUDF, SchemaPruning, SubqueryExpression, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, ColumnarUDF, DynamicPruning, DynamicPruningExpression, Expression, ExpressionSet, GetStructField, Literal, NamedExpression, PythonUDF, SchemaPruning, SubqueryExpression, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.SampleMethod
 import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -639,9 +639,9 @@ object PushDownUtils extends Logging {
 
   /**
    * Whether the data source can be trusted to evaluate `f` in place of Spark: a non-deterministic
-   * expression would not give the same answer twice, and a Python UDF or a subquery cannot be
-   * evaluated by the source at all. Spark will attempt to push only these expressions to the
-   * data source.
+   * expression would not give the same answer twice, and a Python UDF, a columnar UDF or a
+   * subquery cannot be evaluated by the source at all. Spark will attempt to push only these
+   * expressions to the data source.
    *
    * Spark will also call this before dropping a fully pushed runtime filter from the
    * post-scan filters, so that it never removes the only evaluator of a filter that Spark
@@ -654,7 +654,7 @@ object PushDownUtils extends Logging {
       f: Expression,
       includeSubquery: Boolean = false): Boolean =
     f.deterministic &&
-      !f.exists(_.isInstanceOf[PythonUDF]) &&
+      !f.exists(e => e.isInstanceOf[PythonUDF] || e.isInstanceOf[ColumnarUDF]) &&
       (includeSubquery || !SubqueryExpression.hasSubquery(f))
 
   /**
