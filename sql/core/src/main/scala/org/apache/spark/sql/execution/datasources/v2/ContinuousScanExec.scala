@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.connector.read.{InputPartition, Scan}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousPartitionReaderFactory, ContinuousStream, Offset}
+import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.util.ArrayImplicits._
 
@@ -34,7 +35,7 @@ case class ContinuousScanExec(
     @transient stream: ContinuousStream,
     @transient start: Offset,
     keyGroupedPartitioning: Option[Seq[Expression]] = None,
-    ordering: Option[Seq[SortOrder]] = None) extends DataSourceV2ScanExecBase {
+    ordering: Option[Seq[SortOrder]] = None) extends LeafExecNode with DataSourceV2ScanExecBase {
 
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
   override def equals(other: Any): Boolean = other match {

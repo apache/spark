@@ -142,7 +142,8 @@ private class TaskState(customMetrics: Map[String, SQLMetric]) {
  * @param customMetrics Custom metrics defined by the data source
  * @param storageFilterRequest What every reader gets when the scan was offered storage filters.
  *                             Serialized with the task, so each task has its own instance of the
- *                             filter.
+ *                             filter. A subclass can give each split its own request through
+ *                             `computeWith`.
  * @param checkedOutputWidth The width of the rows or batches a reader returns when the request asks
  *                           for the checked column, which is their last column. Each row and batch
  *                           is checked against it, since the plan above the scan reads the column
@@ -172,7 +173,14 @@ class DataSourceRDD(
     case _ => throw QueryExecutionErrors.notADatasourceRDDPartitionError(split)
   }
 
-  override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
+  override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] =
+    computeWith(split, context, storageFilterRequest)
+
+  /** Reads `split`, with `request` for its readers rather than `storageFilterRequest`. */
+  protected final def computeWith(
+      split: Partition,
+      context: TaskContext,
+      request: Option[StorageFilterRequest]): Iterator[InternalRow] = {
     val taskAttemptId = context.taskAttemptId()
 
     // Ensure a TaskState exists for this task and register the completion listener on the
@@ -197,14 +205,14 @@ class DataSourceRDD(
 
     castPartition(split).inputPartition.iterator.flatMap { inputPartition =>
       val iter = if (columnarReads) {
-        val batchReader = storageFilterRequest match {
+        val batchReader = request match {
           case Some(request) => partitionReaderFactory.createColumnarReader(inputPartition, request)
           case None => partitionReaderFactory.createColumnarReader(inputPartition)
         }
         new PartitionIterator[ColumnarBatch](batchReader, _.numRows, taskState,
           checkedOutputWidth.map(width => batch => checkBatch(width, batch)))
       } else {
-        val rowReader = storageFilterRequest match {
+        val rowReader = request match {
           case Some(request) => partitionReaderFactory.createReader(inputPartition, request)
           case None => partitionReaderFactory.createReader(inputPartition)
         }

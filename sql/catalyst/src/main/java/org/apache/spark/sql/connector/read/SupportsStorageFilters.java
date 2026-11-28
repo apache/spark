@@ -33,7 +33,9 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  * now.
  * <p>
  * This is not partition pruning. A storage filter drops no {@link InputPartition}, and
- * {@link SupportsRuntimeV2Filtering} is the interface for that. A scan may implement both.
+ * {@link SupportsRuntimeV2Filtering} is the interface for that. A scan may implement both. Spark
+ * itself skips a split when a per-partition runtime bloom filter has no bloom filter for the
+ * split's partition key.
  * <p>
  * Applying the filter is optional, per unit the reader chooses, such as a file or a row group.
  * Spark keeps the predicate, or a condition that implies it, in the plan above the scan, so a

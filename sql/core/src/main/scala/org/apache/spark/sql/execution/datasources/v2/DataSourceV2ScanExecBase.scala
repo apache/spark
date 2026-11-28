@@ -19,21 +19,28 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, ExpressionSet, SortOrder, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeSet, Expression, ExpressionSet, SortOrder, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition, PartitionReaderFactory, Scan}
-import org.apache.spark.sql.execution.{ExplainUtils, LeafExecNode, SafeForKWayMerge}
+import org.apache.spark.sql.execution.{ExplainUtils, SafeForKWayMerge, SparkPlan}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.connector.SupportsMetadata
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.Utils
 
+/**
+ * A scan of a data source v2. The streaming scans are leaves. A [[BatchScanExec]] has the aggregate
+ * of its per-partition bloom filter as its child, when it has one.
+ */
 trait DataSourceV2ScanExecBase
-  extends LeafExecNode
+  extends SparkPlan
   with SafeForKWayMerge
   with SupportsCustomDriverMetrics {
+
+  // The scan reads its columns, which no child gives it.
+  override def producedAttributes: AttributeSet = outputSet
 
   override lazy val customMetrics: Map[String, SQLMetric] =
     createCustomMetrics(scan.supportedCustomMetrics())
@@ -100,8 +107,9 @@ trait DataSourceV2ScanExecBase
    * The partitioning as the source reported it: one key per input partition, holding every
    * reported key position, with the partitions in the order those full keys sort into. It is built
    * from the raw, full-width `HasPartitionKey.partitionKey()` rows, so a consumer of those rows
-   * (`filteredPartitions`) must take the keys, the key types and the order from here, not from the
-   * possibly-projected `outputPartitioning`.
+   * (`filteredPartitions`, or the split keys of a per-partition bloom filter in `BatchScanExec`)
+   * must take the keys, the key types and the order from here, not from the possibly-projected
+   * `outputPartitioning`.
    *
    * A `lazy val` because this is the expensive half: it sorts every partition key, wraps each one
    * and runs a `distinct` over them, and both `outputPartitioning` and `filteredPartitions` ask

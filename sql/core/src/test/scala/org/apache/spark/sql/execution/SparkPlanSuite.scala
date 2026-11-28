@@ -29,16 +29,18 @@ import org.apache.spark.rdd.{EmptyRDD, RDD}
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{
-  Attribute, AttributeReference, Expression, ExprId, Literal}
+  Attribute, AttributeReference, BloomFilterMightContain, Expression, ExprId, Literal, XxHash64}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.optimizer.PerPartitionSizing
 import org.apache.spark.sql.catalyst.plans.logical.Deduplicate
+import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.catalyst.trees.LeafLike
 import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionReaderFactory, Scan}
-import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, PerPartitionBloomFilter}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DataType, IntegerType, StringType, StructType}
+import org.apache.spark.sql.types.{BinaryType, DataType, IntegerType, StringType, StructType}
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.ThreadUtils
 
@@ -336,9 +338,9 @@ class SparkPlanSuite extends SharedSparkSession {
       }
     }
     val scan = BatchScanExec(Seq.empty, new NewBatchScan, Seq.empty, table = null)
-    def sharesPlanning(copy: SparkPlan): Boolean = copy match {
+    def sharesPlanning(copy: SparkPlan, of: BatchScanExec = scan): Boolean = copy match {
       case c: BatchScanExec =>
-        (c.batch eq scan.batch) && (c.inputPartitions eq scan.inputPartitions)
+        (c.batch eq of.batch) && (c.inputPartitions eq of.inputPartitions)
       case _ => false
     }
     val args = scan.productIterator.map(_.asInstanceOf[AnyRef]).toArray
@@ -349,6 +351,18 @@ class SparkPlanSuite extends SharedSparkSession {
     assert(sharesPlanning(scan.clone()))
     assert(!sharesPlanning(scan.makeCopy(args.updated(1, new NewBatchScan))))
     assert(!sharesPlanning(scan.copy(runtimeFilters = Nil)))
+
+    // A scan with a per-partition bloom filter shares it with a copy over another aggregate, and
+    // with one without the bloom filter.
+    val withBloomFilter = scan.copy(
+      perPartitionBloomFilter = Some(PerPartitionBloomFilter(
+        BloomFilterMightContain(AttributeReference("bloomFilter", BinaryType)(),
+          new XxHash64(Seq(Literal(1L)))),
+        PerPartitionSizing(numItems = 1L, numBits = None, minPartitionKeys = 1L))),
+      bloomFilterAggregate = Some(DummySparkPlan()))
+    val otherAggregate = DummySparkPlan(outputPartitioning = SinglePartition)
+    assert(sharesPlanning(withBloomFilter.withNewChildren(Seq(otherAggregate)), withBloomFilter))
+    assert(sharesPlanning(withBloomFilter.withoutPerPartitionBloomFilter, withBloomFilter))
   }
 }
 
