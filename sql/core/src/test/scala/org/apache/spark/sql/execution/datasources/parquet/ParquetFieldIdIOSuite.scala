@@ -351,4 +351,92 @@ class ParquetFieldIdIOSuite extends ParquetTest with SharedSparkSession  {
       }
     }
   }
+
+  test("SPARK-60887: per-read parquet.fieldId.read.enabled option and filter pushdown") {
+    withTempDir { dir =>
+      val writeSchema = new StructType()
+        .add("a", IntegerType, true, withId(1))
+        .add("b", IntegerType, true, withId(2))
+        .add(
+          "s",
+          new StructType()
+            .add("x", IntegerType, true, withId(10))
+            .add("y", IntegerType, true, withId(20)),
+          true,
+          withId(3))
+      val writeData = Seq(
+        Row(1, 200, Row(10, 2000)),
+        Row(2, 300, Row(20, 3000)))
+
+      withSQLConf(SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.key -> "true") {
+        spark.createDataFrame(writeData.asJava, writeSchema)
+          .coalesce(1)
+          .write.mode("overwrite").parquet(dir.getCanonicalPath)
+      }
+
+      // `a` in readSchema has field ID 2 (which belongs to file column `b`), and `s.x` has field
+      // ID 20 (which belongs to file column `s.y`). `missing` has field ID 99 (not in file).
+      val readSchemaById = new StructType()
+        .add("a", IntegerType, true, withId(2))
+        .add("s", new StructType().add("x", IntegerType, true, withId(20)), true, withId(3))
+        .add("missing", IntegerType, true, withId(99))
+
+      // `a` has field ID 2 and `c` has field ID 1 (which belongs to file column `a`).
+      // When field-ID reading is disabled via the read option, `a` must match file column `a` by
+      // name and `c` must be null (file column `a` must not be placed into `c` by ID).
+      val readSchemaByName = new StructType()
+        .add("a", IntegerType, true, withId(2))
+        .add("c", IntegerType, true, withId(1))
+
+      Seq("parquet", "").foreach { v1List =>
+        withSQLConf(
+          SQLConf.USE_V1_SOURCE_LIST.key -> v1List,
+          SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+          withAllParquetReaders {
+            // 1. Session false, read option true: both readers match by field ID and push filters
+            // to the file column selected by field ID (`b` and `s.y`), not by name (`a` and `s.x`).
+            withSQLConf(SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key -> "false") {
+              def readWithFieldIdOption: DataFrame =
+                spark.read
+                  .schema(readSchemaById)
+                  .option(SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key, "true")
+                  .parquet(dir.getCanonicalPath)
+
+              checkAnswer(
+                readWithFieldIdOption,
+                Seq(Row(200, Row(2000), null), Row(300, Row(3000), null)))
+              checkAnswer(
+                readWithFieldIdOption.where("a > 100"),
+                Seq(Row(200, Row(2000), null), Row(300, Row(3000), null)))
+              checkAnswer(
+                readWithFieldIdOption.where("a > 250"),
+                Seq(Row(300, Row(3000), null)))
+              checkAnswer(
+                readWithFieldIdOption.where("s.x > 1000"),
+                Seq(Row(200, Row(2000), null), Row(300, Row(3000), null)))
+              checkAnswer(
+                readWithFieldIdOption.where("missing IS NULL"),
+                Seq(Row(200, Row(2000), null), Row(300, Row(3000), null)))
+            }
+
+            // 2. Session true, read option false: both readers match by name, not by field ID.
+            withSQLConf(SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key -> "true") {
+              def readWithoutFieldIdOption: DataFrame =
+                spark.read
+                  .schema(readSchemaByName)
+                  .option(SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key, "false")
+                  .parquet(dir.getCanonicalPath)
+
+              checkAnswer(
+                readWithoutFieldIdOption,
+                Seq(Row(1, null), Row(2, null)))
+              checkAnswer(
+                readWithoutFieldIdOption.where("a = 1"),
+                Seq(Row(1, null)))
+            }
+          }
+        }
+      }
+    }
+  }
 }

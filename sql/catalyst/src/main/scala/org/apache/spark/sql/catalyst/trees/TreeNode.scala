@@ -43,8 +43,8 @@ import org.apache.spark.sql.catalyst.rules.RuleId
 import org.apache.spark.sql.catalyst.rules.RuleIdCollection
 import org.apache.spark.sql.catalyst.rules.UnknownRuleId
 import org.apache.spark.sql.catalyst.trees.TreePattern.TreePattern
+import org.apache.spark.sql.catalyst.util.{truncatedString, CaseInsensitiveMap}
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
-import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -478,6 +478,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
         l.map(mapChild).force
       case s: Seq[_] =>
         s.map(mapChild)
+      case m: CaseInsensitiveMap[_] =>
+        CaseInsensitiveMap(m.originalMap.transform((_, v) => mapChild(v)))
       case m: Map[_, _] =>
         m.toMap.transform((_, v) => mapChild(v))
       case arg: TreeNode[_] if containsChild(arg) => mapTreeNode(arg)
@@ -976,6 +978,12 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
         arg.asInstanceOf[BaseType].clone()
       case Some(arg: TreeNode[_]) if containsChild(arg) =>
         Some(arg.asInstanceOf[BaseType].clone())
+      case m: CaseInsensitiveMap[_] =>
+        CaseInsensitiveMap(m.originalMap.transform {
+          case (_, arg: TreeNode[_]) if containsChild(arg) =>
+            arg.asInstanceOf[BaseType].clone()
+          case (_, other) => other
+        })
       // `mapValues` is lazy and we need to force it to materialize by converting to Map
       case m: Map[_, _] => m.toMap.transform {
         case (_, arg: TreeNode[_]) if containsChild(arg) =>

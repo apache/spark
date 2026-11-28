@@ -81,7 +81,7 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends sql.Data
       val dataSourceBuilder = builder.getReadBuilder.getDataSourceBuilder
       Option(source).foreach(dataSourceBuilder.setFormat)
       userSpecifiedSchema.foreach(schema => dataSourceBuilder.setSchema(schema.toDDL))
-      extraOptions.foreach { case (k, v) =>
+      extraOptions.originalMap.foreach { case (k, v) =>
         dataSourceBuilder.putOptions(k, v)
       }
       paths.foreach(path => dataSourceBuilder.addPaths(path))

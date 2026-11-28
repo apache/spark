@@ -4448,6 +4448,41 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
       }
     }
   }
+
+  test("SPARK-60887: AvroTable schema inference respects legacy lowercase option flag") {
+    import org.apache.spark.sql.FakeFileSystemRequiringDSOption
+    import org.apache.spark.sql.execution.datasources.FakeFileSystemRequiringLowercaseDSOption
+
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(1).write.format("avro").save(path)
+      val fs = new org.apache.hadoop.fs.Path(path)
+        .getFileSystem(spark.sessionState.newHadoopConf())
+      val files = fs.listStatus(new org.apache.hadoop.fs.Path(path))
+        .filterNot(_.getPath.getName.startsWith("_")).toSeq
+      val dsOptions = new org.apache.spark.sql.util.CaseInsensitiveStringMap(
+        Map("ds_Option" -> "value").asJava)
+
+      withSQLConf(
+        SQLConf.LEGACY_LOWERCASE_DATA_SOURCE_OPTIONS_IN_HADOOP_CONF.key -> "true",
+        "fs.file.impl" -> classOf[FakeFileSystemRequiringLowercaseDSOption].getName,
+        "fs.file.impl.disable.cache" -> "true") {
+        val table = new org.apache.spark.sql.v2.avro.AvroTable(
+          "t", spark, dsOptions, Seq(path), None, classOf[AvroFileFormat])
+        assert(table.inferSchema(files).nonEmpty)
+      }
+      withSQLConf(
+        SQLConf.LEGACY_LOWERCASE_DATA_SOURCE_OPTIONS_IN_HADOOP_CONF.key -> "true",
+        "fs.file.impl" -> classOf[FakeFileSystemRequiringDSOption].getName,
+        "fs.file.impl.disable.cache" -> "true") {
+        val table = new org.apache.spark.sql.v2.avro.AvroTable(
+          "t", spark, dsOptions, Seq(path), None, classOf[AvroFileFormat])
+        intercept[IllegalArgumentException] {
+          table.inferSchema(files)
+        }
+      }
+    }
+  }
 }
 
 // The allowlist is a static SQL config, so it cannot be set with `withSQLConf`; it is fixed on the

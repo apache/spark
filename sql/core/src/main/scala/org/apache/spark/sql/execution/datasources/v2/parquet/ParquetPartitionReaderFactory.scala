@@ -237,6 +237,9 @@ case class ParquetPartitionReaderFactory(
       // Try to push down filters when filter push-down is enabled.
       val pushed = if (enableParquetFilterPushDown) {
         val parquetSchema = footerFileMetaData.getSchema
+        val useFieldId = conf.getBoolean(
+          SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key,
+          SQLConf.PARQUET_FIELD_ID_READ_ENABLED.defaultValue.get)
         val parquetFilters = new ParquetFilters(
           parquetSchema,
           pushDownDate,
@@ -246,7 +249,8 @@ case class ParquetPartitionReaderFactory(
           pushDownInFilterThreshold,
           isCaseSensitive,
           datetimeRebaseSpec,
-          readSchema = Some(readDataSchema))
+          readSchema = Some(readDataSchema),
+          useFieldId = useFieldId)
         filters
           // Collects all converted Parquet filter predicates. Notice that not all predicates can be
           // converted (`ParquetFilters.createFilter` returns an `Option`). That's why a `flatMap`

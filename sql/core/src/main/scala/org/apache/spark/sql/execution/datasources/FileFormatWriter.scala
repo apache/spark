@@ -39,6 +39,7 @@ import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.write.WriterCommitMessage
 import org.apache.spark.sql.execution.{EmptyRDDWithPartitions, ProjectExec, SortExec, SparkPlan, SQLExecution, UnsafeExternalRowSorter}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -108,7 +109,13 @@ object FileFormatWriter extends Logging {
 
     // Merge write options into the job's configuration so that per-write options
     // take precedence over session-level defaults set later in prepareWrite.
-    DataSourceUtils.mergeWriteOptionsIntoHadoopConf(options, job.getConfiguration)
+    val legacyLowercaseOptions = sparkSession.sessionState.conf.getConf(
+      SQLConf.LEGACY_LOWERCASE_DATA_SOURCE_OPTIONS_IN_HADOOP_CONF)
+    DataSourceUtils.mergeOptionsIntoHadoopConf(
+      options,
+      job.getConfiguration,
+      legacyLowercaseKeys = legacyLowercaseOptions,
+      legacyPreserveOriginalMap = legacyLowercaseOptions)
 
     val partitionSet = AttributeSet(partitionColumns)
     // cleanup the internal metadata information of

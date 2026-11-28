@@ -52,4 +52,22 @@ class CaseInsensitiveMapSuite extends SparkFunSuite {
       assert(m.get("path").contains(kv._2))
     }
   }
+
+  test("SPARK-60887: CaseInsensitiveMap preserves originalMap after ++ through Map reference") {
+    val m: Map[String, String] = CaseInsensitiveMap(Map("ds_Option" -> "value")) - "path"
+    val combined = m ++ Map("other" -> "1")
+    assert(combined.isInstanceOf[CaseInsensitiveMap[_]])
+    assert(combined.asInstanceOf[CaseInsensitiveMap[String]].originalMap ===
+      Map("ds_Option" -> "value", "other" -> "1"))
+
+    val ciRhs = m ++ CaseInsensitiveMap(Map("MixedKey" -> "2", "DS_OPTION" -> "override"))
+    assert(ciRhs.isInstanceOf[CaseInsensitiveMap[_]])
+    assert(ciRhs.asInstanceOf[CaseInsensitiveMap[String]].originalMap ===
+      Map("DS_OPTION" -> "override", "MixedKey" -> "2"))
+
+    assert((m ++ Seq.empty).eq(m))
+    val dupIter = m ++ Seq("KeyA" -> "1", "KEYA" -> "2")
+    assert(dupIter.asInstanceOf[CaseInsensitiveMap[String]].originalMap ===
+      Map("ds_Option" -> "value", "KEYA" -> "2"))
+  }
 }

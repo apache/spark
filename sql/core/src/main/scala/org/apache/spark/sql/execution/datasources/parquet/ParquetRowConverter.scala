@@ -226,7 +226,7 @@ private[parquet] class ParquetRowConverter(
 
     // (SPARK-38094) parquet field ids, if exist, should be prioritized for matching
     val catalystFieldIdxByFieldId =
-      if (SQLConf.get.parquetFieldIdReadEnabled && ParquetUtils.hasFieldIds(catalystType)) {
+      if (schemaConverter.useFieldId && ParquetUtils.hasFieldIds(catalystType)) {
         catalystType.fields
           .zipWithIndex
           .filter { case (f, _) => ParquetUtils.hasFieldId(f) }

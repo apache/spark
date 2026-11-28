@@ -27,6 +27,8 @@ import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.{SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{AnalysisException, SaveMode}
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
@@ -240,6 +242,342 @@ class DataSourceSuite extends SharedSparkSession with PrivateMethodTester {
       parameters = Map("paths" -> "/path1, /path2"))
     )
   }
+
+  test("SPARK-60887: newHadoopConfWithOptions preserves key casing for CaseInsensitiveMap") {
+    val options = CaseInsensitiveMap(Map(
+      "fs.azure.skipUserGroupMetadataDuringInitialization" -> "true",
+      "Path" -> "/tmp/a",
+      "PATHS" -> "/tmp/b"
+    ))
+    val conf = spark.sessionState.newHadoopConfWithOptions(options)
+    assert(conf.get("fs.azure.skipUserGroupMetadataDuringInitialization") === "true")
+    assert(conf.get("fs.azure.skipusergroupmetadataduringinitialization") === null)
+    assert(conf.get("path") === null)
+    assert(conf.get("Path") === null)
+    assert(conf.get("paths") === null)
+    assert(conf.get("PATHS") === null)
+
+    val plainConf = spark.sessionState.newHadoopConfWithOptions(Map(
+      "fs.azure.skipUserGroupMetadataDuringInitialization" -> "true",
+      "Path" -> "/tmp/a",
+      "PATHS" -> "/tmp/b"
+    ))
+    assert(plainConf.get("fs.azure.skipUserGroupMetadataDuringInitialization") === "true")
+    assert(plainConf.get("Path") === null)
+    assert(plainConf.get("PATHS") === null)
+
+    val dupCaseOptions = CaseInsensitiveMap(new scala.collection.immutable.ListMap() +
+      ("parquet.filter.columnindex.enabled" -> "true") +
+      ("PARQUET.FILTER.COLUMNINDEX.ENABLED" -> "false"))
+    val dupConf = spark.sessionState.newHadoopConfWithOptions(dupCaseOptions)
+    assert(dupConf.get("parquet.filter.columnindex.enabled") === null)
+    assert(dupConf.get("PARQUET.FILTER.COLUMNINDEX.ENABLED") === "false")
+
+    withSQLConf(SQLConf.LEGACY_LOWERCASE_DATA_SOURCE_OPTIONS_IN_HADOOP_CONF.key -> "true") {
+      val legacyConf = spark.sessionState.newHadoopConfWithOptions(options)
+      assert(legacyConf.get("fs.azure.skipUserGroupMetadataDuringInitialization") === null)
+      assert(legacyConf.get("fs.azure.skipusergroupmetadataduringinitialization") === "true")
+    }
+  }
+
+  test("SPARK-60887: V2 file table insert fallback and catalog table write options with legacy " +
+    "flag") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(1).write.parquet(path)
+
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+        withTempView("v2_view") {
+          withSQLConf(
+            "fs.file.impl" -> classOf[org.apache.spark.sql.FakeFileSystemRequiringDSOption].getName,
+            "fs.file.impl.disable.cache" -> "true",
+            SQLConf.LEGACY_LOWERCASE_DATA_SOURCE_OPTIONS_IN_HADOOP_CONF.key -> "false") {
+            spark.read.format("parquet").option("ds_Option", "value").load(path)
+              .createOrReplaceTempView("v2_view")
+            val insertDf = sql("INSERT INTO v2_view VALUES (1L)")
+            val cmd = insertDf.queryExecution.analyzed.collectFirst {
+              case c: InsertIntoHadoopFsRelationCommand => c
+            }.get
+            assert(cmd.options.get("ds_Option").contains("value"))
+          }
+
+          withSQLConf(
+            SQLConf.LEGACY_LOWERCASE_DATA_SOURCE_OPTIONS_IN_HADOOP_CONF.key -> "true") {
+            spark.read.format("parquet").option("ds_Option", "value").load(path)
+              .createOrReplaceTempView("v2_view")
+            withSQLConf(
+              "fs.file.impl" -> classOf[FakeFileSystemRequiringLowercaseDSOption].getName,
+              "fs.file.impl.disable.cache" -> "true") {
+              val insertDf = sql("INSERT INTO v2_view VALUES (2L)")
+              val cmd = insertDf.queryExecution.analyzed.collectFirst {
+                case c: InsertIntoHadoopFsRelationCommand => c
+              }.get
+              assert(!cmd.options.contains("ds_Option"))
+              assert(cmd.options.get("ds_option").contains("value"))
+            }
+          }
+        }
+      }
+    }
+
+    // Verify catalog table write option deduplication and Path filtering under both flag values.
+    val writeOpts = CaseInsensitiveMap(new scala.collection.immutable.ListMap() +
+      ("parquet.enable.dictionary" -> "false") +
+      ("PARQUET.ENABLE.DICTIONARY" -> "true") +
+      ("Path" -> "/tmp/custom"))
+
+    val defaultJobConf = spark.sessionState.newHadoopConfWithOptions(writeOpts)
+    DataSourceUtils.mergeOptionsIntoHadoopConf(
+      writeOpts, defaultJobConf, legacyLowercaseKeys = false, legacyPreserveOriginalMap = false)
+    assert(defaultJobConf.get("parquet.enable.dictionary") === null)
+    assert(defaultJobConf.get("PARQUET.ENABLE.DICTIONARY") === "true")
+    assert(defaultJobConf.get("Path") === null)
+
+    withSQLConf(SQLConf.LEGACY_LOWERCASE_DATA_SOURCE_OPTIONS_IN_HADOOP_CONF.key -> "true") {
+      val legacyJobConf = spark.sessionState.newHadoopConfWithOptions(writeOpts)
+      DataSourceUtils.mergeOptionsIntoHadoopConf(
+        writeOpts, legacyJobConf, legacyLowercaseKeys = true, legacyPreserveOriginalMap = true)
+      assert(legacyJobConf.get("parquet.enable.dictionary") === "false")
+      assert(legacyJobConf.get("PARQUET.ENABLE.DICTIONARY") === "true")
+      assert(legacyJobConf.get("Path") === "/tmp/custom")
+    }
+
+    withTempDir { dir =>
+      withTable("dict_tbl") {
+        val loc = dir.getCanonicalPath
+        val orderedProps = new scala.collection.immutable.ListMap[String, String]() +
+          ("parquet.enable.dictionary" -> "false") +
+          ("PARQUET.ENABLE.DICTIONARY" -> "true") +
+          ("Path" -> "/tmp/custom")
+        val tableDesc = org.apache.spark.sql.catalyst.catalog.CatalogTable(
+          identifier = org.apache.spark.sql.catalyst.TableIdentifier("dict_tbl"),
+          tableType = org.apache.spark.sql.catalyst.catalog.CatalogTableType.EXTERNAL,
+          storage = org.apache.spark.sql.catalyst.catalog.CatalogStorageFormat.empty.copy(
+            locationUri = Some(dir.toURI),
+            properties = orderedProps),
+          schema = new org.apache.spark.sql.types.StructType()
+            .add("s", org.apache.spark.sql.types.StringType),
+          provider = Some("parquet"))
+        spark.sessionState.catalog.createTable(tableDesc, ignoreIfExists = false)
+
+        def hasDictionaryPage(tableDir: java.io.File): Boolean = {
+          val parquetFile = tableDir.listFiles()
+            .find(f => f.isFile && f.getName.endsWith(".parquet")).get
+          val footer = org.apache.parquet.hadoop.ParquetFileReader.open(
+            org.apache.parquet.hadoop.util.HadoopInputFile.fromPath(
+              new Path(parquetFile.toURI), spark.sessionState.newHadoopConf()))
+          try {
+            footer.getFooter.getBlocks.get(0).getColumns.get(0).hasDictionaryPage
+          } finally {
+            footer.close()
+          }
+        }
+
+        withSQLConf(
+          "fs.file.impl" -> classOf[CapturingLocalFileSystem].getName,
+          "fs.file.impl.disable.cache" -> "true",
+          SQLConf.LEGACY_LOWERCASE_DATA_SOURCE_OPTIONS_IN_HADOOP_CONF.key -> "true") {
+          CapturingLocalFileSystem.lastConf = null
+          sql("INSERT OVERWRITE dict_tbl SELECT 'repeated_val' FROM range(100)")
+          val jobConf = CapturingLocalFileSystem.lastConf
+          assert(jobConf !== null)
+          assert(jobConf.get("parquet.enable.dictionary") === "false")
+          assert(jobConf.get("PARQUET.ENABLE.DICTIONARY") === "true")
+          assert(jobConf.get("Path") === "/tmp/custom")
+          assert(!hasDictionaryPage(dir))
+        }
+
+        spark.sessionState.catalog.invalidateAllCachedTables()
+        withSQLConf(
+          "fs.file.impl" -> classOf[CapturingLocalFileSystem].getName,
+          "fs.file.impl.disable.cache" -> "true",
+          SQLConf.LEGACY_LOWERCASE_DATA_SOURCE_OPTIONS_IN_HADOOP_CONF.key -> "false") {
+          CapturingLocalFileSystem.lastConf = null
+          sql("INSERT OVERWRITE dict_tbl SELECT 'repeated_val' FROM range(100)")
+          val jobConf = CapturingLocalFileSystem.lastConf
+          assert(jobConf !== null)
+          assert(jobConf.get("parquet.enable.dictionary") === null)
+          assert(jobConf.get("PARQUET.ENABLE.DICTIONARY") === "true")
+          assert(jobConf.get("Path") === null)
+          assert(hasDictionaryPage(dir))
+        }
+      }
+    }
+  }
+
+  test("SPARK-60887: Data Source V2 schema inference, streaming sink fileIndex, and " +
+    "TextBasedFileScan codecFactory respect legacy flag") {
+    import scala.jdk.CollectionConverters._
+    import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
+    import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
+    import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
+    import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
+    import org.apache.spark.sql.execution.datasources.v2.{FileTable, TextBasedFileScan}
+    import org.apache.spark.sql.execution.datasources.v2.csv.{CSVScan, CSVTable}
+    import org.apache.spark.sql.execution.datasources.v2.json.{JsonScan, JsonTable}
+    import org.apache.spark.sql.execution.datasources.v2.orc.OrcTable
+    import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetTable
+    import org.apache.spark.sql.execution.datasources.v2.text.TextScan
+    import org.apache.spark.sql.execution.streaming.runtime.MetadataLogFileIndex
+    import org.apache.spark.sql.types.{StringType, StructType}
+    import org.apache.spark.sql.util.CaseInsensitiveStringMap
+
+    val dsOptions = new CaseInsensitiveStringMap(
+      Map("ds_Option" -> "value", "mergeSchema" -> "true").asJava)
+
+    Seq("parquet", "orc", "json", "csv").foreach { format =>
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        spark.range(1).selectExpr("CAST(id AS STRING) AS v").write.format(format).save(path)
+        val fs = new Path(path).getFileSystem(spark.sessionState.newHadoopConf())
+        val files = fs.listStatus(new Path(path)).filterNot(_.getPath.getName.startsWith("_")).toSeq
+
+        def createTable(): FileTable = format match {
+          case "parquet" =>
+            new ParquetTable("t", spark, dsOptions, Seq(path), None, classOf[ParquetFileFormat])
+          case "orc" =>
+            new OrcTable("t", spark, dsOptions, Seq(path), None, classOf[OrcFileFormat])
+          case "json" =>
+            new JsonTable("t", spark, dsOptions, Seq(path), None, classOf[JsonFileFormat])
+          case "csv" =>
+            new CSVTable("t", spark, dsOptions, Seq(path), None, classOf[CSVFileFormat])
+        }
+
+        withSQLConf(
+          SQLConf.USE_V1_SOURCE_LIST.key -> "",
+          SQLConf.LEGACY_LOWERCASE_DATA_SOURCE_OPTIONS_IN_HADOOP_CONF.key -> "true",
+          "fs.file.impl" -> classOf[FakeFileSystemRequiringLowercaseDSOption].getName,
+          "fs.file.impl.disable.cache" -> "true") {
+          assert(createTable().inferSchema(files).nonEmpty)
+        }
+        withSQLConf(
+          SQLConf.USE_V1_SOURCE_LIST.key -> "",
+          SQLConf.LEGACY_LOWERCASE_DATA_SOURCE_OPTIONS_IN_HADOOP_CONF.key -> "true",
+          "fs.file.impl" -> classOf[org.apache.spark.sql.FakeFileSystemRequiringDSOption].getName,
+          "fs.file.impl.disable.cache" -> "true") {
+          val err = intercept[Throwable] {
+            createTable().inferSchema(files)
+          }
+          assert(org.apache.spark.util.SparkErrorUtils.getRootCause(err)
+            .isInstanceOf[IllegalArgumentException])
+        }
+      }
+    }
+
+    // V2 streaming sink output directory (`MetadataLogFileIndex`)
+    withTempDir { dir =>
+      val sinkPath = new java.io.File(dir, "sink").getCanonicalPath
+      val checkpointPath = new java.io.File(dir, "ckpt").getCanonicalPath
+      val q = spark.readStream.format("rate").load()
+        .writeStream.format("parquet")
+        .option("checkpointLocation", checkpointPath)
+        .start(sinkPath)
+      try {
+        q.processAllAvailable()
+      } finally {
+        q.stop()
+      }
+
+      withSQLConf(
+        SQLConf.USE_V1_SOURCE_LIST.key -> "",
+        SQLConf.LEGACY_LOWERCASE_DATA_SOURCE_OPTIONS_IN_HADOOP_CONF.key -> "true") {
+        val table = new ParquetTable(
+          "t", spark, dsOptions, Seq(sinkPath), None, classOf[ParquetFileFormat])
+        assert(table.fileIndex.isInstanceOf[MetadataLogFileIndex])
+        val hadoopConfMethod =
+          classOf[PartitioningAwareFileIndex].getDeclaredMethod("hadoopConf")
+        hadoopConfMethod.setAccessible(true)
+        val conf = hadoopConfMethod.invoke(table.fileIndex).asInstanceOf[Configuration]
+        assert(conf.get("ds_option") === "value")
+        assert(conf.get("ds_Option") === null)
+        withSQLConf(
+          "fs.file.impl" -> classOf[FakeFileSystemRequiringLowercaseDSOption].getName,
+          "fs.file.impl.disable.cache" -> "true") {
+          new Path(sinkPath).getFileSystem(conf)
+        }
+      }
+    }
+
+    // V2 CSV, JSON, and text scan `codecFactory` split decisions
+    val codecOpts = new CaseInsensitiveStringMap(
+      Map(
+        "Io.Compression.Codecs" -> classOf[FakeUnsplittableCodec].getName,
+        "ds_Option" -> "value").asJava)
+    val dummyIndex = new InMemoryFileIndex(spark, Seq.empty, Map.empty, None)
+    val schema = new StructType().add("v", StringType)
+
+    def createScans(): Seq[TextBasedFileScan] = Seq(
+      CSVScan(spark, dummyIndex, schema, schema, new StructType(), codecOpts, Array.empty),
+      JsonScan(spark, dummyIndex, schema, schema, new StructType(), codecOpts, Array.empty),
+      TextScan(spark, dummyIndex, schema, schema, new StructType(), codecOpts))
+
+    withSQLConf(SQLConf.LEGACY_LOWERCASE_DATA_SOURCE_OPTIONS_IN_HADOOP_CONF.key -> "false") {
+      createScans().foreach { scan =>
+        assert(scan.isSplitable(new Path("test.fakegz")))
+      }
+    }
+    withSQLConf(SQLConf.LEGACY_LOWERCASE_DATA_SOURCE_OPTIONS_IN_HADOOP_CONF.key -> "true") {
+      createScans().foreach { scan =>
+        FakeUnsplittableCodec.lastConf = null
+        assert(!scan.isSplitable(new Path("test.fakegz")))
+        assert(FakeUnsplittableCodec.lastConf.get("ds_option") === "value")
+        assert(FakeUnsplittableCodec.lastConf.get("ds_Option") === null)
+      }
+    }
+
+    val codecOptsLowerKey = new CaseInsensitiveStringMap(
+      Map(
+        "io.compression.codecs" -> classOf[FakeUnsplittableCodec].getName,
+        "ds_Option" -> "value").asJava)
+    withSQLConf(SQLConf.LEGACY_LOWERCASE_DATA_SOURCE_OPTIONS_IN_HADOOP_CONF.key -> "false") {
+      Seq(
+        CSVScan(spark, dummyIndex, schema, schema, new StructType(), codecOptsLowerKey,
+          Array.empty),
+        JsonScan(spark, dummyIndex, schema, schema, new StructType(), codecOptsLowerKey,
+          Array.empty),
+        TextScan(spark, dummyIndex, schema, schema, new StructType(), codecOptsLowerKey)
+      ).foreach { scan =>
+        FakeUnsplittableCodec.lastConf = null
+        assert(!scan.isSplitable(new Path("test.fakegz")))
+        assert(FakeUnsplittableCodec.lastConf.get("ds_Option") === "value")
+        assert(FakeUnsplittableCodec.lastConf.get("ds_option") === null)
+      }
+    }
+  }
+}
+
+class FakeFileSystemRequiringLowercaseDSOption extends org.apache.hadoop.fs.LocalFileSystem {
+  override def initialize(name: java.net.URI, conf: Configuration): Unit = {
+    super.initialize(name, conf)
+    require(conf.get("ds_option", "") == "value" && conf.get("ds_Option") == null)
+  }
+}
+
+class CapturingLocalFileSystem extends org.apache.hadoop.fs.LocalFileSystem {
+  override def initialize(name: java.net.URI, conf: Configuration): Unit = {
+    super.initialize(name, conf)
+    if (conf.get("spark.sql.sources.writeJobUUID") != null) {
+      CapturingLocalFileSystem.lastConf = conf
+    }
+  }
+}
+
+object CapturingLocalFileSystem {
+  @volatile var lastConf: Configuration = _
+}
+
+class FakeUnsplittableCodec extends org.apache.hadoop.io.compress.GzipCodec {
+  override def getDefaultExtension: String = ".fakegz"
+  override def setConf(conf: Configuration): Unit = {
+    super.setConf(conf)
+    if (conf != null) {
+      FakeUnsplittableCodec.lastConf = conf
+    }
+  }
+}
+
+object FakeUnsplittableCodec {
+  @volatile var lastConf: Configuration = _
 }
 
 object TestPaths {

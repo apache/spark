@@ -304,8 +304,14 @@ object OrcUtils extends Logging {
     : Option[StructType] = {
     val orcOptions = new OrcOptions(options, sparkSession.sessionState.conf)
     if (orcOptions.mergeSchema) {
-      SchemaMergeUtils.mergeSchemasInParallel(
-        sparkSession, options, files, OrcUtils.readOrcSchemasInParallel)
+      val reader = (files: Seq[FileStatus], conf: Configuration, ignoreCorruptFiles: Boolean,
+          ignoreMissingFiles: Boolean) => {
+        // readOrcSchemasInParallel reads archivePathFilter from the conf (its signature is fixed
+        // by SchemaMergeUtils' schemaReader type), so put the option there.
+        orcOptions.archivePathFilter.foreach(conf.set(FileSourceOptions.ARCHIVE_PATH_FILTER, _))
+        OrcUtils.readOrcSchemasInParallel(files, conf, ignoreCorruptFiles, ignoreMissingFiles)
+      }
+      SchemaMergeUtils.mergeSchemasInParallel(sparkSession, options, files, reader)
     } else {
       OrcUtils.readSchema(sparkSession, files, options)
     }

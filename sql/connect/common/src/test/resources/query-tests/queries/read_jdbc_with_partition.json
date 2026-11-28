@@ -6,12 +6,12 @@
     "dataSource": {
       "format": "jdbc",
       "options": {
+        "lowerBound": "0",
         "url": "jdbc:h2:mem:testdb0;user\u003dtestUser;password\u003dtestPass",
-        "upperbound": "4",
-        "lowerbound": "0",
-        "numpartitions": "3",
+        "partitionColumn": "THEID",
+        "upperBound": "4",
         "dbtable": "TEST.EMP",
-        "partitioncolumn": "THEID"
+        "numPartitions": "3"
       }
     }
   }

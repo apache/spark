@@ -645,6 +645,41 @@ class SparkConnectReadWriterTests(SparkConnectSQLTestCase):
                 finally:
                     query.stop()
 
+    def test_batch_read_preserves_option_key_casing(self):
+        with tempfile.TemporaryDirectory(prefix="test_option_key_casing_") as d:
+            with open(os.path.join(d, "data.txt"), "w") as f:
+                f.write("visible\n")
+            with open(os.path.join(d, "_logs"), "w") as f:
+                f.write("filtered\n")
+
+            with self.connect_conf(
+                {"spark.sql.legacy.lowercaseDataSourceOptionsInHadoopConf": "false"}
+            ):
+                rows = (
+                    self.connect.read.option("ignoredPathSegmentRegex", "")
+                    .option(
+                        "mapreduce.input.pathFilter.class",
+                        "org.apache.hadoop.mapred.OutputLogFilter",
+                    )
+                    .text(d)
+                    .collect()
+                )
+                self.assertEqual([r[0] for r in rows], ["visible"])
+
+            with self.connect_conf(
+                {"spark.sql.legacy.lowercaseDataSourceOptionsInHadoopConf": "true"}
+            ):
+                rows = (
+                    self.connect.read.option("ignoredPathSegmentRegex", "")
+                    .option(
+                        "mapreduce.input.pathFilter.class",
+                        "org.apache.hadoop.mapred.OutputLogFilter",
+                    )
+                    .text(d)
+                    .collect()
+                )
+                self.assertEqual(sorted(r[0] for r in rows), ["filtered", "visible"])
+
 
 if __name__ == "__main__":
     from pyspark.testing import main
