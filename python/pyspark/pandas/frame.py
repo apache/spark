@@ -3890,13 +3890,20 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                              A
         2018-04-09 00:00:00  1
         2018-04-12 01:00:00  4
+
+        Use ``axis=1`` to select columns whose labels fall between the two times:
+
+        >>> psdf = ps.DataFrame([[1, 2, 3, 4]], columns=idx)
+        >>> psdf.between_time('0:15', '0:45', axis=1)
+           2018-04-10 00:20:00  2018-04-11 00:40:00
+        0                    2                    3
         """
         axis = validate_axis(axis)
 
-        if axis != 0:
-            raise NotImplementedError("between_time currently only works for axis=0")
-
-        if not isinstance(self.index, ps.DatetimeIndex):
+        if axis == 1:
+            if not isinstance(self.columns, pd.DatetimeIndex):
+                raise TypeError("Index must be DatetimeIndex")
+        elif not isinstance(self.index, ps.DatetimeIndex):
             raise TypeError("Index must be DatetimeIndex")
 
         allowed_inclusive_values = ["left", "right", "both", "neither"]
@@ -3908,6 +3915,17 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     "allowed_values": str(allowed_inclusive_values),
                 },
             )
+
+        if axis == 1:
+            # Column labels live on the driver, so compute the positions with pandas.
+            columns = cast(pd.DatetimeIndex, self.columns)  # checked above
+            indexer = columns.indexer_between_time(
+                start_time,
+                end_time,
+                include_start=inclusive in ("both", "left"),
+                include_end=inclusive in ("both", "right"),
+            )
+            return cast(DataFrame, self.iloc[:, indexer.tolist()])
 
         psdf = self.copy()
         psdf.index.name = verify_temp_column_name(psdf, "__index_name__")
@@ -3934,7 +3952,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
         )
 
-    # TODO(SPARK-46159): implement axis=1
     def at_time(
         self, time: Union[datetime.time, str], asof: bool = False, axis: Axis = 0
     ) -> "DataFrame":
@@ -3976,14 +3993,26 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                              A
         2018-04-09 12:00:00  2
         2018-04-10 12:00:00  4
+
+        Use ``axis=1`` to select columns whose labels are at the given time:
+
+        >>> psdf = ps.DataFrame([[1, 2, 3, 4]], columns=idx)
+        >>> psdf.at_time('12:00', axis=1)
+           2018-04-09 12:00:00  2018-04-10 12:00:00
+        0                    2                    4
         """
         if asof:
             raise NotImplementedError("'asof' argument is not supported")
 
         axis = validate_axis(axis)
 
-        if axis != 0:
-            raise NotImplementedError("at_time currently only works for axis=0")
+        if axis == 1:
+            columns = self.columns
+            if not isinstance(columns, pd.DatetimeIndex):
+                raise TypeError("Index must be DatetimeIndex")
+            # Column labels live on the driver, so compute the positions with pandas.
+            indexer = columns.indexer_at_time(time)
+            return cast(DataFrame, self.iloc[:, indexer.tolist()])
 
         if not isinstance(self.index, ps.DatetimeIndex):
             raise TypeError("Index must be DatetimeIndex")
