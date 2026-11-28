@@ -43,7 +43,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertIntoDir, I
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, StreamingSourceIdentifyingName, Unassigned}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.PushableExpression
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, PushableExpression}
 import org.apache.spark.sql.classic.{SparkSession, Strategy}
 import org.apache.spark.sql.connector.catalog.{SupportsRead, V1Table}
 import org.apache.spark.sql.connector.catalog.TableCapability._
@@ -621,9 +621,32 @@ object DataSourceStrategy
     }
   }
 
+  // Without the Java 8 time API, a filter takes a DATE as java.sql.Date and a TIMESTAMP as
+  // java.sql.Timestamp in the JVM time zone, and the data source converts it back. A value that
+  // does not survive this round trip, such as a day that the hybrid Julian/Gregorian calendar or
+  // a time zone transition skips, would be pushed down as another value.
+  private def changesInJavaConversion(value: Any, dataType: DataType): Boolean =
+    (value, dataType) match {
+      case (days: Int, DateType) =>
+        DateTimeUtils.fromJavaDate(DateTimeUtils.toJavaDate(days)) != days
+      case (micros: Long, TimestampType) =>
+        DateTimeUtils.fromJavaTimestamp(DateTimeUtils.toJavaTimestamp(micros)) != micros
+      case _ => false
+    }
+
+  private def hasDatetimeChangedByJavaConversion(predicate: Expression): Boolean =
+    predicate.exists {
+      case Literal(v, t) => changesInJavaConversion(v, t)
+      case expressions.InSet(child, set) => set.exists(changesInJavaConversion(_, child.dataType))
+      case _ => false
+    }
+
   private def translateLeafNodeFilter(
       predicate: Expression,
       pushableColumn: PushableColumnBase): Option[Filter] = predicate match {
+    case _ if !SQLConf.get.datetimeJava8ApiEnabled &&
+        hasDatetimeChangedByJavaConversion(predicate) => None
+
     case expressions.EqualTo(e @ pushableColumn(name), Literal(v, t)) =>
       Some(collationAwareFilter(sources.EqualTo(name, convertToScala(v, t)), e.dataType))
     case expressions.EqualTo(Literal(v, t), e @ pushableColumn(name)) =>

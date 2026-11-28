@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import java.io.{File, FileNotFoundException}
 import java.net.URI
 import java.nio.file.{Files, StandardOpenOption}
-import java.time.{LocalDateTime, ZoneOffset}
+import java.time.{LocalDateTime, ZoneId, ZoneOffset}
 
 import scala.collection.mutable
 
@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GreaterTha
 import org.apache.spark.sql.catalyst.expressions.IntegralLiteralTestUtils.{negativeInt, positiveInt}
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
 import org.apache.spark.sql.execution.{FileSourceScanLike, SimpleMode}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -1849,6 +1850,112 @@ class FileBasedDataSourceSuite extends SharedSparkSession
           parameters = expectedParameters)
       }
     }
+  }
+
+  test("SPARK-61739: filter pushdown with a DATE that the hybrid calendar skips") {
+    // 1582-10-05 to 1582-10-14 do not exist in the hybrid Julian/Gregorian calendar of
+    // java.sql.Date and were pushed down as 1582-10-15, which skipped the file of 1582-10-15.
+    Seq("parquet", "orc").foreach { format =>
+      Seq("false", "true").foreach { java8Api =>
+        withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api) {
+          withTempPath { dir =>
+            val path = dir.getCanonicalPath
+            // One file per date, so that the statistics of a file hold one value.
+            Seq("1582-10-04", "1582-10-15", "1582-10-16").foreach { d =>
+              sql(s"SELECT DATE'$d' AS d").write.mode("append").format(format).save(path)
+            }
+            val df = spark.read.format(format).load(path)
+            Seq(
+              "d > DATE'1582-10-10'" -> Seq("1582-10-15", "1582-10-16"),
+              "d >= DATE'1582-10-14'" -> Seq("1582-10-15", "1582-10-16"),
+              "d < DATE'1582-10-05'" -> Seq("1582-10-04"),
+              "d <> DATE'1582-10-14'" -> Seq("1582-10-04", "1582-10-15", "1582-10-16"),
+              "NOT (d <=> DATE'1582-10-05')" -> Seq("1582-10-04", "1582-10-15", "1582-10-16"),
+              "d IN (DATE'1582-10-10', DATE'1582-10-16')" -> Seq("1582-10-16"),
+              "d NOT IN (DATE'1582-10-10', DATE'1582-10-16')" -> Seq("1582-10-04", "1582-10-15")
+            ).foreach { case (condition, expected) =>
+              checkAnswer(
+                df.where(condition).selectExpr("CAST(d AS STRING)"), expected.map(Row(_)))
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-61739: filter pushdown with a TIMESTAMP in a day that the hybrid calendar skips") {
+    // Timestamps on 1582-10-05 to 1582-10-14 were pushed down to Parquet ten days later.
+    Seq("false", "true").foreach { java8Api =>
+      withSQLConf(
+          SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api,
+          SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> "TIMESTAMP_MICROS") {
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          // One file per value, so that the statistics of a file hold one value.
+          Seq("1582-10-04 12:00:00", "1582-10-10 12:00:00", "1582-10-15 00:00:00",
+              "1582-10-16 00:00:00").foreach { t =>
+            sql(s"SELECT TIMESTAMP'$t' AS t").write.mode("append").parquet(path)
+          }
+          val df = spark.read.parquet(path)
+          Seq(
+            "t = TIMESTAMP'1582-10-10 12:00:00'" -> Seq("1582-10-10 12:00:00"),
+            "t >= TIMESTAMP'1582-10-10 12:00:00'" ->
+              Seq("1582-10-10 12:00:00", "1582-10-15 00:00:00", "1582-10-16 00:00:00"),
+            "t > TIMESTAMP'1582-10-14 23:59:59.999999'" ->
+              Seq("1582-10-15 00:00:00", "1582-10-16 00:00:00"),
+            "t <> TIMESTAMP'1582-10-05 00:00:00'" -> Seq("1582-10-04 12:00:00",
+              "1582-10-10 12:00:00", "1582-10-15 00:00:00", "1582-10-16 00:00:00"),
+            "t IN (TIMESTAMP'1582-10-10 12:00:00', TIMESTAMP'1582-10-16 00:00:00')" ->
+              Seq("1582-10-10 12:00:00", "1582-10-16 00:00:00")
+          ).foreach { case (condition, expected) =>
+            checkAnswer(df.where(condition).selectExpr("CAST(t AS STRING)"), expected.map(Row(_)))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-61739: filter pushdown with a DATE or TIMESTAMP that a time zone skips") {
+    // A time zone that moves across the date line or from local mean time to standard time skips
+    // local dates and times. java.sql.Date and java.sql.Timestamp cannot hold them, so they were
+    // pushed down as other values.
+    def check(zone: String, format: String, values: Seq[String], literalType: String,
+        conditions: Seq[(String, Seq[String])]): Unit = {
+      DateTimeTestUtils.withDefaultTimeZone(ZoneId.of(zone)) {
+        Seq("false", "true").foreach { java8Api =>
+          withSQLConf(
+              SQLConf.SESSION_LOCAL_TIMEZONE.key -> zone,
+              SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api,
+              SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> "TIMESTAMP_MICROS") {
+            withTempPath { dir =>
+              val path = dir.getCanonicalPath
+              // One file per value, so that the statistics of a file hold one value.
+              values.foreach { v =>
+                sql(s"SELECT $literalType'$v' AS v").write.mode("append").format(format).save(path)
+              }
+              val df = spark.read.format(format).load(path)
+              conditions.foreach { case (condition, expected) =>
+                checkAnswer(
+                  df.where(condition).selectExpr("CAST(v AS STRING)"), expected.map(Row(_)))
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Pacific/Kiritimati skipped 1994-12-31.
+    Seq("parquet", "orc").foreach { format =>
+      check("Pacific/Kiritimati", format, Seq("1994-12-30", "1995-01-01"), "DATE", Seq(
+        "v > DATE'1994-12-31'" -> Seq("1995-01-01"),
+        "v < DATE'1994-12-31'" -> Seq("1994-12-30"),
+        "v = DATE'1994-12-31'" -> Nil))
+    }
+    // America/Anchorage moved from local mean time to standard time on 1867-10-18.
+    check("America/Anchorage", "parquet", Seq("1867-10-19 12:00:00", "1867-10-20 12:00:00"),
+      "TIMESTAMP", Seq(
+        "v = TIMESTAMP'1867-10-19 12:00:00'" -> Seq("1867-10-19 12:00:00"),
+        "v > TIMESTAMP'1867-10-19 12:00:00'" -> Seq("1867-10-20 12:00:00")))
   }
 }
 
