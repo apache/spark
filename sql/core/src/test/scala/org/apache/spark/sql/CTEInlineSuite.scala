@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql
 
+import java.util.UUID
+
 import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.{Alias, And, GreaterThan, LessThan, Literal, Or, Rand}
 import org.apache.spark.sql.catalyst.optimizer.InlineCTE
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.adaptive._
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
+import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -552,6 +555,69 @@ abstract class CTEInlineSuiteBase
           df.queryExecution.optimizedPlan.exists(_.isInstanceOf[RepartitionOperation]),
           "Non-deterministic With-CTE with multiple references should not be inlined.")
         assert(df.count() === 10, "Each reference should drop only its own first row.")
+      }
+    }
+  }
+
+  test("SPARK-61192: non-deterministic CTE ending in coalesce is evaluated once") {
+    // A non-deterministic UDF is not seeded (unlike `rand()` or `uuid()`), so a second evaluation
+    // of the CTE body produces different values and the self-join is empty.
+    withUserDefinedFunction("random_uuid" -> true) {
+      spark.udf.register("random_uuid", udf(() => UUID.randomUUID().toString).asNondeterministic())
+      withSQLConf(
+          SQLConf.SHUFFLE_PARTITIONS.key -> "4",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        val uuid = "random_uuid()"
+        def coalescedShuffles(df: DataFrame, n: Int): Int =
+          df.queryExecution.optimizedPlan.collect {
+            case Repartition(`n`, false, r: RepartitionByExpression)
+              if r.partitionExpressions.isEmpty => r
+          }.length
+
+        Seq(1, 2).foreach { n =>
+          val body = s"select /*+ COALESCE($n) */ id k, $uuid u from range(0, 100, 1, 4)"
+          withClue(s"CTE body: $body") {
+            // a self-join of the CTE
+            val selfJoin =
+              sql(s"with v as ($body) select count(*) from v a join v b on a.k = b.k and a.u = b.u")
+            checkAnswer(selfJoin, Row(100))
+            // one shared shuffle below the coalesce in each reference; the coalesce is kept
+            assert(coalescedShuffles(selfJoin, n) === 2)
+
+            // one reference joined with another table first (sort-merge join), so physical
+            // planning sees the references in different contexts
+            val nested = sql(
+              s"""with v as ($body)
+                 |select count(*)
+                 |from (select a.k, a.u from v a join range(0, 100, 1, 4) c on a.k = c.id) x
+                 |join v b on x.k = b.k and x.u <=> b.u""".stripMargin)
+            checkAnswer(nested, Row(100))
+
+            // an explicitly materialized CTE
+            checkAnswer(
+              sql(s"with v as materialized ($body) " +
+                "select count(*) from v a join v b on a.k = b.k and a.u = b.u"),
+              Row(100))
+          }
+        }
+
+        // a deterministic body is not shared unless materialized; then it takes the same shape
+        val deterministic = sql(
+          "with v as materialized (select /*+ COALESCE(1) */ id k from range(0, 100, 1, 4)) " +
+            "select count(*) from v a join v b on a.k = b.k")
+        checkAnswer(deterministic, Row(100))
+        assert(coalescedShuffles(deterministic, 1) === 2)
+
+        // a shuffling repartition at the root is still shared without an extra shuffle
+        val body = s"select /*+ REPARTITION(3) */ id k, $uuid u from range(0, 100, 1, 4)"
+        withClue(s"CTE body: $body") {
+          val df =
+            sql(s"with v as ($body) select count(*) from v a join v b on a.k = b.k and a.u = b.u")
+          checkAnswer(df, Row(100))
+          assert(df.queryExecution.optimizedPlan.collect {
+            case r @ RepartitionByExpression(p, _, None, _) if p.isEmpty => r
+          }.isEmpty)
+        }
       }
     }
   }
