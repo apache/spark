@@ -341,6 +341,10 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkException(days = Int.MaxValue)
   }
 
+  private val intervalMultiplyOverflowErrMsg =
+    "[INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION] Integer overflow while operating with " +
+      "intervals. Use `try_multiply` to tolerate overflow and return NULL instead."
+
   test("SPARK-34824: multiply year-month interval by numeric") {
     Seq(
       (Period.ofYears(-123), Literal(null, DecimalType.USER_DEFAULT)) -> null,
@@ -356,11 +360,11 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     Seq(
-      (Period.ofMonths(2), Int.MaxValue) -> "overflow",
-      (Period.ofMonths(Int.MinValue), 10d) -> "out of range",
+      (Period.ofMonths(2), Int.MaxValue) -> intervalMultiplyOverflowErrMsg,
+      (Period.ofMonths(Int.MinValue), 10d) -> intervalMultiplyOverflowErrMsg,
       (Period.ofMonths(-100), Float.NaN) -> "input is infinite or NaN",
-      (Period.ofMonths(200), Double.PositiveInfinity) -> "input is infinite or NaN",
-      (Period.ofMonths(-200), Float.NegativeInfinity) -> "input is infinite or NaN"
+      (Period.ofMonths(200), Double.PositiveInfinity) -> intervalMultiplyOverflowErrMsg,
+      (Period.ofMonths(-200), Float.NegativeInfinity) -> intervalMultiplyOverflowErrMsg
     ).foreach { case ((period, num), expectedErrMsg) =>
       checkExceptionInExpression[ArithmeticException](
         MultiplyYMInterval(Literal(period), Literal(num)),
@@ -392,11 +396,11 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     Seq(
       (Duration.ofDays(-100), Float.NaN) -> "input is infinite or NaN",
-      (Duration.ofDays(2), Int.MaxValue) -> "overflow",
-      (Duration.ofHours(Int.MinValue), Short.MinValue) -> "overflow",
-      (Duration.ofDays(10), BigDecimal(Long.MinValue)) -> "Overflow",
-      (Duration.ofDays(200), Double.PositiveInfinity) -> "input is infinite or NaN",
-      (Duration.ofDays(-200), Float.NegativeInfinity) -> "input is infinite or NaN"
+      (Duration.ofDays(2), Int.MaxValue) -> intervalMultiplyOverflowErrMsg,
+      (Duration.ofHours(Int.MinValue), Short.MinValue) -> intervalMultiplyOverflowErrMsg,
+      (Duration.ofDays(10), BigDecimal(Long.MinValue)) -> intervalMultiplyOverflowErrMsg,
+      (Duration.ofDays(200), Double.PositiveInfinity) -> intervalMultiplyOverflowErrMsg,
+      (Duration.ofDays(-200), Float.NegativeInfinity) -> intervalMultiplyOverflowErrMsg
     ).foreach { case ((duration, num), expectedErrMsg) =>
       checkExceptionInExpression[ArithmeticException](
         MultiplyDTInterval(Literal(duration), Literal(num)), expectedErrMsg)
@@ -557,6 +561,11 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       withQuery("dt / -1BD")(DivideDTInterval(dtMin, Literal(Decimal(-1)))),
       withQuery("dt / -1.0D")(DivideDTInterval(dtMin, Literal(-1.0d))),
       withQuery("dt / 0")(DivideDTInterval(dtMin, Literal(0))),
+      withQuery("ym * -1")(MultiplyYMInterval(ymMin, Literal(-1))),
+      withQuery("ym * -1L")(MultiplyYMInterval(ymMin, Literal(-1L))),
+      withQuery("ym * -1BD")(MultiplyYMInterval(ymMin, Literal(Decimal(-1)))),
+      withQuery("dt * -1L")(MultiplyDTInterval(dtMin, Literal(-1L))),
+      withQuery("dt * -1.0D")(MultiplyDTInterval(dtMin, Literal(-1.0d))),
       withQuery("make_ym_interval(2147483647, 0)")(
         MakeYMInterval(Literal(Int.MaxValue), Literal(0))),
       withQuery("make_dt_interval(2147483647)")(

@@ -17,10 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.math.RoundingMode
 import java.util.Locale
-
-import com.google.common.math.DoubleMath
 
 import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
@@ -628,11 +625,30 @@ case class MakeYMInterval(years: Expression, months: Expression)
   }
 }
 
-// Multiply an year-month interval by a numeric
+/**
+ * Multiplication of an interval by a number. Both evaluation paths use IntervalMathUtils,
+ * and the query context is preserved when the expression is serialized for executors.
+ */
+trait IntervalMultiply extends BinaryExpression with SupportQueryContext {
+  override def initQueryContext(): Option[QueryContext] = Some(origin.context)
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val errorContext = getContextOrNullCode(ctx)
+    val mathUtils = IntervalMathUtils.getClass.getCanonicalName.stripSuffix("$")
+    val multiplier = right.dataType match {
+      case _: IntegralType => "(long)"
+      case _: DecimalType => ""
+      case _: FractionalType => "(double)"
+    }
+    defineCodeGen(ctx, ev, (m, n) => s"$mathUtils.multiply($m, $multiplier$n, $errorContext)")
+  }
+}
+
+// Multiply a year-month interval by a numeric
 case class MultiplyYMInterval(
     interval: Expression,
     num: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with Serializable {
+  extends IntervalMultiply with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
   override def left: Expression = interval
   override def right: Expression = num
@@ -642,35 +658,17 @@ case class MultiplyYMInterval(
 
   @transient
   private lazy val evalFunc: (Int, Any) => Any = right.dataType match {
-    case ByteType | ShortType | IntegerType => (months: Int, num) =>
-      Math.multiplyExact(months, num.asInstanceOf[Number].intValue())
-    case LongType => (months: Int, num) =>
-      Math.toIntExact(Math.multiplyExact(months, num.asInstanceOf[Long]))
-    case FloatType | DoubleType => (months: Int, num) =>
-      DoubleMath.roundToInt(months * num.asInstanceOf[Number].doubleValue(), RoundingMode.HALF_UP)
+    case _: IntegralType => (months: Int, num) =>
+      IntervalMathUtils.multiply(months, num.asInstanceOf[Number].longValue(), getContextOrNull())
     case _: DecimalType => (months: Int, num) =>
-      val decimalRes = ((new Decimal).set(months) * num.asInstanceOf[Decimal]).toJavaBigDecimal
-      decimalRes.setScale(0, java.math.RoundingMode.HALF_UP).intValueExact()
+      IntervalMathUtils.multiply(months, num.asInstanceOf[Decimal], getContextOrNull())
+    case _: FractionalType => (months: Int, num) =>
+      IntervalMathUtils.multiply(
+        months, num.asInstanceOf[Number].doubleValue(), getContextOrNull())
   }
 
   override def nullSafeEval(interval: Any, num: Any): Any = {
     evalFunc(interval.asInstanceOf[Int], num)
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = right.dataType match {
-    case ByteType | ShortType | IntegerType =>
-      defineCodeGen(ctx, ev, (m, n) => s"java.lang.Math.multiplyExact($m, $n)")
-    case LongType =>
-      val jlm = classOf[Math].getName
-      defineCodeGen(ctx, ev, (m, n) => s"$jlm.toIntExact($jlm.multiplyExact($m, $n))")
-    case FloatType | DoubleType =>
-      val dm = classOf[DoubleMath].getName
-      defineCodeGen(ctx, ev, (m, n) =>
-        s"$dm.roundToInt($m * (double)$n, java.math.RoundingMode.HALF_UP)")
-    case _: DecimalType =>
-      defineCodeGen(ctx, ev, (m, n) =>
-        s"((new Decimal()).set($m).$$times($n)).toJavaBigDecimal()" +
-        ".setScale(0, java.math.RoundingMode.HALF_UP).intValueExact()")
   }
 
   override def toString: String = s"($left * $right)"
@@ -685,7 +683,7 @@ case class MultiplyYMInterval(
 case class MultiplyDTInterval(
     interval: Expression,
     num: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with Serializable {
+  extends IntervalMultiply with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
   override def left: Expression = interval
   override def right: Expression = num
@@ -696,29 +694,15 @@ case class MultiplyDTInterval(
   @transient
   private lazy val evalFunc: (Long, Any) => Any = right.dataType match {
     case _: IntegralType => (micros: Long, num) =>
-      Math.multiplyExact(micros, num.asInstanceOf[Number].longValue())
+      IntervalMathUtils.multiply(micros, num.asInstanceOf[Number].longValue(), getContextOrNull())
     case _: DecimalType => (micros: Long, num) =>
-      val decimalRes = ((new Decimal).set(micros) * num.asInstanceOf[Decimal]).toJavaBigDecimal
-      decimalRes.setScale(0, RoundingMode.HALF_UP).longValueExact()
+      IntervalMathUtils.multiply(micros, num.asInstanceOf[Decimal], getContextOrNull())
     case _: FractionalType => (micros: Long, num) =>
-      DoubleMath.roundToLong(micros * num.asInstanceOf[Number].doubleValue(), RoundingMode.HALF_UP)
+      IntervalMathUtils.multiply(micros, num.asInstanceOf[Number].doubleValue(), getContextOrNull())
   }
 
   override def nullSafeEval(interval: Any, num: Any): Any = {
     evalFunc(interval.asInstanceOf[Long], num)
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = right.dataType match {
-    case _: IntegralType =>
-      defineCodeGen(ctx, ev, (m, n) => s"java.lang.Math.multiplyExact($m, $n)")
-    case _: DecimalType =>
-      defineCodeGen(ctx, ev, (m, n) =>
-        s"((new Decimal()).set($m).$$times($n)).toJavaBigDecimal()" +
-        ".setScale(0, java.math.RoundingMode.HALF_UP).longValueExact()")
-    case _: FractionalType =>
-      val dm = classOf[DoubleMath].getName
-      defineCodeGen(ctx, ev, (m, n) =>
-        s"$dm.roundToLong($m * (double)$n, java.math.RoundingMode.HALF_UP)")
   }
 
   override def toString: String = s"($left * $right)"

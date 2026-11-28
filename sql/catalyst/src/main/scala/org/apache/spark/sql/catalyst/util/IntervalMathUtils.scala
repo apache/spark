@@ -43,6 +43,42 @@ object IntervalMathUtils {
 
   def negateExact(a: Long): Long = withOverflow(Math.negateExact(a), "", null)
 
+  def multiply(months: Int, num: Long, context: QueryContext): Int =
+    withOverflow(Math.toIntExact(Math.multiplyExact(months.toLong, num)), "try_multiply", context)
+
+  def multiply(months: Int, num: Decimal, context: QueryContext): Int =
+    withOverflow(
+      ((new Decimal).set(months) * num).toJavaBigDecimal
+        .setScale(0, RoundingMode.HALF_UP).intValueExact(),
+      "try_multiply", context)
+
+  def multiply(months: Int, num: Double, context: QueryContext): Int = {
+    val product = months * num
+    if (product.isNaN) {
+      DoubleMath.roundToInt(product, RoundingMode.HALF_UP)
+    } else {
+      withOverflow(DoubleMath.roundToInt(product, RoundingMode.HALF_UP), "try_multiply", context)
+    }
+  }
+
+  def multiply(micros: Long, num: Long, context: QueryContext): Long =
+    withOverflow(Math.multiplyExact(micros, num), "try_multiply", context)
+
+  def multiply(micros: Long, num: Decimal, context: QueryContext): Long =
+    withOverflow(
+      ((new Decimal).set(micros) * num).toJavaBigDecimal
+        .setScale(0, RoundingMode.HALF_UP).longValueExact(),
+      "try_multiply", context)
+
+  def multiply(micros: Long, num: Double, context: QueryContext): Long = {
+    val product = micros * num
+    if (product.isNaN) {
+      DoubleMath.roundToLong(product, RoundingMode.HALF_UP)
+    } else {
+      withOverflow(DoubleMath.roundToLong(product, RoundingMode.HALF_UP), "try_multiply", context)
+    }
+  }
+
   // The divisions of a year-month interval, in months, and of a day-time interval, in micros, by
   // a number, rounded half up. The interpreted and the generated code of `DivideYMInterval` and
   // `DivideDTInterval` both call them, so that the checks and the error are in one place. A zero
