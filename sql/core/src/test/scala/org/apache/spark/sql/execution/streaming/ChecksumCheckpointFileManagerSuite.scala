@@ -18,6 +18,8 @@ package org.apache.spark.sql.execution.streaming
 
 import java.io._
 import java.nio.charset.StandardCharsets
+import java.util.concurrent.{CountDownLatch, TimeUnit}
+import java.util.concurrent.atomic.AtomicReference
 
 import scala.io.Source
 
@@ -26,6 +28,7 @@ import org.apache.hadoop.fs._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.execution.streaming.checkpointing._
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager.CancellableFSDataOutputStream
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -294,5 +297,80 @@ class FileContextChecksumCheckpointFileManagerSuite extends ChecksumCheckpointFi
 class FileSystemChecksumCheckpointFileManagerSuite extends ChecksumCheckpointFileManagerSuite {
   protected def createNoChecksumManager(path: Path): CheckpointFileManager = {
     new FileSystemBasedCheckpointFileManager(path, new Configuration())
+  }
+
+  for (numThreads <- Seq(0, 2); failChecksum <- Seq(false, true)) {
+    test(s"SPARK-62369: cancel partial creation with $numThreads threads, crc=$failChecksum") {
+      withTempHadoopPath { basePath =>
+        val path = new Path(basePath, "checkpoint")
+        val failedPath = if (failChecksum) {
+          ChecksumCheckpointFileManager.getChecksumPath(path)
+        } else {
+          path
+        }
+        val conf = new Configuration()
+        val failure = new IOException("create failed")
+        val underlying = new FileSystemBasedCheckpointFileManager(basePath, conf) {
+          override def createAtomic(
+              path: Path,
+              overwriteIfPossible: Boolean): CancellableFSDataOutputStream = {
+            if (path == failedPath) {
+              throw failure
+            }
+            super.createAtomic(path, overwriteIfPossible)
+          }
+        }
+        val fm = new ChecksumCheckpointFileManager(
+          underlying, numThreads = numThreads, skipCreationIfFileMissingChecksum = false)
+        try {
+          assert(intercept[IOException] {
+            fm.createAtomic(path, overwriteIfPossible = false)
+          } eq failure)
+        } finally {
+          fm.close()
+        }
+        assert(path.getFileSystem(conf).listStatus(basePath).isEmpty)
+      }
+    }
+  }
+
+  test("SPARK-62369: cancel pending streams when the caller is interrupted") {
+    withTempHadoopPath { basePath =>
+      val started = new CountDownLatch(2)
+      val allowCreation = new CountDownLatch(1)
+      val conf = new Configuration()
+      val underlying = new FileSystemBasedCheckpointFileManager(basePath, conf) {
+        override def createAtomic(
+            path: Path,
+            overwriteIfPossible: Boolean): CancellableFSDataOutputStream = {
+          started.countDown()
+          assert(allowCreation.await(10, TimeUnit.SECONDS))
+          super.createAtomic(path, overwriteIfPossible)
+        }
+      }
+      val fm = new ChecksumCheckpointFileManager(
+        underlying, numThreads = 2, skipCreationIfFileMissingChecksum = false)
+      val interruption = new AtomicReference[InterruptedException]()
+      val path = new Path(basePath, "checkpoint")
+      val caller = new Thread(() => {
+        try {
+          fm.createAtomic(path, overwriteIfPossible = false).cancel()
+        } catch {
+          case e: InterruptedException => interruption.set(e)
+        }
+      })
+      try {
+        caller.start()
+        assert(started.await(10, TimeUnit.SECONDS))
+        caller.interrupt()
+        caller.join(10000)
+        assert(interruption.get() != null)
+      } finally {
+        allowCreation.countDown()
+        fm.close()
+        caller.join(10000)
+      }
+      assert(path.getFileSystem(conf).listStatus(basePath).isEmpty)
+    }
   }
 }
