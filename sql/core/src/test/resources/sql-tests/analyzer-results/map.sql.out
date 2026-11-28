@@ -14,6 +14,35 @@ Project [map(1, a, 2, b)[5] AS map(1, a, 2, b)[5]#x]
 
 
 -- !query
+select map(1Y, 'a', 44Y, 'b')[300], map(1Y, 'a', 44Y, 'b')[44]
+-- !query analysis
+Project [map(1, a, 44, b)[try_cast(300 as tinyint)] AS map(1, a, 44, b)[300]#x, map(1, a, 44, b)[try_cast(44 as tinyint)] AS map(1, a, 44, b)[44]#x]
++- OneRowRelation
+
+
+-- !query
+select map(1S, 'a', 44S, 'b')[65580], map(1S, 'a', 44S, 'b')[44]
+-- !query analysis
+Project [map(1, a, 44, b)[try_cast(65580 as smallint)] AS map(1, a, 44, b)[65580]#x, map(1, a, 44, b)[try_cast(44 as smallint)] AS map(1, a, 44, b)[44]#x]
++- OneRowRelation
+
+
+-- !query
+select map(1, 'a', 44, 'b')[4294967340L], map(1, 'a', 44, 'b')[44L]
+-- !query analysis
+Project [map(1, a, 44, b)[try_cast(4294967340 as int)] AS map(1, a, 44, b)[4294967340]#x, map(1, a, 44, b)[try_cast(44 as int)] AS map(1, a, 44, b)[44]#x]
++- OneRowRelation
+
+
+-- !query
+select k, map(1Y, 'a', 44Y, 'b')[k] from values (44), (300), (-212), (null) as t(k)
+-- !query analysis
+Project [k#x, map(1, a, 44, b)[try_cast(k#x as tinyint)] AS map(1, a, 44, b)[k]#x]
++- SubqueryAlias t
+   +- LocalRelation [k#x]
+
+
+-- !query
 select map_contains_key(map(1, 'a', 2, 'b'), 5)
 -- !query analysis
 Project [map_contains_key(map(1, a, 2, b), 5) AS map_contains_key(map(1, a, 2, b), 5)#x]
