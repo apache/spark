@@ -848,7 +848,10 @@ class Dataset[T] private[sql](
     // the inputs of this join. A batch join that a streaming query reads later, such as the
     // static side of a stream-static join, gets one column per name here. When the query
     // restarts from a checkpoint of an earlier version, it gives that join both key columns
-    // back, unless a select, withColumn, union, INTERSECT, EXCEPT or CTE is in the way.
+    // back where a deduplication of the query keeps them in its state, but only up to the first
+    // step with its own column list, such as select, withColumn, drop or a join on column names.
+    // A stream-stream join above it can still store one key column, and no join gets them back
+    // when any such join in the query is under a union, INTERSECT, EXCEPT or CTE.
     if (isStreaming || other.isStreaming || sparkSession.sessionState.conf.getConf(
         SQLConf.LEGACY_DATAFRAME_AS_OF_JOIN_KEEP_BOTH_USING_COLUMNS)) {
       val joinConditions = usingColumns.map { name =>

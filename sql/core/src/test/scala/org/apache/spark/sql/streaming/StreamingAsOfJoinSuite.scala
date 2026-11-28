@@ -23,12 +23,14 @@ import java.sql.Timestamp
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{classic, AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.plans.logical.AsOfJoin
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
-class StreamingAsOfJoinSuite extends StreamTest {
+class StreamingAsOfJoinSuite extends StreamTest with AdaptiveSparkPlanHelper {
 
   import testImplicits._
 
@@ -577,6 +579,99 @@ class StreamingAsOfJoinSuite extends StreamTest {
         AddData(input, 4),
         CheckNewAnswer(Row(3, 5, "A", 1, 2, "A", 100, 1), Row(4, 5, "A", 1, 2, "A", 100, 1)),
         StopStream)
+    }
+  }
+
+  // A regular join on column names lists the one-key output of the batch join, so the restart
+  // cannot give its state both key columns back. Fails if this case does not fail loudly, as the
+  // migration guides say, or if their advice (set the config before building the DataFrame)
+  // does not make the query restart.
+  test("batch DataFrame ASOF join with using columns in a stream, then a join on column names " +
+      "and dropDuplicates(), needs the legacy config when the DataFrame is built") {
+    withTempDir { checkpoint =>
+      val input = MemoryStream[Int]
+      def query(): DataFrame = input.toDF().toDF("qty")
+        .join(batchTradeWithQuote(), Seq("qty"), "left").dropDuplicates()
+      // Writes state keys with both key columns, as Spark 4.3 does.
+      withSQLConf(keepBothUsingColumns -> "true") {
+        testStream(query())(
+          StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+          AddData(input, 1, 2),
+          CheckNewAnswer(Row(1, 5, "A", 2, "A", 100), Row(2, null, null, null, null, null)),
+          assertKeepBothUsingColumnsInOffsetLog("true"),
+          StopStream)
+      }
+      val e = intercept[StreamingQueryException] {
+        testStream(query())(
+          StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+          AddData(input, 1, 3),
+          CheckNewAnswer(Row(3, null, null, null, null)))
+      }
+      checkError(
+        e.getCause.asInstanceOf[SparkUnsupportedOperationException],
+        condition = "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE",
+        parameters = Map("storedKeySchema" -> ".*", "newKeySchema" -> ".*"),
+        matchPVals = true)
+      val withConfig = withSQLConf(keepBothUsingColumns -> "true") { query() }
+      testStream(withConfig)(
+        StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+        AddData(input, 4),
+        CheckNewAnswer(Row(3, null, null, null, null, null), Row(4, null, null, null, null, null)),
+        StopStream)
+    }
+  }
+
+  // Also looks into the query stages of adaptive execution, which a batch without state uses.
+  private def assertStaticSideReadsCache: StreamAction = AssertOnQuery { q =>
+    q.processAllAvailable()
+    val plan = q.lastExecution.executedPlan
+    assert(find(plan)(_.isInstanceOf[InMemoryTableScanExec]).isDefined, plan)
+    true
+  }
+
+  // The state of these queries has no key column of the cached batch join, so a restart from a
+  // checkpoint of an earlier version keeps their plan. The first run starts with the legacy
+  // config, so the offset log reads true, as for a checkpoint written before the config. Fails
+  // if a batch of the restarted query reads the static side without the cache, or if the rows
+  // change.
+  Seq(
+    ("no state", (df: DataFrame) => df, OutputMode.Append(),
+      Seq(Row(1, "A", 5, 1, 2, 100)), Seq(Row(1, "A", 5, 1, 2, 100), Row(3, "A", 5, 1, 2, 100))),
+    ("an aggregation", (df: DataFrame) => df.groupBy("value").count(), OutputMode.Update(),
+      Seq(Row(1, 1)), Seq(Row(1, 2), Row(3, 1)))
+  ).foreach { case (state, query, outputMode, firstRows, restartRows) =>
+    test("stream-static join with a cached batch DataFrame ASOF join with using columns reads " +
+        s"the cache after a restart with the legacy config, $state") {
+      val join = batchTradeWithQuote().cache()
+      try {
+        // The batch join is one the restore gives both key columns back to, and it is cached.
+        assert(join.queryExecution.analyzed.exists {
+          case j: AsOfJoin => j.fromDataFrameUsingColumns
+          case _ => false
+        })
+        assert(spark.sharedState.cacheManager.lookupCachedData(join).isDefined)
+        withTempDir { checkpoint =>
+          val input = MemoryStream[Int]
+          val df = query(input.toDF().crossJoin(join))
+          withSQLConf(keepBothUsingColumns -> "true") {
+            testStream(df, outputMode)(
+              StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+              AddData(input, 1),
+              CheckNewAnswer(firstRows: _*),
+              assertKeepBothUsingColumnsInOffsetLog("true"),
+              StopStream)
+          }
+          testStream(df, outputMode)(
+            StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+            AddData(input, 1, 3),
+            CheckNewAnswer(restartRows: _*),
+            assertStaticSideReadsCache,
+            assertKeepBothUsingColumnsInOffsetLog("true"),
+            StopStream)
+        }
+      } finally {
+        join.unpersist()
+      }
     }
   }
 

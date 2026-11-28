@@ -66,14 +66,18 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
 
 - Since Spark 4.4, a DataFrame as-of join on column names, such as PySpark `DataFrame._joinAsOf`
   with `on` set to column names, returns one column per name when both of its sides are batch
-  DataFrames. A join with a streaming side keeps the key column of both sides, as before. A batch
-  join used inside a streaming query, such as the static side of a stream-static join, gets both
-  key columns back when the query restarts from a checkpoint of an earlier version, so the state
-  of the query keeps its schema. The output of the query keeps the columns of the DataFrame. The
-  join keeps one key column when a `select` or `withColumn` is between the join and the stateful
-  step, or when a union, `INTERSECT`, `EXCEPT` or CTE is around the join. As a result, such an
-  existing query fails to restart with a state schema error such as
-  `STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE`. To recover, set
+  DataFrames. A join with a streaming side keeps the key column of both sides, as before. When a
+  streaming query restarts from a checkpoint of an earlier version, a batch join used inside it,
+  such as the static side of a stream-static join on a condition or a cross join, gets both key
+  columns back where a deduplication of the query, such as `dropDuplicates()`, keeps them in its
+  state, so the state of the query keeps its schema. The output of the query keeps the columns of
+  the DataFrame. The key columns reach the stateful step only up to the first step with its own
+  column list, such as `select`, `withColumn`, `drop`, `withColumnRenamed`, `toDF`, `selectExpr`
+  or a regular join on column names. A stream-stream join above the join can still store its rows
+  with one key column. When one batch join on column names in the query is under a union,
+  `INTERSECT`, `EXCEPT` or CTE, no join in the query gets both key columns back. In these cases an
+  existing query whose state holds the key columns of the join fails to restart with a state
+  schema error such as `STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE`. To recover, set
   `spark.sql.legacy.asOfJoin.keepBothUsingColumns` to `true` before building the query, or use a
   new checkpoint location. The config is read when the DataFrame is built. It helps with a
   checkpoint of an earlier version, or one written with the config on. With a checkpoint that

@@ -340,8 +340,15 @@ class DataFrameAsOfJoinSuite extends SharedSparkSession
               }
               val filter = restored.collectFirst { case f: Filter => f }.get
               assert(DataTypeUtils.fromAttributes(filter.output) == legacy.schema)
+              // The keys of the right side are the columns given back.
+              val join = plan.collectFirst { case j: AsOfJoin => j }.get
+              val rightKeys = AttributeSet(join.right.output.filter(a => using.contains(a.name)))
+              assert(AsOfJoin.keyColumnsGivenBack(plan) == rightKeys)
+              assert(rightKeys.subsetOf(filter.outputSet))
               assert(restored.output == plan.output)
-              assert(AsOfJoin.keepBothUsingColumns(restored) == Right(restored))
+              // A plan without a join to restore stays the same instance.
+              assert(AsOfJoin.keepBothUsingColumns(restored).exists(_ eq restored))
+              assert(AsOfJoin.keyColumnsGivenBack(restored).isEmpty)
               withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false") {
                 assert(sortedRows(classic.Dataset.ofRows(spark, restored)) == sortedRows(df))
               }
@@ -349,7 +356,10 @@ class DataFrameAsOfJoinSuite extends SharedSparkSession
                 s"""SELECT * FROM trades $joinType ASOF JOIN quotes
                    |MATCH_CONDITION (trades.ts >= quotes.ts) USING (${using.mkString(", ")})"""
                   .stripMargin).queryExecution.analyzed
-              assert(AsOfJoin.keepBothUsingColumns(sqlPlan) == Right(sqlPlan))
+              assert(AsOfJoin.keepBothUsingColumns(sqlPlan).exists(_ eq sqlPlan))
+              assert(AsOfJoin.keyColumnsGivenBack(sqlPlan).isEmpty)
+              val noJoin = trades.where("qty > 0").queryExecution.analyzed
+              assert(AsOfJoin.keepBothUsingColumns(noJoin).exists(_ eq noJoin))
             }
           }
         }
@@ -431,9 +441,9 @@ class DataFrameAsOfJoinSuite extends SharedSparkSession
     }
   }
 
-  // Other plans that DataFrame joins on column names build. Fails with INTERNAL_ERROR if
-  // keepBothUsingColumns does not know the Project above the join, or if one of the checks of
-  // checkKeepBothUsingColumns fails.
+  // Other plans that DataFrame joins on column names build. Fails with the reason that
+  // keepBothUsingColumns returns if it does not know the Project above the join, or if one of
+  // the checks of checkKeepBothUsingColumns fails.
   gridTest("usingColumns, keepBothUsingColumns handles self joins, aliases and unions")(
     asOfConfs) { case (singlePass, sortMerge, ansi) =>
     withAsOfConf(singlePass, sortMerge, ansi) {
@@ -544,6 +554,20 @@ class DataFrameAsOfJoinSuite extends SharedSparkSession
       Project(join.output.dropRight(1), join)).foreach { p =>
       assert(AsOfJoin.keepBothUsingColumns(p).isLeft, p)
     }
+  }
+
+  // One join under a union keeps the whole plan as it is, also a join that is under no union
+  // and that a deduplication reads. Fails if keepBothUsingColumns restores some of the joins, or
+  // gives another reason: then the migration guides need a change.
+  test("keepBothUsingColumns keeps every join of a plan with one join under a union") {
+    val (trades, quotes) = prepareTradesQuotes()
+    val bySym = usingJoin(trades, quotes, Seq("sym"), "inner")
+    val byEx = usingJoin(trades, quotes, Seq("ex"), "inner")
+    val plan = usingJoin(trades, quotes, Seq("sym", "ex"), "left")
+      .crossJoin(bySym.union(byEx)).dropDuplicates().queryExecution.analyzed
+    assert(plan.collect { case j: AsOfJoin if j.fromDataFrameUsingColumns => j }.length == 3)
+    assert(AsOfJoin.keepBothUsingColumns(plan) == scala.util.Left(
+      "a join is under a union, INTERSECT, EXCEPT or CTE, which match columns by position"))
   }
 
   // A positional rename written for the old output lists both key columns, so it does not fit
