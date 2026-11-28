@@ -237,11 +237,13 @@ class DataFrameWriterV2Suite extends SharedSparkSession with BeforeAndAfter {
 
   test("Append: fail if it writes to a v1 table") {
     sql(s"CREATE TABLE table_name USING ${classOf[FakeSourceOne].getName}")
-    val exc = intercept[AnalysisException] {
-      spark.table("source").writeTo("table_name").append()
-    }
-    assert(exc.getMessage.contains(
-      s"Cannot write into v1 table: `$SESSION_CATALOG_NAME`.`default`.`table_name`"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.table("source").writeTo("table_name").append()
+      },
+      condition = "UNSUPPORTED_FEATURE.DATAFRAME_WRITER_V2_TO_V1_TABLE",
+      sqlState = "0A000",
+      parameters = Map("tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`table_name`"))
   }
 
   test("Overwrite: overwrite by expression: true") {
@@ -413,11 +415,13 @@ class DataFrameWriterV2Suite extends SharedSparkSession with BeforeAndAfter {
 
   test("Overwrite: fail if it writes to a v1 table") {
     sql(s"CREATE TABLE table_name USING ${classOf[FakeSourceOne].getName}")
-    val exc = intercept[AnalysisException] {
-      spark.table("source").writeTo("table_name").overwrite(lit(true))
-    }
-    assert(exc.getMessage.contains(
-      s"Cannot write into v1 table: `$SESSION_CATALOG_NAME`.`default`.`table_name`"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.table("source").writeTo("table_name").overwrite(lit(true))
+      },
+      condition = "UNSUPPORTED_FEATURE.DATAFRAME_WRITER_V2_TO_V1_TABLE",
+      sqlState = "0A000",
+      parameters = Map("tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`table_name`"))
   }
 
   test("OverwritePartitions: overwrite conflicting partitions") {
@@ -523,11 +527,13 @@ class DataFrameWriterV2Suite extends SharedSparkSession with BeforeAndAfter {
 
   test("OverwritePartitions: fail if it writes to a v1 table") {
     sql(s"CREATE TABLE table_name USING ${classOf[FakeSourceOne].getName}")
-    val exc = intercept[AnalysisException] {
-      spark.table("source").writeTo("table_name").overwritePartitions()
-    }
-    assert(exc.getMessage.contains(
-      s"Cannot write into v1 table: `$SESSION_CATALOG_NAME`.`default`.`table_name`"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.table("source").writeTo("table_name").overwritePartitions()
+      },
+      condition = "UNSUPPORTED_FEATURE.DATAFRAME_WRITER_V2_TO_V1_TABLE",
+      sqlState = "0A000",
+      parameters = Map("tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`table_name`"))
   }
 
   test("SPARK-62100: Append and overwrite check a NOT NULL column against a value " +

@@ -512,7 +512,7 @@ class RelationResolution(
       if (isStreaming) {
         if (v1Table.isViewLike) {
           throw QueryCompilationErrors.permanentViewNotSupportedByStreamingReadingAPIError(
-            ident.quoted
+            v1Table.fullIdent
           )
         }
         SubqueryAlias(
@@ -584,7 +584,7 @@ class RelationResolution(
     lookupTempView(identifier).map { v =>
       val tempViewPlan = v1SessionCatalog.getTempViewRelation(v)
       if (isStreaming && !tempViewPlan.isStreaming) {
-        throw QueryCompilationErrors.readNonStreamingTempViewError(identifier.quoted)
+        throw QueryCompilationErrors.readNonStreamingTempViewError(identifier)
       }
       if (isTimeTravel) {
         throw QueryCompilationErrors.timeTravelUnsupportedError(toSQLId(identifier))

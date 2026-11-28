@@ -707,8 +707,27 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           sessionCatalog.alterTableDataSchema(
             TableIdentifier("t1", Some("default")), StructType(oldTab.dataSchema.drop(1)))
         },
-        condition = "_LEGACY_ERROR_TEMP_1071",
-        parameters = Map("nonExistentColumnNames" -> "[col1]"))
+        condition = "UNSUPPORTED_FEATURE.DROP_COLUMNS_FROM_DATA_SCHEMA",
+        sqlState = "0A000",
+        parameters = Map(
+          "tableName" -> "`spark_catalog`.`default`.`t1`",
+          "columnNames" -> "`col1`"))
+
+      val t2 = newTable("t2", "default")
+      sessionCatalog.createTable(
+        t2.copy(schema = StructType(StructField("x.y", IntegerType) +: t2.schema.fields)),
+        ignoreIfExists = false)
+      val oldTab2 = sessionCatalog.externalCatalog.getTable("default", "t2")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sessionCatalog.alterTableDataSchema(
+            TableIdentifier("t2", Some("default")), StructType(oldTab2.dataSchema.drop(1)))
+        },
+        condition = "UNSUPPORTED_FEATURE.DROP_COLUMNS_FROM_DATA_SCHEMA",
+        sqlState = "0A000",
+        parameters = Map(
+          "tableName" -> "`spark_catalog`.`default`.`t2`",
+          "columnNames" -> "`x.y`"))
     }
   }
 

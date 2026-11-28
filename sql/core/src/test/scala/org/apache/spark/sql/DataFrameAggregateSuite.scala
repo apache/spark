@@ -304,6 +304,44 @@ class DataFrameAggregateSuite extends SharedSparkSession
     )
   }
 
+  test("GROUPING SETS, CUBE and ROLLUP reject non-deterministic expressions") {
+    Seq(
+      ("CUBE(rand())", "rand()", "\"rand()\""),
+      ("ROLLUP(a, rand())", "rand()", "\"rand()\""),
+      ("GROUPING SETS ((a + rand()), (b))", "a + rand()", "\"(a + rand())\"")
+    ).foreach { case (groupBy, fragment, sqlExprs) =>
+      val query = s"SELECT count(*) FROM VALUES (1, 2) AS t(a, b) GROUP BY $groupBy"
+      val start = query.indexOf(fragment)
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(query).collect()
+        },
+        condition = "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
+        sqlState = Some("42K0E"),
+        parameters = Map("sqlExprs" -> sqlExprs),
+        queryContext = Array(ExpectedContext(fragment, start, start + fragment.length - 1)))
+    }
+  }
+
+  test("approx_count_distinct requires a DOUBLE literal as relativeSD") {
+    Seq("1" -> "\"1\"", "b" -> "\"b\"", "'0.05'" -> "\"0.05\"").foreach {
+      case (relativeSD, invalidValue) =>
+        val query = s"SELECT approx_count_distinct(a, $relativeSD) FROM VALUES (1, 2) AS t(a, b)"
+        val fragment = s"approx_count_distinct(a, $relativeSD)"
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(query).collect()
+          },
+          condition = "INVALID_PARAMETER_VALUE.DOUBLE",
+          sqlState = Some("22023"),
+          parameters = Map(
+            "parameter" -> "`relativeSD`",
+            "functionName" -> "`approx_count_distinct`",
+            "invalidValue" -> invalidValue),
+          queryContext = Array(ExpectedContext(fragment, 7, 6 + fragment.length)))
+    }
+  }
+
   test("cube overlapping columns") {
     checkAnswer(
       testData2.cube($"a" + $"b", $"b").agg(sum($"a" - $"b")),

@@ -684,7 +684,8 @@ class SessionCatalog(
     val nonExistentColumnNames =
       oldDataSchema.map(_.name).filterNot(columnNameResolved(resolver, newDataSchema, _))
     if (nonExistentColumnNames.nonEmpty) {
-      throw QueryCompilationErrors.dropNonExistentColumnsNotSupportedError(nonExistentColumnNames)
+      throw QueryCompilationErrors.dropNonExistentColumnsNotSupportedError(
+        qualifiedIdent, nonExistentColumnNames)
     }
 
     externalCatalog.alterTableDataSchema(db, table, newDataSchema)

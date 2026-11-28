@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical.{DescribeColumn, DescribeFunction, DescribeNamespace, DescribeRelation, DescribeTablePartition, LogicalPlan}
-import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL}
+import org.apache.spark.sql.catalyst.util.quoteIfNeeded
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.isSessionCatalog
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -94,9 +94,9 @@ private[sql] object DescribeCommandHelper {
           throw QueryCompilationErrors.columnNotFoundError(u.name)
         case a: Attribute =>
           DescribeColumnCommand(ident, a.qualifier :+ a.name, isExtended, output)
-        case Alias(child, _) =>
-          throw QueryCompilationErrors.commandNotSupportNestedColumnError(
-            "DESC TABLE COLUMN", toPrettySQL(child))
+        case a: Alias =>
+          throw QueryCompilationErrors.describeNestedColumnNotSupportedError(
+            DescribeColumn.nestedColumnNameParts(a))
         case _ =>
           throw SparkException.internalError(s"[BUG] unexpected column expression: $column")
       }

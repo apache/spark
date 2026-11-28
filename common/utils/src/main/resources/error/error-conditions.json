@@ -911,6 +911,24 @@
     ],
     "sqlState" : "22007"
   },
+  "CANNOT_READ_VIEW_AS_STREAM" : {
+    "message" : [
+      "Cannot read the view <viewName> as a stream:"
+    ],
+    "subClass" : {
+      "BATCH_TEMP_VIEW" : {
+        "message" : [
+          "It is a temporary view of a batch query, which can only be read as a batch, for example with `spark.read.table` or in a FROM clause without the STREAM keyword."
+        ]
+      },
+      "PERMANENT_VIEW" : {
+        "message" : [
+          "Streaming reads of permanent views are not supported."
+        ]
+      }
+    },
+    "sqlState" : "42KDE"
+  },
   "CANNOT_READ_ZIP_ENTRY" : {
     "message" : [
       "Cannot read zip entry <entry> in archive <path>: encrypted or an unsupported compression method."
@@ -4855,6 +4873,29 @@
     },
     "sqlState" : "42K0Q"
   },
+  "INVALID_HINT_PARAMETER" : {
+    "message" : [
+      "Invalid parameters for the <hintName> hint:"
+    ],
+    "subClass" : {
+      "COALESCE_PARTITION_NUMBER" : {
+        "message" : [
+          "The hint accepts only a single partition number, for example COALESCE(3)."
+        ]
+      },
+      "JOIN_STRATEGY_RELATION" : {
+        "message" : [
+          "Join strategy hints accept only relation names, given as identifiers or string literals, but got <parameter>."
+        ]
+      },
+      "PARTITIONING_EXPRESSION" : {
+        "message" : [
+          "Partitioning expressions must be column names, but got <parameters>."
+        ]
+      }
+    },
+    "sqlState" : "42601"
+  },
   "INVALID_IDENTIFIER" : {
     "message" : [
       "The unquoted identifier <ident> is invalid and must be back quoted as: `<ident>`.",
@@ -5404,7 +5445,7 @@
       },
       "DOUBLE" : {
         "message" : [
-          "expects an double literal, but got <invalidValue>."
+          "expects a double literal, but got <invalidValue>."
         ]
       },
       "DTYPE" : {
@@ -6247,6 +6288,24 @@
     ],
     "sqlState" : "42903"
   },
+  "INVALID_WINDOW_FRAME_FOR_FUNCTION" : {
+    "message" : [
+      "The window function <funcName> does not accept the window frame <windowFrame>."
+    ],
+    "subClass" : {
+      "FRAME_NOT_ALLOWED" : {
+        "message" : [
+          "Its frame is determined by its offset. Remove the frame from the window specification."
+        ]
+      },
+      "REQUIRED_FRAME_MISMATCH" : {
+        "message" : [
+          "It requires the window frame <requiredFrame>. Remove the frame from the window specification or change it to the required frame."
+        ]
+      }
+    },
+    "sqlState" : "42P20"
+  },
   "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC" : {
     "message" : [
       "Cannot specify ORDER BY or a window frame for <aggFunc>."
@@ -6951,6 +7010,12 @@
       "Field(s) <nonExistFields> do(es) not exist. Available fields: <fieldNames>"
     ],
     "sqlState" : "HV091"
+  },
+  "NON_AGGREGATED_COLUMN_IN_PIVOT" : {
+    "message" : [
+      "The column <columnName> is referenced outside of an aggregate function in the PIVOT clause. Every column in a PIVOT aggregate expression must be inside an aggregate function, such as sum(<columnName>) or first(<columnName>)."
+    ],
+    "sqlState" : "42803"
   },
   "NON_DETERMINISTIC_CHECK_CONSTRAINT" : {
     "message" : [
@@ -8059,6 +8124,12 @@
       "Multiple failures (<failureCount>) in stage materialization: <failureDetails>"
     ],
     "sqlState" : "XX000"
+  },
+  "STAR_EXPAND_NON_STRUCT_TYPE" : {
+    "message" : [
+      "Cannot star expand ('.*') attribute <attribute> with data type <dataType>. Star expansion is only supported on STRUCT types."
+    ],
+    "sqlState" : "42K09"
   },
   "STAR_GROUP_BY_POS" : {
     "message" : [
@@ -9864,6 +9935,11 @@
           "Direct execution of a CREATE ... <pipelineDatasetType> query. To create a pipeline dataset, create and execute a pipeline with a SQL file containing your query attached in the pipeline definition."
         ]
       },
+      "DATAFRAME_WRITER_V2_TO_V1_TABLE" : {
+        "message" : [
+          "Writing to the v1 table <tableName> with DataFrameWriterV2 (`df.writeTo`). Use DataFrameWriter (`df.write`) instead."
+        ]
+      },
       "DECOMPRESSION_CODEC_FOR_ARCHIVE" : {
         "message" : [
           "The <option> option for the archive file <path>. Archives are always decompressed based on their file name extension. Remove the option, or read the archive files separately from the other files."
@@ -9884,9 +9960,19 @@
           "DESC TABLE COLUMN for a specific partition."
         ]
       },
+      "DESC_TABLE_NESTED_COLUMN" : {
+        "message" : [
+          "DESC TABLE COLUMN for the nested column <columnName>."
+        ]
+      },
       "DISTRIBUTE_BY" : {
         "message" : [
           "DISTRIBUTE BY clause."
+        ]
+      },
+      "DROP_COLUMNS_FROM_DATA_SCHEMA" : {
+        "message" : [
+          "Dropping the columns <columnNames> from the data schema of the table <tableName>."
         ]
       },
       "DROP_DATABASE" : {
@@ -10006,6 +10092,11 @@
           "JOIN USING with LATERAL correlation."
         ]
       },
+      "LITERAL_ARRAY_ELEMENT_TYPE" : {
+        "message" : [
+          "Array literal with elements of <elementClass>."
+        ]
+      },
       "LITERAL_TYPE" : {
         "message" : [
           "Literal for '<value>' of <type>."
@@ -10034,6 +10125,11 @@
       "MULTIPLE_PYTHON_UDF_TYPES_IN_WINDOW" : {
         "message" : [
           "Cannot use Python user-defined functions of different types together over a single window: <functionList>. Use a separate window specification for each."
+        ]
+      },
+      "MULTIPLE_TIME_WINDOW_EXPRESSIONS" : {
+        "message" : [
+          "Multiple time window expressions, such as window() and session_window(), in the same query operator, because they would produce a cartesian product of rows."
         ]
       },
       "MULTI_ACTION_ALTER" : {
@@ -10988,6 +11084,12 @@
     ],
     "sqlState" : "42601"
   },
+  "WINDOW_FUNCTION_IN_AGGREGATE_FUNCTION" : {
+    "message" : [
+      "It is not allowed to use a window function in the argument of an aggregate function. Please use the inner window function in a sub-query."
+    ],
+    "sqlState" : "42607"
+  },
   "WINDOW_FUNCTION_NOT_ALLOWED_IN_CLAUSE" : {
     "message" : [
       "It is not allowed to use window functions inside <clauseName> clause."
@@ -11102,92 +11204,6 @@
       "Try moving this class out of its parent class."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1005" : {
-    "message" : [
-      "<expr> doesn't show up in the GROUP BY list <groupByAliases>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1006" : {
-    "message" : [
-      "Aggregate expression required for pivot, but '<sql>' did not appear in any aggregate function."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1008" : {
-    "message" : [
-      "<quoted> is not a temp view of streaming logical plan, please use batch API such as `DataFrameReader.table` to read it."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1012" : {
-    "message" : [
-      "Cannot write into v1 table: <identifier>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1018" : {
-    "message" : [
-      "<quoted> is a permanent view, which is not supported by streaming reading API such as `DataStreamReader.table` yet."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1031" : {
-    "message" : [
-      "It is not allowed to use a window function inside an aggregate function. Please use the inner window function in a sub-query."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1032" : {
-    "message" : [
-      "<expr> does not have any WindowExpression."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1033" : {
-    "message" : [
-      "<expr> has multiple Window Specifications (<distinctWindowSpec>).",
-      "Please file a bug report with this error message, stack trace, and the query."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1035" : {
-    "message" : [
-      "Cannot specify window frame for <prettyName> function."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1036" : {
-    "message" : [
-      "Window Frame <wf> must match the required frame <required>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1039" : {
-    "message" : [
-      "Multiple time/session window expressions would result in a cartesian product of rows, therefore they are currently not supported."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1040" : {
-    "message" : [
-      "Gap duration expression used in session window must be CalendarIntervalType, but got <dt>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1045" : {
-    "message" : [
-      "ALTER TABLE SET LOCATION does not support partition for v2 tables."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1046" : {
-    "message" : [
-      "Join strategy hint parameter should be an identifier or string but was <unsupported> (<class>)."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1047" : {
-    "message" : [
-      "<hintName> Hint parameters should include an optional integral partitionNum and/or columns, but <invalidParams> can not be recognized as either partitionNum or columns."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1048" : {
-    "message" : [
-      "<hintName> Hint expects a partition number as a parameter."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1050" : {
-    "message" : [
-      "Can only star expand struct data types. Attribute: `<attributes>`."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1052" : {
     "message" : [
       "ADD COLUMN with v1 tables cannot specify NOT NULL."
@@ -11196,16 +11212,6 @@
   "_LEGACY_ERROR_TEMP_1059" : {
     "message" : [
       "STORED AS with file format '<serdeInfo>' is invalid."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1060" : {
-    "message" : [
-      "<command> does not support nested column: <column>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1071" : {
-    "message" : [
-      "Some existing schema fields (<nonExistentColumnNames>) are not present in the new schema. We don't support dropping columns yet."
     ]
   },
   "_LEGACY_ERROR_TEMP_1080" : {
@@ -11221,21 +11227,6 @@
   "_LEGACY_ERROR_TEMP_1090" : {
     "message" : [
       "Column statistics serialization is not supported for column <colName> of data type: <dataType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1098" : {
-    "message" : [
-      "DataType '<x>' is not supported by <className>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1103" : {
-    "message" : [
-      "Unsupported component type <clz> in arrays."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1104" : {
-    "message" : [
-      "The second argument should be a double literal."
     ]
   },
   "_LEGACY_ERROR_TEMP_1107" : {

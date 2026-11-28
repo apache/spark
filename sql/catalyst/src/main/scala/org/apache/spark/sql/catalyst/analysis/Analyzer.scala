@@ -1292,7 +1292,7 @@ class Analyzer(
           // OK and leave the argument check to CheckAnalysis.
         }
       case e: Attribute =>
-        throw QueryCompilationErrors.aggregateExpressionRequiredForPivotError(e.sql)
+        throw QueryCompilationErrors.nonAggregatedColumnInPivotError(e)
       case e => e.children.foreach(checkValidAggregateExpression)
     }
   }
@@ -3801,8 +3801,9 @@ class Analyzer(
             seenWindowAggregates += newAgg
             WindowExpression(newAgg, spec)
 
-          case AggregateExpression(aggFunc, _, _, _, _) if hasWindowFunction(aggFunc.children) =>
-            throw QueryCompilationErrors.windowFunctionInsideAggregateFunctionNotAllowedError()
+          case ae @ AggregateExpression(aggFunc, _, _, _, _)
+              if hasWindowFunction(aggFunc.children) =>
+            throw QueryCompilationErrors.windowFunctionInsideAggregateFunctionNotAllowedError(ae)
 
           // Extracts AggregateExpression. For example, for SUM(x) - Sum(y) OVER (...),
           // we need to extract SUM(x).
@@ -3877,8 +3878,14 @@ class Analyzer(
         if (distinctWindowSpec.isEmpty) {
           throw QueryCompilationErrors.expressionWithoutWindowExpressionError(expr)
         } else if (distinctWindowSpec.length > 1) {
-          // newExpressionsWithWindowFunctions only have expressions with a single
-          // WindowExpression. If we reach here, we have a bug.
+          // `extract` pulls window expressions out of the arguments of window and aggregate
+          // functions only, so one nested in another function with its own OVER clause, as in
+          // abs(rank() OVER w1) OVER w2, stays in place. Report that function as CheckAnalysis
+          // would. Any other expression with several window specifications is a bug.
+          expr.foreach {
+            case we: WindowExpression => WindowResolution.checkWindowFunction(we)
+            case _ =>
+          }
           throw QueryCompilationErrors.expressionWithMultiWindowExpressionsError(
             expr, distinctWindowSpec)
         } else {

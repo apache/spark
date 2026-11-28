@@ -703,6 +703,53 @@ class DataFrameWindowFunctionsSuite extends SharedSparkSession
         Row("b", 2, null, null, null, null)))
   }
 
+  test("offset window functions reject a window frame") {
+    Seq(
+      ("lag(a)", "`lag`", "ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING"),
+      // The frames that lag(a) and lead(a, -1) use. A SQL frame never equals their folded
+      // negative offset bounds.
+      ("lag(a)", "`lag`", "ROWS BETWEEN 1 PRECEDING AND 1 PRECEDING"),
+      ("lead(a, -1)", "`lead`", "ROWS BETWEEN 1 PRECEDING AND 1 PRECEDING"),
+      ("lead(a, 2)", "`lead`", "ROWS BETWEEN 1 FOLLOWING AND 1 FOLLOWING")
+    ).foreach { case (function, funcName, frame) =>
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"SELECT $function OVER (ORDER BY a $frame) FROM VALUES (1), (2) AS t(a)").collect()
+        },
+        condition = "INVALID_WINDOW_FRAME_FOR_FUNCTION.FRAME_NOT_ALLOWED",
+        sqlState = "42P20",
+        parameters = Map("funcName" -> funcName, "windowFrame" -> ("\"" + frame + "\"")))
+    }
+  }
+
+  test("a window expression nested in a function with an OVER clause") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT abs(rank() OVER (ORDER BY a)) OVER (ORDER BY b) " +
+          "FROM VALUES (1, 2) AS t(a, b)").collect()
+      },
+      condition = "UNSUPPORTED_EXPR_FOR_WINDOW",
+      sqlState = "42P20",
+      parameters = Map("sqlExpr" -> ("\"abs(RANK() OVER (ORDER BY a ASC NULLS FIRST " +
+        "ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))\"")),
+      context = ExpectedContext(
+        fragment = "abs(rank() OVER (ORDER BY a)) OVER (ORDER BY b)", start = 7, stop = 53))
+  }
+
+  test("window functions with a fixed window frame reject other frames") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT row_number() OVER (ORDER BY a ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) " +
+          "FROM VALUES (1), (2) AS t(a)").collect()
+      },
+      condition = "INVALID_WINDOW_FRAME_FOR_FUNCTION.REQUIRED_FRAME_MISMATCH",
+      sqlState = "42P20",
+      parameters = Map(
+        "funcName" -> "`row_number`",
+        "requiredFrame" -> "\"ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\"",
+        "windowFrame" -> "\"ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING\""))
+  }
+
   test("nth_value with ignoreNulls over offset window frame") {
     val nullStr: String = null
     val df = Seq(

@@ -142,7 +142,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1031"
+  "errorClass" : "WINDOW_FUNCTION_IN_AGGREGATE_FUNCTION",
+  "sqlState" : "42607",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 28,
+    "stopIndex" : 65,
+    "fragment" : "SUM(ROW_NUMBER() OVER (ORDER BY col1))"
+  } ]
 }
 
 
@@ -153,7 +161,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1031"
+  "errorClass" : "WINDOW_FUNCTION_IN_AGGREGATE_FUNCTION",
+  "sqlState" : "42607",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 28,
+    "stopIndex" : 59,
+    "fragment" : "MAX(RANK() OVER (ORDER BY col1))"
+  } ]
 }
 
 
@@ -165,7 +181,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1031"
+  "errorClass" : "WINDOW_FUNCTION_IN_AGGREGATE_FUNCTION",
+  "sqlState" : "42607",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 31,
+    "stopIndex" : 68,
+    "fragment" : "SUM(ROW_NUMBER() OVER (ORDER BY col1))"
+  } ]
 }
 
 
@@ -176,7 +200,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1031"
+  "errorClass" : "WINDOW_FUNCTION_IN_AGGREGATE_FUNCTION",
+  "sqlState" : "42607",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 45,
+    "fragment" : "SUM(ROW_NUMBER() OVER (ORDER BY col1))"
+  } ]
 }
 
 
@@ -188,7 +220,15 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1031"
+  "errorClass" : "WINDOW_FUNCTION_IN_AGGREGATE_FUNCTION",
+  "sqlState" : "42607",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 38,
+    "stopIndex" : 75,
+    "fragment" : "SUM(ROW_NUMBER() OVER (ORDER BY col1))"
+  } ]
 }
 
 

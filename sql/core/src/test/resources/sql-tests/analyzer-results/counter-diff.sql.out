@@ -693,10 +693,12 @@ FROM VALUES (1, 100), (2, 200) AS tab(t, c)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1036",
+  "errorClass" : "INVALID_WINDOW_FRAME_FOR_FUNCTION.REQUIRED_FRAME_MISMATCH",
+  "sqlState" : "42P20",
   "messageParameters" : {
-    "required" : "specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())",
-    "wf" : "specifiedwindowframe(RowFrame, -1, 1)"
+    "funcName" : "`counter_diff`",
+    "requiredFrame" : "\"ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\"",
+    "windowFrame" : "\"ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING\""
   }
 }
 
@@ -723,10 +725,12 @@ FROM VALUES (1, 100), (2, 200) AS tab(t, c)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1036",
+  "errorClass" : "INVALID_WINDOW_FRAME_FOR_FUNCTION.REQUIRED_FRAME_MISMATCH",
+  "sqlState" : "42P20",
   "messageParameters" : {
-    "required" : "specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())",
-    "wf" : "specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())"
+    "funcName" : "`counter_diff`",
+    "requiredFrame" : "\"ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\"",
+    "windowFrame" : "\"RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\""
   }
 }
 

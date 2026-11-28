@@ -1890,10 +1890,9 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
         exception = intercept[AnalysisException]{
           sql("select a.* from testData2")
         },
-        condition = "_LEGACY_ERROR_TEMP_1050",
-        sqlState = None,
-        parameters = Map("attributes" -> "(ArrayBuffer|List)\\(a\\)"),
-        matchPVals = true,
+        condition = "STAR_EXPAND_NON_STRUCT_TYPE",
+        sqlState = Some("42K09"),
+        parameters = Map("attribute" -> "`a`", "dataType" -> "\"INT\""),
         queryContext = Array(ExpectedContext(fragment = "a.*", start = 7, stop = 9)))
     }
   }

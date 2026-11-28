@@ -362,11 +362,13 @@ class DataFrameTimeWindowingSuite extends SharedSparkSession {
       (LocalDateTime.parse("2016-03-27T09:00:35"), 6)).toDF("time", "value")
 
     Seq(df1, df2).foreach { df =>
-      val e = intercept[AnalysisException] {
-        df.select(window($"time", "10 second"), window($"time", "15 second")).collect()
-      }
-      assert(e.getMessage.contains(
-        "Multiple time/session window expressions would result in a cartesian product"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          df.select(window($"time", "10 second"), window($"time", "15 second")).collect()
+        },
+        condition = "UNSUPPORTED_FEATURE.MULTIPLE_TIME_WINDOW_EXPRESSIONS",
+        sqlState = "0A000",
+        parameters = Map.empty)
     }
   }
 

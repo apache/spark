@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.util.Locale
+
 import org.apache.logging.log4j.Level
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Literal, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Expression, Literal, SortOrder}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -59,6 +61,17 @@ class ResolveHintsSuite extends AnalysisTest {
       UnresolvedHint("MAPJOIN", Seq("table"), table("TaBlE")),
       testRelation,
       caseSensitive = true)
+  }
+
+  test("join strategy hints accept only relation names") {
+    Seq("BROADCAST", "merge").foreach { hintName =>
+      assertAnalysisErrorCondition(
+        UnresolvedHint(hintName, Seq(Literal(1)), table("TaBlE")),
+        expectedErrorCondition = "INVALID_HINT_PARAMETER.JOIN_STRATEGY_RELATION",
+        expectedMessageParameters = Map(
+          "hintName" -> hintName.toUpperCase(Locale.ROOT),
+          "parameter" -> "\"1\""))
+    }
   }
 
   test("multiple broadcast hint aliases") {
@@ -151,17 +164,17 @@ class ResolveHintsSuite extends AnalysisTest {
       UnresolvedHint("REPARTITION", Seq(Literal(100.toShort)), table("TaBlE")),
       Repartition(numPartitions = 100, shuffle = true, child = testRelation))
 
-    val errMsg = "COALESCE Hint expects a partition number as a parameter"
+    assertAnalysisErrorCondition(
+      UnresolvedHint("REPARTITION", Seq(Literal(1.5)), table("TaBlE")),
+      expectedErrorCondition = "INVALID_HINT_PARAMETER.PARTITIONING_EXPRESSION",
+      expectedMessageParameters = Map("hintName" -> "REPARTITION", "parameters" -> "\"1.5\""))
 
-    assertAnalysisError(
-      UnresolvedHint("COALESCE", Seq.empty, table("TaBlE")),
-      Seq(errMsg))
-    assertAnalysisError(
-      UnresolvedHint("COALESCE", Seq(Literal(10), Literal(false)), table("TaBlE")),
-      Seq(errMsg))
-    assertAnalysisError(
-      UnresolvedHint("COALESCE", Seq(Literal(1.0)), table("TaBlE")),
-      Seq(errMsg))
+    Seq(Seq.empty, Seq(Literal(10), Literal(false)), Seq(Literal(1.0))).foreach { parameters =>
+      assertAnalysisErrorCondition(
+        UnresolvedHint("COALESCE", parameters, table("TaBlE")),
+        expectedErrorCondition = "INVALID_HINT_PARAMETER.COALESCE_PARTITION_NUMBER",
+        expectedMessageParameters = Map("hintName" -> "COALESCE"))
+    }
 
     checkAnalysisWithoutViewWrapper(
       UnresolvedHint("RePartition", Seq(Literal(10), UnresolvedAttribute("a")), table("TaBlE")),
@@ -200,38 +213,25 @@ class ResolveHintsSuite extends AnalysisTest {
         Seq(SortOrder(AttributeReference("a", IntegerType)(), Ascending)),
         testRelation, None))
 
-    val errMsg2 = "REPARTITION Hint parameters should include an optional integral partitionNum " +
-      "and/or columns, but"
+    def assertInvalidPartitioningExpressions(
+        hintName: String, parameters: Seq[Expression], invalidParameters: String): Unit = {
+      assertAnalysisErrorCondition(
+        UnresolvedHint(hintName, parameters, table("TaBlE")),
+        expectedErrorCondition = "INVALID_HINT_PARAMETER.PARTITIONING_EXPRESSION",
+        expectedMessageParameters = Map("hintName" -> hintName, "parameters" -> invalidParameters))
+    }
 
-    assertAnalysisError(
-      UnresolvedHint("REPARTITION", Seq(Literal(true)), table("TaBlE")),
-      Seq(errMsg2))
-
-    assertAnalysisError(
-      UnresolvedHint("REPARTITION",
-        Seq(Literal(1.0), AttributeReference("a", IntegerType)()),
-        table("TaBlE")),
-      Seq(errMsg2))
-
-    val errMsg3 = "REPARTITION_BY_RANGE Hint parameters should include an optional " +
-      "integral partitionNum and/or columns, but"
-    assertAnalysisError(
-      UnresolvedHint("REPARTITION_BY_RANGE",
-        Seq(Literal(1.0), AttributeReference("a", IntegerType)()),
-        table("TaBlE")),
-      Seq(errMsg3))
-
-    assertAnalysisError(
-      UnresolvedHint("REPARTITION_BY_RANGE",
-        Seq(Literal(10), Literal(10)),
-        table("TaBlE")),
-      Seq(errMsg3))
-
-    assertAnalysisError(
-      UnresolvedHint("REPARTITION_BY_RANGE",
-        Seq(Literal(10), Literal(10), UnresolvedAttribute("a")),
-        table("TaBlE")),
-      Seq(errMsg3))
+    assertInvalidPartitioningExpressions("REPARTITION", Seq(Literal(true)), "\"true\"")
+    assertInvalidPartitioningExpressions(
+      "REPARTITION", Seq(Literal(1.0), AttributeReference("a", IntegerType)()), "\"1.0\", \"a\"")
+    assertInvalidPartitioningExpressions(
+      "REPARTITION_BY_RANGE",
+      Seq(Literal(1.0), AttributeReference("a", IntegerType)()),
+      "\"1.0\", \"a\"")
+    assertInvalidPartitioningExpressions(
+      "REPARTITION_BY_RANGE", Seq(Literal(10), Literal(10)), "\"10\"")
+    assertInvalidPartitioningExpressions(
+      "REPARTITION_BY_RANGE", Seq(Literal(10), Literal(10), UnresolvedAttribute("a")), "\"10\"")
   }
 
   test("log warnings for invalid hints") {
@@ -346,19 +346,20 @@ class ResolveHintsSuite extends AnalysisTest {
         testRelation)
     }
 
-    val msg = "REBALANCE Hint parameters should include an optional integral partitionNum " +
-      "and/or columns, but \"1\" can not be recognized as either partitionNum or columns."
-    assertAnalysisError(
+    assertAnalysisErrorCondition(
       UnresolvedHint("REBALANCE", Seq(Literal(1), Literal(1)), table("TaBlE")),
-      Seq(msg))
+      expectedErrorCondition = "INVALID_HINT_PARAMETER.PARTITIONING_EXPRESSION",
+      expectedMessageParameters = Map("hintName" -> "REBALANCE", "parameters" -> "\"1\""))
 
-    assertAnalysisError(
+    assertAnalysisErrorCondition(
       UnresolvedHint("REBALANCE", Seq(1, Literal(1)), table("TaBlE")),
-      Seq(msg))
+      expectedErrorCondition = "INVALID_HINT_PARAMETER.PARTITIONING_EXPRESSION",
+      expectedMessageParameters = Map("hintName" -> "REBALANCE", "parameters" -> "\"1\""))
 
-    assertAnalysisError(
+    assertAnalysisErrorCondition(
       UnresolvedHint("REBALANCE", Seq(1, Literal(Array[Byte](0, 1, 3))), table("TaBlE")),
-      Seq("X'000103'"))
+      expectedErrorCondition = "INVALID_HINT_PARAMETER.PARTITIONING_EXPRESSION",
+      expectedMessageParameters = Map("hintName" -> "REBALANCE", "parameters" -> "\"X'000103'\""))
   }
 
   test("SPARK-38410: Support specify initial partition number for rebalance") {

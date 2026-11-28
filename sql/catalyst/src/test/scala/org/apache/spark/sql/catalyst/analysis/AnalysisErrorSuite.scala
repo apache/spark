@@ -331,7 +331,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     messageParameters = Map.empty
   )
 
-  errorTest(
+  errorConditionTest(
     "offset window function",
     testRelation2.select(
       WindowExpression(
@@ -340,7 +340,10 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
           UnresolvedAttribute("a") :: Nil,
           SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
           SpecifiedWindowFrame(RangeFrame, Literal(1), Literal(2)))).as("window")),
-    "Cannot specify window frame for lead function" :: Nil)
+    condition = "INVALID_WINDOW_FRAME_FOR_FUNCTION.FRAME_NOT_ALLOWED",
+    messageParameters = Map(
+      "funcName" -> "`lead`",
+      "windowFrame" -> "\"RANGE BETWEEN 1 FOLLOWING AND 2 FOLLOWING\""))
 
   errorConditionTest(
     "the offset of nth_value window function is negative or zero",

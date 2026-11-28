@@ -82,6 +82,27 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
     }
   }
 
+  test("describe a nested column of a view") {
+    withTempView("temp_view") {
+      withView("perm_view") {
+        sql("CREATE TEMPORARY VIEW temp_view AS SELECT named_struct('x', 1, 'y.z', 2) AS col")
+        sql("CREATE VIEW perm_view AS SELECT named_struct('x', 1) AS col")
+        Seq(
+          "temp_view col.x" -> "`col`.`x`",
+          "temp_view col.`y.z`" -> "`col`.`y.z`",
+          "perm_view col.x" -> "`col`.`x`").foreach { case (viewAndColumn, columnName) =>
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"DESCRIBE TABLE $viewAndColumn")
+            },
+            condition = "UNSUPPORTED_FEATURE.DESC_TABLE_NESTED_COLUMN",
+            sqlState = "0A000",
+            parameters = Map("columnName" -> columnName))
+        }
+      }
+    }
+  }
+
   test("describe a non-existent table") {
     val tbl = "undefined"
     val statements = Seq(

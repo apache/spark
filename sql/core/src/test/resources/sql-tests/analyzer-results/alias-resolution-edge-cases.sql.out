@@ -185,7 +185,15 @@ SELECT 1 AS a, a + 1 AS b, SUM(ROW_NUMBER() OVER (ORDER BY col1)) AS s FROM VALU
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1031"
+  "errorClass" : "WINDOW_FUNCTION_IN_AGGREGATE_FUNCTION",
+  "sqlState" : "42607",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 28,
+    "stopIndex" : 65,
+    "fragment" : "SUM(ROW_NUMBER() OVER (ORDER BY col1))"
+  } ]
 }
 
 
@@ -194,7 +202,15 @@ SELECT 1 AS a, a + 1 AS b, MAX(RANK() OVER (ORDER BY col1)) AS s FROM VALUES (1)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1031"
+  "errorClass" : "WINDOW_FUNCTION_IN_AGGREGATE_FUNCTION",
+  "sqlState" : "42607",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 28,
+    "stopIndex" : 59,
+    "fragment" : "MAX(RANK() OVER (ORDER BY col1))"
+  } ]
 }
 
 
@@ -204,7 +220,15 @@ FROM VALUES (1), (2) GROUP BY col1
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1031"
+  "errorClass" : "WINDOW_FUNCTION_IN_AGGREGATE_FUNCTION",
+  "sqlState" : "42607",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 31,
+    "stopIndex" : 68,
+    "fragment" : "SUM(ROW_NUMBER() OVER (ORDER BY col1))"
+  } ]
 }
 
 
@@ -213,7 +237,15 @@ SELECT SUM(ROW_NUMBER() OVER (ORDER BY col1)) AS s FROM VALUES (1), (2)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1031"
+  "errorClass" : "WINDOW_FUNCTION_IN_AGGREGATE_FUNCTION",
+  "sqlState" : "42607",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 45,
+    "fragment" : "SUM(ROW_NUMBER() OVER (ORDER BY col1))"
+  } ]
 }
 
 
@@ -223,7 +255,15 @@ SELECT 1 AS a, a + 1 AS b,
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1031"
+  "errorClass" : "WINDOW_FUNCTION_IN_AGGREGATE_FUNCTION",
+  "sqlState" : "42607",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 38,
+    "stopIndex" : 75,
+    "fragment" : "SUM(ROW_NUMBER() OVER (ORDER BY col1))"
+  } ]
 }
 
 

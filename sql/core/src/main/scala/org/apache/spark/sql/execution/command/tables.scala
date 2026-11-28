@@ -854,8 +854,7 @@ case class DescribeColumnCommand(
     }
     if (!field.isInstanceOf[Attribute]) {
       // If the field is not an attribute after `resolve`, then it's a nested field.
-      throw QueryCompilationErrors.commandNotSupportNestedColumnError(
-        "DESC TABLE COLUMN", colName)
+      throw QueryCompilationErrors.describeNestedColumnNotSupportedError(colNameParts)
     }
 
     val catalogTable = catalog.getTempViewOrPermanentTableMetadata(table)

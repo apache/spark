@@ -243,8 +243,7 @@ case class DescribeV2ViewColumnExec(
     val resolver = conf.resolver
     val colName = colNameParts.mkString(".")
     if (colNameParts.length > 1) {
-      throw QueryCompilationErrors.commandNotSupportNestedColumnError(
-        "DESC TABLE COLUMN", colName)
+      throw QueryCompilationErrors.describeNestedColumnNotSupportedError(colNameParts)
     }
     val field = viewInfo.schema.fields
       .find(f => resolver(f.name, colNameParts.head))

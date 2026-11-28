@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -325,9 +326,15 @@ object GroupingAnalyticsTransformer extends SQLConfHelper with AliasHelper {
       groupingSetExprs.map { expression =>
         val alias = groupByAliases
           .find(_.child.semanticEquals(expression))
-          .getOrElse(
-            throw QueryCompilationErrors.selectExprNotInGroupByError(expression, groupByAliases)
-          )
+          .getOrElse {
+            // Every grouping set expression is also a group-by expression, but `semanticEquals`
+            // never matches a non-deterministic expression, not even with itself.
+            if (expression.deterministic) {
+              throw SparkException.internalError(
+                s"Grouping set expression $expression is not among the group-by expressions.")
+            }
+            throw QueryCompilationErrors.nonDeterministicGroupingSetExpressionError(expression)
+          }
         expandedAttributes.find(_.semanticEquals(alias.toAttribute)).getOrElse(alias.toAttribute)
       }
     }

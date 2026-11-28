@@ -26,7 +26,7 @@ import scala.collection.mutable
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.ExamplePointUDT
 import org.apache.spark.sql.catalyst.util.ArrayData
@@ -436,6 +436,22 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.create('0'), "0")
     checkEvaluation(Literal('\u0000'), "\u0000")
     checkEvaluation(Literal.create('\n'), "\n")
+  }
+
+  test("array literals reject elements of unsupported classes") {
+    Seq(Array(new Object()), Array(Array(new java.util.Date()))).foreach { array =>
+      val elementClass = array.head match {
+        case nested: Array[_] => nested.getClass.getComponentType
+        case element => element.getClass
+      }
+      checkError(
+        exception = intercept[AnalysisException] {
+          Literal(array)
+        },
+        condition = "UNSUPPORTED_FEATURE.LITERAL_ARRAY_ELEMENT_TYPE",
+        sqlState = "0A000",
+        parameters = Map("elementClass" -> elementClass.toString))
+    }
   }
 
   test("SPARK-33390: Make Literal support char array") {

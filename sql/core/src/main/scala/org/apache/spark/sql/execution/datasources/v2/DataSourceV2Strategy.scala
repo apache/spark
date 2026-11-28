@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.SCALAR_SUBQUERY
-import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, GeneratedColumn, IdentityColumn, MetadataColumnHelper, ResolveDefaultColumns, ResolveTableConstraints, V2ExpressionBuilder, WriteDistributionAndOrdering}
+import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, GeneratedColumn, IdentityColumn, MetadataColumnHelper, ResolveDefaultColumns, ResolveTableConstraints, V2ExpressionBuilder, WriteDistributionAndOrdering}
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Dependency, DependencyList, Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TableSummary, TruncatableTable, V1Table, V1View, ViewCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange
@@ -723,8 +723,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         case c: Attribute =>
           DescribeColumnExec(output, c, isExtended, r.table) :: Nil
         case nested =>
-          throw QueryCompilationErrors.commandNotSupportNestedColumnError(
-            "DESC TABLE COLUMN", toPrettySQL(nested))
+          throw QueryCompilationErrors.describeNestedColumnNotSupportedError(
+            DescribeColumn.nestedColumnNameParts(nested))
       }
 
     case DropTable(r: ResolvedIdentifier, ifExists, purge) =>
