@@ -88,8 +88,9 @@ import java.util.Map;
  * <p>
  * Resolution on magic method is done during query analysis, where Spark looks up the magic
  * method by first converting the actual input SQL data types to their corresponding Java types
- * following the mapping defined below, and then checking if there is a matching method from all the
- * declared methods in the UDF class, using method name and the Java types.
+ * following the mapping defined below, and then checking if there is a matching method, using
+ * method name and the Java types, among the methods declared in the UDF class and the public
+ * methods it inherits from its superclasses.
  * <p>
  * <h2> Handling of nullable primitive arguments </h2>
  * The handling of null primitive arguments is different between the magic method approach and

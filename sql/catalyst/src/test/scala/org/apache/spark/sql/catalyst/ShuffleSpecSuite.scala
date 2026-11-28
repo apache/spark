@@ -714,15 +714,15 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
 
   test("SPARK-60522: KeyedShuffleSpec refuses a transform Spark cannot evaluate") {
     // A connector may bind its partition transform to a `BoundFunction` that is not a
-    // `ScalarFunction`, or to a `ScalarFunction` whose `produceResult` is inherited, which
-    // resolving it does not find. `TransformExpression.eval` cannot run either, so an identity
-    // side is not reduced onto it and no other child is shuffled onto it. The gates answer that
-    // without throwing, since they are asked of candidates that may not be chosen.
+    // `ScalarFunction`, which `TransformExpression.eval` cannot run, so an identity side is not
+    // reduced onto it and no other child is shuffled onto it. A `ScalarFunction` whose
+    // `produceResult` is inherited can run, since resolving it finds that method (SPARK-60783).
+    // The gates answer without throwing, since they are asked of candidates that may not be chosen.
     val nonScalarBucket = NonScalarBucketFunction
     abstract class BucketBase extends ScalarFunction[Int] {
       override def produceResult(input: InternalRow): Int = input.getInt(1)
     }
-    // Declares the bucket count too, so that only the inherited `produceResult` refuses it.
+    // Declares the bucket count too, so that only the inherited `produceResult` is under test.
     val inheritedBucket = new BucketBase {
       override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
       override def resultType(): DataType = IntegerType
@@ -737,7 +737,7 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     Seq(
       ("scalar", TestBucketFunction, true),
       ("non-scalar", nonScalarBucket, false),
-      ("inherited produceResult", inheritedBucket, false)
+      ("inherited produceResult", inheritedBucket, true)
     ).foreach {
       case (name, fn, evaluable) =>
         val bucket = spec(TransformExpression(fn, Seq(a), Some(4)))

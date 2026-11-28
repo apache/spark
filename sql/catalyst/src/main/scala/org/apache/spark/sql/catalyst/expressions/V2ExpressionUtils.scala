@@ -295,19 +295,25 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
 
   /**
    * Check if the input `fn` implements the given `methodName` with parameter types specified
-   * via `argClasses`.
+   * via `argClasses`, either in its own class or in one of its superclasses.
    */
   private def findMethod(
       fn: BoundFunction,
       methodName: String,
       argClasses: Seq[Class[_]]): Option[Method] = {
     val cls = fn.getClass
-    try {
-      Some(cls.getDeclaredMethod(methodName, argClasses: _*))
-    } catch {
-      case _: NoSuchMethodException =>
-        None
-    }
+    // A method declared in a superclass counts only if it is public, since Spark can only call
+    // a public inherited method. Interfaces are not searched, so the default `produceResult` of
+    // `ScalarFunction` does not count as an implementation.
+    Iterator.iterate[Class[_]](cls)(_.getSuperclass).takeWhile(_ != null).flatMap { c =>
+      try {
+        Some(c.getDeclaredMethod(methodName, argClasses: _*))
+          .filter(m => c == cls || Modifier.isPublic(m.getModifiers))
+      } catch {
+        case _: NoSuchMethodException =>
+          None
+      }
+    }.nextOption()
   }
 
   def toCatalyst(expr: V2Expression): Option[Expression] = expr match {
