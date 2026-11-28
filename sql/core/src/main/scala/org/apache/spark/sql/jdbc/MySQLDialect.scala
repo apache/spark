@@ -126,7 +126,8 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
       }
 
     override def visitCast(expr: String, exprDataType: DataType, dataType: DataType): String = {
-      lazy val fractionalToIntegral = !JdbcUtils.legacyIntegralCastPushdown &&
+      val legacyIntegralCastPushdown = JdbcUtils.legacyIntegralCastPushdown
+      lazy val fractionalToIntegral = !legacyIntegralCastPushdown &&
         isFractionalToIntegral(exprDataType, dataType)
       (exprDataType, dataType) match {
         case (_, DoubleType) =>
@@ -142,6 +143,11 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
         case (_, _: IntegralType) if fractionalToIntegral =>
           cannotPushCast(exprDataType, dataType, "MySQL can only cast to 64-bit SIGNED, which " +
             "doesn't fail like Spark on source values out of the target's range")
+        case (from: IntegralType, to: IntegralType) if !legacyIntegralCastPushdown =>
+          if (from.defaultSize > to.defaultSize) {
+            cannotPushCast(from, to, "MySQL's SIGNED cast does not check the narrower range")
+          }
+          s"CAST($expr AS SIGNED)"
         case _ => super.visitCast(expr, exprDataType, dataType)
       }
     }
