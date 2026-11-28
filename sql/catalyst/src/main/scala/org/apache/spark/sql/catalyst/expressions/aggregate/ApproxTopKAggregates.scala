@@ -391,9 +391,11 @@ class ApproxTopKAggregateBuffer[T](val sketch: ItemsSketch[T], private var nullC
         case _: LongType =>
           sketch.asInstanceOf[ItemsSketch[Long]].update(v.asInstanceOf[Long])
         case _: FloatType =>
-          sketch.asInstanceOf[ItemsSketch[Float]].update(v.asInstanceOf[Float])
+          val item = v.asInstanceOf[Float]
+          sketch.asInstanceOf[ItemsSketch[Float]].update(if (item == 0.0f) 0.0f else item)
         case _: DoubleType =>
-          sketch.asInstanceOf[ItemsSketch[Double]].update(v.asInstanceOf[Double])
+          val item = v.asInstanceOf[Double]
+          sketch.asInstanceOf[ItemsSketch[Double]].update(if (item == 0.0d) 0.0d else item)
         case _: DateType =>
           sketch.asInstanceOf[ItemsSketch[Int]].update(v.asInstanceOf[Int])
         case _: TimestampType =>
