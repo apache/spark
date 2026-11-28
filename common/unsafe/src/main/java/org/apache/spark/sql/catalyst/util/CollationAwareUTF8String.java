@@ -817,7 +817,7 @@ public class CollationAwareUTF8String {
    *
    * @param target the string to be searched in
    * @param pattern the string to be searched for
-   * @param start the start position for searching (1-based, can be negative for backward search)
+   * @param start 1-based position; negative searches backward, zero returns {@code MATCH_NOT_FOUND}
    * @param occurrence which occurrence to return (must be &gt;= 1)
    * @return the position of the {@code occurrence}-th occurrence of pattern in target
    *         (0-based character index), or {@code MATCH_NOT_FOUND} if not found
@@ -825,8 +825,8 @@ public class CollationAwareUTF8String {
   public static int lowercaseIndexOf(final UTF8String target, final UTF8String pattern,
       final int start, final int occurrence) {
     assert occurrence > 0;
-    if (pattern.numBytes() == 0) return target.indexOfEmpty(start);
     if (start == 0) return MATCH_NOT_FOUND;
+    if (pattern.numBytes() == 0) return target.indexOfEmpty(start);
     if (target.isFullAscii() && pattern.isFullAscii()) {
       return target.toLowerCase().indexOf(pattern.toLowerCase(), start, occurrence);
     }
@@ -919,7 +919,7 @@ public class CollationAwareUTF8String {
    *
    * @param target the string to be searched in
    * @param pattern the string to be searched for
-   * @param start the start position for searching (1-based, can be negative for backward search)
+   * @param start 1-based position; negative searches backward, zero returns {@code MATCH_NOT_FOUND}
    * @param occurrence which occurrence to return (must be &gt;= 1)
    * @param collationId the ICU collation identifier
    * @return the position of the {@code occurrence}-th occurrence of pattern in target
@@ -928,8 +928,10 @@ public class CollationAwareUTF8String {
   public static int indexOf(final UTF8String target, final UTF8String pattern,
       final int start, final int occurrence, final int collationId) {
     assert occurrence > 0;
+    // Reject zero start before the empty-pattern shortcut to preserve SQL instr semantics.
+    if (start == 0) return MATCH_NOT_FOUND;
     if (pattern.numBytes() == 0) return target.indexOfEmpty(start);
-    if (target.numBytes() == 0 || start == 0) return MATCH_NOT_FOUND;
+    if (target.numBytes() == 0) return MATCH_NOT_FOUND;
 
     String targetStr = target.toValidString();
     String patternStr = pattern.toValidString();
