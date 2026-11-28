@@ -1817,6 +1817,10 @@ abstract class RDD[T: ClassTag](
         case _ =>
       }
       checkpointData = Some(new LocalRDDCheckpointData(this))
+      // So the RDD TTL cleaner never reaps this RDD: once the checkpoint is materialized its cache
+      // blocks are the only copy of the data. See SparkContext.locallyCheckpointedRdds for why
+      // this is recorded here rather than read off persistentRdds.
+      sc.locallyCheckpointedRdds(id) = this
       // Mark for checksum + seal only when the checkpoint's storage level is serialized: a
       // deserialized level keeps in-memory objects with no bytes to checksum, so there is
       // nothing to verify and marking would only add cost. (A deserialized default is expected,
