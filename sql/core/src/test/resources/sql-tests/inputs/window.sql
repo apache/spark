@@ -517,3 +517,50 @@ SELECT * FROM (SELECT cate, val, row_number() OVER(PARTITION BY cate ORDER BY va
 SELECT *, mean(val_double) over (partition BY val ORDER BY val_date RANGE INTERVAL '5' DAY PRECEDING) AS mean FROM testData;
 SELECT *, mean(val_double) over (partition BY val ORDER BY val_date RANGE INTERVAL '1 2:3:4.001' DAY TO SECOND PRECEDING) AS mean FROM testData;
 SELECT *, mean(val_double) over (partition BY val ORDER BY val_date RANGE DATE '2024-01-01' FOLLOWING) AS mean FROM testData;
+
+-- collect_union over windows. Its element order is unspecified, so results are wrapped in
+-- sort_array. o = 3 is missing in partition k = 2, so RANGE and ROWS frames differ there.
+CREATE OR REPLACE TEMPORARY VIEW collect_union_data AS SELECT * FROM VALUES
+(1, 1, array(1, 2)),
+(1, 2, array(2, 3)),
+(1, 3, CAST(NULL AS ARRAY<INT>)),
+(1, 4, array(3, NULL, 4)),
+(1, 5, CAST(array() AS ARRAY<INT>)),
+(2, 1, array(5)),
+(2, 2, array(5, NULL)),
+(2, 4, array(6))
+AS collect_union_data(k, o, arr);
+
+SELECT k, o,
+  sort_array(collect_union(arr) OVER (PARTITION BY k)) AS whole_partition,
+  sort_array(collect_union(arr) OVER (PARTITION BY k ORDER BY o
+    ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)) AS growing,
+  sort_array(collect_union(arr) OVER (PARTITION BY k ORDER BY o
+    ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)) AS sliding_rows,
+  sort_array(collect_union(arr) OVER (PARTITION BY k ORDER BY o
+    RANGE BETWEEN 1 PRECEDING AND CURRENT ROW)) AS sliding_range,
+  sort_array(collect_union(arr) OVER (PARTITION BY k ORDER BY o
+    ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING)) AS empty_frame
+FROM collect_union_data
+ORDER BY k, o;
+
+SELECT k, o,
+  sort_array(collect_union(arr) RESPECT NULLS OVER w) AS respect_nulls,
+  sort_array(collect_union(arr) IGNORE NULLS OVER w) AS ignore_nulls
+FROM collect_union_data
+WINDOW w AS (PARTITION BY k ORDER BY o ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)
+ORDER BY k, o;
+
+-- NaN values are deduplicated and -0.0 is normalized to 0.0 for floating-point elements.
+-- Binary elements are shown with hex() to keep the output readable.
+SELECT o,
+  sort_array(collect_union(d) OVER w) AS doubles,
+  sort_array(collect_union(f) OVER w) AS floats,
+  transform(sort_array(collect_union(b) OVER w), x -> hex(x)) AS binaries
+FROM VALUES
+(1, array(CAST('NaN' AS DOUBLE), 0.0D), array(CAST('NaN' AS FLOAT), CAST(0.0 AS FLOAT)), array(X'01', X'02')),
+(2, array(-0.0D, CAST('NaN' AS DOUBLE)), array(CAST(-0.0D AS FLOAT), CAST('NaN' AS FLOAT)), array(X'02')),
+(3, array(1.5D), array(CAST(1.5 AS FLOAT)), array(X'03', X'01'))
+AS t(o, d, f, b)
+WINDOW w AS (ORDER BY o ROWS BETWEEN 1 PRECEDING AND CURRENT ROW)
+ORDER BY o;

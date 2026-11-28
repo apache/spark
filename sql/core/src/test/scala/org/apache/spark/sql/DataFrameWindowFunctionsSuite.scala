@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, Exchange, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.window.WindowExec
-import org.apache.spark.sql.expressions.{Aggregator, MutableAggregationBuffer, UserDefinedAggregateFunction, Window}
+import org.apache.spark.sql.expressions.{Aggregator, MutableAggregationBuffer, UserDefinedAggregateFunction, Window, WindowSpec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -370,6 +370,85 @@ class DataFrameWindowFunctionsSuite extends SharedSparkSession
         Row("f", Array("10", "11")),
         Row("g", Array("10", "11")),
         Row("h", Array("20"))))
+  }
+
+  test("collect_union in window") {
+    // The element order of collect_union is unspecified, so results are wrapped in sort_array.
+    val df = Seq[(Int, Int, Seq[Integer])](
+      (1, 1, Seq(1, 2)),
+      (1, 2, Seq(2, 3)),
+      (1, 3, null),
+      (1, 4, Seq(3, null, 4)),
+      (1, 5, Seq.empty),
+      (2, 1, Seq(5)),
+      (2, 2, Seq(5, null)),
+      // o = 3 is missing in partition 2, so RANGE and ROWS frames differ there.
+      (2, 4, Seq(6))).toDF("k", "o", "arr")
+    val keys = Seq((1, 1), (1, 2), (1, 3), (1, 4), (1, 5), (2, 1), (2, 2), (2, 4))
+    def check(w: WindowSpec, expected: Seq[Seq[Integer]]): Unit = {
+      checkAnswer(
+        df.select($"k", $"o", sort_array(collect_union($"arr").over(w))),
+        keys.zip(expected).map { case ((k, o), e) => Row(k, o, e) })
+    }
+    val ordered = Window.partitionBy($"k").orderBy($"o")
+
+    // Whole-partition frame. NULL arrays are skipped and null elements are dropped.
+    check(Window.partitionBy($"k"),
+      Seq.fill(5)(Seq[Integer](1, 2, 3, 4)) ++ Seq.fill(3)(Seq[Integer](5, 6)))
+    // Growing frame.
+    check(ordered.rowsBetween(Window.unboundedPreceding, Window.currentRow),
+      Seq(Seq(1, 2), Seq(1, 2, 3), Seq(1, 2, 3), Seq(1, 2, 3, 4), Seq(1, 2, 3, 4),
+        Seq(5), Seq(5), Seq(5, 6)))
+    // Sliding ROWS frame: the set is rebuilt as rows leave the frame.
+    check(ordered.rowsBetween(-1, 1),
+      Seq(Seq(1, 2, 3), Seq(1, 2, 3), Seq(2, 3, 4), Seq(3, 4), Seq(3, 4),
+        Seq(5), Seq(5, 6), Seq(5, 6)))
+    // Sliding RANGE frame.
+    check(ordered.rangeBetween(-1, Window.currentRow),
+      Seq(Seq(1, 2), Seq(1, 2, 3), Seq(2, 3), Seq(3, 4), Seq(3, 4),
+        Seq(5), Seq(5), Seq(6)))
+    // An empty frame produces an empty array, not null.
+    check(ordered.rowsBetween(Window.unboundedPreceding, -1),
+      Seq(Seq(), Seq(1, 2), Seq(1, 2, 3), Seq(1, 2, 3), Seq(1, 2, 3, 4),
+        Seq(), Seq(5), Seq(5)))
+
+    // RESPECT NULLS (only reachable through SQL) keeps a single null element over a window.
+    checkAnswer(
+      df.select($"k", $"o", expr(
+        "sort_array(collect_union(arr) RESPECT NULLS OVER " +
+          "(PARTITION BY k ORDER BY o ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING))")),
+      Seq(
+        Row(1, 1, Seq(1, 2, 3)),
+        Row(1, 2, Seq(1, 2, 3)),
+        Row(1, 3, Seq(null, 2, 3, 4)),
+        Row(1, 4, Seq(null, 3, 4)),
+        Row(1, 5, Seq(null, 3, 4)),
+        Row(2, 1, Seq(null, 5)),
+        Row(2, 2, Seq(null, 5, 6)),
+        Row(2, 4, Seq(null, 5, 6))))
+  }
+
+  test("collect_union in window with floating-point and binary elements") {
+    // NaN values are deduplicated and -0.0 is normalized to 0.0, also when rows leave a
+    // sliding frame.
+    val df = Seq(
+      (1, Seq(Double.NaN, 0.0d), Seq(Float.NaN, 0.0f), Seq(Array[Byte](1), Array[Byte](2))),
+      (2, Seq(-0.0d, Double.NaN), Seq(-0.0f, Float.NaN), Seq(Array[Byte](2))),
+      (3, Seq(1.5d), Seq(1.5f), Seq(Array[Byte](3), Array[Byte](1)))).toDF("o", "d", "f", "b")
+    val w = Window.orderBy($"o").rowsBetween(-1, Window.currentRow)
+    checkAnswer(
+      df.select(
+        $"o",
+        sort_array(collect_union($"d").over(w)),
+        sort_array(collect_union($"f").over(w)),
+        sort_array(collect_union($"b").over(w))),
+      Seq(
+        Row(1, Seq(0.0d, Double.NaN), Seq(0.0f, Float.NaN),
+          Seq(Array[Byte](1), Array[Byte](2))),
+        Row(2, Seq(0.0d, Double.NaN), Seq(0.0f, Float.NaN),
+          Seq(Array[Byte](1), Array[Byte](2))),
+        Row(3, Seq(0.0d, 1.5d, Double.NaN), Seq(0.0f, 1.5f, Float.NaN),
+          Seq(Array[Byte](1), Array[Byte](2), Array[Byte](3)))))
   }
 
   test("skewness and kurtosis functions in window") {

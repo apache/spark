@@ -1582,3 +1582,101 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "(partition BY val ORDER BY val_date RANGE DATE '2024-01-01' FOLLOWING)"
   } ]
 }
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW collect_union_data AS SELECT * FROM VALUES
+(1, 1, array(1, 2)),
+(1, 2, array(2, 3)),
+(1, 3, CAST(NULL AS ARRAY<INT>)),
+(1, 4, array(3, NULL, 4)),
+(1, 5, CAST(array() AS ARRAY<INT>)),
+(2, 1, array(5)),
+(2, 2, array(5, NULL)),
+(2, 4, array(6))
+AS collect_union_data(k, o, arr)
+-- !query analysis
+CreateViewCommand `collect_union_data`, SELECT * FROM VALUES
+(1, 1, array(1, 2)),
+(1, 2, array(2, 3)),
+(1, 3, CAST(NULL AS ARRAY<INT>)),
+(1, 4, array(3, NULL, 4)),
+(1, 5, CAST(array() AS ARRAY<INT>)),
+(2, 1, array(5)),
+(2, 2, array(5, NULL)),
+(2, 4, array(6))
+AS collect_union_data(k, o, arr), false, true, LocalTempView, UNSUPPORTED, true
+   +- Project [k#x, o#x, arr#x]
+      +- SubqueryAlias collect_union_data
+         +- LocalRelation [k#x, o#x, arr#x]
+
+
+-- !query
+SELECT k, o,
+  sort_array(collect_union(arr) OVER (PARTITION BY k)) AS whole_partition,
+  sort_array(collect_union(arr) OVER (PARTITION BY k ORDER BY o
+    ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)) AS growing,
+  sort_array(collect_union(arr) OVER (PARTITION BY k ORDER BY o
+    ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)) AS sliding_rows,
+  sort_array(collect_union(arr) OVER (PARTITION BY k ORDER BY o
+    RANGE BETWEEN 1 PRECEDING AND CURRENT ROW)) AS sliding_range,
+  sort_array(collect_union(arr) OVER (PARTITION BY k ORDER BY o
+    ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING)) AS empty_frame
+FROM collect_union_data
+ORDER BY k, o
+-- !query analysis
+Sort [k#x ASC NULLS FIRST, o#x ASC NULLS FIRST], true
++- Project [k#x, o#x, whole_partition#x, growing#x, sliding_rows#x, sliding_range#x, empty_frame#x]
+   +- Project [k#x, o#x, arr#x, _we0#x, _we1#x, _we2#x, _we3#x, _we4#x, sort_array(_we0#x, true) AS whole_partition#x, sort_array(_we1#x, true) AS growing#x, sort_array(_we2#x, true) AS sliding_rows#x, sort_array(_we3#x, true) AS sliding_range#x, sort_array(_we4#x, true) AS empty_frame#x]
+      +- Window [collect_union(arr#x, 0, 0, true) windowspecdefinition(k#x, o#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS _we1#x, collect_union(arr#x, 0, 0, true) windowspecdefinition(k#x, o#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, -1, 1)) AS _we2#x, collect_union(arr#x, 0, 0, true) windowspecdefinition(k#x, o#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, -1, currentrow$())) AS _we3#x, collect_union(arr#x, 0, 0, true) windowspecdefinition(k#x, o#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), -1)) AS _we4#x], [k#x], [o#x ASC NULLS FIRST]
+         +- Window [collect_union(arr#x, 0, 0, true) windowspecdefinition(k#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS _we0#x], [k#x]
+            +- Project [k#x, o#x, arr#x]
+               +- SubqueryAlias collect_union_data
+                  +- View (`collect_union_data`, [k#x, o#x, arr#x])
+                     +- Project [cast(k#x as int) AS k#x, cast(o#x as int) AS o#x, cast(arr#x as array<int>) AS arr#x]
+                        +- Project [k#x, o#x, arr#x]
+                           +- SubqueryAlias collect_union_data
+                              +- LocalRelation [k#x, o#x, arr#x]
+
+
+-- !query
+SELECT k, o,
+  sort_array(collect_union(arr) RESPECT NULLS OVER w) AS respect_nulls,
+  sort_array(collect_union(arr) IGNORE NULLS OVER w) AS ignore_nulls
+FROM collect_union_data
+WINDOW w AS (PARTITION BY k ORDER BY o ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)
+ORDER BY k, o
+-- !query analysis
+Sort [k#x ASC NULLS FIRST, o#x ASC NULLS FIRST], true
++- Project [k#x, o#x, respect_nulls#x, ignore_nulls#x]
+   +- Project [k#x, o#x, arr#x, _we0#x, _we1#x, sort_array(_we0#x, true) AS respect_nulls#x, sort_array(_we1#x, true) AS ignore_nulls#x]
+      +- Window [collect_union(arr#x, 0, 0, false) windowspecdefinition(k#x, o#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, -1, 1)) AS _we0#x, collect_union(arr#x, 0, 0, true) windowspecdefinition(k#x, o#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, -1, 1)) AS _we1#x], [k#x], [o#x ASC NULLS FIRST]
+         +- Project [k#x, o#x, arr#x]
+            +- SubqueryAlias collect_union_data
+               +- View (`collect_union_data`, [k#x, o#x, arr#x])
+                  +- Project [cast(k#x as int) AS k#x, cast(o#x as int) AS o#x, cast(arr#x as array<int>) AS arr#x]
+                     +- Project [k#x, o#x, arr#x]
+                        +- SubqueryAlias collect_union_data
+                           +- LocalRelation [k#x, o#x, arr#x]
+
+
+-- !query
+SELECT o,
+  sort_array(collect_union(d) OVER w) AS doubles,
+  sort_array(collect_union(f) OVER w) AS floats,
+  transform(sort_array(collect_union(b) OVER w), x -> hex(x)) AS binaries
+FROM VALUES
+(1, array(CAST('NaN' AS DOUBLE), 0.0D), array(CAST('NaN' AS FLOAT), CAST(0.0 AS FLOAT)), array(X'01', X'02')),
+(2, array(-0.0D, CAST('NaN' AS DOUBLE)), array(CAST(-0.0D AS FLOAT), CAST('NaN' AS FLOAT)), array(X'02')),
+(3, array(1.5D), array(CAST(1.5 AS FLOAT)), array(X'03', X'01'))
+AS t(o, d, f, b)
+WINDOW w AS (ORDER BY o ROWS BETWEEN 1 PRECEDING AND CURRENT ROW)
+ORDER BY o
+-- !query analysis
+Sort [o#x ASC NULLS FIRST], true
++- Project [o#x, doubles#x, floats#x, binaries#x]
+   +- Project [o#x, d#x, f#x, b#x, _we0#x, _we1#x, _we2#x, sort_array(_we0#x, true) AS doubles#x, sort_array(_we1#x, true) AS floats#x, transform(sort_array(_we2#x, true), lambdafunction(hex(lambda x#x), lambda x#x, false)) AS binaries#x]
+      +- Window [collect_union(d#x, 0, 0, true) windowspecdefinition(o#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, -1, currentrow$())) AS _we0#x, collect_union(f#x, 0, 0, true) windowspecdefinition(o#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, -1, currentrow$())) AS _we1#x, collect_union(b#x, 0, 0, true) windowspecdefinition(o#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, -1, currentrow$())) AS _we2#x], [o#x ASC NULLS FIRST]
+         +- Project [o#x, d#x, f#x, b#x]
+            +- SubqueryAlias t
+               +- LocalRelation [o#x, d#x, f#x, b#x]
