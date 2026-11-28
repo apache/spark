@@ -17,6 +17,7 @@
 
 package org.apache.spark.util
 
+import java.time.Duration
 import java.util.concurrent.{Callable, TimeUnit}
 
 import com.google.common.cache.{Cache, CacheBuilder, CacheLoader, LoadingCache}
@@ -78,7 +79,8 @@ private[spark] object NonFateSharingCache {
       builder.maximumSize(maximumSize)
     }
     if(expireAfterAccessTime > 0) {
-      builder.expireAfterAccess(expireAfterAccessTime, expireAfterAccessTimeUnit)
+      builder.expireAfterAccess(
+        Duration.of(expireAfterAccessTime, expireAfterAccessTimeUnit.toChronoUnit))
     }
     new NonFateSharingCache(builder.build[K, V]())
   }

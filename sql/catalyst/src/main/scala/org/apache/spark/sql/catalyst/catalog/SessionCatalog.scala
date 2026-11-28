@@ -19,8 +19,9 @@ package org.apache.spark.sql.catalyst.catalog
 
 import java.lang.reflect.InvocationTargetException
 import java.net.URI
+import java.time.Duration
 import java.util.Locale
-import java.util.concurrent.{Callable, ExecutionException, TimeUnit}
+import java.util.concurrent.{Callable, ExecutionException}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
@@ -380,7 +381,7 @@ class SessionCatalog(
       .maximumSize(cacheSize)
 
     if (cacheTTL > 0) {
-      builder = builder.expireAfterWrite(cacheTTL, TimeUnit.SECONDS)
+      builder = builder.expireAfterWrite(Duration.ofSeconds(cacheTTL))
     }
 
     builder.build[QualifiedTableName, LogicalPlan]()

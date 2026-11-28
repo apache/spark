@@ -18,7 +18,8 @@
 package org.apache.spark.sql.connect.service
 
 import java.nio.file.Path
-import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, TimeUnit}
+import java.time.Duration
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
@@ -109,9 +110,8 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     CacheBuilder
       .newBuilder()
       .ticker(Ticker.systemTicker())
-      .expireAfterAccess(
-        SparkEnv.get.conf.get(Connect.CONNECT_INACTIVE_OPERATIONS_CACHE_EXPIRATION_MINS),
-        TimeUnit.MINUTES)
+      .expireAfterAccess(Duration.ofMinutes(
+        SparkEnv.get.conf.get(Connect.CONNECT_INACTIVE_OPERATIONS_CACHE_EXPIRATION_MINS)))
       .build[String, TerminationInfo]()
 
   // The cache that maps an error id to a throwable. The throwable in cache is independent to
@@ -120,7 +120,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     .newBuilder()
     .ticker(Ticker.systemTicker())
     .maximumSize(ERROR_CACHE_SIZE)
-    .expireAfterAccess(ERROR_CACHE_TIMEOUT_SEC, TimeUnit.SECONDS)
+    .expireAfterAccess(Duration.ofSeconds(ERROR_CACHE_TIMEOUT_SEC))
     .build[String, Throwable]()
 
   val eventManager: SessionEventsManager = SessionEventsManager(this, new SystemClock())

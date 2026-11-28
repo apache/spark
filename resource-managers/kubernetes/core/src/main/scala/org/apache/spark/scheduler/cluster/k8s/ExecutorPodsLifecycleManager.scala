@@ -16,7 +16,7 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
-import java.util.concurrent.TimeUnit
+import java.time.Duration
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -53,7 +53,7 @@ private[spark] class ExecutorPodsLifecycleManager(
   // bounds.
   private lazy val removedExecutorsCache =
     CacheBuilder.newBuilder()
-      .expireAfterWrite(conf.get(KUBERNETES_DELETED_EXECUTORS_CACHE_TIMEOUT), TimeUnit.SECONDS)
+      .expireAfterWrite(Duration.ofSeconds(conf.get(KUBERNETES_DELETED_EXECUTORS_CACHE_TIMEOUT)))
       .build[java.lang.Long, java.lang.Long]()
 
   private var lastFullSnapshotTs: Long = 0
