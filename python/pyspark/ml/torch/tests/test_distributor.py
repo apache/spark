@@ -34,7 +34,12 @@ from pyspark.ml.torch.distributor import TorchDistributor, _get_gpus_owned
 from pyspark.ml.torch.torch_run_process_wrapper import check_parent_alive, clean_and_terminate
 from pyspark.sql import SparkSession
 from pyspark.testing.sqlutils import SPARK_HOME
-from pyspark.testing.utils import have_torch, torch_requirement_message
+from pyspark.testing.utils import (
+    have_pandas,
+    have_torch,
+    pandas_requirement_message,
+    torch_requirement_message,
+)
 
 
 @contextlib.contextmanager
@@ -323,6 +328,7 @@ class TorchDistributorBaselineUnitTestsMixin:
         finally:
             sock.close()
 
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_master_port_reserved_until_training_finishes(self) -> None:
         import socket
 
