@@ -1665,6 +1665,91 @@ class TaskSetManagerSuite
     taskSetManager.checkSpeculatableTasks(0)
   }
 
+  test("SPARK-62336: a resubmitted task can be speculated again after an earlier attempt " +
+    "succeeded while it was speculatable") {
+    val conf = new SparkConf()
+      .set(config.SPECULATION_ENABLED, true)
+      .set(config.SPECULATION_MULTIPLIER, 0.0)
+      .set(config.SPECULATION_QUANTILE, 0.5)
+    sc = new SparkContext("local", "test", conf)
+    sched = new FakeTaskScheduler(sc,
+      ("exec1", "host1"), ("exec2", "host2"), ("exec3", "host3"),
+      ("exec4", "host4"), ("exec5", "host5"))
+    val clock = new ManualClock()
+    val taskSet = FakeTask.createShuffleMapTaskSet(2, 0, 0, Seq(), Seq())
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+    def offer(execId: String, host: String): TaskDescription =
+      manager.resourceOffer(execId, host, NO_PREF)._1.get
+
+    // Both tasks are marked speculatable, but the regular attempt of `task` succeeds before its
+    // speculative copy launches.
+    val task = offer("exec1", "host1")
+    val otherTask = offer("exec2", "host2")
+    manager.speculatableTasks += otherTask.index
+    manager.addPendingTask(otherTask.index, speculatable = true)
+    manager.speculatableTasks += task.index
+    manager.addPendingTask(task.index, speculatable = true)
+    clock.advance(1)
+    manager.handleSuccessfulTask(task.taskId, createTaskResult(task.index))
+    assert(!manager.speculatableTasks.contains(task.index))
+    assert(manager.speculatableTasks.contains(otherTask.index))
+
+    // Losing exec1 loses the shuffle output of `task`, so it is resubmitted and runs again.
+    manager.executorLost("exec1", "host1", ExecutorProcessLost())
+    val rerun = offer("exec3", "host3")
+    assert(rerun.index === task.index)
+    assert(!manager.taskInfos(rerun.taskId).speculative)
+
+    // The stale pending speculative entry of `task` must not launch just because `otherTask`
+    // keeps `speculatableTasks` non-empty. The requested copy of `otherTask` launches instead.
+    val otherSpeculativeCopy = offer("exec4", "host4")
+    assert(otherSpeculativeCopy.index === otherTask.index)
+    assert(manager.taskInfos(otherSpeculativeCopy.taskId).speculative)
+
+    // The rerun of `task` can be speculated again.
+    clock.advance(1)
+    assert(manager.checkSpeculatableTasks(0))
+    assert(sched.speculativeTasks.contains(task.index))
+    val speculativeCopy = offer("exec5", "host5")
+    assert(speculativeCopy.index === task.index)
+    assert(manager.taskInfos(speculativeCopy.taskId).speculative)
+  }
+
+  test("SPARK-62336: marking a partition completed clears its pending speculation") {
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
+    val taskSet = FakeTask.createTaskSet(2)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
+    val task = manager.resourceOffer("exec1", "host1", NO_PREF)._1.get
+    manager.speculatableTasks += task.index
+    manager.addPendingTask(task.index, speculatable = true)
+
+    // Another attempt of the stage completes the partition while this attempt still runs.
+    manager.markPartitionCompleted(taskSet.tasks(task.index).partitionId)
+    assert(!manager.speculatableTasks.contains(task.index))
+  }
+
+  test("SPARK-62336: a stale pending speculative copy does not keep the task set schedulable") {
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"), ("exec3", "host3"))
+    val clock = new ManualClock()
+    val taskSet = FakeTask.createTaskSet(2)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+    val task = manager.resourceOffer("exec1", "host1", NO_PREF)._1.get
+    manager.resourceOffer("exec2", "host2", NO_PREF)._1.get
+
+    // `task` is the only speculatable task, and its regular attempt succeeds before the copy
+    // launches. Nothing is left to launch while the other task runs.
+    manager.speculatableTasks += task.index
+    manager.addPendingTask(task.index, speculatable = true)
+    clock.advance(1)
+    manager.handleSuccessfulTask(task.taskId, createTaskResult(task.index))
+    val (taskDescription, delayReject, _) = manager.resourceOffer("exec3", "host3", ANY)
+    assert(taskDescription.isEmpty)
+    assert(!delayReject)
+    assert(!manager.isSchedulable)
+  }
+
 
   test("SPARK-24755 Executor loss can cause task to not be resubmitted") {
     val conf = new SparkConf().set(config.SPECULATION_ENABLED, true)

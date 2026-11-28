@@ -350,7 +350,7 @@ private[spark] class TaskSetManager(
         list.remove(indexOffset)
         // Speculatable task should only be launched when at most one copy of the
         // original task is running
-        if (!successful(index)) {
+        if (isTaskPendingForDequeue(index, speculative)) {
           if (copiesRunning(index) == 0 && !barrierPendingLaunchTasks.contains(index)) {
             return Some(index)
           } else if (speculative && copiesRunning(index) == 1) {
@@ -361,6 +361,22 @@ private[spark] class TaskSetManager(
     }
     None
   }
+
+  /**
+   * Pending lists are cleaned up lazily, so a speculative entry can outlive the speculation it
+   * was added for, e.g. when the task succeeds and is later resubmitted. Only launch a
+   * speculative copy while its index is still in `speculatableTasks`.
+   */
+  private def isTaskPendingForDequeue(index: Int, speculative: Boolean): Boolean = {
+    !successful(index) && (!speculative || speculatableTasks.contains(index))
+  }
+
+  /**
+   * Whether a requested speculative copy is still waiting to launch. `pendingSpeculatableTasks`
+   * can hold stale entries, and they are not scanned once `speculatableTasks` is empty, so it
+   * cannot answer this on its own.
+   */
+  private def hasPendingSpeculativeTasks: Boolean = speculatableTasks.nonEmpty
 
   /** Check whether a task once ran an attempt on a given host */
   private def hasAttemptOnHost(taskIndex: Int, host: String): Boolean = {
@@ -523,7 +539,7 @@ private[spark] class TaskSetManager(
                 curTime)
             }
           }
-      val hasPendingTasks = pendingTasks.all.nonEmpty || pendingSpeculatableTasks.all.nonEmpty
+      val hasPendingTasks = pendingTasks.all.nonEmpty || hasPendingSpeculativeTasks
       val hasScheduleDelayReject =
         taskDescription.isEmpty &&
           maxLocality == TaskLocality.ANY &&
@@ -827,6 +843,27 @@ private[spark] class TaskSetManager(
   }
 
   /**
+   * Marks the task at `index` as successful and stops the task set once all tasks have succeeded.
+   * Also drops the index from `speculatableTasks`: a succeeded task needs no speculative copy,
+   * and a stale entry would block speculating it again if it is resubmitted later, e.g. after
+   * its shuffle output is lost. Returns false if the task had already succeeded.
+   */
+  private def markTaskSuccessful(index: Int): Boolean = {
+    speculatableTasks -= index
+    if (successful(index)) {
+      false
+    } else {
+      tasksSuccessful += 1
+      successful(index) = true
+      numFailures(index) = 0
+      if (tasksSuccessful == numTasks) {
+        isZombie = true
+      }
+      true
+    }
+  }
+
+  /**
    * Marks a task as successful and notifies the DAGScheduler that the task has ended.
    */
   def handleSuccessfulTask(tid: Long, result: DirectTaskResult[_]): Unit = {
@@ -885,18 +922,11 @@ private[spark] class TaskSetManager(
         interruptThread = true,
         reason = "another attempt succeeded")
     }
-    if (!successful(index)) {
-      tasksSuccessful += 1
+    if (markTaskSuccessful(index)) {
       logInfo(log"Finished ${MDC(TASK_NAME, taskName(info.taskId))} in " +
         log"${MDC(DURATION, info.duration)} ms on ${MDC(HOST, info.host)} " +
         log"(executor ${MDC(LogKeys.EXECUTOR_ID, info.executorId)}) " +
         log"(${MDC(NUM_SUCCESSFUL_TASKS, tasksSuccessful)}/${MDC(NUM_TASKS, numTasks)})")
-      // Mark successful and stop if all the tasks have succeeded.
-      successful(index) = true
-      numFailures(index) = 0
-      if (tasksSuccessful == numTasks) {
-        isZombie = true
-      }
     } else {
       logInfo(log"Ignoring task-finished event for " +
         log"${MDC(TASK_NAME, taskName(info.taskId))} " +
@@ -983,13 +1013,7 @@ private[spark] class TaskSetManager(
 
   private[scheduler] def markPartitionCompleted(partitionId: Int): Unit = {
     partitionToIndex.get(partitionId).foreach { index =>
-      if (!successful(index)) {
-        tasksSuccessful += 1
-        successful(index) = true
-        numFailures(index) = 0
-        if (tasksSuccessful == numTasks) {
-          isZombie = true
-        }
+      if (markTaskSuccessful(index)) {
         maybeFinishTaskSet()
       }
     }
@@ -1204,7 +1228,7 @@ private[spark] class TaskSetManager(
   }
 
   override def isSchedulable: Boolean = !isZombie &&
-    (pendingTasks.all.nonEmpty || pendingSpeculatableTasks.all.nonEmpty)
+    (pendingTasks.all.nonEmpty || hasPendingSpeculativeTasks)
 
   override def addSchedulable(schedulable: Schedulable): Unit = {}
 
