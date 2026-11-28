@@ -173,8 +173,13 @@ case class BloomFilterAggregate(
       numBitsExpression = newNumBitsExpression)
   }
 
+  // Mark as lazy so that the conf is read where the buffers are created.
+  private lazy val version: BloomFilter.Version = BloomFilter.Version.valueOf(
+    "V" + SQLConf.get.getConf(SQLConf.LEGACY_BLOOM_FILTER_AGGREGATE_VERSION))
+
   override def createAggregationBuffer(): BloomFilter = {
-    BloomFilter.create(estimatedNumItems, numBits)
+    // The seed `BloomFilter.create` uses without one.
+    BloomFilter.create(version, estimatedNumItems, numBits, 0)
   }
 
   override def update(buffer: BloomFilter, inputRow: InternalRow): BloomFilter = {
@@ -216,9 +221,9 @@ case class BloomFilterAggregate(
 
 object BloomFilterAggregate {
   final def serialize(obj: BloomFilter): Array[Byte] = {
-    // BloomFilterImpl.writeTo() writes 2 integers (version number and num hash functions), hence
-    // the +8
-    val size = (obj.bitSize() / 8) + 8
+    // V2 and V3 write 4 integers before the words (the version number, the number of hash
+    // functions, the seed and the number of words), hence the +16. V1 writes no seed.
+    val size = (obj.bitSize() / 8) + 16
     require(size <= Integer.MAX_VALUE, s"actual number of bits is too large $size")
     val out = new ByteArrayOutputStream(size.intValue())
     obj.writeTo(out)

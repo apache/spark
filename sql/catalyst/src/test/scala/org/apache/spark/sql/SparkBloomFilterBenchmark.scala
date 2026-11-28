@@ -22,7 +22,8 @@ import org.apache.spark.util.sketch.BloomFilter._
 import org.apache.spark.util.sketch.BloomFilter.Version._
 
 /**
- * Benchmark for Spark's BloomFilter implementations (BloomFilterImpl and BloomFilterImplV2)
+ * Benchmark for Spark's BloomFilter implementations (BloomFilterImpl, BloomFilterImplV2 and
+ * BloomFilterImplV3)
  *
  * To run this benchmark:
  * {{{
@@ -66,6 +67,16 @@ object SparkBloomFilterBenchmark extends BenchmarkBase {
     // Test BloomFilterImplV2 (V2)
     benchmark.addCase(s"BloomFilterImplV2 - $numItems", 3) { _ =>
       val bf = create(V2, numItems, optimalNumOfBits(numItems, fpp), DEFAULT_SEED)
+      var i = 0
+      while (i < valuesPerIteration) {
+        bf.put(i.toLong)
+        i += 1
+      }
+    }
+
+    // Test BloomFilterImplV3 (V3)
+    benchmark.addCase(s"BloomFilterImplV3 - $numItems", 3) { _ =>
+      val bf = create(V3, numItems, optimalNumOfBits(numItems, fpp), DEFAULT_SEED)
       var i = 0
       while (i < valuesPerIteration) {
         bf.put(i.toLong)
@@ -131,6 +142,21 @@ object SparkBloomFilterBenchmark extends BenchmarkBase {
       timer.stopTiming()
     }
 
+    // Test BloomFilterImplV3 (V3)
+    benchmark.addTimerCase(s"BloomFilterImplV3 - $numItems", 3) { timer =>
+      val bf = create(V3, numItems, optimalNumOfBits(numItems, fpp), DEFAULT_SEED)
+      // Populate with existing items
+      existingItems.foreach(i => bf.put(i.toLong))
+
+      timer.startTiming()
+      var i = 0
+      while (i < valuesPerIteration) {
+        bf.mightContain(testItems(i))
+        i += 1
+      }
+      timer.stopTiming()
+    }
+
     benchmark.run()
   }
 
@@ -161,6 +187,16 @@ object SparkBloomFilterBenchmark extends BenchmarkBase {
     // Test V2 with binary PUT
     benchmark.addCase(s"BloomFilterImplV2 - $numItems", 3) { _ =>
       val bf = create(V2, numItems, optimalNumOfBits(numItems, fpp), DEFAULT_SEED)
+      var i = 0
+      while (i < valuesPerIteration) {
+        bf.putBinary(binaryData(i % numItems))
+        i += 1
+      }
+    }
+
+    // Test V3 with binary PUT
+    benchmark.addCase(s"BloomFilterImplV3 - $numItems", 3) { _ =>
+      val bf = create(V3, numItems, optimalNumOfBits(numItems, fpp), DEFAULT_SEED)
       var i = 0
       while (i < valuesPerIteration) {
         bf.putBinary(binaryData(i % numItems))
@@ -214,6 +250,21 @@ object SparkBloomFilterBenchmark extends BenchmarkBase {
     // Test V2 with binary QUERY
     benchmark.addTimerCase(s"BloomFilterImplV2 - $numItems", 3) { timer =>
       val bf = create(V2, numItems, optimalNumOfBits(numItems, fpp), DEFAULT_SEED)
+      // Populate with binary data
+      binaryData.foreach(data => bf.putBinary(data))
+
+      timer.startTiming()
+      var i = 0
+      while (i < valuesPerIteration) {
+        bf.mightContainBinary(queryBinaryData(i))
+        i += 1
+      }
+      timer.stopTiming()
+    }
+
+    // Test V3 with binary QUERY
+    benchmark.addTimerCase(s"BloomFilterImplV3 - $numItems", 3) { timer =>
+      val bf = create(V3, numItems, optimalNumOfBits(numItems, fpp), DEFAULT_SEED)
       // Populate with binary data
       binaryData.foreach(data => bf.putBinary(data))
 

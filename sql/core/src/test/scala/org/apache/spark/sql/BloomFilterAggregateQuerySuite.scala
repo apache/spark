@@ -31,6 +31,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BinaryType, LongType}
 import org.apache.spark.tags.ExtendedSQLTest
+import org.apache.spark.util.sketch.BloomFilter
 
 /**
  * Query tests for the Bloom filter aggregate and filter function.
@@ -308,6 +309,38 @@ class BloomFilterAggregateQuerySuite extends SharedSparkSession with AdaptiveSpa
         |X'0000000200000005000000000000000343A2EC6EA8C117E2D3CDB767296B144FC5BFBCED9737F267',
         |cast(201 as long))""".stripMargin),
       Row(false))
+  }
+
+  test("Test that might_contain can take a constant value input (V3)") {
+    // A V3 bloom filter of the values 1 to 10.
+    val bloom =
+      "X'000000030000000D0000000000000003BCA1BEA6303CE97B9E04A02633051A3A396061BBE7689C56'"
+    checkAnswer(
+      spark.sql(s"SELECT might_contain($bloom, 5L), might_contain($bloom, 201L)"),
+      Row(true, false))
+  }
+
+  test("SPARK-62421: bloom_filter_agg builds the version that the legacy conf sets") {
+    // The filter `BloomFilter.create` builds of 0 to 9, with `version`, the sizes and seed 0.
+    def filterOf(version: BloomFilter.Version, numItems: Long, numBits: Long): BloomFilter = {
+      val filter = BloomFilter.create(version, numItems, numBits, 0)
+      (0L until 10L).foreach(filter.putLong)
+      filter
+    }
+    def check(version: BloomFilter.Version): Unit = {
+      // Without sizes, `bloom_filter_agg` takes the default ones.
+      val bytes = spark.sql("SELECT bloom_filter_agg(CAST(id AS LONG)) FROM range(10)")
+        .head().getAs[Array[Byte]](0)
+      assert(BloomFilter.readFrom(bytes) == filterOf(version,
+        conf.getConf(SQLConf.RUNTIME_BLOOM_FILTER_EXPECTED_NUM_ITEMS),
+        conf.getConf(SQLConf.RUNTIME_BLOOM_FILTER_NUM_BITS)))
+      assert(spark.range(10).stat.bloomFilter("id", 10, 0.03) ==
+        filterOf(version, 10, BloomFilter.optimalNumOfBits(10, 0.03)))
+    }
+    check(BloomFilter.Version.V3)
+    withSQLConf(SQLConf.LEGACY_BLOOM_FILTER_AGGREGATE_VERSION.key -> "2") {
+      check(BloomFilter.Version.V2)
+    }
   }
 
   // Whole-stage codegen, expression codegen alone, and no codegen at all.
