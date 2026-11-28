@@ -42,11 +42,12 @@ import org.apache.spark.sql.internal.SQLConf
  * Note that this rule is stateful and thus should not be reused across query executions.
  */
 case class InsertAdaptiveSparkPlan(
-    adaptiveExecutionContext: AdaptiveExecutionContext) extends Rule[SparkPlan] {
+    adaptiveExecutionContext: AdaptiveExecutionContext,
+    isSubquery: Boolean = false) extends Rule[SparkPlan] {
 
   override def conf: SQLConf = adaptiveExecutionContext.session.sessionState.conf
 
-  override def apply(plan: SparkPlan): SparkPlan = applyInternal(plan, false)
+  override def apply(plan: SparkPlan): SparkPlan = applyInternal(plan, isSubquery)
 
   private def applyInternal(plan: SparkPlan, isSubquery: Boolean): SparkPlan = plan match {
     case _ if !conf.adaptiveExecutionEnabled => plan

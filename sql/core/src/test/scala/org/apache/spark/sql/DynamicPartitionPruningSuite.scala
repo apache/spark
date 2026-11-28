@@ -2909,6 +2909,27 @@ class DynamicPartitionPruningV1SuiteAEOn extends DynamicPartitionPruningV1Suite
       checkAnswer(df, Row(1000, 1) :: Row(1010, 2) :: Row(1020, 2) :: Nil)
     }
   }
+
+  test("SPARK-62405: dynamic pruning build plans are subquery plans") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
+      val df = sql(
+        """
+          |SELECT f.date_id, f.store_id FROM fact_sk f
+          |JOIN dim_store s ON f.store_id = s.store_id AND s.country = 'NL'
+          |WHERE s.state_province != (SELECT max(state_province) FROM dim_stats)
+        """.stripMargin)
+      checkAnswer(df, Row(1000, 1) :: Row(1010, 2) :: Row(1020, 2) :: Nil)
+
+      val root = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+      val pruningPlans = collectWithSubqueries(root.executedPlan) {
+        case plan: AdaptiveSparkPlanExec => plan
+      }
+      assert(pruningPlans.nonEmpty)
+      assert(pruningPlans.forall(_.isSubquery))
+    }
+  }
 }
 
 abstract class DynamicPartitionPruningV2Suite extends DynamicPartitionPruningDataSourceSuiteBase {
