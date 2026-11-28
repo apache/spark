@@ -22,12 +22,12 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Add, AggregateWindowFunction, Ascending, Attribute, BoundReference, CurrentRow, DateAdd, DateAddYMInterval, DecimalAddNoOverflowCheck, Descending, Expression, ExtractANSIIntervalDays, FrameLessOffsetWindowFunction, FrameType, IdentityProjection, IntegerLiteral, MutableProjection, NamedExpression, OffsetWindowFunction, PythonFuncExpression, RangeFrame, RowFrame, RowOrdering, SortOrder, SpecifiedWindowFrame, TimestampAddInterval, TimestampAddYMInterval, UnaryMinus, UnboundedFollowing, UnboundedPreceding, UnsafeProjection, WindowExpression}
+import org.apache.spark.sql.catalyst.expressions.{Add, AggregateWindowFunction, Ascending, Attribute, BoundReference, Cast, CurrentRow, DateAddYMInterval, DecimalAddNoOverflowCheck, Descending, Expression, ExtractANSIIntervalDays, FrameLessOffsetWindowFunction, FrameType, IdentityProjection, IntegerLiteral, MutableProjection, NamedExpression, OffsetWindowFunction, PythonFuncExpression, RangeFrame, RowFrame, RowOrdering, SortOrder, SpecifiedWindowFrame, TimestampAddInterval, TimestampAddYMInterval, UnaryMinus, UnboundedFollowing, UnboundedPreceding, UnixDate, UnsafeProjection, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, DeclarativeAggregate, Max, Min}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{CalendarIntervalType, DateType, DayTimeIntervalType, DecimalType, IntegerType, TimestampNTZType, TimestampType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{CalendarIntervalType, DateType, DayTimeIntervalType, DecimalType, IntegerType, LongType, TimestampNTZType, TimestampType, YearMonthIntervalType}
 import org.apache.spark.sql.types.DayTimeIntervalType.DAY
 import org.apache.spark.util.collection.Utils
 
@@ -116,6 +116,29 @@ trait WindowEvaluatorFactoryBase {
         val ordering = RowOrdering.create(orderSpec, childOutput)
         RangeBoundOrdering(ordering, IdentityProjection, IdentityProjection)
 
+      case (RangeFrame, offset: Expression) if orderSpec.size == 1 &&
+          orderSpec.head.dataType == DateType &&
+          (offset.dataType == IntegerType || offset.dataType == DayTimeIntervalType(DAY, DAY)) =>
+        // Compare the dates and the bound as numbers of days since the epoch in a BIGINT, where
+        // the bound cannot overflow. A DATE bound would not fit past the ends of the DATE range,
+        // where the frame still has a meaning: `2147483647 FOLLOWING` reaches all the following
+        // rows, and `1 FOLLOWING AND 2 FOLLOWING` is empty for the maximum DATE.
+        val sortExpr = orderSpec.head
+        val days = Cast(UnixDate(sortExpr.child), LongType)
+        val offsetDays = offset.dataType match {
+          case IntegerType => Cast(offset, LongType)
+          case _ => Cast(ExtractANSIIntervalDays(offset), LongType)
+        }
+        val boundOffset = sortExpr.direction match {
+          case Descending => UnaryMinus(offsetDays)
+          case Ascending => offsetDays
+        }
+        val current = MutableProjection.create(days :: Nil, childOutput)
+        val bound = MutableProjection.create(Add(days, boundOffset) :: Nil, childOutput)
+        val boundSortExprs =
+          sortExpr.copy(BoundReference(0, LongType, sortExpr.child.nullable)) :: Nil
+        RangeBoundOrdering(RowOrdering.create(boundSortExprs, Nil), current, bound)
+
       case (RangeFrame, offset: Expression) if orderSpec.size == 1 =>
         // Use only the first order expression when the offset is non-null.
         val sortExpr = orderSpec.head
@@ -132,10 +155,7 @@ trait WindowEvaluatorFactoryBase {
 
         // Create the projection which returns the current 'value' modified by adding the offset.
         val boundExpr = (expr.dataType, boundOffset.dataType) match {
-          case (DateType, IntegerType) => DateAdd(expr, boundOffset)
           case (DateType, _: YearMonthIntervalType) => DateAddYMInterval(expr, boundOffset)
-          case (DateType, DayTimeIntervalType(DAY, DAY)) =>
-            DateAdd(expr, ExtractANSIIntervalDays(boundOffset))
           case (TimestampType | TimestampNTZType, CalendarIntervalType) =>
             TimestampAddInterval(expr, boundOffset, Some(timeZone))
           case (TimestampType | TimestampNTZType, _: YearMonthIntervalType) =>

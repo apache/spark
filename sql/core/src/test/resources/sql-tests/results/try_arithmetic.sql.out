@@ -150,6 +150,22 @@ struct<try_add(1, DATE '2021-01-01'):date>
 
 
 -- !query
+SELECT try_add(date'2021-01-01', 2147483647)
+-- !query schema
+struct<try_add(DATE '2021-01-01', 2147483647):date>
+-- !query output
+NULL
+
+
+-- !query
+SELECT try_add(2147483647, date'2021-01-01')
+-- !query schema
+struct<try_add(2147483647, DATE '2021-01-01'):date>
+-- !query output
+NULL
+
+
+-- !query
 SELECT try_add(date'2021-01-01', interval 2 year)
 -- !query schema
 struct<try_add(DATE '2021-01-01', INTERVAL '2' YEAR):date>
@@ -617,6 +633,22 @@ SELECT try_subtract(sum(1), 1) GROUP BY ALL
 struct<try_subtract(sum(1), 1):bigint>
 -- !query output
 0
+
+
+-- !query
+SELECT try_subtract(date'2021-01-01', 1)
+-- !query schema
+struct<try_subtract(DATE '2021-01-01', 1):date>
+-- !query output
+2020-12-31
+
+
+-- !query
+SELECT try_subtract(date'1900-01-01', 2147483647)
+-- !query schema
+struct<try_subtract(DATE '1900-01-01', 2147483647):date>
+-- !query output
+NULL
 
 
 -- !query

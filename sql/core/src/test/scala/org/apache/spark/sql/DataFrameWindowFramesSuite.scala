@@ -649,4 +649,34 @@ class DataFrameWindowFramesSuite extends SharedSparkSession {
         Row("a", 1, "x", "x"),
         Row("b", 0, null, null)))
   }
+
+  test("SPARK-59859: range frame ordered by a date has bounds past the ends of the DATE range") {
+    withTempView("dates") {
+      sql("SELECT * FROM VALUES (DATE'-5877641-06-23'), (DATE'2020-01-01'), (DATE'2020-01-02'), " +
+        "(DATE'+5881580-07-11'), (NULL) AS t(d)").createOrReplaceTempView("dates")
+      // The days since the epoch of the minimum and maximum DATE, and of 2020-01-01.
+      val (lo, hi, d1) = (Int.MinValue, Int.MaxValue, 18262)
+      def counts(frame: String): DataFrame =
+        sql(s"SELECT unix_date(d), count(*) OVER (ORDER BY $frame) FROM dates")
+      Seq(true, false).foreach { ansiEnabled =>
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+          // The upper bound of every row but the first is past the maximum DATE.
+          checkAnswer(
+            counts("d RANGE BETWEEN CURRENT ROW AND 2147483647 FOLLOWING"),
+            Seq(Row(lo, 1), Row(d1, 3), Row(d1 + 1, 2), Row(hi, 1), Row(null, 1)))
+          // The lower bound of the maximum DATE is past it, so its frame is empty.
+          checkAnswer(
+            counts("d RANGE BETWEEN 1 FOLLOWING AND 2 FOLLOWING"),
+            Seq(Row(lo, 0), Row(d1, 1), Row(d1 + 1, 0), Row(hi, 0), Row(null, 1)))
+          // In descending order, the bound of a PRECEDING offset is later than the date.
+          checkAnswer(
+            counts("d DESC RANGE BETWEEN 2147483647 PRECEDING AND CURRENT ROW"),
+            Seq(Row(lo, 1), Row(d1, 3), Row(d1 + 1, 2), Row(hi, 1), Row(null, 1)))
+          checkAnswer(
+            counts("d RANGE BETWEEN INTERVAL '1' DAY PRECEDING AND INTERVAL '1' DAY FOLLOWING"),
+            Seq(Row(lo, 1), Row(d1, 2), Row(d1 + 1, 2), Row(hi, 1), Row(null, 1)))
+        }
+      }
+    }
+  }
 }

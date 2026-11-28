@@ -23,7 +23,7 @@ import java.time.{Instant, LocalDateTime, ZoneId}
 import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkConf, SparkRuntimeException, SparkUpgradeException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkArithmeticException, SparkConf, SparkRuntimeException, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{CEST, LA}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.functions._
@@ -473,6 +473,49 @@ class DateFunctionsSuite extends SharedSparkSession {
           parameters = Map("functionName" -> function),
           sqlState = "22023")
       }
+    }
+  }
+
+  gridTest("SPARK-59859: DATETIME_OVERFLOW of date arithmetic has the query context")(
+      Seq(false, true)) { ansiEnabled =>
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+      checkError(
+        exception = intercept[SparkArithmeticException] {
+          sql("SELECT date_add(d, 1), date_add(d, 2147483647) " +
+            "FROM VALUES (DATE'2020-01-01') AS t(d)").collect()
+        },
+        condition = "DATETIME_OVERFLOW",
+        parameters = Map("operation" -> "add 2147483647 days to DATE '2020-01-01'"),
+        context = ExpectedContext(fragment = "date_add(d, 2147483647)", start = 23, stop = 45))
+      checkError(
+        exception = intercept[SparkArithmeticException] {
+          sql("SELECT d - 1, date_sub(d, 1) FROM VALUES (DATE'-5877641-06-23') AS t(d)")
+            .collect()
+        },
+        condition = "DATETIME_OVERFLOW",
+        parameters = Map("operation" -> "subtract 1 days from DATE '-5877641-06-23'"),
+        context = ExpectedContext(fragment = "d - 1", start = 7, stop = 11))
+      checkError(
+        exception = intercept[SparkArithmeticException] {
+          sql("SELECT d + INTERVAL '1' DAY FROM VALUES (DATE'+5881580-07-11') AS t(d)")
+            .collect()
+        },
+        condition = "DATETIME_OVERFLOW",
+        parameters = Map("operation" -> "add 1 days to DATE '+5881580-07-11'"),
+        context = ExpectedContext(fragment = "d + INTERVAL '1' DAY", start = 7, stop = 26))
+      val df = Seq(Date.valueOf("2020-01-01")).toDF("d")
+      checkError(
+        exception = intercept[SparkArithmeticException] {
+          df.select(date_add(col("d"), lit(2147483647))).collect()
+        },
+        condition = "DATETIME_OVERFLOW",
+        parameters = Map("operation" -> "add 2147483647 days to DATE '2020-01-01'"),
+        context = ExpectedContext(
+          fragment = "date_add", callSitePattern = getCurrentClassCallSitePattern))
+      checkAnswer(
+        sql("SELECT try_add(hi, 1), try_subtract(lo, INTERVAL '1' DAY) " +
+          "FROM VALUES (DATE'+5881580-07-11', DATE'-5877641-06-23') AS t(hi, lo)"),
+        Row(null, null))
     }
   }
 

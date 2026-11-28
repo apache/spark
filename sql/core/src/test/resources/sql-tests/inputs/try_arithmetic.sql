@@ -14,6 +14,8 @@ SELECT try_add(sum(1), 1) GROUP BY ALL;
 -- Date + Integer
 SELECT try_add(date'2021-01-01', 1);
 SELECT try_add(1, date'2021-01-01');
+SELECT try_add(date'2021-01-01', 2147483647);
+SELECT try_add(2147483647, date'2021-01-01');
 
 -- Date + Interval
 SELECT try_add(date'2021-01-01', interval 2 year);
@@ -73,6 +75,10 @@ SELECT try_subtract(1, (2147483647 + 1));
 SELECT try_subtract(1L, (9223372036854775807L + 1L));
 SELECT try_subtract(1, 1.0 / 0.0);
 SELECT try_subtract(sum(1), 1) GROUP BY ALL;
+
+-- Date - Integer
+SELECT try_subtract(date'2021-01-01', 1);
+SELECT try_subtract(date'1900-01-01', 2147483647);
 
 -- Interval - Interval
 SELECT try_subtract(interval 2 year, interval 3 year);
