@@ -64,7 +64,7 @@ class ResolveReferencesInAggregate(val catalogManager: CatalogManager) extends S
     val resolvedAggExprsBasic = a.aggregateExpressions.map(
       resolveExpressionByPlanChildren(_, planForResolve))
     val resolvedAggExprsWithLCA = resolveLateralColumnAlias(resolvedAggExprsBasic)
-    val resolvedAggExprsFinal = resolvedAggExprsWithLCA.map(resolveColsLastResort)
+    val resolvedAggExprsFinal = resolveSelectListColsLastResort(resolvedAggExprsWithLCA)
       .map(e => aliasIfOuterReference(e.asInstanceOf[NamedExpression]))
     // `groupingExpressions` may rely on `aggregateExpressions`, due to features like GROUP BY alias
     // and GROUP BY ALL. We only do basic resolution for `groupingExpressions`, and will further
