@@ -776,16 +776,13 @@ object InlineOuterGeneratorBuilder extends InlineGeneratorBuilderBase {
  *   20   NULL   2
  * }}}
  *
- * This generator uses interpreted evaluation ([[CodegenFallback]]); `GenerateExec` therefore
- * disables whole-stage codegen for the enclosing `Generate`. The per-array/per-ordinality zip with
- * NULL padding does not map onto the existing [[CollectionGenerator]] codegen path (which emits a
- * single `ArrayData`/`MapData`), and its interpreted `eval` is already lazy (one row built per
- * pull). Interpreted generation is the same choice made by other non-`CollectionGenerator`
- * generators such as [[ReplicateRows]]. A dedicated codegen path (analogous to `arrays_zip`) is
- * possible future work if UNNEST becomes hot in whole-stage-codegen pipelines.
+ * Under whole-stage codegen, `GenerateExec` generates the loop over the arrays itself (see
+ * `GenerateExec.codeGenUnnest`): the per-array zip with NULL padding and the ordinality do not
+ * map onto the [[CollectionGenerator]] code path, which reads a single `ArrayData`/`MapData`.
+ * [[eval]] is the interpreted path.
  */
 case class Unnest(children: Seq[Expression], withOrdinality: Boolean)
-  extends Generator with CodegenFallback {
+  extends Generator {
 
   private lazy val arrayElementTypes: Seq[ArrayType] =
     children.map(_.dataType.asInstanceOf[ArrayType])
@@ -863,6 +860,11 @@ case class Unnest(children: Seq[Expression], withOrdinality: Boolean)
       new GenericInternalRow(fields)
     }
   }
+
+  // `GenerateExec` generates the code of UNNEST itself and does not call this; UNNEST can only
+  // appear as the generator of a `Generate`.
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
 
   override def prettyName: String = "unnest"
 

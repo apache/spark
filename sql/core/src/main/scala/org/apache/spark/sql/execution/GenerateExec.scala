@@ -150,6 +150,7 @@ case class GenerateExec(
     val requiredInput = requiredChildOutput.map(attrToInputCode)
     boundGenerator match {
       case e: CollectionGenerator => codeGenCollection(ctx, e, requiredInput)
+      case u: Unnest => codeGenUnnest(ctx, u, requiredInput)
       case g => codeGenIterableOnce(ctx, g, requiredInput)
     }
   }
@@ -237,6 +238,68 @@ case class GenerateExec(
        |  $numOutput.add(1);
        |  $updateRowData
        |  ${consume(ctx, input ++ position ++ values)}
+       |}
+     """.stripMargin
+  }
+
+  /**
+   * Generate code for [[Unnest]]. The arrays are expanded in parallel: there is one row for each
+   * index up to the length of the longest array, an array that is NULL or shorter than that gives
+   * NULL, and the optional ordinality is the 1-based index as a BIGINT. See [[Unnest.eval]].
+   */
+  private def codeGenUnnest(
+      ctx: CodegenContext,
+      u: Unnest,
+      input: Seq[ExprCode]): String = {
+    val arrays = u.children.map(_.genCode(ctx))
+    val index = ctx.freshName("index")
+    val numRows = ctx.freshName("numRows")
+    val numElements = arrays.map(_ => ctx.freshName("numElements"))
+
+    // Add a check if the generate outer flag is true.
+    val checks = optionalCode(outer, s"($index == -1)")
+    val padded = arrays.length > 1
+    val values = arrays.zip(numElements).zip(u.children).map { case ((array, n), child) =>
+      val at = child.dataType.asInstanceOf[ArrayType]
+      // With a single array, every index is within it, so only several arrays need the check.
+      val pastEnd = optionalCode(padded, s"$index >= $n")
+      codeGenAccessor(ctx, array.value, "col", index, at.elementType, at.containsNull,
+        checks ++ pastEnd)
+    }
+    // Variables, not expressions of `index`, so that a method a parent operator splits its code
+    // into can take them as parameters.
+    val ordinality = if (u.withOrdinality) {
+      val value = JavaCode.variable(ctx.freshName("ordinality"), LongType)
+      if (outer) {
+        val isNull = JavaCode.isNullVariable(ctx.freshName("isNull"))
+        val code =
+          code"""
+             |boolean $isNull = $index == -1;
+             |long $value = $index + 1L;
+           """.stripMargin
+        Seq(ExprCode(code, isNull, value))
+      } else {
+        Seq(ExprCode(code"long $value = $index + 1L;", FalseLiteral, value))
+      }
+    } else {
+      Seq.empty
+    }
+
+    // A NULL array has no elements. In case of outer=true the loop is executed once with the index
+    // set to -1 when no array has elements, and the accessors then give NULL.
+    val initNumElements = arrays.zip(numElements).map { case (array, n) =>
+      s"int $n = ${array.isNull} ? 0 : ${array.value}.numElements();"
+    }
+    val maxNumElements = numElements.reduceLeft((a, b) => s"java.lang.Math.max($a, $b)")
+    val init = if (outer) s"$numRows == 0 ? -1 : 0" else "0"
+    val numOutput = metricTerm(ctx, "numOutputRows")
+    s"""
+       |${arrays.map(_.code).mkString("\n")}
+       |${initNumElements.mkString("\n")}
+       |int $numRows = $maxNumElements;
+       |for (int $index = $init; $index < $numRows; $index++) {
+       |  $numOutput.add(1);
+       |  ${consume(ctx, input ++ values ++ ordinality)}
        |}
      """.stripMargin
   }
