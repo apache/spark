@@ -112,6 +112,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
         LimitPushDown,
         LimitPushDownThroughWindow,
         RewriteSizeOfArrayStruct,
+        // Runs before `ColumnPruning`, which may insert a `Project` between the `Aggregate`
+        // and the `Generate`.
+        RemoveRedundantGenerate,
         ColumnPruning,
         GenerateOptimization,
         // Operator combine
