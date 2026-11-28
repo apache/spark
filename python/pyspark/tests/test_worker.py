@@ -77,10 +77,10 @@ class WorkerMetricsTests(unittest.TestCase):
 
     def test_constructor_reuses_collector_without_reset(self):
         metrics = WorkerMetrics()
-        metrics.set("bootTimestampMs", 123)
+        metrics.set("bootTimestampNs", 123)
         metrics.increment("rows", 2)
         self.assertIs(WorkerMetrics(), metrics)
-        self.assertEqual(WorkerMetrics().to_dict(), {"bootTimestampMs": 123, "rows": 2})
+        self.assertEqual(WorkerMetrics().to_dict(), {"bootTimestampNs": 123, "rows": 2})
 
     def test_reset_isolates_new_task_from_existing_timer(self):
         metrics = WorkerMetrics()
@@ -97,27 +97,29 @@ class WorkerMetricsTests(unittest.TestCase):
                 pass
         previous_timer.add_duration_ns(3_000_000)
         self.assertIs(WorkerMetrics(), metrics)
-        self.assertEqual(metrics.to_dict(), {"currentTaskRows": 1, "currentTaskDuration": 2})
+        self.assertEqual(
+            metrics.to_dict(), {"currentTaskRows": 1, "currentTaskDuration": 2_000_000}
+        )
 
-    def test_set_current_timestamp_uses_epoch_milliseconds(self):
+    def test_set_current_timestamp_uses_epoch_nanoseconds(self):
         metrics = WorkerMetrics()
         with patch("pyspark.worker_metrics.time.time_ns", return_value=1_700_000_000_123_456_789):
-            metrics.set_current_timestamp("bootTimestampMs")
-        self.assertEqual(metrics.to_dict(), {"bootTimestampMs": 1_700_000_000_123})
+            metrics.set_current_timestamp("bootTimestampNs")
+        self.assertEqual(metrics.to_dict(), {"bootTimestampNs": 1_700_000_000_123_456_789})
 
-    def test_accumulate_before_converting_to_milliseconds(self):
+    def test_durations_are_reported_in_exact_nanoseconds(self):
         metrics = WorkerMetrics()
-        # Control the clock to retain fractional milliseconds and exclude gaps between blocks.
+        # Control the clock to keep sub-microsecond intervals and exclude gaps between blocks.
         with patch(
             "pyspark.worker_metrics.time.perf_counter_ns",
-            side_effect=[10_000_000, 10_600_000, 100_000_000, 100_700_000],
+            side_effect=[10_000, 10_600, 100_000, 100_700],
         ):
             with metrics.measure("duration"):
                 pass
-            self.assertEqual(metrics.to_dict(), {"duration": 0})
+            self.assertEqual(metrics.to_dict(), {"duration": 600})
             with metrics.measure("duration"):
                 pass
-        self.assertEqual(metrics.to_dict(), {"duration": 1})
+        self.assertEqual(metrics.to_dict(), {"duration": 1_300})
 
     def test_nested_timings_are_inclusive(self):
         metrics = WorkerMetrics()
@@ -128,7 +130,7 @@ class WorkerMetricsTests(unittest.TestCase):
             with metrics.measure("outer"):
                 with metrics.measure("inner"):
                     pass
-        self.assertEqual(metrics.to_dict(), {"outer": 5, "inner": 2})
+        self.assertEqual(metrics.to_dict(), {"outer": 5_000_000, "inner": 2_000_000})
 
     def test_reuse_timer_scope(self):
         metrics = WorkerMetrics()
@@ -143,7 +145,7 @@ class WorkerMetricsTests(unittest.TestCase):
                         pass
             with timer:
                 pass
-        self.assertEqual(metrics.to_dict(), {"duration": 3})
+        self.assertEqual(metrics.to_dict(), {"duration": 3_000_000})
 
     def test_accumulate_and_propagate_exception(self):
         metrics = WorkerMetrics()
@@ -156,7 +158,7 @@ class WorkerMetricsTests(unittest.TestCase):
                     raise ValueError("worker failure")
             with metrics.measure("duration"):
                 pass
-        self.assertEqual(metrics.to_dict(), {"duration": 3})
+        self.assertEqual(metrics.to_dict(), {"duration": 3_000_000})
 
 
 class ReadInThreadTests(PySparkBaseTestCase):
@@ -361,6 +363,31 @@ class WorkerInitResponseTests(unittest.TestCase):
         ser = CPickleSerializer()
         self.assertEqual([ser._read_with_length(outfile) for _ in range(2)], [2, 4])
         self.assertEqual(read_int(outfile), SpecialLengths.METRICS_DATA)
+
+    def test_metrics_report_uses_nanoseconds(self):
+        # Sleep 2 ms per row, so that the execution duration is at least 4 ms.
+        command = self._command(lambda _, it: (time.sleep(0.002) or x * 2 for x in it))
+        worker_input = self._worker_input(command, [1, 2])
+        outfile = self._run(worker_input)
+        self._read_init_response(outfile)
+        ser = CPickleSerializer()
+        self.assertEqual([ser._read_with_length(outfile) for _ in range(2)], [2, 4])
+        self.assertEqual(read_int(outfile), SpecialLengths.METRICS_DATA)
+        report = json.loads(outfile.read(read_int(outfile)).decode("utf-8"))
+        self.assertFalse([name for name in report if name.endswith("Ms")])
+        # The JVM requires these timings in nanoseconds. The report was written moments ago, so
+        # a timestamp in another unit would be far from the current time in nanoseconds.
+        boot, init, finish = (report[f"{name}TimestampNs"] for name in ("boot", "init", "finish"))
+        now = time.time_ns()
+        for timestamp in (boot, init, finish):
+            self.assertLess(abs(now - timestamp), 60_000_000_000)
+        self.assertTrue(boot <= init <= finish)
+        # Allow for the wall clock's resolution, which is coarse on some platforms, and for the
+        # wall clock being adjusted while the duration is measured with another clock.
+        duration = report["pythonExecutionDurationNs"]
+        resolution = int(time.get_clock_info("time").resolution * 1_000_000_000) + 1
+        self.assertLessEqual(duration, finish - init + resolution + duration // 100)
+        self.assertGreaterEqual(duration, 4_000_000)
 
     def test_payload_error_is_reported_in_init_response(self):
         worker_input = self._worker_input(self._framed(b"not a pickle"), [1])

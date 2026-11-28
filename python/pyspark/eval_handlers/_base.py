@@ -339,9 +339,9 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
         if not self._detailed_timing_enabled:
             return
         metrics = self._metrics
-        self._input_preparation_timer = metrics.measure("pythonInputPreparationTime")
-        self._udf_execution_timer = metrics.measure("pythonUDFExecutionTime")
-        self._output_preparation_timer = metrics.measure("pythonOutputPreparationTime")
+        self._input_preparation_timer = metrics.measure("pythonInputPreparationTimeNs")
+        self._udf_execution_timer = metrics.measure("pythonUDFExecutionTimeNs")
+        self._output_preparation_timer = metrics.measure("pythonOutputPreparationTimeNs")
         metrics.set("pythonNumTimingReports", 1)
         metrics.set("pythonNumTimedBatches", 0)
 

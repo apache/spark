@@ -72,9 +72,9 @@ class WorkerMetrics:
     """One collector per Python worker process, reset by the worker before each task.
 
     set stores a supplied value; increment adds to a counter.
-    set_current_timestamp reads the clock and stores epoch milliseconds.
+    set_current_timestamp reads the clock and stores epoch nanoseconds.
     measure creates timer scopes that accumulate nanoseconds in a separate shared dictionary.
-    to_dict combines both dictionaries, converting only durations to milliseconds.
+    to_dict combines both dictionaries.
     """
 
     _instance: ClassVar[Optional["WorkerMetrics"]] = None
@@ -94,15 +94,15 @@ class WorkerMetrics:
 
     def reset(self) -> None:
         """Start fresh task state while keeping the singleton's identity."""
-        # Counters, spill byte counts, and epoch timestamps need no conversion at report time.
+        # Values from set, increment and set_current_timestamp, reported as stored.
         self._values_in_report_units: dict[str, int] = {}
         # Existing timers keep the old dictionary. A fresh dictionary keeps their
         # measurements out of the next task's report.
         self._duration_totals_ns: dict[str, int] = {}
 
     def set_current_timestamp(self, name: str) -> None:
-        """Read the current clock and store its epoch milliseconds under name."""
-        self.set(name, time.time_ns() // 1_000_000)
+        """Read the current clock and store its epoch nanoseconds under name."""
+        self.set(name, time.time_ns())
 
     def set(self, name: str, value: int) -> None:
         """Store the supplied value unchanged, replacing any earlier value."""
@@ -116,7 +116,10 @@ class WorkerMetrics:
         self._values_in_report_units[name] = self._values_in_report_units.get(name, 0) + value
 
     def measure(self, name: str) -> _WorkerTimer:
-        """Create a task-bound duration handle for with or add_duration_ns."""
+        """Create a task-bound duration handle for with or add_duration_ns.
+
+        The duration is reported in nanoseconds under name, so name should end in Ns.
+        """
         # Register zero so an empty supported task can still report this timing.
         self._duration_totals_ns.setdefault(name, 0)
         return _WorkerTimer(self._duration_totals_ns, name)
@@ -124,10 +127,6 @@ class WorkerMetrics:
     def to_dict(self) -> dict[str, int]:
         """Build the numeric report dictionary consumed by report_metrics.
 
-        Counters, bytes, and epoch timestamps already have their reporting units. Only the
-        accumulated duration totals require conversion from nanoseconds to milliseconds.
+        Every value is reported as stored, so timestamps and durations are in nanoseconds.
         """
-        return {
-            **self._values_in_report_units,
-            **{name: duration // 1_000_000 for name, duration in self._duration_totals_ns.items()},
-        }
+        return {**self._values_in_report_units, **self._duration_totals_ns}

@@ -733,14 +733,14 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   private val metricsReport =
-    "{\"bootTimestampMs\":1250,\"initTimestampMs\":2500," +
-      "\"finishTimestampMs\":3750,\"pythonExecutionDurationMs\":42," +
+    "{\"bootTimestampNs\":1250,\"initTimestampNs\":2500," +
+      "\"finishTimestampNs\":3750,\"pythonExecutionDurationNs\":42," +
       "\"memoryBytesSpilled\":7,\"diskBytesSpilled\":9}"
   private val expectedMetrics = Map(
-    "bootTimestampMs" -> 1250L,
-    "initTimestampMs" -> 2500L,
-    "finishTimestampMs" -> 3750L,
-    "pythonExecutionDurationMs" -> 42L,
+    "bootTimestampNs" -> 1250L,
+    "initTimestampNs" -> 2500L,
+    "finishTimestampNs" -> 3750L,
+    "pythonExecutionDurationNs" -> 42L,
     "memoryBytesSpilled" -> 7L,
     "diskBytesSpilled" -> 9L)
 
@@ -785,7 +785,7 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
     val invalidValues = Seq("null", "true", "\"42\"", "42.0", "[]", "{}",
       "9223372036854775808", "-9223372036854775809")
     val reportWithExtra = metricsReport.dropRight(1) + ",\"futureMetric\":17}"
-    val fields = Seq("pythonExecutionDurationMs" -> 42,
+    val fields = Seq("pythonExecutionDurationNs" -> 42,
       "memoryBytesSpilled" -> 7, "diskBytesSpilled" -> 9, "futureMetric" -> 17)
     for {
       (name, originalValue) <- fields
@@ -805,12 +805,12 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
   test("SPARK-59773: worker metrics preserve int64 values exactly") {
     Seq(Long.MinValue, 9007199254740993L, Long.MaxValue).foreach { value =>
       val json = metricsReport.replace(
-        "\"pythonExecutionDurationMs\":42", "\"pythonExecutionDurationMs\":" + value)
+        "\"pythonExecutionDurationNs\":42", "\"pythonExecutionDurationNs\":" + value)
         .replace("\"memoryBytesSpilled\":7", "\"memoryBytesSpilled\":" + value)
         .replace("\"diskBytesSpilled\":9", "\"diskBytesSpilled\":" + value)
       val stream = framedMetricsStream(json)
       assert(BasePythonRunner.readWorkerMetrics(stream) ==
-        expectedMetrics ++ Map("pythonExecutionDurationMs" -> value,
+        expectedMetrics ++ Map("pythonExecutionDurationNs" -> value,
           "memoryBytesSpilled" -> value, "diskBytesSpilled" -> value))
       checkEndMarkers(stream)
     }
@@ -818,7 +818,7 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
 
   test("SPARK-59773: worker metrics reject malformed, duplicate, and non-object JSON") {
     val invalid = Seq("[]", "null", "42", metricsReport.dropRight(1), metricsReport + "{}",
-      metricsReport.dropRight(1) + ",\"bootTimestampMs\":9}", "{\"future\":1,\"future\":2}")
+      metricsReport.dropRight(1) + ",\"bootTimestampNs\":9}", "{\"future\":1,\"future\":2}")
     invalid.foreach { json =>
       val stream = framedMetricsStream(json)
       intercept[SparkException] {
@@ -848,6 +848,19 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
     val result = BasePythonRunner.readWorkerMetrics(stream)
     assert(result == expectedMetrics + ("futureMetric" -> 17L))
     checkEndMarkers(stream)
+  }
+
+  test("SPARK-62067: the runner start time has sub-millisecond resolution on the wall clock") {
+    // Boot, init and total subtract this start time from the worker's timestamps. A millisecond
+    // clock scaled to nanoseconds would make them up to 1 ms too large, and the tests that run a
+    // Python worker would still pass.
+    val beforeMs = System.currentTimeMillis()
+    val readings = Seq.fill(100)(BasePythonRunner.currentTimeNanos())
+    val afterMs = System.currentTimeMillis()
+    // Nanoseconds since the epoch, like the worker's timestamps.
+    assert(readings.forall(ns => ns / 1000000 >= beforeMs && ns / 1000000 <= afterMs))
+    // A millisecond clock scaled to nanoseconds would always end in 000000.
+    assert(readings.exists(_ % 1000000 != 0))
   }
 
   private val initErrorJson =

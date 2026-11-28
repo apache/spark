@@ -27,7 +27,7 @@ trait PythonSQLMetrics { self: SparkPlan =>
     PythonSQLMetrics.pythonSizeMetricsDesc.map { case (k, v) =>
       k -> SQLMetrics.createSizeMetric(sparkContext, v)
     } ++ PythonSQLMetrics.pythonTimingMetricsDesc.map { case (k, v) =>
-      k -> SQLMetrics.createTimingMetric(sparkContext, v)
+      k -> SQLMetrics.createNanoTimingMetric(sparkContext, v)
     } ++ PythonSQLMetrics.pythonOtherMetricsDesc.map { case (k, v) =>
       k -> SQLMetrics.createMetric(sparkContext, v)
     } ++ additionalMetrics ++ phaseMetrics
@@ -41,7 +41,7 @@ trait PythonSQLMetrics { self: SparkPlan =>
 
   protected def createPythonPhaseMetrics(): Map[String, SQLMetric] = {
     PythonSQLMetrics.pythonPhaseTimingMetricsDesc.map { case (k, v) =>
-      k -> SQLMetrics.createTimingMetric(sparkContext, v)
+      k -> SQLMetrics.createNanoTimingMetric(sparkContext, v)
     } ++ PythonSQLMetrics.pythonPhaseCountMetricsDesc.map { case (k, v) =>
       k -> SQLMetrics.createMetric(sparkContext, v)
     }
@@ -58,12 +58,14 @@ object PythonSQLMetrics {
     )
   }
 
+  // Timings are in nanoseconds. The unit is part of each key and name, so that they differ
+  // from the millisecond metrics of earlier versions wherever metrics are stored by name.
   val pythonTimingMetricsDesc: Map[String, String] = {
     Map(
-      "pythonBootTime" -> "time to start Python workers",
-      "pythonInitTime" -> "time to initialize Python workers",
-      "pythonTotalTime" -> "time to run Python workers",
-      "pythonProcessingTime" -> "time to execute Python code"
+      "pythonBootTimeNs" -> "time to start Python workers (ns)",
+      "pythonInitTimeNs" -> "time to initialize Python workers (ns)",
+      "pythonTotalTimeNs" -> "time to run Python workers (ns)",
+      "pythonProcessingTimeNs" -> "time to execute Python code (ns)"
     )
   }
 
@@ -73,13 +75,14 @@ object PythonSQLMetrics {
       "pythonNumPipelinedTasks" -> "number of pipelined Python worker tasks")
   }
 
+  // In nanoseconds, with the unit in each key and name, like pythonTimingMetricsDesc.
   val pythonPhaseTimingMetricsDesc: Map[String, String] = {
     Map(
-      "pythonDataReadTime" -> "time to read and deserialize Arrow data",
-      "pythonInputPreparationTime" -> "time to prepare Python UDF input",
-      "pythonUDFExecutionTime" -> "time to evaluate Python UDFs",
-      "pythonOutputPreparationTime" -> "time to prepare Python UDF output",
-      "pythonDataWriteTime" -> "time to serialize and write Arrow data")
+      "pythonDataReadTimeNs" -> "time to read and deserialize Arrow data (ns)",
+      "pythonInputPreparationTimeNs" -> "time to prepare Python UDF input (ns)",
+      "pythonUDFExecutionTimeNs" -> "time to evaluate Python UDFs (ns)",
+      "pythonOutputPreparationTimeNs" -> "time to prepare Python UDF output (ns)",
+      "pythonDataWriteTimeNs" -> "time to serialize and write Arrow data (ns)")
   }
 
   val pythonPhaseCountMetricsDesc: Map[String, String] = {
