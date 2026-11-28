@@ -28,6 +28,7 @@ from pyspark.errors import PySparkAssertionError
 from pyspark.serializers import (
     CPickleSerializer,
     UTF8Deserializer,
+    read_int,
     read_long,
     write_int,
 )
@@ -55,6 +56,8 @@ def main(infile: IO, outfile: IO) -> None:
         if spark is None or spark.session_id != cloned_session_id:
             cloned_url = connect_url + ";session_id=" + cloned_session_id
             spark = SparkSession.builder.remote(cloned_url).create()
+            for tag in session_tags:
+                spark.addTag(tag)
             # create() fills the default/active slots only when they are empty, and the bootstrap
             # session below already claimed them. Point them at the cloned session so that
             # SparkSession.active() and getActiveSession() inside the user function return the
@@ -100,6 +103,10 @@ def main(infile: IO, outfile: IO) -> None:
         func = worker.read_command(pickle_ser, infile)
         write_int(0, outfile)
         outfile.flush()
+
+        session_tags = [utf8_deserializer.loads(infile) for _ in range(read_int(infile))]
+        for tag in session_tags:
+            spark_connect_session.addTag(tag)
 
         while True:
             df_ref_id = utf8_deserializer.loads(infile)
