@@ -84,6 +84,7 @@ object TreePattern extends Enumeration  {
   val NULL_LITERAL: Value = Value
   val OR: Value = Value
   val OUTER_REFERENCE: Value = Value
+  val OVERLAPS: Value = Value
   val PARAMETER: Value = Value
   val PARSE_SQL: Value = Value
   val PER_PARTITION_RUNTIME_FILTER_SUBQUERY: Value = Value
