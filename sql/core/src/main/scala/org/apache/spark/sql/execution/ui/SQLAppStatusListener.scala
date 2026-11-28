@@ -123,7 +123,7 @@ class SQLAppStatusListener(
 
     exec.jobs = exec.jobs + (jobId -> JobExecutionStatus.RUNNING)
     exec.stages ++= event.stageIds.toSet
-    update(exec, force = true)
+    update(exec, force = live)
   }
 
   override def onStageSubmitted(event: SparkListenerStageSubmitted): Unit = {
