@@ -91,10 +91,9 @@ private[sql] object CatalogV2Implicits {
           throw QueryExecutionErrors.unsupportedPartitionTransformError(transform)
       }
 
-      // Parser guarantees that partition and clustering cannot co-exist.
-      assert(!(identityCols.toSeq.nonEmpty && clusterBySpec.nonEmpty))
-      // Parser guarantees that bucketing and clustering cannot co-exist.
-      assert(!(bucketSpec.nonEmpty && clusterBySpec.nonEmpty))
+      if (clusterBySpec.nonEmpty) {
+        ClusterBySpec.validateTableLayout(identityCols.nonEmpty, bucketSpec.nonEmpty)
+      }
 
       (identityCols.toSeq, bucketSpec, clusterBySpec)
     }

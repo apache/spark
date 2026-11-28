@@ -287,6 +287,15 @@ object ClusterBySpec {
     ret
   }
 
+  private[sql] def validateTableLayout(hasPartitioning: Boolean, hasBucketing: Boolean): Unit = {
+    if (hasPartitioning) {
+      throw QueryCompilationErrors.clusterByWithPartitionedBy()
+    }
+    if (hasBucketing) {
+      throw QueryCompilationErrors.clusterByWithBucketing()
+    }
+  }
+
   /**
    * Converts the clustering column property to a ClusterBySpec.
    */

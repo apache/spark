@@ -110,7 +110,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
             if (provider.supportsExternalMetadata()) {
               provider.getTable(
                 table.schema,
-                getV2Partitioning(table),
+                V1Table(table).partitioning,
                 dsOptions.asCaseSensitiveMap())
             } else {
               provider.getTable(
@@ -148,16 +148,6 @@ class V2SessionCatalog(catalog: SessionCatalog)
       case _ => ident.asTableIdentifier.nameParts
     }
     throw QueryCompilationErrors.timeTravelUnsupportedError(toSQLId(nameParts))
-  }
-
-  private def getV2Partitioning(table: CatalogTable): Array[Transform] = {
-    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-    val v2Partitioning = table.partitionColumnNames.asTransforms
-    val v2Bucketing = table.bucketSpec.map(
-      spec => Array(spec.asTransform)).getOrElse(Array.empty)
-    val v2Clustering = table.clusterBySpec.map(
-      spec => Array(spec.asTransform)).getOrElse(Array.empty)
-    v2Partitioning ++ v2Bucketing ++ v2Clustering
   }
 
   override def invalidateTable(ident: Identifier): Unit = {
@@ -314,6 +304,12 @@ class V2SessionCatalog(catalog: SessionCatalog)
       catalogTable.storage
     }
 
+    changes.foreach {
+      case change: TableChange.ClusterBy if change.clusteringColumns.nonEmpty =>
+        ClusterBySpec.validateTableLayout(
+          catalogTable.partitionColumnNames.nonEmpty, catalogTable.bucketSpec.nonEmpty)
+      case _ =>
+    }
     val finalProperties = CatalogV2Util.applyClusterByChanges(properties, schema, changes)
     try {
       if (changes.exists(!_.isInstanceOf[TableChange.ColumnChange])) {
