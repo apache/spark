@@ -83,7 +83,23 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
       labels = DRIVER_LABELS)
     val configurationStep = new DriverServiceFeatureStep(kconf)
     val expectedServiceName = kconf.resourceNamePrefix + DriverServiceFeatureStep.DRIVER_SVC_POSTFIX
-    val expectedHostName = s"$expectedServiceName.my-namespace.svc"
+    val expectedHostName = s"$expectedServiceName.my-namespace.svc.cluster.local."
+    val additionalProps = configurationStep.getAdditionalPodSystemProperties()
+    assert(additionalProps(DRIVER_HOST_ADDRESS.key) === expectedHostName)
+  }
+
+  test("SPARK-58967: Custom cluster domain is used in the driver hostname FQDN.") {
+    val sparkConf = new SparkConf(false)
+      .set(DRIVER_PORT, 9000)
+      .set(DRIVER_BLOCK_MANAGER_PORT, 8080)
+      .set(KUBERNETES_NAMESPACE, "my-namespace")
+      .set(KUBERNETES_CLUSTER_DOMAIN, "custom.domain")
+    val kconf = KubernetesTestConf.createDriverConf(
+      sparkConf = sparkConf,
+      labels = DRIVER_LABELS)
+    val configurationStep = new DriverServiceFeatureStep(kconf)
+    val expectedServiceName = kconf.resourceNamePrefix + DriverServiceFeatureStep.DRIVER_SVC_POSTFIX
+    val expectedHostName = s"$expectedServiceName.my-namespace.svc.custom.domain."
     val additionalProps = configurationStep.getAdditionalPodSystemProperties()
     assert(additionalProps(DRIVER_HOST_ADDRESS.key) === expectedHostName)
   }
@@ -141,7 +157,7 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
     services.foreach { case (kconf, name, address) =>
       assert(!name.startsWith(kconf.resourceNamePrefix))
       assert(!address.startsWith(kconf.resourceNamePrefix))
-      assert(InternetDomainName.isValid(address))
+      assert(InternetDomainName.isValid(address.stripSuffix(".")))
     }
   }
 
