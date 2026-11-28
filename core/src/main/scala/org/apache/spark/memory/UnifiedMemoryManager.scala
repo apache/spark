@@ -452,12 +452,28 @@ object UnifiedMemoryManager extends Logging {
 
   def apply(conf: SparkConf, numCores: Int, isDriver: Boolean): UnifiedMemoryManager = {
     val maxMemory = getMaxMemory(conf, isDriver)
+    warnIfOffHeapExceedsCgroupLimit(conf)
     new UnifiedMemoryManager(
       conf,
       maxHeapMemory = maxMemory,
       onHeapStorageRegionSize =
         (maxMemory * conf.get(config.MEMORY_STORAGE_FRACTION)).toLong,
       numCores = numCores)
+  }
+
+  private def warnIfOffHeapExceedsCgroupLimit(conf: SparkConf): Unit = {
+    if (conf.get(config.MEMORY_OFFHEAP_ENABLED)) {
+      val heapMax = Runtime.getRuntime.maxMemory()
+      val offHeapSize = conf.get(config.MEMORY_OFFHEAP_SIZE)
+      CgroupMemoryLimit.currentLimitBytes().foreach { limit =>
+        if (CgroupMemoryLimit.exceedsLimit(heapMax, offHeapSize, limit)) {
+          logWarning(s"JVM maximum heap ($heapMax bytes) plus configured Spark managed " +
+            s"off-heap memory ($offHeapSize bytes) exceeds the cgroup memory limit " +
+            s"($limit bytes). The process may be killed before Spark can spill. Reduce " +
+            s"spark.memory.offHeap.size or increase the container memory overhead.")
+        }
+      }
+    }
   }
 
   /**
