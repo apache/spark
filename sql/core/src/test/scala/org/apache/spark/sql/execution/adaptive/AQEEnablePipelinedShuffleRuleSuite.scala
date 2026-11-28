@@ -19,10 +19,11 @@ package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.plans.Inner
-import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, SinglePartition}
 import org.apache.spark.sql.execution.{SparkPlan, UnionExec}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 /** Plan-level coverage of the conservative AQE channel eligibility policy. */
@@ -62,6 +63,40 @@ class AQEEnablePipelinedShuffleRuleSuite extends QueryTest with SharedSparkSessi
       }
       assert(exchangesWithPipelined(flippedUnion) == Seq(false, false),
         s"both branches must stay regular so the sibling can recover lost outputs: $flipped")
+    }
+  }
+
+  test("an eligible exchange beside a CTE reuse stage stays regular") {
+    // A replan can leave an unstaged eligible exchange beside a CTE reuse stage. The stage's
+    // shuffle is materialized by its inner adaptive plan, which the regular-prefix check cannot
+    // see through, so the stage itself must count as a regular prefix. Every branch is
+    // single-partition and the union reports a single partition, so the plan fits the shared
+    // session's local task slots and only that guard keeps the exchange regular.
+    withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
+      import testImplicits._
+      def oneRow(): SparkPlan =
+        spark.range(0, 1, 1, 1).select($"id" as Symbol("k")).queryExecution.sparkPlan
+      def flipUnion(sibling: SparkPlan): SparkPlan = {
+        val leaf = oneRow()
+        assert(leaf.outputPartitioning == SinglePartition && sibling.outputPartitioning ==
+          SinglePartition, s"expected single-partition branches: $leaf\n$sibling")
+        AQEEnablePipelinedShuffle.flipEligibleExchanges(
+          UnionExec(Seq(ShuffleExchangeExec(SinglePartition, leaf), sibling)))
+      }
+
+      // Control: beside a plain one-partition leaf, the exchange is flipped.
+      val control = flipUnion(oneRow())
+      assert(exchangesWithPipelined(control) == Seq(true),
+        s"expected the exchange beside a plain leaf to be pipelined: $control")
+
+      val body = oneRow()
+      val inner = AdaptiveSparkPlanExec(
+        body, AdaptiveExecutionContext(spark, spark.range(1).queryExecution), Nil,
+        isSubquery = true)
+      val stage = CTEReuseQueryStageExec(0, inner, body.output, body.canonicalized)
+      val flipped = flipUnion(stage)
+      assert(exchangesWithPipelined(flipped) == Seq(false),
+        s"an exchange beside a CTE reuse stage must stay regular: $flipped")
     }
   }
 }

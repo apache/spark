@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.adaptive
 
 import scala.collection.mutable
 
-import org.apache.spark.internal.LogKeys.{CONFIG, SUB_QUERY}
+import org.apache.spark.internal.LogKeys.{CONFIG, QUERY_PLAN, SUB_QUERY}
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{DynamicPruningSubquery, ListQuery, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -31,7 +31,7 @@ import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.command.{DataWritingCommandExec, ExecutedCommandExec}
 import org.apache.spark.sql.execution.datasources.V1WriteCommand
 import org.apache.spark.sql.execution.datasources.v2.V2CommandExec
-import org.apache.spark.sql.execution.exchange.Exchange
+import org.apache.spark.sql.execution.exchange.{CTEReuseExchange, Exchange}
 import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperator
 import org.apache.spark.sql.internal.SQLConf
 
@@ -48,7 +48,9 @@ case class InsertAdaptiveSparkPlan(
 
   override def apply(plan: SparkPlan): SparkPlan = applyInternal(plan, false)
 
-  private def applyInternal(plan: SparkPlan, isSubquery: Boolean): SparkPlan = plan match {
+  // `PlanCTEReuse` (same package) calls this to wrap a CTEReuseExchange subplan in an inner AQE.
+  private[adaptive] def applyInternal(
+      plan: SparkPlan, isSubquery: Boolean): SparkPlan = plan match {
     case _ if !conf.adaptiveExecutionEnabled => plan
     case _: ExecutedCommandExec => plan
     case _: CommandResultExec => plan
@@ -71,23 +73,22 @@ case class InsertAdaptiveSparkPlan(
     case _ if shouldApplyAQE(plan, isSubquery) =>
       if (supportAdaptive(plan)) {
         try {
-          // Plan sub-queries recursively and pass in the shared stage cache for exchange reuse.
           // Fall back to non-AQE mode if AQE is not supported in any of the sub-queries.
-          val subqueryMap = buildSubqueryMap(plan)
-          val planSubqueriesRule = PlanAdaptiveSubqueries(subqueryMap)
-          val preprocessingRules = Seq(
-            planSubqueriesRule)
-          // Run pre-processing rules.
-          val newPlan = AdaptiveSparkPlanExec.applyPhysicalRules(
-            plan,
-            preprocessingRules,
-            "AQE Preprocessing")
+          val (newPlan, preprocessingRules) = preprocess(plan)
           logDebug(s"Adaptive execution enabled for plan: $plan")
           AdaptiveSparkPlanExec(newPlan, adaptiveExecutionContext, preprocessingRules, isSubquery)
         } catch {
           case SubqueryAdaptiveNotSupportedException(subquery) =>
             logWarning(log"${MDC(CONFIG, SQLConf.ADAPTIVE_EXECUTION_ENABLED.key)} is enabled " +
               log"but is not supported for sub-query: ${MDC(SUB_QUERY, subquery)}.")
+            plan
+          case CTEAdaptiveNotSupportedException(cteSubplan) =>
+            // `PlanCTEReuse` could not wrap a `CTEReuseExchange`'s subplan in an inner AQE. Back
+            // the whole query off AQE; the non-AQE path (`UnwrapCTEReuseExchange`) handles the
+            // CTE reuse.
+            logWarning(log"${MDC(CONFIG, SQLConf.ADAPTIVE_EXECUTION_ENABLED.key)} is enabled " +
+              log"but a CTE reuse subplan could not be planned adaptively; " +
+              log"falling back to non-AQE. CTE reuse subplan: ${MDC(QUERY_PLAN, cteSubplan)}.")
             plan
         }
       } else {
@@ -97,6 +98,30 @@ case class InsertAdaptiveSparkPlan(
       }
 
     case _ => plan
+  }
+
+  /**
+   * Runs the AQE pre-processing rules on `plan`: plans its sub-queries adaptively, then builds and
+   * registers the shared inner AQE of each CTE reference in it (see [[PlanCTEReuse]]). Returns the
+   * pre-processed plan and the rules, which the [[AdaptiveSparkPlanExec]] that runs the plan
+   * applies again when it re-plans. Throws [[SubqueryAdaptiveNotSupportedException]] when a
+   * sub-query cannot be planned adaptively, and [[CTEAdaptiveNotSupportedException]] when a CTE
+   * reference's subplan cannot.
+   *
+   * `PlanCTEReuse` (same package) also calls this alone for a reference whose shared inner AQE is
+   * already registered, since that reference needs only its own pre-processed subplan.
+   */
+  private[adaptive] def preprocess(plan: SparkPlan): (SparkPlan, Seq[Rule[SparkPlan]]) = {
+    // Plan sub-queries recursively and pass in the shared stage cache for exchange reuse.
+    val subqueryMap = buildSubqueryMap(plan)
+    val preprocessingRules = Seq(
+      PlanAdaptiveSubqueries(subqueryMap),
+      PlanCTEReuse(adaptiveExecutionContext))
+    val newPlan = AdaptiveSparkPlanExec.applyPhysicalRules(
+      plan,
+      preprocessingRules,
+      "AQE Preprocessing")
+    (newPlan, preprocessingRules)
   }
 
   // AQE is only useful when the query has exchanges, sub-queries or table caches. This method
@@ -114,6 +139,10 @@ case class InsertAdaptiveSparkPlan(
     conf.getConf(SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY) || isSubquery || {
       plan.exists {
         case _: Exchange => true
+        // A forced CTE's only shuffles are held inside CTEReuseExchange leaves (the shuffle is in
+        // metadata, not children), so a plan whose exchanges are all inside CTEs would otherwise
+        // look exchange-free and skip AQE -- dropping to the best-effort non-AQE reuse path.
+        case _: CTEReuseExchange => true
         case p if p.requiredChildDistribution.exists(_ != UnspecifiedDistribution) => true
         // AQE framework has a different way to update the query plan in the UI: it updates the plan
         // at the end of execution, while non-AQE updates the plan before execution. If the cached
@@ -175,3 +204,10 @@ case class InsertAdaptiveSparkPlan(
 }
 
 private case class SubqueryAdaptiveNotSupportedException(plan: LogicalPlan) extends Exception {}
+
+/**
+ * Thrown by `PlanCTEReuse` when a `CTEReuseExchange`'s subplan cannot be wrapped in an inner AQE.
+ * Caught in `applyInternal` to back the whole query off AQE, so the non-AQE CTE-reuse path handles
+ * it instead of failing at execution time.
+ */
+private case class CTEAdaptiveNotSupportedException(cteSubplan: LogicalPlan) extends Exception {}

@@ -7767,6 +7767,52 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val REPLACE_CTE_REF_WITH_CTE_REUSE =
+    buildConf("spark.sql.cteReuse.enabled")
+      .internal()
+      .doc("When true, a CTE definition marked forceSkipInline whose body the lowered plan of a " +
+        "batch query holds two or more copies of is sealed for reuse: its references become " +
+        "CTEReuseRelation nodes, planned as CTEReuseExchange. With " +
+        "AQE on, the body is materialized once, through a single inner AdaptiveSparkPlanExec " +
+        "that every reference reads; when a shared body cannot be planned adaptively, the " +
+        "whole query runs without AQE. With AQE off, the copies are deduplicated by exchange " +
+        "reuse, which is best effort: a miss is only detected, and logged or, under " +
+        "spark.sql.cteReuse.failOnMissWithoutAQE, thrown. Such a definition can also pin its " +
+        "partitioning. An ordinary retained or user MATERIALIZED CTE, like a forceSkipInline " +
+        "CTE whose body the plan holds only one copy of, keeps its plain lowering, unless its " +
+        "deterministic body equals the body of such a sealed CTE, or the body of such a sealed " +
+        "CTE that does not pin its partitioning only selects it and the plan also reads it " +
+        "elsewhere: it is then sealed with it and shares its single materialization. When " +
+        "sealing these CTEs would leave one of them not sharing the materialization of a CTE " +
+        "sealed on its own, the query is lowered again with every CTE sealed on its own kept " +
+        "sealed, and only when one of them still does not share it does every such CTE of the " +
+        "query keep its plain repartition. A CTE with a copy inside the recursive term of a " +
+        "recursive CTE is never sealed, so the rewrites that term gets before every iteration " +
+        "reach every copy; its copies elsewhere in the query are then deduplicated only by " +
+        "exchange reuse. A CTE read inside the anchor of a recursive CTE is still sealed, " +
+        "but the anchor runs in query executions of its own, so its copy there does not share " +
+        "the query's materialization of that CTE. A " +
+        "forceSkipInline CTE that pins a hash partitioning is repartitioned on its pin even " +
+        "when it is not sealed. When false, forceSkipInline definitions are lowered like any " +
+        "other retained CTE.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
+  val FAIL_ON_CTE_REUSE_WITHOUT_AQE =
+    buildConf("spark.sql.cteReuse.failOnMissWithoutAQE")
+      .internal()
+      .doc("When true, throw an error if guaranteed CTE shuffle reuse fails with AQE off, i.e. " +
+        "two or more shuffles carrying the same cteId in their LOCAL_SHUFFLE_FOR_CTE origin " +
+        "survive after ReuseExchangeAndSubquery (they were not deduplicated into a " +
+        "ReusedExchangeExec). When false, only log the plan and the cteIds. The default is " +
+        "false, in tests too; suites that check guaranteed reuse turn it on.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_TIME_PARSER_POLICY = buildConf(SqlApiConfHelper.LEGACY_TIME_PARSER_POLICY_KEY)
     .internal()
     .doc("When LEGACY, java.text.SimpleDateFormat is used for formatting and parsing " +

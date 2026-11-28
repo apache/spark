@@ -177,6 +177,86 @@ object SQLExecution extends Logging {
     }
   }
 
+  /**
+   * The state of one execution id in [[sharedCTEPlanStates]]: whether the execution has ended, and
+   * how many shared inner CTE plans that run under its id are still materializing.
+   */
+  private[sql] case class SharedCTEPlanState(ended: Boolean, pending: Int)
+
+  /**
+   * Execution-scoped registry of the shared inner CTE plans that run under each execution id (see
+   * `AdaptiveSparkPlanExec.materialize`), whatever adaptive execution context holds them, a cached
+   * relation's included. Such a plan is not cancelled with its query, so it can still be submitting
+   * jobs under the id of an execution that has ended and released the scheduler's per-query job
+   * entries of that id; when it finishes, it releases them once more. The registry holds an entry
+   * for each running execution, and for each ended execution while a shared inner CTE plan that
+   * runs under its id is still materializing, so it stays bounded by the running executions and the
+   * inner plans in flight. Each update of an entry is one atomic operation on its id.
+   */
+  private[sql] val sharedCTEPlanStates = new ConcurrentHashMap[Long, SharedCTEPlanState]()
+
+  /** Adds the entry of a starting execution, marked running. */
+  private[sql] def registerExecutionForSharedCTEPlans(executionId: Long): Unit = {
+    sharedCTEPlanStates.put(executionId, SharedCTEPlanState(ended = false, pending = 0))
+  }
+
+  /**
+   * Handles the end of `executionId`: removes its entry when no shared inner CTE plan that runs
+   * under its id is still materializing, and otherwise marks it ended, so that each such plan
+   * releases the scheduler's per-query job entries of the id again when it finishes. Must be called
+   * before the execution posts its own job cleanup. Idempotent.
+   */
+  private[sql] def recordExecutionEndForSharedCTEPlans(executionId: Long): Unit = {
+    sharedCTEPlanStates.computeIfPresent(executionId, (_, state) =>
+      if (state.pending == 0) null else state.copy(ended = true))
+  }
+
+  /**
+   * Registers a shared inner CTE plan that starts materializing under `executionId`. Must be called
+   * before the plan submits its first job. An id without an entry belongs to an execution that has
+   * already ended, for example when a thread that still carries the id forces the plan afterwards.
+   */
+  private[sql] def sharedCTEPlanStarted(executionId: Long): Unit = {
+    sharedCTEPlanStates.compute(executionId, (_, state) =>
+      if (state == null) {
+        SharedCTEPlanState(ended = true, pending = 1)
+      } else {
+        state.copy(pending = state.pending + 1)
+      })
+  }
+
+  /**
+   * Called when a shared inner CTE plan that [[sharedCTEPlanStarted]] registered under
+   * `executionId` finishes, successfully or not. When the execution has ended, the plan may have
+   * registered jobs under its id after the execution's own job cleanup, so this releases the
+   * scheduler's per-query job entries of the id once more. Each stage submission of the plan is
+   * posted to the scheduler's event loop before its materialization completes, and the execution's
+   * end updates its entry before its own cleanup is posted, so whichever of the two cleanups is
+   * posted last is handled after every job the plan registered. The exception is work that a
+   * replan of the plan drops without cancelling it or waiting for it: a broadcast stage, the
+   * subqueries that a dropped shuffle stage starts while it prepares, which cancelling the stage
+   * does not stop, and a delegated shuffle that cannot be cancelled before it is submitted. Jobs
+   * that such work submits can register after both cleanups, as such dropped work of any
+   * adaptive plan can.
+   */
+  private[sql] def sharedCTEPlanFinished(sc: SparkContext, executionId: Long): Unit = {
+    var ended = false
+    sharedCTEPlanStates.computeIfPresent(executionId, (_, state) => {
+      ended = state.ended
+      val pending = state.pending - 1
+      if (state.ended && pending == 0) null else state.copy(pending = pending)
+    })
+    if (ended) {
+      try {
+        Option(sc.dagScheduler).foreach(_.cleanupQueryJobs(executionId))
+      } catch {
+        case NonFatal(e) =>
+          logWarning(log"Failed to clean up the jobs of ended execution " +
+            log"${MDC(EXECUTION_ID, executionId)} after a shared CTE plan finished.", e)
+      }
+    }
+  }
+
   private[sql] val NONE_EXPLAIN_MODE = "none"
 
   private[sql] val NO_PLAN_DESCRIPTION =
@@ -232,6 +312,7 @@ object SQLExecution extends Logging {
       executionId
     }
     executionIdToQueryExecution.put(executionId, queryExecution)
+    registerExecutionForSharedCTEPlans(executionId)
     val originalInterruptOnCancel = sc.getLocalProperty(SPARK_JOB_INTERRUPT_ON_CANCEL)
     if (originalInterruptOnCancel == null) {
       val interruptOnCancel = sparkSession.sessionState.conf.getConf(SQLConf.INTERRUPT_ON_CANCEL)
@@ -363,6 +444,10 @@ object SQLExecution extends Logging {
                     .getOrElse(Set.empty)
                 }
 
+                // A shared inner CTE plan can outlive this execution and register jobs under its
+                // id after the cleanup below. Record the end first, so that such a plan releases
+                // them again when it finishes.
+                recordExecutionEndForSharedCTEPlans(executionId)
                 // Clean up jobs tracked by DAGScheduler for this query execution.
                 dagSchedulerOpt.foreach(_.cleanupQueryJobs(executionId))
 
@@ -384,6 +469,9 @@ object SQLExecution extends Logging {
       }
     } finally {
       executionIdToQueryExecution.remove(executionId)
+      // Normally a no-op: the end above has already been recorded. This keeps the entry from
+      // outliving an execution whose end handling above did not run.
+      recordExecutionEndForSharedCTEPlans(executionId)
       sc.setLocalProperty(EXECUTION_ID_KEY, oldExecutionId)
       sc.setLocalProperty(QUERY_ID_KEY, oldQueryId)
       // Unset the "root" SQL Execution Id once the "root" SQL execution completes.

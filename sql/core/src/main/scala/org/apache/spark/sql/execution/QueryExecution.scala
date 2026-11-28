@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CompoundBody, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer, Union, UnresolvedInsert, UnresolvedWith, WithCTE}
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule, RuleExecutor}
 import org.apache.spark.sql.catalyst.transactions.TransactionUtils
+import org.apache.spark.sql.catalyst.trees.TreePattern.CTE_REUSE
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.classic.SparkSession
@@ -47,7 +48,7 @@ import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, Adapti
 import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
 import org.apache.spark.sql.execution.datasources.v2.{TransactionalExec, V2TableRefreshUtil}
 import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
-import org.apache.spark.sql.execution.exchange.{EnablePipelinedShuffle, EnsureRequirements, PipelinedShuffleEligibility, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange.{EnablePipelinedShuffle, EnsureRequirements, PipelinedShuffleEligibility, ShuffleExchangeExec, UnwrapCTEReuseExchange, VerifyCTEReuse}
 import org.apache.spark.sql.execution.joins.ChoosePerPartitionRuntimeFilters
 import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
 import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqMetadata
@@ -467,8 +468,18 @@ class QueryExecution(
 
   protected def preparations: Seq[Rule[SparkPlan]] = {
     QueryExecution.preparations(sparkSession,
-      Option(InsertAdaptiveSparkPlan(AdaptiveExecutionContext(sparkSession, this))), false)
+      Option(InsertAdaptiveSparkPlan(AdaptiveExecutionContext(sparkSession, this))), false,
+      verifyCTEReuse = hasCTEReuse)
   }
+
+  /**
+   * Whether the optimized plan, subqueries included, seals a CTE for guaranteed reuse. Only such a
+   * plan can hold a `LOCAL_SHUFFLE_FOR_CTE` shuffle, so only its preparation needs
+   * [[VerifyCTEReuse]]; every other query, including each streaming micro-batch and every query
+   * with the reuse flag off, skips that traversal. Subquery expressions propagate the pattern of
+   * their plans.
+   */
+  private def hasCTEReuse: Boolean = optimizedPlan.containsPattern(CTE_REUSE)
 
   protected def executePhase[T](phase: String)(block: => T): T = sparkSession.withActive {
     QueryExecution.withInternalError(s"The Spark SQL phase $phase failed with an internal error.") {
@@ -830,7 +841,8 @@ object QueryExecution {
   private[execution] def preparations(
       sparkSession: SparkSession,
       adaptiveExecutionRule: Option[InsertAdaptiveSparkPlan] = None,
-      subquery: Boolean): Seq[Rule[SparkPlan]] = {
+      subquery: Boolean,
+      verifyCTEReuse: Boolean = false): Seq[Rule[SparkPlan]] = {
     // Read once here so that both union barriers below, and the codegen gate they stamp for, answer
     // from the same values however long preparation takes.
     val unionConf = UnionConfSnapshot(sparkSession.sessionState.conf)
@@ -839,6 +851,14 @@ object QueryExecution {
     // as the original plan is hidden behind `AdaptiveSparkPlanExec`.
     adaptiveExecutionRule.toSeq ++
     Seq(
+      // Unwrap CTEReuseExchange nodes first (AQE off): a sealed CTE body is a data field of the
+      // leaf until then, so every preparation rule that must see a CTE body has to run after this
+      // one. `CoalesceBucketsInJoin` then coalesces the joins inside a body, a
+      // `DynamicPruningSubquery` inside a body is planned by `PlanDynamicPruningFilters` (otherwise
+      // it is left unplanned and fails at execution), and `ChoosePerPartitionRuntimeFilters` sees
+      // the semi joins inside a body. Runs in both main and subquery passes so CTE references
+      // inside subqueries are also unwrapped.
+      UnwrapCTEReuseExchange,
       CoalesceBucketsInJoin,
       // Must run before `EnsureRequirements`, which then plans the query without the semi joins
       // this rule drops.
@@ -891,7 +911,16 @@ object QueryExecution {
       (if (subquery) {
         Nil
       } else {
-        Seq(ReuseExchangeAndSubquery)
+        // VerifyCTEReuse runs only on the main query (not per-subquery) after
+        // ReuseExchangeAndSubquery, to verify guaranteed CTE shuffle reuse held (AQE off), and only
+        // when the caller found a sealed CTE in the optimized plan.
+        Seq(ReuseExchangeAndSubquery) ++
+          (if (verifyCTEReuse) {
+            Seq(VerifyCTEReuse(failOnReuseFailure =
+              sparkSession.sessionState.conf.getConf(SQLConf.FAIL_ON_CTE_REUSE_WITHOUT_AQE)))
+          } else {
+            Nil
+          })
       }) ++
       // Opt-in (SPARK-57399): runs last so it observes the final reuse decision (a reused
       // exchange means fan-out, which it refuses to make pipelined).

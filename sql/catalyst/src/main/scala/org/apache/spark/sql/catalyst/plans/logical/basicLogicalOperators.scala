@@ -2342,8 +2342,55 @@ abstract class RepartitionOperation extends UnaryNode {
   def numPartitions: Int
   override final def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
-  final override val nodePatterns: Seq[TreePattern] = Seq(REPARTITION_OPERATION)
+  final override val nodePatterns: Seq[TreePattern] =
+    Seq(REPARTITION_OPERATION) ++ nodePatternsInternal()
+
+  // Subclasses can override this function to provide more TreePatterns.
+  def nodePatternsInternal(): Seq[TreePattern] = Seq()
+
   def partitioning: Partitioning
+}
+
+/**
+ * Generator for unique Repartition IDs within a query, used to correlate the references of a
+ * plan-reuse repartition so they can be materialized once and shared (see
+ * [[PlanReusableRepartition]]).
+ */
+object RepartitionIdGenerator {
+  private val curId = new java.util.concurrent.atomic.AtomicLong(1)
+  def newRepartitionId: Long = curId.getAndIncrement()
+}
+
+/**
+ * A trait for repartition operations that support plan reuse. A repartition marked for plan reuse
+ * carries a nonzero id that every copy of the same shared body keeps, used to guarantee exchange
+ * reuse across references. [[RepartitionByExpression]] is the only implementation, and
+ * `ReplaceCTERefWithRepartition` assigns ids only for `forceSkipInline` CTE definitions whose body
+ * the lowered plan holds two or more copies of, for definitions whose deterministic body equals
+ * such a sealed body, and for definitions, deterministic or not, that the body of such a sealed,
+ * unpinned forced definition only selects and that the plan also reads outside that body (see
+ * `ReplaceCTERefWithRepartition` for when the last two are not sealed);
+ * `ReplaceRepartitionWithCTEReuse` then seals those copies into `CTEReuseRelation` nodes, planned
+ * as `CTEReuseExchange`.
+ */
+trait PlanReusableRepartition extends RepartitionOperation {
+  /**
+   * Identifier of the shared body this repartition belongs to, used for plan reuse: every copy of
+   * one body (for example every reference of one CTE definition) carries the same id.
+   * A value of 0 indicates this repartition is not used for plan reuse.
+   */
+  def repartitionId: Long
+
+  /**
+   * Whether this repartition is used for plan reuse (today only for sealed CTE definitions).
+   * True when repartitionId is non-zero.
+   */
+  def isForPlanReuse: Boolean = repartitionId != 0L
+
+  /**
+   * Creates a copy of this repartition with a new id.
+   */
+  def withRepartitionId(newId: Long): PlanReusableRepartition
 }
 
 /**
@@ -2419,8 +2466,9 @@ case class RepartitionByExpression(
     partitionExpressions: Seq[Expression],
     child: LogicalPlan,
     optNumPartitions: Option[Int],
-    optAdvisoryPartitionSize: Option[Long] = None)
-  extends RepartitionOperation with HasPartitionExpressions {
+    optAdvisoryPartitionSize: Option[Long] = None,
+    id: Long = 0)
+  extends RepartitionOperation with HasPartitionExpressions with PlanReusableRepartition {
 
   require(optNumPartitions.isEmpty || optAdvisoryPartitionSize.isEmpty)
 
@@ -2433,6 +2481,20 @@ case class RepartitionByExpression(
   }
 
   override def shuffle: Boolean = true
+
+  // Implement PlanReusableRepartition by delegating to `id`.
+  override def repartitionId: Long = id
+
+  // PLAN_REUSE_REPARTITION lets the CTE reuse rules skip a plan with no plan-reuse repartition.
+  override def nodePatternsInternal(): Seq[TreePattern] =
+    if (id != 0L) Seq(PLAN_REUSE_REPARTITION) else Seq()
+
+  override def withRepartitionId(newId: Long): RepartitionByExpression = this.copy(id = newId)
+
+  // The plan-reuse `id` is an internal correlation field (consumed by
+  // ReplaceRepartitionWithCTEReuse); never render it, so plan output stays deterministic and
+  // stable across runs and unaffected by the new field (EXPLAIN, plan comparisons, golden files).
+  override def stringArgs: Iterator[Any] = super.stringArgs.toArray.dropRight(1).iterator
 
   override protected def withNewChildInternal(newChild: LogicalPlan): RepartitionByExpression =
     copy(child = newChild)

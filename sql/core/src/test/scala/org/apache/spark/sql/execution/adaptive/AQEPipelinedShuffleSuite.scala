@@ -20,8 +20,11 @@ package org.apache.spark.sql.execution.adaptive
 import java.util.concurrent.{Executors, TimeUnit}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.execution.exchange.{PipelinedShuffleTestSession, ShuffleExchangeExec}
+import org.apache.spark.sql.{classic, DataFrame, SparkSession}
+import org.apache.spark.sql.catalyst.plans.logical.CTERelationDef
+import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.exchange.{CTEReuseExchange, PipelinedShuffleTestSession, ShuffleExchangeExec}
+import org.apache.spark.sql.internal.SQLConf
 
 /** End-to-end coverage of channel eligibility and regular-shuffle fallbacks under AQE. */
 class AQEPipelinedShuffleSuite extends SparkFunSuite
@@ -201,6 +204,133 @@ class AQEPipelinedShuffleSuite extends SparkFunSuite
       }
       // The inner pipelined query still runs.
       assert(inner.collect().map(_.getLong(1)).sum === 1000L)
+    }
+  }
+
+  test("a shared forced CTE stays regular across repeated actions") {
+    withAqePipelinedSession { spark =>
+      val session = spark.asInstanceOf[classic.SparkSession]
+      session.conf.set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
+      session.conf.set(SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
+      // forceSkipInline has no SQL syntax: tag the analyzed CTE definition and re-run it.
+      val analyzed = session.sql(
+        """WITH cte AS (SELECT id AS k, rand() AS r FROM range(0, 100, 1, 2))
+          |SELECT c1.k, c1.r = c2.r AS same FROM cte c1 JOIN cte c2 ON c1.k = c2.k
+          |""".stripMargin).queryExecution.analyzed
+      val df = classic.Dataset.ofRows(session, analyzed.transformWithSubqueries {
+        case d: CTERelationDef => d.copy(forceSkipInline = true)
+      })
+      val expected = (0L until 100L).map(k => (k, true))
+      def run(): Seq[(Long, Boolean)] =
+        df.collect().map(r => (r.getLong(0), r.getBoolean(1))).toSeq.sortBy(_._1)
+      assert(run() === expected)
+      val plan = df.queryExecution.executedPlan
+      val cteStages = collect(plan) { case s: CTEReuseQueryStageExec => s }
+      assert(cteStages.size == 2, s"expected two CTE reuse stages; plan:\n$plan")
+      cteStages.foreach { s =>
+        val root = s.innerAQE.executedPlan match {
+          case r: AQEShuffleReadExec => r.child
+          case other => other
+        }
+        assert(root.isInstanceOf[ShuffleQueryStageExec],
+          s"expected the shared inner plan to root at a regular shuffle stage; plan:\n$plan")
+      }
+      assert(pipelinedExchanges(plan).isEmpty,
+        s"no exchange of a plan reading a CTE reuse stage may be pipelined; plan:\n$plan")
+      // The second collect of the same DataFrame must succeed with the same rows.
+      assert(run() === expected)
+    }
+  }
+
+  test("the initial adaptive plan of a join of forced CTE references stays regular") {
+    withAqePipelinedSession { spark =>
+      val session = spark.asInstanceOf[classic.SparkSession]
+      session.conf.set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
+      session.conf.set(SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
+      // The plan the AQE preparation rules, this rule included, give the query before any stage
+      // is created.
+      def initialPlan(df: DataFrame): SparkPlan = df.queryExecution.executedPlan match {
+        case a: AdaptiveSparkPlanExec => a.initialPlan
+        case other => fail(s"expected an adaptive plan; plan:\n$other")
+      }
+      val range = "range(0, 100, 1, 2)"
+      // Without a CTE, each shape pipelines both join inputs in its initial plan. A self-join's
+      // two inputs are canonically equal, which leaves them regular while exchange reuse is on,
+      // so it runs with exchange reuse off.
+      Seq(
+        ("a self-join", false,
+          s"""SELECT a.k FROM (SELECT id AS k FROM $range) a
+             |JOIN (SELECT id AS k FROM $range) b ON a.k = b.k""".stripMargin,
+          "SELECT c1.k FROM cte c1 JOIN cte c2 ON c1.k = c2.k", 100),
+        ("a join of differently projected references", true,
+          s"""SELECT a.k FROM (SELECT id AS k FROM $range) a
+             |JOIN (SELECT id + 1 AS k FROM $range) b ON a.k = b.k""".stripMargin,
+          "SELECT c1.k FROM cte c1 JOIN (SELECT k + 1 AS k FROM cte) c2 ON c1.k = c2.k", 99)
+      ).foreach { case (name, reuse, control, query, numRows) =>
+        session.conf.set(SQLConf.EXCHANGE_REUSE_ENABLED.key, reuse.toString)
+        val controlPlan = initialPlan(session.sql(control))
+        assert(pipelinedExchanges(controlPlan).size == 2,
+          s"$name: expected the control's join inputs pipelined; plan:\n$controlPlan")
+
+        // forceSkipInline has no SQL syntax: tag the analyzed CTE definition and re-run it.
+        val analyzed = session.sql(s"WITH cte AS (SELECT id AS k FROM $range) $query")
+          .queryExecution.analyzed
+        val df = classic.Dataset.ofRows(session, analyzed.transformWithSubqueries {
+          case d: CTERelationDef => d.copy(forceSkipInline = true)
+        })
+        // Before stage creation, the join inputs are exchanges over the CTE references, which
+        // are still CTEReuseExchange leaves rather than CTE reuse stages.
+        val initial = initialPlan(df)
+        val overReferences = collect(initial) {
+          case s: ShuffleExchangeExec if s.child.exists(_.isInstanceOf[CTEReuseExchange]) => s
+        }
+        assert(overReferences.size == 2,
+          s"$name: expected both join inputs to read a CTE reference; plan:\n$initial")
+        assert(pipelinedExchanges(initial).isEmpty,
+          s"$name: no exchange of a plan reading a CTE reference may be pipelined; plan:\n$initial")
+        assert(df.collect().length == numRows)
+      }
+    }
+  }
+
+  test("an eligible exchange beside a branch that reads CTE reuse stages stays regular") {
+    withAqePipelinedSession { spark =>
+      val session = spark.asInstanceOf[classic.SparkSession]
+      // Every branch of the union is single-partition, so the union reports a single partition
+      // and its plan fits the local capacity check.
+      session.conf.set(SQLConf.UNION_OUTPUT_PARTITIONING.key, "true")
+      // Without a CTE, the same shape pipelines its exchanges: the count's exchange is eligible.
+      val control = session.sql(
+        """SELECT id AS k FROM (SELECT /*+ REPARTITION(1) */ id FROM range(0, 100, 1, 2))
+          |UNION ALL SELECT count(*) AS k FROM range(0, 1000, 1, 2)
+          |""".stripMargin)
+      assert(control.collect().map(_.getLong(0)).sorted.toSeq === (0L until 100L) :+ 1000L)
+      assert(pipelinedExchanges(control.queryExecution.executedPlan).nonEmpty,
+        s"expected the control to pipeline; plan:\n${control.queryExecution.executedPlan}")
+
+      // The count's exchange reads no CTE reference. It is staged together with the CTE
+      // references, which are still unstaged CTEReuseExchange leaves in the initial plan, so the
+      // regular-prefix guard for those leaves keeps it regular; AQEEnablePipelinedShuffleRuleSuite
+      // covers the guard for CTE reuse stages on a hand-built plan.
+      val analyzed = session.sql(
+        """WITH cte AS (SELECT /*+ REPARTITION(1) */ id AS k, rand() AS r FROM range(0, 100, 1, 2))
+          |SELECT k FROM cte
+          |UNION ALL SELECT k FROM cte
+          |UNION ALL SELECT count(*) AS k FROM range(0, 1000, 1, 2)
+          |""".stripMargin).queryExecution.analyzed
+      val df = classic.Dataset.ofRows(session, analyzed.transformWithSubqueries {
+        case d: CTERelationDef => d.copy(forceSkipInline = true)
+      })
+      val expected = ((0L until 100L) ++ (0L until 100L) :+ 1000L).sorted
+      def run(): Seq[Long] = df.collect().map(_.getLong(0)).toSeq.sorted
+      assert(run() === expected)
+      val plan = df.queryExecution.executedPlan
+      assert(collect(plan) { case s: CTEReuseQueryStageExec => s }.size == 2,
+        s"expected two CTE reuse stages; plan:\n$plan")
+      assert(pipelinedExchanges(plan).isEmpty,
+        s"no exchange of a plan reading a CTE reuse stage may be pipelined; plan:\n$plan")
+      // The second collect of the same DataFrame must succeed with the same rows.
+      assert(run() === expected)
     }
   }
 }

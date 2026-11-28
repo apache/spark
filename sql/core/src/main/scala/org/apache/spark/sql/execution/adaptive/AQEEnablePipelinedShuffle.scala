@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{BinaryExecNode, SparkPlan}
-import org.apache.spark.sql.execution.exchange.{PipelinedShuffleEligibility, ReusedExchangeExec, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange.{CTEReuseExchange, PipelinedShuffleEligibility, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.ShuffledJoin
 
 /**
@@ -34,6 +34,14 @@ import org.apache.spark.sql.execution.joins.ShuffledJoin
  * rewrite: a mixed plan can lose its materialized outputs between actions, and the pipelined
  * group cannot recover those outputs. Reused exchanges and unsupported consumers also retain
  * regular execution. The shared environment gate excludes streaming, RDD and cache boundaries.
+ *
+ * The rule never crosses a guaranteed CTE reuse boundary: a `LOCAL_SHUFFLE_FOR_CTE` shuffle is the
+ * root stage of an inner adaptive plan that every reference of the CTE reads, and an exchange
+ * that reads a CTE reference stays regular. A CTE reference also counts as a regular prefix,
+ * because its shuffle is materialized by the inner plan, which the prefix check cannot see
+ * through, so a plan that reads one is left regular as a whole. Both checks cover both forms of
+ * a reference: the [[CTEReuseExchange]] leaf of the initial adaptive plan and of every replan
+ * before its stage is created, and the [[CTEReuseQueryStageExec]] that replaces it.
  */
 object AQEEnablePipelinedShuffle extends Rule[SparkPlan] {
 
@@ -78,6 +86,7 @@ object AQEEnablePipelinedShuffle extends Rule[SparkPlan] {
     def hasRegularPrefix(p: SparkPlan): Boolean = p match {
       case s: ShuffleExchangeExec =>
         (!s.pipelined && !toFlip.contains(s.id)) || hasRegularPrefix(s.child)
+      case _: CTEReuseQueryStageExec | _: CTEReuseExchange => true
       case q: QueryStageExec => hasRegularPrefix(q.plan)
       case r: ReusedExchangeExec => hasRegularPrefix(r.child)
       case other => other.children.exists(hasRegularPrefix)
@@ -98,7 +107,14 @@ object AQEEnablePipelinedShuffle extends Rule[SparkPlan] {
   }
 
   private def isCandidate(s: ShuffleExchangeExec, shared: Set[SparkPlan]): Boolean =
-    !s.pipelined && (shared.isEmpty || !shared.contains(s.canonicalized))
+    !s.pipelined && !s.isCreatedForSubplanReuse && !readsCTEReference(s) &&
+      (shared.isEmpty || !shared.contains(s.canonicalized))
+
+  // Whether `s` reads a CTE reference, unstaged or staged (see the class doc).
+  private def readsCTEReference(s: ShuffleExchangeExec): Boolean = s.child.exists {
+    case _: CTEReuseQueryStageExec | _: CTEReuseExchange => true
+    case _ => false
+  }
 
   /**
    * Top-down walk collecting exchanges to flip. `blocked` is true once the path from the

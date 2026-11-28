@@ -40,7 +40,7 @@ import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableS
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{LogicalRelation, WriteFiles, WriteFilesExec}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, StreamingDataSourceV2ScanRelation}
-import org.apache.spark.sql.execution.exchange.{REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, REPARTITION_BY_COL, REPARTITION_BY_NUM, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange.{CTEReuseExchange, LOCAL_SHUFFLE_FOR_CTE, REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, REPARTITION_BY_COL, REPARTITION_BY_NUM, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.BroadcastRangeJoinExec
 import org.apache.spark.sql.execution.python._
 import org.apache.spark.sql.execution.python.streaming.{FlatMapGroupsInPandasWithStateExec, TransformWithStateInPySparkExec}
@@ -1097,6 +1097,38 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           f, key, lObj, rObj, lGroup, rGroup, lAttr, rAttr, lOrder, rOrder, oAttr,
           planLater(left), planLater(right)) :: Nil
 
+      case r: logical.CTEReuseRelation =>
+        // Plan the shared subplan eagerly rather than using planLater, because
+        // CTEReuseExchange is a LeafExecNode whose subplan is not visible via
+        // children. QueryPlanner.collectPlaceholders would never find a PlanLater
+        // inside the subplan, leaving it unresolved.
+        //
+        // sharedSubplan is a plan-reuse RepartitionByExpression wrapping the CTE body; the
+        // RepartitionByExpression strategy already stamps it as a ShuffleExchangeExec with a
+        // LOCAL_SHUFFLE_FOR_CTE origin (a reuse boundary via `isCreatedForSubplanReuse` for
+        // EnsureRequirements, the AQE-off unwrap path, and VerifyCTEReuse). Deriving the origin
+        // from the logical node keeps it across AQE re-planning. We use this shuffle directly
+        // instead of adding a separate exchange -- the Repartition serves as the logical plan for
+        // the inner AQE, enabling correct re-optimization (broadcast stages are findable as
+        // descendants, and re-planning preserves the root exchange).
+        //
+        // sharedSubplan is not a child, so the clone that QueryExecution takes before planning
+        // does not copy it: every planning of this reference (the main query, a dynamic-pruning
+        // build side, a nested reference) would see the object the optimized plan holds, and the
+        // inner AQE re-optimizes its logical link on another thread. Plan a private clone instead,
+        // which keeps the canonical form.
+        val subplan = r.sharedSubplan.clone()
+        val physicalSubplan = SparkStrategies.this.plan(subplan).next()
+        val shuffle = physicalSubplan match {
+          case s: ShuffleExchangeExec => s
+          case other =>
+            throw SparkException.internalError(
+              s"Planning CTEReuseRelation(cteId=${r.cteId}) sharedSubplan was expected to " +
+                s"produce a ShuffleExchangeExec, but got ${other.getClass.getSimpleName}:\n" +
+                other.treeString)
+        }
+        CTEReuseExchange(r.cteId, shuffle) :: Nil
+
       case r @ logical.Repartition(numPartitions, shuffle, child) =>
         if (shuffle) {
           ShuffleExchangeExec(r.partitioning, planLater(child), REPARTITION_BY_NUM) :: Nil
@@ -1163,7 +1195,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case r: logical.Range =>
         execution.RangeExec(r) :: Nil
       case r: logical.RepartitionByExpression =>
-        val shuffleOrigin = if (r.partitionExpressions.isEmpty && r.optNumPartitions.isEmpty) {
+        val shuffleOrigin = if (r.isForPlanReuse) {
+          // A plan-reuse RepartitionByExpression backs guaranteed CTE reuse; deriving the origin
+          // from the logical node here (rather than stamping it post-planning) keeps it across
+          // AQE re-planning, so the shared root shuffle stays a protected reuse boundary.
+          LOCAL_SHUFFLE_FOR_CTE(r.repartitionId)
+        } else if (r.partitionExpressions.isEmpty && r.optNumPartitions.isEmpty) {
           REBALANCE_PARTITIONS_BY_NONE
         } else if (r.optNumPartitions.isEmpty) {
           REPARTITION_BY_COL
