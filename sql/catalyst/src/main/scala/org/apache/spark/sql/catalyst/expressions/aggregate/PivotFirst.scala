@@ -22,6 +22,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.optimizer.NormalizeFloatingNumbers
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{GenericArrayData, TypeUtils}
@@ -89,34 +90,48 @@ case class PivotFirst(
 
   private val usesTreeMap: Boolean = !TypeUtils.typeWithProperEquals(pivotColumn.dataType)
 
+  private val indexKey: Any => Any = pivotColumn.dataType match {
+    case DoubleType | FloatType => floatingIndexKey
+    case _ => identity
+  }
+
+  private def floatingIndexKey(value: Any): Any = value match {
+    case d: Double => java.lang.Double.doubleToLongBits(
+      NormalizeFloatingNumbers.DOUBLE_NORMALIZER(d).asInstanceOf[Double])
+    case f: Float => java.lang.Float.floatToIntBits(
+      NormalizeFloatingNumbers.FLOAT_NORMALIZER(f).asInstanceOf[Float])
+    case _ => value
+  }
+
   private val (pivotIndex, slotOfValue, slotValues) = {
     val slots = new Array[Int](pivotColumnValues.length)
     val values = mutable.ArrayBuffer.empty[Any]
     var index: Map[Any, Int] = if (usesTreeMap) {
-      TreeMap.empty[Any, Int](TypeUtils.getInterpretedOrdering(pivotColumn.dataType))
+      val ordering = TypeUtils.getInterpretedOrdering(pivotColumn.dataType)
+      val nullSafeOrdering: Ordering[Any] = (x: Any, y: Any) =>
+        if (x == null) {
+          if (y == null) 0 else -1
+        } else if (y == null) {
+          1
+        } else {
+          ordering.compare(x, y)
+        }
+      TreeMap.empty[Any, Int](nullSafeOrdering)
     } else {
       HashMap.empty[Any, Int]
     }
     pivotColumnValues.zipWithIndex.foreach { case (value, i) =>
-      index.get(value) match {
+      val key = indexKey(value)
+      index.get(key) match {
         case Some(existingSlot) =>
           slots(i) = existingSlot
         case None =>
           slots(i) = values.length
-          index = index.updated(value, values.length)
+          index = index.updated(key, values.length)
           values += value
       }
     }
     (index, slots, values.toSeq)
-  }
-
-  // Null-safe lookup into pivotIndex. When pivotIndex is a TreeMap, its comparison-based lookup
-  // throws NPE on null keys. Returning -1 for null is safe on the TreeMap path because null can
-  // never be a TreeMap key (insertion would also NPE), so it can never match any pivot value.
-  // Otherwise, pivotIndex is a HashMap that handles null keys safely via hash-based lookup.
-  private def findPivotIndex(key: Any): Int = key match {
-    case null if usesTreeMap => -1
-    case _ => pivotIndex.getOrElse(key, -1)
   }
 
   // Values that compare as equal share a slot, so this counts distinct slots; the output has one
@@ -128,7 +143,7 @@ case class PivotFirst(
   override def update(mutableAggBuffer: InternalRow, inputRow: InternalRow): Unit = {
     val pivotColValue = pivotColumn.eval(inputRow)
     // We ignore rows whose pivot column value is not in the list of pivot column values.
-    val index = findPivotIndex(pivotColValue)
+    val index = pivotIndex.getOrElse(indexKey(pivotColValue), -1)
     if (index >= 0) {
       val value = valueColumn.eval(inputRow)
       if (value != null) {
