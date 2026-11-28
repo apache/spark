@@ -671,6 +671,7 @@ private[ml] object MLUtils {
     (classOf[VarianceThresholdSelectorModel], Set("selectedFeatures")),
     (classOf[PCAModel], Set("pc", "explainedVariance")),
     (classOf[Word2VecModel], Set("getVectors", "findSynonyms")),
+    (classOf[Hash2VecModel], Set("getVectors")),
     (classOf[CountVectorizerModel], Set("vocabulary")),
     (classOf[OneHotEncoderModel], Set("categorySizes")),
     (classOf[StringIndexerModel], Set("labels", "labelsArray")),
