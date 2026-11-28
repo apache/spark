@@ -27,10 +27,12 @@ from pandas.core.dtypes.common import is_numeric_dtype
 
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.typedef.typehints import (
+    extension_arrow_dtypes_available,
     extension_dtypes_available,
     extension_float_dtypes_available,
     extension_object_dtypes_available,
     handle_dtype_as_extension_dtype,
+    is_arrow_dtype,
     is_str_dtype,
     spark_type_to_pandas_dtype,
 )
@@ -64,6 +66,10 @@ if extension_float_dtypes_available:
 
 if extension_object_dtypes_available:
     from pandas import BooleanDtype, StringDtype
+
+if extension_arrow_dtypes_available:
+    import pyarrow as pa
+    from pandas import ArrowDtype
 
 
 def is_valid_operand_for_numeric_arithmetic(operand: Any, *, allow_bool: bool = True) -> bool:
@@ -116,12 +122,16 @@ def _should_return_all_false(left: IndexOpsLike, right: Any) -> bool:
     Determine if binary comparison should short-circuit to all False,
     based on incompatible dtypes: non-numeric vs. numeric (including bools).
     """
-    from pandas.api.types import is_list_like
+    import datetime
+    from pandas.api.types import (
+        is_bool_dtype,
+        is_datetime64_any_dtype,
+        is_list_like,
+        is_string_dtype,
+        is_timedelta64_dtype,
+    )
 
     from pyspark.pandas.base import IndexOpsMixin
-
-    def are_both_numeric(left_dtype: Dtype, right_dtype: Dtype) -> bool:
-        return is_numeric_dtype(left_dtype) and is_numeric_dtype(right_dtype)
 
     left_dtype = left.dtype
 
@@ -136,7 +146,77 @@ def _should_return_all_false(left: IndexOpsLike, right: Any) -> bool:
         )
         right_dtype = pd.Series([right]).dtype
 
-    return left_dtype != right_dtype and not are_both_numeric(left_dtype, right_dtype)
+    if left_dtype == right_dtype:
+        return False
+
+    def is_numeric_or_bool(dtype: Dtype) -> bool:
+        if is_numeric_dtype(dtype) or is_bool_dtype(dtype):
+            return True
+        if extension_arrow_dtypes_available and isinstance(dtype, ArrowDtype):
+            pa_type = dtype.pyarrow_dtype
+            return (
+                pa.types.is_integer(pa_type)
+                or pa.types.is_floating(pa_type)
+                or pa.types.is_boolean(pa_type)
+                or pa.types.is_decimal(pa_type)
+            )
+        return False
+
+    if is_numeric_or_bool(left_dtype) and is_numeric_or_bool(right_dtype):
+        return False
+
+    def is_string_like(dtype: Dtype) -> bool:
+        if extension_arrow_dtypes_available and isinstance(dtype, ArrowDtype):
+            pa_type = dtype.pyarrow_dtype
+            return pa.types.is_string(pa_type) or pa.types.is_large_string(pa_type)
+        return is_string_dtype(dtype)
+
+    if is_string_like(left_dtype) and is_string_like(right_dtype):
+        return False
+
+    def is_timestamp_like(dtype: Dtype) -> bool:
+        if is_datetime64_any_dtype(dtype):
+            return True
+        if extension_arrow_dtypes_available and isinstance(dtype, ArrowDtype):
+            return pa.types.is_timestamp(dtype.pyarrow_dtype)
+        return False
+
+    if is_timestamp_like(left_dtype) and is_timestamp_like(right_dtype):
+        return False
+
+    def is_date_like(dtype: Dtype, val: Any) -> bool:
+        if isinstance(val, datetime.date) and not isinstance(val, datetime.datetime):
+            return True
+        if extension_arrow_dtypes_available and isinstance(dtype, ArrowDtype):
+            return pa.types.is_date(dtype.pyarrow_dtype)
+        return False
+
+    if is_date_like(left_dtype, left) and is_date_like(right_dtype, right):
+        return False
+
+    def is_duration_like(dtype: Dtype) -> bool:
+        if is_timedelta64_dtype(dtype):
+            return True
+        if extension_arrow_dtypes_available and isinstance(dtype, ArrowDtype):
+            return pa.types.is_duration(dtype.pyarrow_dtype)
+        return False
+
+    if is_duration_like(left_dtype) and is_duration_like(right_dtype):
+        return False
+
+    def is_binary_like(dtype: Dtype, val: Any) -> bool:
+        if isinstance(val, (bytes, bytearray)):
+            return True
+        if extension_arrow_dtypes_available and isinstance(dtype, ArrowDtype):
+            return pa.types.is_binary(dtype.pyarrow_dtype) or pa.types.is_large_binary(
+                dtype.pyarrow_dtype
+            )
+        return False
+
+    if is_binary_like(left_dtype, left) and is_binary_like(right_dtype, right):
+        return False
+
+    return True
 
 
 def _as_categorical_type(
@@ -286,30 +366,32 @@ class DataTypeOps(object, metaclass=ABCMeta):
         elif isinstance(spark_type, DecimalType):
             return object.__new__(DecimalOps)
         elif isinstance(spark_type, FractionalType):
-            if extension_float_dtypes_available and type(dtype) in [Float32Dtype, Float64Dtype]:
+            if (
+                extension_float_dtypes_available and type(dtype) in [Float32Dtype, Float64Dtype]
+            ) or (extension_arrow_dtypes_available and isinstance(dtype, ArrowDtype)):
                 return object.__new__(FractionalExtensionOps)
             else:
                 return object.__new__(FractionalOps)
         elif isinstance(spark_type, IntegralType):
-            if extension_dtypes_available and type(dtype) in [
-                Int8Dtype,
-                Int16Dtype,
-                Int32Dtype,
-                Int64Dtype,
-            ]:
+            if (
+                extension_dtypes_available
+                and type(dtype) in [Int8Dtype, Int16Dtype, Int32Dtype, Int64Dtype]
+            ) or (extension_arrow_dtypes_available and isinstance(dtype, ArrowDtype)):
                 return object.__new__(IntegralExtensionOps)
             else:
                 return object.__new__(IntegralOps)
         elif isinstance(spark_type, StringType):
-            if extension_object_dtypes_available and isinstance(dtype, StringDtype):
-                if handle_dtype_as_extension_dtype(dtype):
-                    return object.__new__(StringExtensionOps)
-                else:
-                    return object.__new__(StringOps)
+            if (
+                (extension_object_dtypes_available and isinstance(dtype, StringDtype))
+                or (extension_arrow_dtypes_available and isinstance(dtype, ArrowDtype))
+            ) and handle_dtype_as_extension_dtype(dtype):
+                return object.__new__(StringExtensionOps)
             else:
                 return object.__new__(StringOps)
         elif isinstance(spark_type, BooleanType):
-            if extension_object_dtypes_available and isinstance(dtype, BooleanDtype):
+            if (extension_object_dtypes_available and isinstance(dtype, BooleanDtype)) or (
+                extension_arrow_dtypes_available and isinstance(dtype, ArrowDtype)
+            ):
                 return object.__new__(BooleanExtensionOps)
             else:
                 return object.__new__(BooleanOps)

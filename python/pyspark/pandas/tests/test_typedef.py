@@ -29,11 +29,16 @@ from pyspark import pandas as ps
 from pyspark.loose_version import LooseVersion
 from pyspark.pandas.typedef import (
     as_spark_type,
+    extension_arrow_dtypes_available,
     extension_dtypes_available,
     extension_float_dtypes_available,
     extension_object_dtypes_available,
     infer_return_type,
+    is_arrow_dtype,
+    is_pyarrow_backed_dtype,
+    is_string_pyarrow_dtype,
     pandas_on_spark_type,
+    spark_type_to_pandas_dtype,
 )
 from pyspark.sql.types import (
     ArrayType,
@@ -472,6 +477,66 @@ class TypeHintTestsMixin:
         for extension_dtype, spark_type in type_mapper.items():
             self.assertEqual(as_spark_type(extension_dtype), spark_type)
             self.assertEqual(pandas_on_spark_type(extension_dtype), (extension_dtype, spark_type))
+
+    @unittest.skipIf(
+        not extension_arrow_dtypes_available, "PyArrow-backed dtypes are not available"
+    )
+    def test_as_spark_type_pyarrow_dtypes(self):
+        import pyarrow as pa
+        from pandas import ArrowDtype
+
+        type_mapper = {
+            ArrowDtype(pa.bool_()): BooleanType(),
+            ArrowDtype(pa.int8()): ByteType(),
+            ArrowDtype(pa.int16()): ShortType(),
+            ArrowDtype(pa.int32()): IntegerType(),
+            ArrowDtype(pa.int64()): LongType(),
+            ArrowDtype(pa.float32()): FloatType(),
+            ArrowDtype(pa.float64()): DoubleType(),
+            ArrowDtype(pa.string()): StringType(),
+            ArrowDtype(pa.timestamp("us")): TimestampType(),
+        }
+
+        for arrow_dtype, spark_type in type_mapper.items():
+            self.assertEqual(as_spark_type(arrow_dtype), spark_type)
+            self.assertEqual(
+                spark_type_to_pandas_dtype(spark_type, use_arrow_dtypes=True),
+                arrow_dtype,
+            )
+
+        # Test nested timestamps in spark_type_to_pandas_dtype
+        self.assertEqual(
+            spark_type_to_pandas_dtype(ArrayType(TimestampType()), use_arrow_dtypes=True),
+            ArrowDtype(pa.list_(pa.field("element", pa.timestamp("us")))),
+        )
+        self.assertEqual(
+            spark_type_to_pandas_dtype(
+                StructType([StructField("ts", TimestampType())]), use_arrow_dtypes=True
+            ),
+            ArrowDtype(pa.struct([pa.field("ts", pa.timestamp("us"))])),
+        )
+
+    @unittest.skipIf(
+        not extension_arrow_dtypes_available, "PyArrow-backed dtypes are not available"
+    )
+    def test_is_pyarrow_backed_dtype(self):
+        import pyarrow as pa
+        from pandas import ArrowDtype, StringDtype
+
+        self.assertTrue(is_pyarrow_backed_dtype(ArrowDtype(pa.bool_())))
+        self.assertTrue(is_pyarrow_backed_dtype(ArrowDtype(pa.int64())))
+        self.assertTrue(is_pyarrow_backed_dtype(ArrowDtype(pa.string())))
+        self.assertTrue(is_pyarrow_backed_dtype(StringDtype(storage="pyarrow")))
+        self.assertFalse(is_pyarrow_backed_dtype(StringDtype(storage="python")))
+        self.assertFalse(is_pyarrow_backed_dtype(np.dtype("int64")))
+
+        self.assertTrue(is_arrow_dtype(ArrowDtype(pa.string())))
+        self.assertFalse(is_arrow_dtype(StringDtype(storage="pyarrow")))
+        self.assertFalse(is_arrow_dtype(np.dtype("int64")))
+
+        self.assertTrue(is_string_pyarrow_dtype(StringDtype(storage="pyarrow")))
+        self.assertFalse(is_string_pyarrow_dtype(StringDtype(storage="python")))
+        self.assertFalse(is_string_pyarrow_dtype(ArrowDtype(pa.string())))
 
 
 class TypeHintTests(TypeHintTestsMixin, PandasOnSparkTestCase):

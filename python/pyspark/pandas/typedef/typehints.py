@@ -56,10 +56,18 @@ try:
     except ImportError:
         extension_float_dtypes_available = False
 
+    try:
+        from pandas import ArrowDtype
+
+        extension_arrow_dtypes_available = True
+    except ImportError:
+        extension_arrow_dtypes_available = False
+
 except ImportError:
     extension_dtypes_available = False
     extension_object_dtypes_available = False
     extension_float_dtypes_available = False
+    extension_arrow_dtypes_available = False
     extension_dtypes = ()
 
 import pyarrow as pa
@@ -253,16 +261,79 @@ def as_spark_type(
             elif isinstance(tpe, Float64Dtype) or (isinstance(tpe, str) and tpe == "Float64"):
                 return types.DoubleType()
 
+        # PyArrow-backed ArrowDtype
+        if extension_arrow_dtypes_available and isinstance(tpe, ArrowDtype):
+            return from_arrow_type(tpe.pyarrow_dtype, prefer_timestamp_ntz)
+
     if raise_error:
         raise TypeError("Type %s was not understood." % tpe)
     else:
         return None
 
 
+def _prefers_large_var_types() -> bool:
+    from pyspark.sql import SparkSession
+
+    session = SparkSession.getActiveSession()
+    if session is not None:
+        return (
+            session.conf.get("spark.sql.execution.arrow.useLargeVarTypes", "false").lower()
+            == "true"
+        )
+    try:
+        from pyspark.pandas.utils import default_session
+
+        return (
+            default_session()
+            .conf.get("spark.sql.execution.arrow.useLargeVarTypes", "false")
+            .lower()
+            == "true"
+        )
+    except Exception:
+        return False
+
+
 def spark_type_to_pandas_dtype(
-    spark_type: types.DataType, *, use_extension_dtypes: bool = False
+    spark_type: types.DataType,
+    *,
+    use_extension_dtypes: bool = False,
+    use_arrow_dtypes: bool = False,
 ) -> Dtype:
     """Return the given Spark DataType to pandas dtype."""
+
+    if use_arrow_dtypes and extension_arrow_dtypes_available:
+        prefers_large_var_types = _prefers_large_var_types()
+
+        def _to_arrow_dtype_internal(dt: types.DataType) -> "pa.DataType":
+            if isinstance(dt, (types.TimestampType, types.TimestampNTZType)):
+                return pa.timestamp("us")
+            elif isinstance(dt, types.ArrayType):
+                return pa.list_(
+                    pa.field(
+                        "element",
+                        _to_arrow_dtype_internal(dt.elementType),
+                        nullable=dt.containsNull,
+                    )
+                )
+            elif isinstance(dt, types.MapType):
+                return pa.map_(
+                    _to_arrow_dtype_internal(dt.keyType),
+                    _to_arrow_dtype_internal(dt.valueType),
+                )
+            elif isinstance(dt, types.StructType):
+                fields = [
+                    pa.field(f.name, _to_arrow_dtype_internal(f.dataType), nullable=f.nullable)
+                    for f in dt.fields
+                ]
+                return pa.struct(fields)
+            else:
+                return to_arrow_type(
+                    dt,
+                    timezone="UTC",
+                    prefers_large_types=prefers_large_var_types,
+                )
+
+        return ArrowDtype(_to_arrow_dtype_internal(spark_type))
 
     if use_extension_dtypes and extension_dtypes_available:
         # IntegralType
@@ -317,14 +388,7 @@ def spark_type_to_pandas_dtype(
         else:
             return np.dtype("datetime64[us]")
     else:
-        from pyspark.pandas.utils import default_session
-
-        prefers_large_var_types = (
-            default_session()
-            .conf.get("spark.sql.execution.arrow.useLargeVarTypes", "false")
-            .lower()
-            == "true"
-        )
+        prefers_large_var_types = _prefers_large_var_types()
         return np.dtype(
             to_arrow_type(
                 spark_type, timezone="UTC", prefers_large_types=prefers_large_var_types
@@ -340,9 +404,36 @@ def is_str_dtype(tpe: Dtype) -> bool:
     return False
 
 
+def is_arrow_dtype(tpe: Dtype) -> bool:
+    """Return whether the given dtype is an ArrowDtype."""
+    return extension_arrow_dtypes_available and isinstance(tpe, ArrowDtype)
+
+
+def is_string_pyarrow_dtype(tpe: Dtype) -> bool:
+    """Return whether the given dtype is string[pyarrow] (StringDtype with pd.NA)."""
+    return (
+        extension_object_dtypes_available
+        and isinstance(tpe, StringDtype)
+        and getattr(tpe, "storage", None) == "pyarrow"
+        and not is_str_dtype(tpe)
+    )
+
+
+def is_pyarrow_backed_dtype(tpe: Dtype) -> bool:
+    """Return whether the given dtype is a PyArrow-backed dtype."""
+    if extension_arrow_dtypes_available and isinstance(tpe, ArrowDtype):
+        return True
+    if extension_object_dtypes_available and isinstance(tpe, StringDtype):
+        storage = getattr(tpe, "storage", None)
+        return isinstance(storage, str) and storage.startswith("pyarrow")
+    return False
+
+
 def handle_dtype_as_extension_dtype(tpe: Dtype) -> bool:
     if is_str_dtype(tpe):
         return False
+    elif extension_arrow_dtypes_available and isinstance(tpe, ArrowDtype):
+        return True
     else:
         return isinstance(tpe, extension_dtypes)
 
