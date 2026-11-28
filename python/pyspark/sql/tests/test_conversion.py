@@ -394,6 +394,27 @@ class PandasToArrowConversionTests(unittest.TestCase):
         self.assertEqual(result.num_columns, 0)
         self.assertEqual(result.num_rows, 3)
 
+        # SPARK-62320: a DataFrame with 0 columns has the schema of one with columns, also for
+        # NOT NULL fields, so that the batches of one stream have one schema
+        not_null_schema = StructType(
+            [
+                StructField("_0", StructType([StructField("a", IntegerType(), False)]), False),
+            ]
+        )
+        with_columns = PandasToArrowConversion.from_pandas(
+            [pd.DataFrame({"a": [1]})], not_null_schema
+        )
+        without_columns = PandasToArrowConversion.from_pandas([pd.DataFrame()], not_null_schema)
+        self.assertEqual(without_columns.num_rows, 0)
+        self.assertEqual(without_columns.schema, with_columns.schema)
+        not_null_schema = StructType([StructField("a", IntegerType(), False)])
+        with_columns = PandasToArrowConversion.from_pandas(
+            pd.DataFrame({"a": [1]}), not_null_schema
+        )
+        without_columns = PandasToArrowConversion.from_pandas(pd.DataFrame(), not_null_schema)
+        self.assertEqual(without_columns.num_rows, 0)
+        self.assertEqual(without_columns.schema, with_columns.schema)
+
     def test_from_pandas_assign_cols_by_name(self):
         """Test assign_cols_by_name reorders columns to match schema."""
         import pandas as pd

@@ -395,6 +395,23 @@ class ApplyInPandasTestsMixin:
     def test_apply_in_pandas_returning_empty_dataframe(self):
         self._test_apply_in_pandas_returning_empty_dataframe(pd.DataFrame())
 
+    def test_apply_in_pandas_returning_empty_dataframe_for_not_null_schema(self):
+        # SPARK-62320: a group that returns a DataFrame with 0 columns, next to one that returns
+        # rows, for a schema with NOT NULL fields
+        def stats(key, pdf):
+            if key[0] % 2 == 0:
+                return pd.DataFrame([key + (pdf.v.mean(),)])
+            return pd.DataFrame()
+
+        result = (
+            self.data.groupby("id")
+            .applyInPandas(stats, schema="id long not null, mean double not null")
+            .collect()
+        )
+        expected_ids = {row[0] for row in self.data.collect() if row[0] % 2 == 0}
+        self.assertSetEqual(expected_ids, {row[0] for row in result})
+        self.assertEqual(len(expected_ids), len(result))
+
     @unittest.skipIf(
         os.environ.get("SPARK_SKIP_CONNECT_COMPAT_TESTS") == "1", "SPARK-54482: To be reenabled"
     )

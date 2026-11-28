@@ -416,8 +416,15 @@ class PandasToArrowConversion:
         # Handle empty DataFrame (0 columns) with non-empty schema
         # This happens when user returns pd.DataFrame() for struct types
         if isinstance(data, pd.DataFrame) and len(data.columns) == 0:
-            arrow_type = to_arrow_type(
-                schema, timezone=timezone, prefers_large_types=prefers_large_types
+            # The fields are nullable, as pa.RecordBatch.from_arrays below makes them for a
+            # DataFrame with columns, so that all the batches of a stream have one schema.
+            arrow_type = pa.struct(
+                [
+                    field.with_nullable(True)
+                    for field in to_arrow_type(
+                        schema, timezone=timezone, prefers_large_types=prefers_large_types
+                    )
+                ]
             )
             return pa.RecordBatch.from_struct_array(pa.array([{}] * len(data), arrow_type))
 
