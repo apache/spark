@@ -338,32 +338,11 @@ public class SSLFactory {
     return engine;
   }
 
-  private static TrustManager[] credulousTrustStoreManagers() {
-    return new TrustManager[]{new X509TrustManager() {
-      @Override
-      public void checkClientTrusted(X509Certificate[] x509Certificates, String s)
-        throws CertificateException {
-      }
-
-      @Override
-      public void checkServerTrusted(X509Certificate[] x509Certificates, String s)
-        throws CertificateException {
-      }
-
-      @Override
-      public X509Certificate[] getAcceptedIssuers() {
-        return null;
-      }
-    }};
-  }
-
   private static TrustManager[] trustStoreManagers(
       File trustStore, String trustStorePassword,
       boolean trustStoreReloadingEnabled, int trustStoreReloadIntervalMs)
           throws IOException, GeneralSecurityException {
-    if (trustStore == null || !trustStore.exists()) {
-      return credulousTrustStoreManagers();
-    } else {
+    if (trustStore != null && trustStore.exists()) {
       if (trustStoreReloadingEnabled) {
         ReloadingX509TrustManager reloading = new ReloadingX509TrustManager(
           KeyStore.getDefaultType(), trustStore, trustStorePassword, trustStoreReloadIntervalMs);
@@ -372,6 +351,12 @@ public class SSLFactory {
       } else {
         return defaultTrustManagers(trustStore, trustStorePassword);
       }
+    } else {
+      // Use the system default TrustManager instead of a "trust-all" implementation
+      TrustManagerFactory tmf = TrustManagerFactory.getInstance(
+        TrustManagerFactory.getDefaultAlgorithm());
+      tmf.init((KeyStore) null);
+      return tmf.getTrustManagers();
     }
   }
 
