@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.text.{DecimalFormat, DecimalFormatSymbols, SimpleDateFormat}
+import java.time.LocalDate
 import java.util.{Calendar, Locale, TimeZone}
 
 import org.scalatest.exceptions.TestFailedException
@@ -28,6 +29,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{PST, UTC, UTC_OPT}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -369,6 +371,70 @@ class XmlExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       new SchemaOfXml(Literal.create("""<ROW><col>01</col></ROW>"""),
         CreateMap(Seq(Literal.create("allowNumericLeadingZeros"), Literal.create("true")))),
       "STRUCT<col: BIGINT>")
+  }
+
+  test("SPARK-60201: LEGACY XML dates prefer ISO to a custom dateFormat") {
+    val schema = new StructType().add("d", DateType)
+    for {
+      policy <- Seq("LEGACY", "CORRECTED", "EXCEPTION")
+      mode <- Seq("PERMISSIVE", "FAILFAST")
+    } {
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> policy) {
+        val options = Map("dateFormat" -> "yyyy-dd-MM", "mode" -> mode)
+        val expected = if (policy == "LEGACY") "2024-03-04" else "2024-04-03"
+        checkEvaluation(
+          XmlToStructs(schema, options, Literal("<ROW><d>2024-03-04</d></ROW>"), UTC_OPT),
+          InternalRow(DateTimeUtils.localDateToDays(LocalDate.parse(expected))))
+        checkEvaluation(
+          XmlToStructs(schema, options, Literal("<ROW><d>2024-31-01</d></ROW>"), UTC_OPT),
+          InternalRow(DateTimeUtils.localDateToDays(LocalDate.of(2024, 1, 31))))
+      }
+    }
+  }
+
+  test("SPARK-60201: LEGACY XML ISO date precedence preserves historical dates and offsets") {
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "LEGACY") {
+      val schema = new StructType().add("d", DateType)
+      val options = Map("dateFormat" -> "yyyy-dd-MM", "mode" -> "FAILFAST")
+      Seq(
+        "1500-03-04" -> "1500-03-04",
+        "2024-03-04+02:00" -> "2024-03-04",
+        "2024-03-04Z" -> "2024-03-04").foreach { case (input, expected) =>
+        checkEvaluation(
+          XmlToStructs(schema, options, Literal(s"<ROW><d>$input</d></ROW>"), UTC_OPT),
+          InternalRow(DateTimeUtils.localDateToDays(LocalDate.parse(expected))))
+      }
+    }
+  }
+
+  test("SPARK-60201: LEGACY XML keeps non-ISO custom date parsing and locale behavior") {
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "LEGACY") {
+      val schema = new StructType().add("d", DateType)
+      Seq(
+        ("dd/MM/yyyy", "en-US", "04/03/2024", "2024-03-04"),
+        ("yyyyMMdd", "en-US", "20240304", "2024-03-04"),
+        ("dd.MM.yyyy", "en-US", "04.03.2024", "2024-03-04"),
+        ("dd MMM yyyy", "fr-FR", "04 mars 2024", "2024-03-04"),
+        ("MMM yyyy", "en-US", "Mar 2024", "2024-03-01")
+      ).foreach { case (format, locale, input, expected) =>
+        val options = Map("dateFormat" -> format, "locale" -> locale, "mode" -> "FAILFAST")
+        checkEvaluation(
+          XmlToStructs(schema, options, Literal(s"<ROW><d>$input</d></ROW>"), UTC_OPT),
+          InternalRow(DateTimeUtils.localDateToDays(LocalDate.parse(expected))))
+      }
+    }
+  }
+
+  test("SPARK-60201: LEGACY XML ISO-shaped dates preserve the locale calendar") {
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "LEGACY") {
+      val schema = new StructType().add("d", DateType)
+      for (mode <- Seq("PERMISSIVE", "FAILFAST")) {
+        val options = Map("dateFormat" -> "yyyy-MM-dd", "locale" -> "th-TH", "mode" -> mode)
+        checkEvaluation(
+          XmlToStructs(schema, options, Literal("<ROW><d>2567-03-04</d></ROW>"), UTC_OPT),
+          InternalRow(DateTimeUtils.localDateToDays(LocalDate.of(2024, 3, 4))))
+      }
+    }
   }
 
   test("parse date with locale") {
