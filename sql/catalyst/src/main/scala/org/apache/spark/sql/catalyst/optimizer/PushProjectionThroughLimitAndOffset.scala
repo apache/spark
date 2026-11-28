@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.expressions.{NamedExpression, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{GlobalLimit, LocalLimit, LogicalPlan, Offset, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LIMIT, OFFSET, PROJECT}
@@ -25,19 +26,25 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{LIMIT, OFFSET, PROJECT}
  * Pushes Project operator through Limit operator.
  */
 object PushProjectionThroughLimitAndOffset extends Rule[LogicalPlan] {
+  private def canPush(projectList: Seq[NamedExpression]): Boolean = {
+    projectList.forall(e => e.deterministic &&
+      !SubqueryExpression.hasCorrelatedSubquery(e) &&
+      !SubqueryExpression.hasInOrCorrelatedExistsSubquery(e))
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(treeBits =>
     treeBits.containsPattern(PROJECT) && treeBits.containsAnyPattern(OFFSET, LIMIT)) {
 
     case p @ Project(projectList, limit @ LocalLimit(_, child))
-        if projectList.forall(_.deterministic) =>
+        if canPush(projectList) =>
       limit.copy(child = p.copy(projectList, child))
 
     case p @ Project(projectList, g @ GlobalLimit(_, limit @ LocalLimit(_, child)))
-        if projectList.forall(_.deterministic) =>
+        if canPush(projectList) =>
       g.copy(child = limit.copy(child = p.copy(projectList, child)))
 
     case p @ Project(projectList, offset @ Offset(_, child))
-      if projectList.forall(_.deterministic) =>
+      if canPush(projectList) =>
       offset.copy(child = p.copy(projectList, child))
   }
 }
