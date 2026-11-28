@@ -1750,13 +1750,12 @@ class StructType(DataType):
     def __init__(self, fields: Optional[List[StructField]] = None):
         if not fields:
             self.fields = []
-            self.names = []
         else:
             self.fields = fields
-            self.names = [f.name for f in fields]
-            assert all(isinstance(f, StructField) for f in fields), (
+            assert all(isinstance(f, StructField) for f in self.fields), (
                 "fields should be a list of StructField"
             )
+        self.names = [f.name for f in self.fields]
         # Precalculated list of fields that need conversion with fromInternal/toInternal functions
         self._needConversion = [f.needConversion() for f in self]
         self._needSerializeAnyField = any(self._needConversion)

@@ -1778,6 +1778,42 @@ class TypesTestsMixin:
         self.assertRaises(IndexError, lambda: struct1[9])
         self.assertRaises(TypeError, lambda: struct1[9.9])
 
+    def test_struct_type_subclass(self):
+        # SPARK-62231: Subclasses should route attributes through subclass properties
+        class CustomStruct(StructType):
+            _f = [StructField("custom", StringType())]
+
+            @property
+            def fields(self):
+                return self._f
+
+            @fields.setter
+            def fields(self, val):
+                pass
+
+        # Overridden fields property resolves names properly with and without constructor args
+        s1 = CustomStruct()
+        self.assertEqual(s1.names, ["custom"])
+        self.assertEqual(len(s1._needConversion), 1)
+
+        s2 = CustomStruct([StructField("arg", IntegerType())])
+        self.assertEqual(s2.names, ["custom"])
+
+        class BadStruct(StructType):
+            _f = [1, 2]
+
+            @property
+            def fields(self):
+                return self._f
+
+            @fields.setter
+            def fields(self, val):
+                pass
+
+        # Subclass holding objects that are not StructField fails to construct
+        with self.assertRaises(AttributeError):
+            BadStruct()
+
     def test_parse_datatype_json_string(self):
         from pyspark.sql.types import _parse_datatype_json_string
 
