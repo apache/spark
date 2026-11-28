@@ -74,7 +74,7 @@ class ProtobufSerdeSuite extends SharedSparkSession with ProtobufTestBase {
 
   test("SPARK-59112: serialize CHAR/VARCHAR with Protobuf string-family converters") {
     val stringDescriptor =
-      ProtobufUtils.buildDescriptor("SimpleMessageJavaTypes", Some(testFileDesc)).descriptor
+      ProtobufUtils.buildDescriptor("SimpleMessageJavaTypes", Some(functionsDesc)).descriptor
     val enumDescriptor =
       ProtobufUtils.buildDescriptor("SimpleMessageEnum", Some(functionsDesc)).descriptor
     val wrapperDescriptor =
