@@ -42,7 +42,7 @@ import org.apache.spark.util.Utils
 class ExecutorPodsWatchSnapshotSource(
     snapshotsStore: ExecutorPodsSnapshotsStore,
     kubernetesClient: KubernetesClient,
-    conf: SparkConf) extends Logging {
+    conf: SparkConf) extends ExecutorPodsSnapshotSource with Logging {
 
   private var watchConnection: Closeable = _
   private val enableWatching = conf.get(KUBERNETES_EXECUTOR_ENABLE_API_WATCHER)
