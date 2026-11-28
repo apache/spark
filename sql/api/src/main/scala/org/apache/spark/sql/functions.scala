@@ -6356,6 +6356,19 @@ object functions {
   def shiftleft(e: Column, numBits: Int): Column = Column.fn("shiftleft", e, lit(numBits))
 
   /**
+   * Shift the value left by the number of bits given by a column.
+   *
+   * @param e
+   *   the value to shift. A column that evaluates to an integer or long.
+   * @param numBits
+   *   the number of bits to shift. A column that evaluates to an integer.
+   * @group bitwise_funcs
+   * @since 4.5.0
+   */
+  def shiftleft(e: Column, numBits: Column): Column =
+    Column.fn("shiftleft", e, numBits)
+
+  /**
    * (Signed) shift the given value numBits right. If the given value is a long value, it will
    * return a long value else it will return an integer value.
    *
@@ -6382,6 +6395,19 @@ object functions {
    *   Returns a column of the same type as the input.
    */
   def shiftright(e: Column, numBits: Int): Column = Column.fn("shiftright", e, lit(numBits))
+
+  /**
+   * Shift the value right with sign extension by the number of bits given by a column.
+   *
+   * @param e
+   *   the value to shift. A column that evaluates to an integer or long.
+   * @param numBits
+   *   the number of bits to shift. A column that evaluates to an integer.
+   * @group bitwise_funcs
+   * @since 4.5.0
+   */
+  def shiftright(e: Column, numBits: Column): Column =
+    Column.fn("shiftright", e, numBits)
 
   /**
    * Unsigned shift the given value numBits right. If the given value is a long value, it will
@@ -6411,6 +6437,19 @@ object functions {
    */
   def shiftrightunsigned(e: Column, numBits: Int): Column =
     Column.fn("shiftrightunsigned", e, lit(numBits))
+
+  /**
+   * Shift the value right with zero fill by the number of bits given by a column.
+   *
+   * @param e
+   *   the value to shift. A column that evaluates to an integer or long.
+   * @param numBits
+   *   the number of bits to shift. A column that evaluates to an integer.
+   * @group bitwise_funcs
+   * @since 4.5.0
+   */
+  def shiftrightunsigned(e: Column, numBits: Column): Column =
+    Column.fn("shiftrightunsigned", e, numBits)
 
   /**
    * Computes the signum of the given value.

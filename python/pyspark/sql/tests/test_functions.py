@@ -3500,6 +3500,35 @@ class FunctionsTestsMixin:
             )
         ).collect()
 
+    def test_shift_by_column(self):
+        df = self.spark.sql("SELECT * FROM VALUES (-16, 1), (-16, 3), (5, NULL) AS t(value, bits)")
+        actual = df.select(
+            F.shiftleft("value", F.col("bits")).alias("left"),
+            F.shiftright(df.value, "bits").alias("right"),
+            F.shiftrightunsigned("value", "bits").alias("unsigned"),
+        ).collect()
+        self.assertCountEqual(
+            actual,
+            [(-32, -8, 2147483640), (-128, -2, 536870910), (None, None, None)],
+        )
+
+    @unittest.skipIf(not have_numpy, "NumPy not installed")
+    def test_shift_by_numpy_integer(self):
+        import numpy as np
+
+        df = self.spark.sql("SELECT -16 AS value")
+        for dtype in (np.int16, np.int32, np.int64):
+            with self.subTest(dtype=dtype):
+                shift = dtype(1)
+                self.assertEqual(
+                    df.select(
+                        F.shiftleft("value", shift),
+                        F.shiftright("value", shift),
+                        F.shiftrightunsigned("value", shift),
+                    ).first(),
+                    (-32, -8, 2147483640),
+                )
+
     def test_lit_time(self):
         t = datetime.time(12, 34, 56)
         actual = self.spark.range(1).select(F.lit(t)).first()[0]

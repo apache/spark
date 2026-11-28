@@ -8640,7 +8640,7 @@ def bround(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> C
 
 
 @_try_remote_functions
-def shiftLeft(col: "ColumnOrName", numBits: int) -> Column:
+def shiftLeft(col: "ColumnOrName", numBits: "int | ColumnOrName") -> Column:
     """Shift the given value numBits left.
 
     .. versionadded:: 1.5.0
@@ -8656,7 +8656,7 @@ def shiftLeft(col: "ColumnOrName", numBits: int) -> Column:
 
 
 @_try_remote_functions
-def shiftleft(col: "ColumnOrName", numBits: int) -> Column:
+def shiftleft(col: "ColumnOrName", numBits: "int | ColumnOrName") -> Column:
     """Shift the given value numBits left.
 
     .. versionadded:: 3.2.0
@@ -8664,14 +8664,16 @@ def shiftleft(col: "ColumnOrName", numBits: int) -> Column:
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    .. versionchanged:: 4.5.0
+        Accepts a column or column name as the shift amount.
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         input column of values to shift.
         A column that evaluates to an integer or long.
-    numBits : int
-        number of bits to shift.
-        A column that evaluates to an integer.
+    numBits : int, :class:`~pyspark.sql.Column` or column name
+        Number of bits to shift, or a column that evaluates to an integer.
 
     Returns
     -------
@@ -8694,11 +8696,13 @@ def shiftleft(col: "ColumnOrName", numBits: int) -> Column:
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function("shiftleft", _to_java_column(col), _enum_to_value(numBits))
+    numBits = _enum_to_value(numBits)
+    shift = _to_java_column(numBits) if isinstance(numBits, (Column, str)) else numBits
+    return _invoke_function("shiftleft", _to_java_column(col), shift)
 
 
 @_try_remote_functions
-def shiftRight(col: "ColumnOrName", numBits: int) -> Column:
+def shiftRight(col: "ColumnOrName", numBits: "int | ColumnOrName") -> Column:
     """(Signed) shift the given value numBits right.
 
     .. versionadded:: 1.5.0
@@ -8714,7 +8718,7 @@ def shiftRight(col: "ColumnOrName", numBits: int) -> Column:
 
 
 @_try_remote_functions
-def shiftright(col: "ColumnOrName", numBits: int) -> Column:
+def shiftright(col: "ColumnOrName", numBits: "int | ColumnOrName") -> Column:
     """(Signed) shift the given value numBits right.
 
     .. versionadded:: 3.2.0
@@ -8722,14 +8726,16 @@ def shiftright(col: "ColumnOrName", numBits: int) -> Column:
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    .. versionchanged:: 4.5.0
+        Accepts a column or column name as the shift amount.
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         input column of values to shift.
         A column that evaluates to an integer or long.
-    numBits : int
-        number of bits to shift.
-        A column that evaluates to an integer.
+    numBits : int, :class:`~pyspark.sql.Column` or column name
+        Number of bits to shift, or a column that evaluates to an integer.
 
     Returns
     -------
@@ -8752,11 +8758,13 @@ def shiftright(col: "ColumnOrName", numBits: int) -> Column:
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function("shiftright", _to_java_column(col), _enum_to_value(numBits))
+    numBits = _enum_to_value(numBits)
+    shift = _to_java_column(numBits) if isinstance(numBits, (Column, str)) else numBits
+    return _invoke_function("shiftright", _to_java_column(col), shift)
 
 
 @_try_remote_functions
-def shiftRightUnsigned(col: "ColumnOrName", numBits: int) -> Column:
+def shiftRightUnsigned(col: "ColumnOrName", numBits: "int | ColumnOrName") -> Column:
     """Unsigned shift the given value numBits right.
 
     .. versionadded:: 1.5.0
@@ -8772,7 +8780,7 @@ def shiftRightUnsigned(col: "ColumnOrName", numBits: int) -> Column:
 
 
 @_try_remote_functions
-def shiftrightunsigned(col: "ColumnOrName", numBits: int) -> Column:
+def shiftrightunsigned(col: "ColumnOrName", numBits: "int | ColumnOrName") -> Column:
     """Unsigned shift the given value numBits right.
 
     .. versionadded:: 3.2.0
@@ -8780,14 +8788,16 @@ def shiftrightunsigned(col: "ColumnOrName", numBits: int) -> Column:
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    .. versionchanged:: 4.5.0
+        Accepts a column or column name as the shift amount.
+
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         input column of values to shift.
         A column that evaluates to an integer or long.
-    numBits : int
-        number of bits to shift.
-        A column that evaluates to an integer.
+    numBits : int, :class:`~pyspark.sql.Column` or column name
+        Number of bits to shift, or a column that evaluates to an integer.
 
     Returns
     -------
@@ -8810,7 +8820,9 @@ def shiftrightunsigned(col: "ColumnOrName", numBits: int) -> Column:
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    return _invoke_function("shiftrightunsigned", _to_java_column(col), _enum_to_value(numBits))
+    numBits = _enum_to_value(numBits)
+    shift = _to_java_column(numBits) if isinstance(numBits, (Column, str)) else numBits
+    return _invoke_function("shiftrightunsigned", _to_java_column(col), shift)
 
 
 @_try_remote_functions
