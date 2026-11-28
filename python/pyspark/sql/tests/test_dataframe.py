@@ -538,6 +538,23 @@ class DataFrameTestsMixin:
             },
         )
 
+    def test_sort_ascending_with_sort_expression(self):
+        df = self.spark.range(10)
+        for sort, fragment in [
+            (lambda: df.orderBy(functions.desc("id"), ascending=False), "desc"),
+            (lambda: df.sort(df.id.desc().asc()), "asc"),
+        ]:
+            with self.assertRaises(AnalysisException) as pe:
+                sort().collect()
+            self.check_error(
+                exception=pe.exception,
+                errorClass="NESTED_SORT_ORDER",
+                messageParameters={"sortOrder": '"id DESC NULLS LAST"'},
+                # Spark Connect does not report the DataFrame call site of the sort expression.
+                query_context_type=None if is_remote() else QueryContextType.DataFrame,
+                fragment=None if is_remote() else fragment,
+            )
+
     def test_with_columns_renamed_with_duplicated_names(self):
         df1 = self.spark.createDataFrame([(1, "v1")], ["id", "value"])
         df2 = self.spark.createDataFrame([(1, "x", "v2")], ["id", "a", "value"])

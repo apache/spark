@@ -680,6 +680,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       )
   }
 
+  def nestedSortOrderError(sortOrder: SortOrder): Throwable = {
+    new AnalysisException(
+      errorClass = "NESTED_SORT_ORDER",
+      messageParameters = Map("sortOrder" -> toSQLExpr(sortOrder.child)),
+      origin = sortOrder.origin)
+  }
+
   def selectExprNotInGroupByError(expr: Expression, groupByAliases: Seq[Alias]): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1005",

@@ -331,6 +331,26 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     messageParameters = Map.empty
   )
 
+  errorConditionTest(
+    name = "SPARK-46349: nested sort orders",
+    testRelation2.orderBy(SortOrder(SortOrder($"a", Descending), Ascending)),
+    condition = "NESTED_SORT_ORDER",
+    messageParameters = Map("sortOrder" -> "\"a DESC NULLS LAST\"")
+  )
+
+  errorConditionTest(
+    name = "SPARK-46349: nested sort orders in a window specification",
+    testRelation2.select(
+      WindowExpression(
+        RowNumber(),
+        WindowSpecDefinition(
+          Nil,
+          SortOrder(SortOrder($"a", Ascending), Descending) :: Nil,
+          UnspecifiedFrame)).as("rn")),
+    condition = "NESTED_SORT_ORDER",
+    messageParameters = Map("sortOrder" -> "\"a ASC NULLS FIRST\"")
+  )
+
   errorTest(
     "offset window function",
     testRelation2.select(
