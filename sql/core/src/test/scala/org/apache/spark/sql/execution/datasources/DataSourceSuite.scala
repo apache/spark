@@ -240,6 +240,72 @@ class DataSourceSuite extends SharedSparkSession with PrivateMethodTester {
       parameters = Map("paths" -> "/path1, /path2"))
     )
   }
+
+  test("SPARK-58518: checkAndGlobPathIfNecessary must not duplicate paths " +
+    "when globbing is disabled") {
+    // The lambda runs once per glob-looking path, so returning `qualifiedPaths` -- the whole
+    // input -- multiplies the result: G glob-looking paths and n others give G*(G+n)+n entries
+    // instead of G+n. Those duplicates become the file index's rootPaths.
+    //
+    // checkFilesExist = false keeps this focused on the path arithmetic and avoids depending on
+    // MockFileSystem.exists, which only knows allPathsInFs.
+    val onlyGlobLooking = DataSource.checkAndGlobPathIfNecessary(
+      Seq(path1.toString, path2.toString, globPath1.toString),
+      hadoopConf,
+      checkEmptyGlobPath = true,
+      checkFilesExist = false,
+      enableGlobbing = false
+    )
+
+    // Asserted as a Seq, NOT a Set: `toSet` is what would hide the defect. Order follows
+    // `globbedPaths ++ nonGlobPaths`.
+    assert(onlyGlobLooking === Seq(globPath1, path1, path2))
+
+    // Two glob-looking paths among four is where the multiplication is unmistakable: the buggy
+    // branch yields 2*(2+2)+2 = 10 entries for 4 inputs.
+    val twoGlobLooking = DataSource.checkAndGlobPathIfNecessary(
+      Seq(path1.toString, path2.toString, globPath1.toString, globPath2.toString),
+      hadoopConf,
+      checkEmptyGlobPath = true,
+      checkFilesExist = false,
+      enableGlobbing = false
+    )
+
+    assert(twoGlobLooking === Seq(globPath1, globPath2, path1, path2))
+    assert(twoGlobLooking.length === 4, "globbing is disabled, so each path must appear once")
+  }
+
+  test("SPARK-58518: a filename with a glob metacharacter must not duplicate rows " +
+    "when globbing is disabled") {
+    // isGlobPath is a bare character scan over "{}[]*?\\" with no notion of escaping, so an
+    // ordinary filename takes the branch. Names containing brackets are legal on HDFS and S3,
+    // which is why SPARK-32810 introduced __globPaths__ in the first place.
+    withTempDir { dir =>
+      val plainA = new File(dir, "plain_a.txt")
+      val plainB = new File(dir, "plain_b.txt")
+      val bracketed = new File(dir, "weird_[x].txt")
+      // Files.writeString rather than a PrintWriter: scalastyle bans println, and it is
+      // fully qualified so this test adds no import to the suite.
+      java.nio.file.Files.writeString(plainA.toPath, "row_a\n")
+      java.nio.file.Files.writeString(plainB.toPath, "row_b\n")
+      java.nio.file.Files.writeString(bracketed.toPath, "row_c\n")
+
+      val paths = Seq(plainA, plainB, bracketed).map(_.getCanonicalPath)
+
+      val df = spark.read
+        .option(DataSource.GLOB_PATHS_KEY, "false")
+        .text(paths: _*)
+
+      // Three files, one row each. Before the fix this returned five rows, with the two plain
+      // files duplicated, because the bracketed name made the branch emit all three paths.
+      //
+      // Collected and sorted into an Array rather than compared as a Set, for the same reason
+      // the unit test above avoids toSet: a Set is precisely what would hide duplication. This
+      // also keeps the test free of a `Row` import the suite does not currently carry.
+      assert(df.collect().map(_.getString(0)).sorted === Array("row_a", "row_b", "row_c"))
+      assert(df.count() === 3)
+    }
+  }
 }
 
 object TestPaths {
