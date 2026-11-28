@@ -24,7 +24,7 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.parquet.HadoopReadOptions
 import org.apache.parquet.column.ParquetProperties
 import org.apache.parquet.format.converter.ParquetMetadataConverter
@@ -136,10 +136,24 @@ private[sql] trait ParquetTest extends FileBasedDataSourceTest {
     ParquetFileWriter.writeMetadataFile(configuration, path, Seq(footer).asJava)
   }
 
+  /**
+   * Reads the footer of each file under `path`, skipping the files and directories whose names
+   * start with `.` or `_`.
+   */
   protected def readAllFootersWithoutSummaryFiles(
       path: Path, configuration: Configuration): Seq[Footer] = {
     val fs = path.getFileSystem(configuration)
-    ParquetFileReader.readAllFootersInParallel(configuration, fs.getFileStatus(path)).asScala.toSeq
+    def leafFiles(status: FileStatus): Seq[FileStatus] = if (status.isDirectory) {
+      fs.listStatus(status.getPath).toSeq
+        .filterNot(s => s.getPath.getName.startsWith(".") || s.getPath.getName.startsWith("_"))
+        .flatMap(leafFiles)
+    } else {
+      Seq(status)
+    }
+    leafFiles(fs.getFileStatus(path)).map { status =>
+      new Footer(status.getPath, ParquetFooterReader.readFooter(
+        HadoopInputFile.fromStatus(status, configuration), ParquetMetadataConverter.NO_FILTER))
+    }
   }
 
   protected def readFooter(path: Path, configuration: Configuration): ParquetMetadata = {

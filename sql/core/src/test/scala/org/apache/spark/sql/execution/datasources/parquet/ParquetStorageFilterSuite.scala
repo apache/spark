@@ -42,7 +42,7 @@ import org.apache.parquet.format.converter.ParquetMetadataConverter
 import org.apache.parquet.hadoop.{ParquetFileReader, ParquetFileWriter, ParquetInputFormat, ParquetOutputFormat, ParquetWriter}
 import org.apache.parquet.hadoop.metadata.{ColumnChunkMetaData, CompressionCodecName, ParquetMetadata}
 import org.apache.parquet.hadoop.util.{HadoopInputFile, HadoopOutputFile}
-import org.apache.parquet.schema.MessageTypeParser
+import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 import org.mockito.ArgumentMatchers.{any, anyInt}
 import org.mockito.Mockito.{doAnswer, doThrow, spy}
 import org.mockito.invocation.InvocationOnMock
@@ -1392,13 +1392,18 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     val hadoopPath = new Path(file.getAbsolutePath)
     val writer = new ParquetFileWriter(
       HadoopOutputFile.fromPath(hadoopPath, spark.sessionState.newHadoopConf()),
-      schema, ParquetFileWriter.Mode.CREATE, 128L * 1024 * 1024, 8)
+      schema, ParquetFileWriter.Mode.CREATE, 128L * 1024 * 1024, 8,
+      ParquetProperties.DEFAULT_COLUMN_INDEX_TRUNCATE_LENGTH,
+      ParquetProperties.DEFAULT_STATISTICS_TRUNCATE_LENGTH,
+      ParquetProperties.DEFAULT_PAGE_WRITE_CHECKSUM_ENABLED)
     writer.start()
     blocks.zipWithIndex.foreach { case (block, blockIdx) =>
       writer.startBlock(block.size)
       schema.getColumns.asScala.zipWithIndex.foreach { case (cd, colIdx) =>
         val pageStore = new MemPageStore(block.size)
-        val writeStore = new ColumnWriteStoreV1(pageStore,
+        // The store gets a schema of this one column, as it writes every column it is given.
+        val columnSchema = new MessageType(schema.getName, schema.getType(cd.getPath: _*))
+        val writeStore = new ColumnWriteStoreV1(columnSchema, pageStore,
           // The row-count check is what decides when a page is flushed, so without lowering it a
           // block of a few hundred rows comes out as one page and no column index can narrow it.
           ParquetProperties.builder().withPageSize(256).withMinRowCountForPageSizeCheck(1)

@@ -26,6 +26,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.hadoop.conf.Configuration
 import org.apache.parquet.hadoop.api.{InitContext, ReadSupport}
 import org.apache.parquet.hadoop.api.ReadSupport.ReadContext
+import org.apache.parquet.hadoop.util.ConfigurationUtil
 import org.apache.parquet.io.api.RecordMaterializer
 import org.apache.parquet.schema._
 import org.apache.parquet.schema.LogicalTypeAnnotation.{ListLogicalTypeAnnotation, MapKeyValueTypeAnnotation, MapLogicalTypeAnnotation, UnknownLogicalTypeAnnotation}
@@ -80,7 +81,7 @@ class ParquetReadSupport(
    * readers.  Responsible for figuring out Parquet requested schema used for column pruning.
    */
   override def init(context: InitContext): ReadContext = {
-    val conf = context.getConfiguration
+    val conf = ConfigurationUtil.createHadoopConfiguration(context.getParquetConfiguration)
     catalystRequestedSchema = {
       val schemaString = conf.get(ParquetReadSupport.SPARK_ROW_REQUESTED_SCHEMA)
       assert(schemaString != null, "Parquet requested schema not set.")

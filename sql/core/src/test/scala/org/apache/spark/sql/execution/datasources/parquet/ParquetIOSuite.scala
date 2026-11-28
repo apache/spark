@@ -44,8 +44,8 @@ import org.apache.parquet.hadoop._
 import org.apache.parquet.hadoop.api.WriteSupport
 import org.apache.parquet.hadoop.example.ExampleParquetWriter
 import org.apache.parquet.hadoop.metadata.CompressionCodecName.SNAPPY
-import org.apache.parquet.hadoop.util.HadoopInputFile
-import org.apache.parquet.io.ParquetDecodingException
+import org.apache.parquet.hadoop.util.{HadoopInputFile, HadoopOutputFile}
+import org.apache.parquet.io.{OutputFile, ParquetDecodingException}
 import org.apache.parquet.io.api.{Binary, RecordConsumer}
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 import org.apache.parquet.schema.PrimitiveComparator.UNSIGNED_LEXICOGRAPHICAL_BINARY_COMPARATOR
@@ -287,8 +287,8 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
     conf
   }
 
-  private class InternalRowParquetWriterBuilder(path: Path)
-    extends ParquetWriter.Builder[InternalRow, InternalRowParquetWriterBuilder](path) {
+  private class InternalRowParquetWriterBuilder(file: OutputFile)
+    extends ParquetWriter.Builder[InternalRow, InternalRowParquetWriterBuilder](file) {
 
     override protected def self(): InternalRowParquetWriterBuilder = this
 
@@ -336,7 +336,7 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
           if (offHeap) {
             Platform.setMemory(address, '!'.toByte, shared.length)
           }
-          val writer = new InternalRowParquetWriterBuilder(path)
+          val writer = new InternalRowParquetWriterBuilder(HadoopOutputFile.fromPath(path, conf))
             .withConf(conf)
             .withWriterVersion(version)
             .withCompressionCodec(SNAPPY)
@@ -1362,7 +1362,7 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
       .withType(schema)
       .withWriterVersion(PARQUET_1_0)
       .withCompressionCodec(ParquetCompressionCodec.GZIP.getCompressionCodec)
-      .withRowGroupSize(1024 * 1024)
+      .withRowGroupSize(1024L * 1024)
       .withPageSize(pageSize)
       .withDictionaryPageSize(dictionaryPageSize)
       .withConf(hadoopConf)
@@ -2891,7 +2891,7 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
     withTempPath { dir =>
       val conf = parquetWriterConf(reusedBinarySchema)
       val path = new Path(dir.toURI.toString, "part-r-0.parquet")
-      val writer = new InternalRowParquetWriterBuilder(path)
+      val writer = new InternalRowParquetWriterBuilder(HadoopOutputFile.fromPath(path, conf))
         .withConf(conf)
         .withWriterVersion(version)
         .withCompressionCodec(SNAPPY)
