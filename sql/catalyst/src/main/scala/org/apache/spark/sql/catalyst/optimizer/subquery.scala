@@ -27,12 +27,14 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.ScalarSubquery._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.expressions.variant.VariantExplode
 import org.apache.spark.sql.catalyst.optimizer.RewriteCorrelatedScalarSubquery.splitSubquery
 import org.apache.spark.sql.catalyst.planning.PhysicalAggregation
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXISTS_SUBQUERY, IN_SUBQUERY, LATERAL_JOIN, LIST_SUBQUERY, PLAN_EXPRESSION, SCALAR_SUBQUERY}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION, OPTIMIZE_UNCORRELATED_IN_SUBQUERIES_IN_JOIN_CONDITION,
@@ -1160,9 +1162,23 @@ object OptimizeOneRowRelationSubquery extends Rule[LogicalPlan] {
    * if there is no nested subqueries in the subquery plan.
    */
   private def rewrite(plan: LogicalPlan): LogicalPlan = plan.transformUpWithSubqueries {
+    // A lateral subquery with a Generate over OneRowRelation, with or without a Project on top,
+    // becomes a Generate over the left side, which evaluates the generator once per left row. A
+    // left outer lateral join keeps a left row for which the generator returns no rows once, with
+    // NULLs for the columns of the subquery, so its Generate becomes outer, which adds that row,
+    // unless the generator returns a row for every input row, as stack and json_tuple do.
+    // A Project over a Generate that is not outer must not compute values that are not NULL on
+    // that row, nor evaluate inputs that can fail on it, as the subquery has no row there. A column
+    // of the generator, and a null-intolerant, deterministic expression over one whose other inputs
+    // can not fail, are NULL there already. For other expressions, such as coalesce, a literal, an
+    // outer column, a Python UDF or an expression with an input that can fail, the Generate marks
+    // the rows the generator returns, by a column that is not NULL on them or with
+    // `GeneratedRowMarker`, and the Project gives NULL on the row it does not mark.
     case LateralJoin(
-      left, right @ LateralSubquery(OneRowSubquery(plan), _, _, _, _), _, None)
+      left, right @ LateralSubquery(OneRowSubquery(plan), _, _, _, _), joinType, None)
         if !hasCorrelatedSubquery(right.plan) && right.joinCond.isEmpty =>
+      val keepLeftRows = joinType == LeftOuter &&
+        !conf.getConf(SQLConf.LEFT_LATERAL_JOIN_GENERATOR_LEGACY_DROP_ROWS_ENABLED)
       plan match {
         case Project(projectList, _: OneRowRelation) =>
           val newPList = stripOuterReferences(projectList)
@@ -1170,12 +1186,111 @@ object OptimizeOneRowRelationSubquery extends Rule[LogicalPlan] {
 
         case g @ Generate(generator, _, _, _, _, _: OneRowRelation) =>
           val newGenerator = stripOuterReference(generator)
-          g.copy(generator = newGenerator, child = left)
+          val keepRows = keepLeftRows && !returnsRowForEveryInput(newGenerator)
+          g.copy(generator = newGenerator, outer = g.outer || keepRows, child = left)
 
         case Project(projectList, g @ Generate(generator, _, _, _, _, _: OneRowRelation)) =>
-          val newPList = stripOuterReferences(projectList)
           val newGenerator = stripOuterReference(generator)
-          Project(left.output ++ newPList, g.copy(generator = newGenerator, child = left))
+          val keepRows = keepLeftRows && !returnsRowForEveryInput(newGenerator)
+          val generatorOutput = AttributeSet(g.generatorOutput)
+          // The Generate becomes outer, so its columns are NULL on the row it adds. The Project
+          // must reference them as nullable, or rules such as NullPropagation fold null checks
+          // over them as if that row could not be NULL.
+          val newPList = if (keepRows && !g.outer) {
+            val nullableOutput =
+              AttributeMap(g.generatorOutput.map(a => a -> a.withNullability(true)))
+            stripOuterReferences(projectList).map(_.transformUp {
+              case a: Attribute if nullableOutput.contains(a) => nullableOutput(a)
+            }.asInstanceOf[NamedExpression])
+          } else {
+            stripOuterReferences(projectList)
+          }
+          // A column of the generator is NULL on the row that an outer Generate adds, and so is a
+          // null-intolerant expression over one, such as a field of a struct column, whose other
+          // inputs can not fail. On an outer Generate in the subquery, that row is a row of the
+          // subquery.
+          def nullOnAddedRow(e: Expression): Boolean = e match {
+            case a: Attribute => generatorOutput.contains(a)
+            case _ if e.nullIntolerant && e.deterministic =>
+              val onAddedRow = e.children.map(nullOnAddedRow)
+              onAddedRow.contains(true) && e.children.zip(onAddedRow).forall {
+                case (c, n) => n || ExprUtils.canEvaluateUnconditionally(c)
+              }
+            case _ => false
+          }
+          // Whether a column of the Project is NULL on the added row without the marker.
+          def needsNoMarker(e: NamedExpression): Boolean = e match {
+            case a: Attribute => generatorOutput.contains(a)
+            case Alias(child, _) => nullOnAddedRow(child)
+            case _ => false
+          }
+          if (!keepRows || g.outer || newPList.forall(needsNoMarker)) {
+            val newGenerate =
+              g.copy(generator = newGenerator, outer = g.outer || keepRows, child = left)
+            Project(left.output ++ newPList, newGenerate)
+          } else {
+            // The rows the generator returns are marked by a column that is not NULL on them and
+            // is NULL on the added row, so that the Generate keeps a generator that whole-stage
+            // codegen and nested column pruning support: a column that a built-in generator,
+            // whose nullability Spark derives, declares not nullable, such as the position of
+            // posexplode and variant_explode or the key of explode over a map. Without one, an
+            // explode becomes a posexplode, and an inline a posexplode whose struct fields a
+            // Project extracts. Other generators, such as UDTFs, whose declared nullability their
+            // code may not keep, are wrapped in GeneratedRowMarker. The marker is referenced as
+            // nullable, as it is NULL on that row.
+            val notNullable = newGenerator match {
+              case _: Explode | _: PosExplode | _: Inline | _: VariantExplode =>
+                g.generatorOutput.zip(newGenerator.elementSchema).collectFirst {
+                  case (a, field) if !field.nullable => a
+                }
+              case _ => None
+            }
+            val (markedChild, marker) = (notNullable, newGenerator) match {
+              case (Some(a), _) =>
+                (g.copy(generator = newGenerator, outer = true, child = left), a)
+              case (None, e: Explode) =>
+                val pos = AttributeReference("pos", IntegerType, nullable = false)()
+                val generate = g.copy(generator = PosExplode(e.child), outer = true,
+                  generatorOutput = pos +: g.generatorOutput, child = left)
+                (generate, pos)
+              case (None, i: Inline) =>
+                val posExplode = PosExplode(i.child)
+                val Seq(pos, struct) = DataTypeUtils.toAttributes(posExplode.elementSchema)
+                val generate = g.copy(generator = posExplode, outer = true,
+                  generatorOutput = Seq(pos, struct), child = left)
+                val fields = g.generatorOutput.zipWithIndex.map { case (a, ordinal) =>
+                  Alias(GetStructField(struct, ordinal), a.name)(a.exprId, a.qualifier)
+                }
+                (Project(left.output ++ (pos +: fields), generate), pos)
+              case _ =>
+                val m = AttributeReference(GeneratedRowMarker.columnName, BooleanType)()
+                val generate = g.copy(generator = GeneratedRowMarker(newGenerator), outer = true,
+                  generatorOutput = g.generatorOutput :+ m, child = left)
+                (generate, m)
+            }
+            val markerOnAddedRow = marker.withNullability(true)
+            // A Python or external UDF is lifted out of the If and evaluated on every row, so an
+            // expression with one is wrapped in EvalOnlyWhen, which evaluates it only on the rows
+            // the generator returns. The If and the EvalOnlyWhen use one condition, so
+            // SimplifyConditionals removes the EvalOnlyWhen once no UDF is left under it.
+            def nullIfNotGenerated(e: Expression): Expression = {
+              val generated = IsNotNull(markerOnAddedRow)
+              If(generated,
+                if (EvalOnlyWhen.hasLiftedUDF(e)) EvalOnlyWhen(generated, e) else e,
+                Literal(null, e.dataType))
+            }
+            // Keep the expression IDs and the metadata, as the parent operators bind to them.
+            val markedPList = newPList.map {
+              case e if needsNoMarker(e) => e
+              case a: Alias =>
+                Alias(nullIfNotGenerated(a.child), a.name)(
+                  a.exprId, a.qualifier, Some(a.metadata), a.nonInheritableMetadataKeys)
+              case o =>
+                throw SparkException.internalError(
+                  s"Unexpected expression in a lateral subquery over a generator: $o")
+            }
+            Project(left.output ++ markedPList, markedChild)
+          }
 
         case o =>
           throw SparkException.internalError(
@@ -1189,6 +1304,14 @@ object OptimizeOneRowRelationSubquery extends Rule[LogicalPlan] {
         assert(p.projectList.size == 1)
         stripOuterReferences(p.projectList).head
     }
+  }
+
+  // Whether a generator returns at least one row for every input row, so that a left outer lateral
+  // join over it is an inner one: stack returns its n rows, and n is at least 1, and json_tuple
+  // returns one row, also for a NULL input or one that is not a JSON object.
+  private def returnsRowForEveryInput(generator: Generator): Boolean = generator match {
+    case _: Stack | _: JsonTuple => true
+    case _ => false
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = {

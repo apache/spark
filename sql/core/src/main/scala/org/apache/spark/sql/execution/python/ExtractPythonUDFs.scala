@@ -419,16 +419,35 @@ object ExtractPythonUDTFs extends Rule[LogicalPlan] {
     case s: Subquery if s.correlated => plan
 
     case _ => plan.transformUpWithPruning(_.containsPattern(GENERATE)) {
-      case g @ Generate(func: PythonUDTF, _, _, _, _, child) => func.evalType match {
-        case PythonEvalType.SQL_TABLE_UDF =>
-          BatchEvalPythonUDTF(func, g.requiredChildOutput, g.generatorOutput, child)
-        case PythonEvalType.SQL_ARROW_TABLE_UDF =>
-          ArrowEvalPythonUDTF(func, g.requiredChildOutput, g.generatorOutput, child, func.evalType)
-        case PythonEvalType.SQL_ARROW_UDTF =>
-          ArrowEvalPythonUDTF(func, g.requiredChildOutput, g.generatorOutput, child, func.evalType)
-        case _ =>
-          throw SparkException.internalError(s"Unsupported UDTF eval type: ${func.evalType}")
-      }
+      case g @ Generate(func: PythonUDTF, _, outer, _, _, child) =>
+        evalPythonUDTF(func, g.requiredChildOutput, g.nullableOutput, child, outer, None)
+
+      // The last column of the Generate is the column of the marker.
+      case g @ Generate(GeneratedRowMarker(func: PythonUDTF), _, outer, _, _, child) =>
+        val output = g.nullableOutput
+        evalPythonUDTF(func, g.requiredChildOutput, output.init, child, outer, Some(output.last))
     }
+  }
+
+  private def evalPythonUDTF(
+      func: PythonUDTF,
+      requiredChildOutput: Seq[Attribute],
+      resultAttrs: Seq[Attribute],
+      child: LogicalPlan,
+      outer: Boolean,
+      generatedRowMarker: Option[Attribute]): LogicalPlan = func.evalType match {
+    case PythonEvalType.SQL_TABLE_UDF =>
+      BatchEvalPythonUDTF(
+        func, requiredChildOutput, resultAttrs, child, outer, generatedRowMarker)
+    // The padding of `outer` assumes each output group belongs to one input row, which does not
+    // hold for an Arrow UDTF that receives whole batches. CheckAnalysis rejects such lateral joins.
+    case PythonEvalType.SQL_ARROW_UDTF if outer =>
+      throw SparkException.internalError(
+        s"An outer Generate is not supported for an Arrow UDTF: ${func.name}")
+    case PythonEvalType.SQL_ARROW_TABLE_UDF | PythonEvalType.SQL_ARROW_UDTF =>
+      ArrowEvalPythonUDTF(
+        func, requiredChildOutput, resultAttrs, child, func.evalType, outer, generatedRowMarker)
+    case _ =>
+      throw SparkException.internalError(s"Unsupported UDTF eval type: ${func.evalType}")
   }
 }

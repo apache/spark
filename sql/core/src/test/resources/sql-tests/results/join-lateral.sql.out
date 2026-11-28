@@ -32,6 +32,14 @@ struct<>
 
 
 -- !query
+CREATE VIEW tm(id, m) AS VALUES (1, MAP('a', 1)), (2, MAP())
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 SELECT * FROM t1, LATERAL (SELECT c1)
 -- !query schema
 struct<c1:int,c2:int,c1:int>
@@ -1477,6 +1485,360 @@ NULL	[4]	NULL
 
 
 -- !query
+SELECT * FROM t3 LEFT JOIN LATERAL EXPLODE(c2)
+-- !query schema
+struct<c1:int,c2:array<int>,col:int>
+-- !query output
+0	[0,1]	0
+0	[0,1]	1
+1	[2]	2
+2	[]	NULL
+NULL	[4]	4
+
+
+-- !query
+SELECT * FROM t3 LEFT JOIN LATERAL EXPLODE(c2) t(c3)
+-- !query schema
+struct<c1:int,c2:array<int>,c3:int>
+-- !query output
+0	[0,1]	0
+0	[0,1]	1
+1	[2]	2
+2	[]	NULL
+NULL	[4]	4
+
+
+-- !query
+SELECT * FROM t3 LEFT JOIN LATERAL (SELECT EXPLODE(c2))
+-- !query schema
+struct<c1:int,c2:array<int>,col:int>
+-- !query output
+0	[0,1]	0
+0	[0,1]	1
+1	[2]	2
+2	[]	NULL
+NULL	[4]	4
+
+
+-- !query
+SELECT * FROM t3 LEFT JOIN LATERAL EXPLODE(c2) ON TRUE
+-- !query schema
+struct<c1:int,c2:array<int>,col:int>
+-- !query output
+0	[0,1]	0
+0	[0,1]	1
+1	[2]	2
+2	[]	NULL
+NULL	[4]	4
+
+
+-- !query
+SELECT * FROM t3 LEFT JOIN LATERAL POSEXPLODE(c2)
+-- !query schema
+struct<c1:int,c2:array<int>,pos:int,col:int>
+-- !query output
+0	[0,1]	0	0
+0	[0,1]	1	1
+1	[2]	0	2
+2	[]	NULL	NULL
+NULL	[4]	0	4
+
+
+-- !query
+SELECT * FROM t3 LEFT JOIN LATERAL EXPLODE_OUTER(c2)
+-- !query schema
+struct<c1:int,c2:array<int>,col:int>
+-- !query output
+0	[0,1]	0
+0	[0,1]	1
+1	[2]	2
+2	[]	NULL
+NULL	[4]	4
+
+
+-- !query
+SELECT * FROM t3 LEFT JOIN LATERAL (SELECT c3 + 1, 'x', t3.c1 FROM EXPLODE(c2) t(c3))
+-- !query schema
+struct<c1:int,c2:array<int>,(c3 + 1):int,x:string,c1:int>
+-- !query output
+0	[0,1]	1	x	0
+0	[0,1]	2	x	0
+1	[2]	3	x	1
+2	[]	NULL	NULL	NULL
+NULL	[4]	5	x	NULL
+
+
+-- !query
+SELECT * FROM t3 LEFT JOIN LATERAL (SELECT c3 + 1 FROM EXPLODE_OUTER(c2) t(c3))
+-- !query schema
+struct<c1:int,c2:array<int>,(c3 + 1):int>
+-- !query output
+0	[0,1]	1
+0	[0,1]	2
+1	[2]	3
+2	[]	NULL
+NULL	[4]	5
+
+
+-- !query
+SELECT * FROM VALUES (1, ARRAY(CAST(NULL AS INT))), (2, ARRAY()) AS t(id, arr)
+  LEFT JOIN LATERAL (SELECT COALESCE(v, -1) AS w FROM EXPLODE(arr) t2(v))
+-- !query schema
+struct<id:int,arr:array<int>,w:int>
+-- !query output
+1	[null]	-1
+2	[]	NULL
+
+
+-- !query
+SELECT * FROM VALUES (1, MAP('a', 1)), (2, MAP()) AS t(id, m) LEFT JOIN LATERAL EXPLODE(m)
+-- !query schema
+struct<id:int,m:map<string,int>,key:string,value:int>
+-- !query output
+1	{"a":1}	a	1
+2	{}	NULL	NULL
+
+
+-- !query
+SELECT * FROM VALUES (1, CAST(NULL AS ARRAY<STRUCT<x: INT, y: STRING>>)),
+  (2, ARRAY(NAMED_STRUCT('x', 1, 'y', 'a'))) AS t(id, arr) LEFT JOIN LATERAL INLINE(arr)
+-- !query schema
+struct<id:int,arr:array<struct<x:int,y:string>>,x:int,y:string>
+-- !query output
+1	NULL	NULL	NULL
+2	[{"x":1,"y":"a"}]	1	a
+
+
+-- !query
+SELECT * FROM VALUES (1, ARRAY(-0.0D)), (2, ARRAY(0.0D)) AS t(id, arr)
+  LEFT JOIN LATERAL EXPLODE(arr)
+-- !query schema
+struct<id:int,arr:array<double>,col:double>
+-- !query output
+1	[-0.0]	-0.0
+2	[0.0]	0.0
+
+
+-- !query
+SELECT * FROM t3 LEFT JOIN LATERAL EXPLODE(c2) t(c3) WHERE c3 IS NULL
+-- !query schema
+struct<c1:int,c2:array<int>,c3:int>
+-- !query output
+2	[]	NULL
+
+
+-- !query
+SELECT * FROM t3 LEFT JOIN LATERAL EXPLODE(c2) t(c3) WHERE c3 IS NOT NULL
+-- !query schema
+struct<c1:int,c2:array<int>,c3:int>
+-- !query output
+0	[0,1]	0
+0	[0,1]	1
+1	[2]	2
+NULL	[4]	4
+
+
+-- !query
+SELECT c1, COALESCE(c3, -1) FROM t3 LEFT JOIN LATERAL EXPLODE(c2) t(c3)
+-- !query schema
+struct<c1:int,coalesce(c3, -1):int>
+-- !query output
+0	0
+0	1
+1	2
+2	-1
+NULL	4
+
+
+-- !query
+SELECT * FROM t3 LEFT JOIN LATERAL POSEXPLODE(c2) t(p, v) WHERE p IS NULL
+-- !query schema
+struct<c1:int,c2:array<int>,p:int,v:int>
+-- !query output
+2	[]	NULL	NULL
+
+
+-- !query
+SELECT * FROM t3 LEFT JOIN LATERAL UNNEST(c2) WITH ORDINALITY AS t(x, o) WHERE o IS NULL
+-- !query schema
+struct<c1:int,c2:array<int>,x:int,o:bigint>
+-- !query output
+2	[]	NULL	NULL
+
+
+-- !query
+SELECT * FROM t3 LEFT JOIN LATERAL (SELECT c3 + 1 AS x, c3 FROM EXPLODE(c2) t(c3)) WHERE c3 IS NULL
+-- !query schema
+struct<c1:int,c2:array<int>,x:int,c3:int>
+-- !query output
+2	[]	NULL	NULL
+
+
+-- !query
+SELECT * FROM t3 LEFT JOIN LATERAL (SELECT coalesce(c3, 0) AS x, c3 FROM EXPLODE(c2) t(c3))
+  WHERE c3 IS NULL
+-- !query schema
+struct<c1:int,c2:array<int>,x:int,c3:int>
+-- !query output
+2	[]	NULL	NULL
+
+
+-- !query
+SELECT * FROM VALUES (0, ARRAY()), (1, ARRAY(1)) AS t(c1, c2)
+  LEFT JOIN LATERAL (SELECT 10 / c1 + v AS w FROM EXPLODE(c2) t2(v))
+-- !query schema
+struct<c1:int,c2:array<int>,w:double>
+-- !query output
+0	[]	NULL
+1	[1]	11.0
+
+
+-- !query
+SELECT * FROM t3 LEFT JOIN LATERAL (SELECT coalesce(v, -1) AS w, p FROM POSEXPLODE(c2) t(p, v))
+-- !query schema
+struct<c1:int,c2:array<int>,w:int,p:int>
+-- !query output
+0	[0,1]	0	0
+0	[0,1]	1	1
+1	[2]	2	0
+2	[]	NULL	NULL
+NULL	[4]	4	0
+
+
+-- !query
+SELECT * FROM tm LEFT JOIN LATERAL (SELECT coalesce(v, 0) AS w, k FROM EXPLODE(m) t(k, v))
+-- !query schema
+struct<id:int,m:map<string,int>,w:int,k:string>
+-- !query output
+1	{"a":1}	1	a
+2	{}	NULL	NULL
+
+
+-- !query
+SELECT * FROM VALUES (1, CAST(NULL AS ARRAY<STRUCT<x: INT, y: STRING>>)),
+  (2, ARRAY(NAMED_STRUCT('x', 1, 'y', 'a'), NULL)), (3, ARRAY()) AS t(id, arr)
+  LEFT JOIN LATERAL (SELECT coalesce(x, -1) AS w, 'k' AS k, t.id AS i FROM INLINE(arr))
+-- !query schema
+struct<id:int,arr:array<struct<x:int,y:string>>,w:int,k:string,i:int>
+-- !query output
+1	NULL	NULL	NULL	NULL
+2	[{"x":1,"y":"a"},null]	-1	k	2
+2	[{"x":1,"y":"a"},null]	1	k	2
+3	[]	NULL	NULL	NULL
+
+
+-- !query
+SELECT * FROM t3 LEFT JOIN LATERAL (SELECT coalesce(v, -1) AS w, 'k' AS k FROM STACK(2, c1, c1 + 1) t(v))
+-- !query schema
+struct<c1:int,c2:array<int>,w:int,k:string>
+-- !query output
+0	[0,1]	0	k
+0	[0,1]	1	k
+1	[2]	1	k
+1	[2]	2	k
+2	[]	2	k
+2	[]	3	k
+NULL	[4]	-1	k
+NULL	[4]	-1	k
+
+
+-- !query
+SELECT * FROM VALUES (1, '{"a": 1}'), (2, CAST(NULL AS STRING)), (3, '[1]') AS t(id, j)
+  LEFT JOIN LATERAL (SELECT coalesce(a, '0') AS a, 'k' AS k FROM JSON_TUPLE(t.j, 'a') t2(a))
+-- !query schema
+struct<id:int,j:string,a:string,k:string>
+-- !query output
+1	{"a": 1}	1	k
+2	NULL	0	k
+3	[1]	0	k
+
+
+-- !query
+SELECT * FROM VALUES (1, '{"a": 1}'), (2, '{}'), (3, CAST(NULL AS STRING)) AS t(id, j)
+  LEFT JOIN LATERAL (SELECT 'k' AS k, key FROM VARIANT_EXPLODE(parse_json(t.j)))
+-- !query schema
+struct<id:int,j:string,k:string,key:string>
+-- !query output
+1	{"a": 1}	k	a
+2	{}	NULL	NULL
+3	NULL	NULL	NULL
+
+
+-- !query
+SELECT * FROM tm LEFT JOIN LATERAL EXPLODE(m) t(k, v) WHERE k IS NULL
+-- !query schema
+struct<id:int,m:map<string,int>,k:string,v:int>
+-- !query output
+2	{}	NULL	NULL
+
+
+-- !query
+SET spark.sql.optimizer.decorrelateInnerQuery.enabled=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.optimizer.decorrelateInnerQuery.enabled	false
+
+
+-- !query
+SELECT * FROM t3 LEFT JOIN LATERAL EXPLODE(c2)
+-- !query schema
+struct<c1:int,c2:array<int>,col:int>
+-- !query output
+0	[0,1]	0
+0	[0,1]	1
+1	[2]	2
+2	[]	NULL
+NULL	[4]	4
+
+
+-- !query
+RESET spark.sql.optimizer.decorrelateInnerQuery.enabled
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SET spark.sql.optimizer.leftLateralJoinGeneratorLegacyDropRows.enabled=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.optimizer.leftLateralJoinGeneratorLegacyDropRows.enabled	true
+
+
+-- !query
+SELECT * FROM t3 LEFT JOIN LATERAL EXPLODE(c2)
+-- !query schema
+struct<c1:int,c2:array<int>,col:int>
+-- !query output
+0	[0,1]	0
+0	[0,1]	1
+1	[2]	2
+NULL	[4]	4
+
+
+-- !query
+SELECT * FROM t3 LEFT JOIN LATERAL (SELECT c3 + 1 FROM EXPLODE(c2) t(c3))
+-- !query schema
+struct<c1:int,c2:array<int>,(c3 + 1):int>
+-- !query output
+0	[0,1]	1
+0	[0,1]	2
+1	[2]	3
+NULL	[4]	5
+
+
+-- !query
+RESET spark.sql.optimizer.leftLateralJoinGeneratorLegacyDropRows.enabled
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 SELECT * FROM t1, LATERAL (SELECT * FROM EXPLODE(ARRAY(c1, c2)))
 -- !query schema
 struct<c1:int,c2:int,col:int>
@@ -2081,6 +2443,14 @@ struct<>
 
 -- !query
 DROP VIEW t4
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW tm
 -- !query schema
 struct<>
 -- !query output

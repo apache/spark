@@ -7217,6 +7217,20 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val LEFT_LATERAL_JOIN_GENERATOR_LEGACY_DROP_ROWS_ENABLED =
+    buildConf("spark.sql.optimizer.leftLateralJoinGeneratorLegacyDropRows.enabled")
+      .internal()
+      .doc("If enabled, revert to the legacy incorrect behavior where a LEFT JOIN LATERAL " +
+        "without a join condition, whose lateral subquery is a call of a generator or a Python " +
+        "UDTF or a SELECT over one, drops the left rows for which the generator returns no " +
+        "rows. When disabled (default), such a left row is kept once, with NULLs for the " +
+        "columns of the lateral subquery. It only takes effect when " +
+        s"${OPTIMIZE_ONE_ROW_RELATION_SUBQUERY.key} is set to true.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val PULL_HINTS_INTO_SUBQUERIES =
     buildConf("spark.sql.optimizer.pullHintsIntoSubqueries")
       .internal()

@@ -349,6 +349,42 @@ case class GeneratorOuter(child: Generator) extends UnaryExpression with Generat
 }
 
 /**
+ * Wrapper around another generator that adds a column that is true on every row the generator
+ * returns, including the rows of `terminate()`. In an outer `Generate`, the NULL-padded row of an
+ * input row for which the generator returns no rows has NULL in that column, which tells it apart
+ * from a generated row whose values are NULL. `OptimizeOneRowRelationSubquery` uses it to inline a
+ * left outer lateral join over a generator whose rows no column marks, when the projection computes
+ * values that are not NULL on that row or evaluates inputs that can fail on it, such as `coalesce`,
+ * a literal, an outer column, a Python UDF or an expression with an input that can fail. A column
+ * that a built-in generator declares not nullable marks its rows, and explode and inline become a
+ * posexplode, whose position does, so only other generators, such as UDTFs, are wrapped.
+ */
+case class GeneratedRowMarker(child: Generator)
+  extends UnaryExpression with Generator with CodegenFallback {
+
+  override def elementSchema: StructType =
+    child.elementSchema.add(GeneratedRowMarker.columnName, BooleanType, nullable = false)
+
+  private def withMarker(rows: IterableOnce[InternalRow]): IterableOnce[InternalRow] = {
+    val marked = new JoinedRow
+    rows.iterator.map(marked(_, GeneratedRowMarker.markerRow))
+  }
+
+  override def eval(input: InternalRow): IterableOnce[InternalRow] = withMarker(child.eval(input))
+
+  override def terminate(): IterableOnce[InternalRow] = withMarker(child.terminate())
+
+  override protected def withNewChildInternal(newChild: Expression): GeneratedRowMarker =
+    copy(child = newChild.asInstanceOf[Generator])
+}
+
+object GeneratedRowMarker {
+  val columnName: String = "__generated_row"
+
+  private val markerRow: InternalRow = InternalRow(true)
+}
+
+/**
  * Extracts the parts of a generator item, as ExtractGenerator plans it: a [[Generator]], optionally
  * wrapped in [[GeneratorOuter]], and then optionally in a [[MultiAlias]] that names its output
  * columns. Returns the generator inside any GeneratorOuter, the MultiAlias names (None without a
