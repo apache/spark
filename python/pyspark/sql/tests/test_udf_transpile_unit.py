@@ -1556,6 +1556,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             ["a"],
             LongType(),
             {0: "numeric"},
+            series_semantics=False,
         )
 
         self.assertIsNotNone(converted)
@@ -2514,6 +2515,56 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         self.assertEqual(
             self._vals(eq_strlit, BooleanType(), "a long", [(5,), (3,)], require_lowered=False),
             [False, False],
+        )
+
+    def test_modulo_preserves_intermediate_numeric_width(self):
+        import ast
+
+        with self.sql_conf(_TRANSPILE_ON):
+            for dtype, expected in (
+                ("tinyint", "int"),
+                ("smallint", "int"),
+                ("int", "int"),
+                ("bigint", "bigint"),
+                ("float", "double"),
+                ("double", "double"),
+            ):
+                for series in (False, True):
+                    with self.subTest(dtype=dtype, series=series):
+                        df = self.spark.createDataFrame(
+                            [(1, 2)] if dtype not in ("float", "double") else [(1.0, 2.0)],
+                            f"_udf_param_0 {dtype}, _udf_param_1 {dtype}",
+                        )
+                        transpiler = CatalystTranspiler()
+                        transpiler._param_categories = {0: "numeric", 1: "numeric"}
+                        transpiler._series_semantics = series
+                        expr = transpiler._convert_chunk(
+                            ["a", "b"], ast.parse("a % b", mode="eval").body
+                        )
+                        self.assertEqual(
+                            df.select(expr).schema[0].dataType.simpleString(), expected
+                        )
+
+    def test_udf_transpile_modulo_minima_and_large_divisors(self):
+        def modulo(a, b):
+            return a % b
+
+        for dtype, minimum in (
+            ("tinyint", -(2**7)),
+            ("smallint", -(2**15)),
+            ("int", -(2**31)),
+            ("bigint", -(2**63)),
+        ):
+            rows = [(minimum, -1), (1, minimum), (minimum, 3)]
+            with self.subTest(dtype=dtype):
+                self.assertEqual(
+                    self._vals(modulo, LongType(), f"a {dtype}, b {dtype}", rows),
+                    [a % b for a, b in rows],
+                )
+        rows = [(-1.0, float("inf")), (1.0, -float("inf")), (-1.0, 1e308), (1.0, -1e308)]
+        self.assertEqual(
+            self._vals(modulo, DoubleType(), "a double, b double", rows),
+            [a % b for a, b in rows],
         )
 
     def test_udf_transpile_overflow_and_modulo_zero_raise(self):

@@ -706,7 +706,18 @@ object SQLConf {
         "UDF construction. Transpiled UDFS attempt to match the Python functionality but " +
         "may not be 100% equivalent. Some known differences include: overflows from input types " +
         "(you can precast to decimal to avoid), type coercion on comparison, and implicit " +
-        "returns. This initial version only works with non-Connect Spark; Spark Connect " +
+        "returns. Applies to regular Python UDFs, Arrow-optimized or not, except under " +
+        "spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled=true, which " +
+        "disables it for Arrow-optimized UDFs. Scalar pandas UDFs are transpiled only for " +
+        "element-wise bodies built from `+` `-` `*` `%`, unary `+`/`-` and " +
+        "`Series.isnull()` and its aliases, and not at all under " +
+        "spark.sql.execution.pythonUDF.pandas.preferIntExtensionDtype=true; numpy integer " +
+        "overflow wraps where a transpiled pandas UDF raises. Other vectorized UDFs are " +
+        "never transpiled. A transpiled expression can be non-nullable where the Python " +
+        "UDF is nullable, so a stateful streaming query started with " +
+        "spark.sql.streaming.statefulOperator.alwaysNullableOutput.enabled=false must be " +
+        "restarted with the transpilation settings it started with. " +
+        "This initial version only works with non-Connect Spark; Spark Connect " +
         "support is to follow. This is an *experimental* feature."
     )
     .version("4.3.0")
