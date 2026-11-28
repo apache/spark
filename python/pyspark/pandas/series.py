@@ -76,6 +76,7 @@ from pyspark.pandas.correlation import (
 )
 from pyspark.pandas.datetimes import DatetimeMethods
 from pyspark.pandas.exceptions import SparkPandasIndexingError
+from pyspark.pandas.extensions import CachedAccessor as TypedCachedAccessor
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.generic import Frame
 from pyspark.pandas.internal import (
@@ -766,7 +767,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     )
 
     # create accessor for pandas-on-Spark specific methods.
-    pandas_on_spark = CachedAccessor("pandas_on_spark", PandasOnSparkSeriesMethods)
+    pandas_on_spark = TypedCachedAccessor("pandas_on_spark", PandasOnSparkSeriesMethods)
 
     # Comparison Operators
     def eq(self, other: Any) -> "Series":
