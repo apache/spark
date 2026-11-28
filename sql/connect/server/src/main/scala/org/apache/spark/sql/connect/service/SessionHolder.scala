@@ -457,6 +457,17 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     }
   }
 
+  /** Whether the client opted in to reusing this session id after the session is closed. */
+  private[connect] def allowReconnectAfterClose: Boolean = {
+    if (Utils.isTesting && session == null) {
+      // Testing-only: dummy sessions from SparkConnectTestUtils.createDummySessionHolder may
+      // have no underlying SparkSession.
+      false
+    } else {
+      session.sessionState.conf.getConf(Connect.CONNECT_SESSION_ALLOW_RECONNECT_AFTER_CLOSE)
+    }
+  }
+
   /** Get SessionInfo with information about this SessionHolder. */
   def getSessionHolderInfo: SessionHolderInfo =
     SessionHolderInfo(
