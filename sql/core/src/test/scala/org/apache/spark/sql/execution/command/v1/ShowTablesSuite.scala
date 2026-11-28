@@ -17,9 +17,18 @@
 
 package org.apache.spark.sql.execution.command.v1
 
+import org.mockito.ArgumentMatchers.{anyBoolean, anyString}
+import org.mockito.Mockito.{doAnswer, mock, spy, when}
+import org.mockito.invocation.InvocationOnMock
+
 import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.SessionCatalog
+import org.apache.spark.sql.classic.SparkSession
+import org.apache.spark.sql.execution.CommandExecutionMode
 import org.apache.spark.sql.execution.command
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.execution.command.ShowTablesCommand
+import org.apache.spark.sql.internal.{SessionState, SQLConf}
 
 /**
  * This base suite contains unified tests for the `SHOW TABLES` command that check V1
@@ -153,6 +162,33 @@ class ShowTablesSuite extends ShowTablesSuiteBase with CommandSuiteBase {
         df.write.partitionBy("a").format("parquet").mode(SaveMode.Overwrite).saveAsTable(t)
         assert(sql(s"SHOW TABLE EXTENDED LIKE '$t' PARTITION(a = 1)").count() === 1)
       }
+    }
+  }
+
+  test("SPARK-62356: show table extended skips a table dropped after listing") {
+    withNamespaceAndTable("ns", "tbl", catalog) { t =>
+      sql(s"CREATE TABLE $t (id int) $defaultUsing")
+      val command = spark.sessionState
+        .executePlan(
+          spark.sessionState.sqlParser.parsePlan("SHOW TABLE EXTENDED IN ns LIKE '*'"),
+          CommandExecutionMode.SKIP)
+        .analyzed
+        .collectFirst { case c: ShowTablesCommand => c }
+        .get
+      // A session catalog that also lists a table that no longer exists, as if it had been
+      // dropped between listing the namespace and loading the table's metadata.
+      val sessionCatalog = spy[SessionCatalog](spark.sessionState.catalog)
+      doAnswer { (invocation: InvocationOnMock) =>
+        invocation.callRealMethod().asInstanceOf[Seq[TableIdentifier]] :+
+          TableIdentifier("dropped_tbl", Some("ns"))
+      }.when(sessionCatalog).listTables(anyString(), anyString(), anyBoolean())
+      val sessionState = mock(classOf[SessionState])
+      when(sessionState.catalog).thenReturn(sessionCatalog)
+      val session = mock(classOf[SparkSession])
+      when(session.sessionState).thenReturn(sessionState)
+
+      assert(sessionCatalog.listTables("ns").map(_.table) === Seq("tbl", "dropped_tbl"))
+      assert(command.run(session).map(_.getString(1)) === Seq("tbl"))
     }
   }
 
