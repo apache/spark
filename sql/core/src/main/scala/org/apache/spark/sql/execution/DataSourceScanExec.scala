@@ -451,8 +451,12 @@ trait FileSourceScanLike extends DataSourceScanExec with SessionStateHelper {
 
   // exposed for testing
   lazy val bucketedScan: Boolean = {
-    if (getSqlConf(relation.sparkSession).bucketingEnabled && relation.bucketSpec.isDefined
-      && !disableBucketedScan) {
+    // The bucketing decision is frozen into `disableBucketedScan` at planning. FileSourceStrategy
+    // sets it from `relation.bucketSpec.isDefined && !bucketingEnabled`, so a scan rebuilt after
+    // planning (for instance the copy PlanAdaptiveDynamicPruningFilters makes at AQE stage
+    // creation) keeps the decision the plan was built with instead of re-reading the live config
+    // (SPARK-60610).
+    if (relation.bucketSpec.isDefined && !disableBucketedScan) {
       val spec = relation.bucketSpec.get
       val bucketColumns = spec.bucketColumnNames.flatMap(n => toAttribute(n))
       bucketColumns.size == spec.bucketColumnNames.size

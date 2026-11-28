@@ -146,7 +146,11 @@ object DisableUnnecessaryBucketedScan extends Rule[SparkPlan] {
       case _ => false
     }
 
-    if (!conf.bucketingEnabled || !conf.autoBucketedScanEnabled || !hasBucketedScan) {
+    // `hasBucketedScan` already reflects each scan's own bucketing decision, frozen at planning
+    // (SPARK-60610), so it does not need a separate gate on the live `conf.bucketingEnabled`. A
+    // scan planned with bucketing on and prepared with it off is still bucketed and must be
+    // disabled here.
+    if (!conf.autoBucketedScanEnabled || !hasBucketedScan) {
       plan
     } else {
       disableBucketWithInterestingPartition(plan, false, false, true)

@@ -389,7 +389,14 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
           table.map(_.identifier),
           markedForSingleTaskExecution =
             l.getTagValue(MarkSingleTaskExecution.markTag).getOrElse(false),
-          storageFilters = storageFilters)
+          storageFilters = storageFilters,
+          // Freeze the bucketing decision here, at planning, in the existing `disableBucketedScan`
+          // field. A scan rebuilt after planning (for instance the copy
+          // PlanAdaptiveDynamicPruningFilters makes at AQE stage creation) then keeps the planned
+          // decision instead of re-reading `spark.sql.sources.bucketing.enabled`, which can change
+          // between planning and execution (SPARK-60610). DisableUnnecessaryBucketedScan may later
+          // set this field to true as well; it never clears it.
+          disableBucketedScan = fsRelation.bucketSpec.isDefined && !SQLConf.get.bucketingEnabled)
 
       // extra Project node: wrap flat metadata columns to a metadata struct
       val withMetadataProjections = metadataStructOpt.map { metadataStruct =>
