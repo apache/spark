@@ -133,8 +133,9 @@ public class ExternalBlockHandler extends RpcHandler
 
   /**
    * Validates the local directories an executor reports against the service's configured roots.
-   * Applied at the RPC boundary so both the block resolver and the merged-shuffle manager only
-   * consume validated paths. Throws {@link IllegalArgumentException} if an entry is not allowed.
+   * Applied at the RPC boundary so both the block resolver and the merged-shuffle manager get
+   * validated paths at registration. Throws {@link IllegalArgumentException} if an entry is not
+   * allowed.
    */
   public void validateLocalDirs(String[] localDirs, String appId) {
     localDirValidator.validate(localDirs, appId);
@@ -236,7 +237,7 @@ public class ExternalBlockHandler extends RpcHandler
       try {
         checkAuth(client, msg.appId);
         // Validate executor-supplied localDirs once here, at the RPC boundary, so both the block
-        // resolver and the merged-shuffle manager only ever consume validated paths.
+        // resolver and the merged-shuffle manager get validated paths at registration.
         validateLocalDirs(msg.executorInfo.localDirs, msg.appId);
         blockManager.registerExecutor(msg.appId, msg.execId, msg.executorInfo);
         mergeManager.registerExecutor(msg.appId, msg.executorInfo);
