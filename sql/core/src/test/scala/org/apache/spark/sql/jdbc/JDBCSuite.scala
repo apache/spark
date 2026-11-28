@@ -2035,7 +2035,7 @@ class JDBCSuite extends SharedSparkSession {
     val ex = intercept[SparkArithmeticException] {
       Decimal(largeInt, p, newScale)
     }
-    assert(ex.getCondition == "NUMERIC_VALUE_OUT_OF_RANGE.WITHOUT_SUGGESTION")
+    assert(ex.getCondition == "NUMERIC_VALUE_OUT_OF_RANGE.WITH_ROUND_ATTEMPT")
 
     // Legacy config restores 28 integer digits via type mapping
     withSQLConf(SQLConf.LEGACY_ORACLE_NUMBER_MAPPING_ENABLED.key -> "true") {

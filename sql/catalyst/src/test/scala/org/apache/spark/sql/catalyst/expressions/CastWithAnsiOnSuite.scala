@@ -553,12 +553,11 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
             def checkOutOfRange(eval: => Any): Unit = {
               checkError(
                 exception = intercept[SparkArithmeticException](eval),
-                condition = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+                condition = "NUMERIC_VALUE_OUT_OF_RANGE.DEFAULT",
                 parameters = Map(
                   "value" -> value,
                   "precision" -> "10",
-                  "scale" -> "2",
-                  "config" -> """"spark.sql.ansi.enabled""""),
+                  "scale" -> "2"),
                 queryContext = Array(ExpectedContext(fragment = "", start = -1, stop = -1)))
             }
             // Interpreted, and both codegen paths without falling back to interpreted.
@@ -994,12 +993,11 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
         exception = intercept[SparkArithmeticException](
           cast(largeTime, DecimalType(2, 0)).eval()
         ),
-        condition = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+        condition = "NUMERIC_VALUE_OUT_OF_RANGE.DEFAULT",
         parameters = Map(
           "value" -> "86399.123456000",
           "precision" -> "2",
-          "scale" -> "0",
-          "config" -> """"spark.sql.ansi.enabled""""
+          "scale" -> "0"
         ),
         queryContext = Array(ExpectedContext(fragment = "", start = -1, stop = -1))
       )

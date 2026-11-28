@@ -217,12 +217,11 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
     val valueString =
       if (value.scale < -MAX_PLAIN_STRING_TRAILING_ZEROS) value.toString else value.toPlainString
     new SparkArithmeticException(
-      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+      errorClass = "NUMERIC_VALUE_OUT_OF_RANGE.DEFAULT",
       messageParameters = Map(
         "value" -> valueString,
         "precision" -> decimalPrecision.toString,
-        "scale" -> decimalScale.toString,
-        "config" -> toSQLConf("spark.sql.ansi.enabled")),
+        "scale" -> decimalScale.toString),
       context = getQueryContext(context),
       summary = getSummary(context))
   }
