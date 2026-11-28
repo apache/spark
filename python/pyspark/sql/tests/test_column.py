@@ -27,7 +27,12 @@ from pyspark.sql import functions as sf
 from pyspark.sql.types import IntegerType, LongType, StringType, StructField, StructType
 from pyspark.sql.window import Window
 from pyspark.testing.sqlutils import ReusedSQLTestCase
-from pyspark.testing.utils import have_pandas, pandas_requirement_message
+from pyspark.testing.utils import (
+    have_numpy,
+    have_pandas,
+    numpy_requirement_message,
+    pandas_requirement_message,
+)
 
 
 class ColumnTestsMixin:
@@ -138,6 +143,37 @@ class ColumnTestsMixin:
             with self.subTest(name=name):
                 result = df.select(getattr(df.s, name)(1).alias("r")).collect()
                 self.assertEqual(result, [Row(r=True), Row(r=False), Row(r=None)])
+
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
+    def test_numpy_scalar_operands(self):
+        # SPARK-61562: NumPy scalars are literals in Column operators, also in Spark Connect
+        import numpy as np
+
+        df = self.spark.createDataFrame([(0, False), (1, True), (2, None)], "x long, b boolean")
+        x, b = sf.col("x"), sf.col("b")
+        cases = [
+            ("x + np.int64(1)", x + np.int64(1), [1, 2, 3]),
+            ("x - np.int8(1)", x - np.int8(1), [-1, 0, 1]),
+            ("x * np.int32(2)", x * np.int32(2), [0, 2, 4]),
+            ("x / np.float32(2)", x / np.float32(2), [0.0, 0.5, 1.0]),
+            ("x % np.int16(2)", x % np.int16(2), [0, 1, 0]),
+            ("x > np.float32(0.5)", x > np.float32(0.5), [False, True, True]),
+            ("x <= np.int16(1)", x <= np.int16(1), [True, True, False]),
+            ("x == np.int64(1)", x == np.int64(1), [False, True, False]),
+            ("x != np.int64(1)", x != np.int64(1), [True, False, True]),
+            ("b == np.bool_(True)", b == np.bool_(True), [False, True, None]),
+            ("b.eqNullSafe(np.bool_(True))", b.eqNullSafe(np.bool_(True)), [False, True, False]),
+            ("x.bitwiseOR(np.int64(4))", x.bitwiseOR(np.int64(4)), [4, 5, 6]),
+            (
+                "x.between(np.int64(0), np.int64(1))",
+                x.between(np.int64(0), np.int64(1)),
+                [True, True, False],
+            ),
+        ]
+        for name, col, expected in cases:
+            with self.subTest(name=name):
+                result = [row[0] for row in df.select(col).collect()]
+                self.assertEqual(result, expected)
 
     def test_column_date_time_op(self):
         query = """

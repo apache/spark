@@ -26,6 +26,8 @@ from typing import (
     Union,
 )
 
+import numpy as np
+
 import pyspark.sql.connect.proto as proto
 from pyspark.errors import (
     PySparkAttributeError,
@@ -83,6 +85,7 @@ def _bin_op(
             datetime.datetime,
             datetime.timedelta,
             decimal.Decimal,
+            np.generic,
         ),
     ):
         other_expr = LiteralExpression._from_value(other)
@@ -401,6 +404,7 @@ class Column(ParentColumn):
                 datetime.time,
                 datetime.datetime,
                 decimal.Decimal,
+                np.generic,
             ),
         ):
             other_expr = LiteralExpression._from_value(other)
