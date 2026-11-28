@@ -6567,6 +6567,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val KLL_MERGE_LOWEST_COMPACTING_K =
+    buildConf("spark.sql.function.kllMerge.lowestCompactingK.enabled")
+      .internal()
+      .doc("When true, kll_sketch_merge_{bigint,float,double}(left, right) returns a sketch " +
+        "with k = min(k of the first non-empty input, k of `right`), where the k of `right` " +
+        "counts only if `right` is in estimation mode. Two empty inputs keep the k of `left`. " +
+        "When false, the result has the k of `left`.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
   val ELT_OUTPUT_AS_STRING = buildConf("spark.sql.function.eltOutputAsString")
     .doc("When this option is set to false and all inputs are binary, `elt` returns " +
       "an output as binary. Otherwise, it returns as a string.")
@@ -11128,6 +11140,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def concatBinaryAsString: Boolean = getConf(CONCAT_BINARY_AS_STRING)
 
   def parseSqlEnabled: Boolean = getConf(PARSE_SQL_ENABLED)
+
+  def kllMergeLowestCompactingK: Boolean = getConf(KLL_MERGE_LOWEST_COMPACTING_K)
 
   def eltOutputAsString: Boolean = getConf(ELT_OUTPUT_AS_STRING)
 
