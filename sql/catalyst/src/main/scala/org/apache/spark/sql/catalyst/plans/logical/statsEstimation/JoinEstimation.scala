@@ -17,16 +17,14 @@
 
 package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 
-import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Expression, ExpressionSet}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.planning.ExtractAllEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Histogram, Join, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, DistinctKeyVisitor, Histogram, Join, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 
 
 case class JoinEstimation(join: Join) extends Logging {
@@ -59,14 +57,14 @@ case class JoinEstimation(join: Join) extends Logging {
 
     case ExtractAllEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, left, right, _) =>
       // 1. Compute join selectivity
-      // A key cast to a STRING of its own collation is estimated as the key itself.
-      val strippedLeftKeys = leftKeys.map(CharVarcharUtils.stripCastToPlainString)
-      val strippedRightKeys = rightKeys.map(CharVarcharUtils.stripCastToPlainString)
-      val joinKeyPairs = extractJoinKeysWithColStats(strippedLeftKeys, strippedRightKeys)
-      val leftSideUniqueness =
-        left.distinctKeys.exists(_.subsetOf(ExpressionSet(strippedLeftKeys)))
-      val rightSideUniqueness =
-        right.distinctKeys.exists(_.subsetOf(ExpressionSet(strippedRightKeys)))
+      // A key cast to a STRING of its own collation is unique where the key is. A key that is
+      // padded or widened is estimated as the column it reads (see `readColumn`), but is not
+      // unique where the column is.
+      val joinKeyPairs = extractJoinKeysWithColStats(leftKeys, rightKeys)
+      val leftKeySet = DistinctKeyVisitor.joinKeySet(leftKeys)
+      val rightKeySet = DistinctKeyVisitor.joinKeySet(rightKeys)
+      val leftSideUniqueness = left.distinctKeys.exists(_.subsetOf(leftKeySet))
+      val rightSideUniqueness = right.distinctKeys.exists(_.subsetOf(rightKeySet))
       val (numInnerJoinedRows, keyStatsAfterJoin) =
         computeCardinalityAndStats(joinKeyPairs, leftSideUniqueness, rightSideUniqueness)
 
@@ -179,13 +177,13 @@ case class JoinEstimation(join: Join) extends Logging {
    * estimated by ndv of join key A.k1 and B.k1, card2 is the cardinality estimated by histograms
    * of join key A.k2 and B.k2, then the result cardinality would be min(card1, card2).
    *
-   * @param keyPairs pairs of join keys
+   * @param keyPairs pairs of join keys, see `extractJoinKeysWithColStats`
    *
    * @return join cardinality, and column stats for join keys after the join
    */
   // scalastyle:on
   private def computeCardinalityAndStats(
-      keyPairs: Seq[(AttributeReference, AttributeReference)],
+      keyPairs: Seq[JoinKeyPair],
       leftSideUniqueness: Boolean,
       rightSideUniqueness: Boolean): (BigInt, AttributeMap[ColumnStat]) = {
     // If there's no column stats available for join keys, estimate as cartesian product.
@@ -195,10 +193,17 @@ case class JoinEstimation(join: Join) extends Logging {
       case (false, true) => leftStats.rowCount.get
       case _ => leftStats.rowCount.get * rightStats.rowCount.get
     }
-    val keyStatsAfterJoin = new mutable.HashMap[Attribute, ColumnStat]()
+    // The key stats in the order they are written: for a column in several pairs, the stats
+    // written last win, also when the pairs reference it through different qualifiers.
+    val keyStatsAfterJoin = new ArrayBuffer[(Attribute, ColumnStat)]()
+    // The columns of a padded or widened pair keep their own lengths (see `lengths` below). The
+    // other pairs come last, so that their joined stats, whose maximum length is bounded by both
+    // sides, take precedence for a column that they share with such a pair.
+    val (widenedPairs, otherPairs) = keyPairs.partition(_.widened)
+    val orderedPairs = widenedPairs ++ otherPairs
     var i = 0
-    while (i < keyPairs.length && joinCard != 0) {
-      val (leftKey, rightKey) = keyPairs(i)
+    while (i < orderedPairs.length && joinCard != 0) {
+      val JoinKeyPair(leftKey, rightKey, widened) = orderedPairs(i)
       // Check if the two sides are disjoint
       val leftKeyStat = leftStats.attributeStats(leftKey)
       val rightKeyStat = rightStats.attributeStats(rightKey)
@@ -216,14 +221,20 @@ case class JoinEstimation(join: Join) extends Logging {
           case _ =>
             computeByNdv(leftKey, rightKey, newMin, newMax)
         }
+        // Each column of a padded or widened pair keeps its own lengths.
+        def lengths(keyStat: ColumnStat): ColumnStat = if (widened) {
+          joinStat.copy(avgLen = keyStat.avgLen, maxLen = keyStat.maxLen)
+        } else {
+          joinStat
+        }
         keyStatsAfterJoin +=
           // A histogram is propagated as unchanged, so that only a pointer to it is kept. Later
           // estimates bound it by the min/max of the joined keys, and do not use it without them.
           // If only one key has a known range, the joined keys take it, and the histogram of the
           // other key, which may not cover that range, is neither used above nor propagated.
-          (leftKey -> joinStat.copy(
+          (leftKey -> lengths(leftKeyStat).copy(
             histogram = leftKeyStat.histogram.filter(_ => lRangeKnown || !rRangeKnown))) +=
-            (rightKey -> joinStat.copy(
+            (rightKey -> lengths(rightKeyStat).copy(
               histogram = rightKeyStat.histogram.filter(_ => rRangeKnown || !lRangeKnown)))
         // Return cardinality estimated from the most selective join keys.
         if (card < joinCard) joinCard = card
@@ -234,7 +245,7 @@ case class JoinEstimation(join: Join) extends Logging {
       }
       i += 1
     }
-    (joinCard, AttributeMap(keyStatsAfterJoin))
+    (joinCard, AttributeMap(keyStatsAfterJoin.toSeq))
   }
 
   /**
@@ -357,17 +368,24 @@ case class JoinEstimation(join: Join) extends Logging {
     outputAttrStats.toSeq
   }
 
+  /**
+   * Returns the pairs of join keys that read a column with count stats on each side, through the
+   * casts and padding that `readColumn` looks through, and whether either key of the pair is
+   * padded or widened.
+   */
   private def extractJoinKeysWithColStats(
       leftKeys: Seq[Expression],
-      rightKeys: Seq[Expression]): Seq[(AttributeReference, AttributeReference)] = {
-    leftKeys.zip(rightKeys).collect {
+      rightKeys: Seq[Expression]): Seq[JoinKeyPair] = {
+    leftKeys.zip(rightKeys).flatMap { case (lk, rk) =>
       // Currently we don't deal with equal joins like key1 = key2 + 5.
-      // TODO(SPARK-61871): nor with keys of CHAR or VARCHAR columns of different types, which are
-      // wrapped in a cast to a CHAR or VARCHAR type, or in rpad for CHAR keys of different lengths.
       // Note: join keys from EqualNullSafe also fall into this case (Coalesce), consider to
       // support it in the future by using `nullCount` in column stats.
-      case (lk: AttributeReference, rk: AttributeReference)
-        if columnStatsWithCountsExist((leftStats, lk), (rightStats, rk)) => (lk, rk)
+      for {
+        ColumnRead(l: AttributeReference, lStat, _, lWidened) <-
+          readColumn(lk, leftStats.attributeStats) if lStat.hasCountStats
+        ColumnRead(r: AttributeReference, rStat, _, rWidened) <-
+          readColumn(rk, rightStats.attributeStats) if rStat.hasCountStats
+      } yield JoinKeyPair(l, r, widened = lWidened || rWidened)
     }
   }
 
@@ -388,3 +406,12 @@ case class JoinEstimation(join: Join) extends Logging {
     }
   }
 }
+
+/**
+ * A pair of equi-join keys that read the columns `left` and `right`, and whether either key is
+ * padded or widened (see `EstimationUtils.ColumnRead`).
+ */
+private case class JoinKeyPair(
+    left: AttributeReference,
+    right: AttributeReference,
+    widened: Boolean)

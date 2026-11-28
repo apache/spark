@@ -38,14 +38,6 @@ object EstimationUtils {
     }
   }
 
-  /** Check if each attribute has column stat containing distinct and null counts
-   *  in the corresponding statistic. */
-  def columnStatsWithCountsExist(statsAndAttr: (Statistics, Attribute)*): Boolean = {
-    statsAndAttr.forall { case (stats, attr) =>
-      stats.attributeStats.get(attr).map(_.hasCountStats).getOrElse(false)
-    }
-  }
-
   /** Statistics for a Column containing only NULLs. */
   def nullColumnStat(dataType: DataType, rowCount: BigInt): ColumnStat = {
     ColumnStat(distinctCount = Some(0), min = None, max = None, nullCount = Some(rowCount),
@@ -85,24 +77,19 @@ object EstimationUtils {
       expressions: Seq[Expression],
       attributeStats: AttributeMap[ColumnStat],
       rowCount: BigInt): Seq[(Attribute, ColumnStat)] = {
+    object ReadColumnStat {
+      def unapply(e: Expression): Option[ColumnStat] =
+        readColumn(e, attributeStats).map(_.readStat)
+    }
     expressions.collect {
-      // A cast to a STRING of the same collation keeps the value and the column's statistics,
-      // e.g. the cast that a union with a STRING adds to a first-class VARCHAR column.
-      case alias @ Alias(WithoutCastToPlainString(attr: Attribute), _)
-          if attributeStats.contains(attr) =>
-        alias.toAttribute -> attributeStats(attr)
       // A scan wraps each CHAR column in read-side padding, or under standard CHAR/VARCHAR
       // semantics each CHAR and VARCHAR column in a read-side check. ANALYZE TABLE reads the table
       // through them as well, so the statistics already describe the values they return.
       // Statistics collected otherwise (with padding off, or reported by a connector) can describe
       // shorter values, and more distinct ones: the padding and the checks can make values equal
-      // that differ only in trailing spaces. The distinct count is kept as is, and the VARCHAR
-      // check never makes a value longer.
-      case alias @ Alias(WithoutCastToPlainString(
-          CharVarcharUtils.ReadSidePaddingOrCheck(attr: Attribute, n, padsToLength)), _)
-          if attributeStats.contains(attr) =>
-        val stat = attributeStats(attr)
-        alias.toAttribute -> (if (padsToLength) padToCharLength(stat, n) else stat)
+      // that differ only in trailing spaces. The distinct count is kept as is. See `readColumn`
+      // for the casts and the padding above the read, e.g. the cast a union with a STRING adds.
+      case alias @ Alias(ReadColumnStat(stat), _) => alias.toAttribute -> stat
       case alias @ Alias(expr: Expression, _) if expr.foldable && expr.deterministic =>
         val value = expr.eval(EmptyRow)
         val size = expr.dataType.defaultSize
@@ -129,9 +116,69 @@ object EstimationUtils {
     }
   }
 
-  private object WithoutCastToPlainString {
-    def unapply(e: Expression): Some[Expression] =
-      Some(CharVarcharUtils.stripCastToPlainString(e))
+  /**
+   * A column that an expression reads (see `readColumn`), with the column's statistics, the length
+   * N of the CHAR that the expression pads the column's values to, if any, and whether the
+   * expression pads the values or widens their type, through the read-side padding or CHAR check
+   * or through an rpad or a cast that `CharVarcharWidening` matches, such as one a comparison or
+   * a union adds.
+   */
+  private[statsEstimation] case class ColumnRead(
+      attr: Attribute,
+      stat: ColumnStat,
+      padTo: Option[Int],
+      widened: Boolean) {
+    /**
+     * The statistics of the expression: the column's, with the lengths raised to at least N
+     * unless the column has no non-null values.
+     */
+    def readStat: ColumnStat = padTo.fold(stat)(padToCharLength(stat, _))
+
+    /**
+     * Whether the statistics show that the non-null values of the expression have at most n
+     * characters: there are none (a distinct count of 0), or the maximum length, raised to N, is
+     * at most n.
+     */
+    def fitsIn(n: Int): Boolean = stat.distinctCount.contains(BigInt(0)) ||
+      stat.maxLen.exists(maxLen => padTo.fold(maxLen)(maxLen.max(_)) <= n)
+  }
+
+  /**
+   * Returns the column that an expression reads and its statistics, through any of: the read-side
+   * padding or check of a CHAR or VARCHAR column, a cast to a STRING of the same collation (see
+   * `CharVarcharUtils.stripCastToPlainString`), and an rpad or a cast that
+   * `CharVarcharUtils.CharVarcharWidening` matches, such as one a comparison or a union adds. Such
+   * an rpad or cast to length N is followed only if the statistics show that the values fit in N
+   * characters, since rpad truncates longer ones. Returns None if the expression reads no column
+   * through these, the column has no statistics, or the values do not fit.
+   */
+  private[statsEstimation] def readColumn(
+      e: Expression,
+      attributeStats: AttributeMap[ColumnStat]): Option[ColumnRead] = {
+    def through(
+        child: Expression,
+        n: Int,
+        padsToLength: Boolean,
+        widening: Boolean): Option[ColumnRead] =
+      readColumn(child, attributeStats).collect {
+        case read if !widening || read.fitsIn(n) => read.copy(
+          padTo = if (padsToLength) Some(read.padTo.fold(n)(_.max(n))) else read.padTo,
+          widened = read.widened || widening || padsToLength)
+      }
+    e match {
+      // Every read ends at a column with statistics. Without any, skip the type checks, which can
+      // parse the CHAR or VARCHAR type in an attribute's metadata.
+      case _ if attributeStats.isEmpty => None
+      case attr: Attribute =>
+        attributeStats.get(attr).map(ColumnRead(attr, _, padTo = None, widened = false))
+      case CharVarcharUtils.ReadSidePaddingOrCheck(child, n, padsToLength) =>
+        through(child, n, padsToLength, widening = false)
+      case CharVarcharUtils.CharVarcharWidening(child, n, padsToLength) =>
+        through(child, n, padsToLength, widening = true)
+      case _ =>
+        val uncast = CharVarcharUtils.stripCastToPlainString(e)
+        if (uncast eq e) None else readColumn(uncast, attributeStats)
+    }
   }
 
   def getSizePerRow(

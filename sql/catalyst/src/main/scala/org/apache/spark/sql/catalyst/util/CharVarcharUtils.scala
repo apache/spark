@@ -464,6 +464,59 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
   }
 
   /**
+   * Matches the padding or widening that a comparison of CHAR or VARCHAR values, or a set
+   * operation of such values of different types, adds to a value, or that a query writes
+   * explicitly: rpad with spaces of a CHAR value to a length at least its own, or a cast of a CHAR
+   * value to a CHAR or VARCHAR type at least as long, or of a VARCHAR value to a VARCHAR type at
+   * least as long, of the same collation. Extracts the value, the target length N, and whether the
+   * target pads to N. Values longer than N can become equal, as rpad truncates them, and so can
+   * unpadded CHAR values that differ only in trailing spaces. So the result is not unique where
+   * the value is.
+   */
+  private[sql] object CharVarcharWidening {
+    def unapply(e: Expression): Option[(Expression, Int, Boolean)] = e match {
+      case Cast(child, to: CharType, _, _) => declaredType(child).collect {
+        case from if from.isChar && from.fitsIn(to.length, to.collationId) =>
+          (child, to.length, true)
+      }
+      case Cast(child, to: VarcharType, _, _) => declaredType(child).collect {
+        case from if from.fitsIn(to.length, to.collationId) => (child, to.length, false)
+      }
+      // `createStringRPad` gives the pad the type of the padded value, so the pad of a CHAR(N)
+      // value is N spaces, which pads the same way as one space.
+      case StringRPad(child, Literal(n: Int, IntegerType), Literal(pad: UTF8String, _))
+          if pad.numBytes > 0 && pad.toString.forall(_ == ' ') => declaredType(child).collect {
+        case from if from.isChar && from.length <= n => (child, n, true)
+      }
+      case _ => None
+    }
+
+    /** The length and collation of a CHAR or VARCHAR type, and whether it is CHAR. */
+    private case class Declared(length: Int, collationId: Int, isChar: Boolean) {
+      def fitsIn(n: Int, targetCollationId: Int): Boolean =
+        length <= n && collationId == targetCollationId
+    }
+
+    private def declared(dataType: DataType): Option[Declared] = dataType match {
+      case c: CharType => Some(Declared(c.length, c.collationId, isChar = true))
+      case v: VarcharType => Some(Declared(v.length, v.collationId, isChar = false))
+      case _ => None
+    }
+
+    // The CHAR or VARCHAR type of a value, also of a column read as STRING with its declared type
+    // in the metadata, and of the read-side padding of a CHAR column, which a predicate pushed
+    // below the read-side Project compares.
+    private def declaredType(e: Expression): Option[Declared] = declared(e.dataType).orElse {
+      (e, e.dataType) match {
+        case (a: Attribute, _: StringType) => getRawType(a.metadata).flatMap(declared)
+        case (ReadSidePaddingOrCheck(_, n, true), s: StringType) =>
+          Some(Declared(n, s.collationId, isChar = true))
+        case _ => None
+      }
+    }
+  }
+
+  /**
    * Return expressions to apply char type padding for the string comparison between the given
    * attributes. When comparing two char type columns/fields, we need to pad the shorter one to
    * the longer length.

@@ -416,6 +416,109 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
+  test("SPARK-61871: CBO estimates an equi-join of CHAR/VARCHAR keys of different types") {
+    // Without first-class CHAR/VARCHAR types the comparison pads the shorter of two CHAR keys
+    // with rpad, and with read-side padding off pads both, while other keys are compared as they
+    // are. As first-class types it casts the keys to their common type. Each pair joins
+    // 1000 x 1000 rows with 10 values on each side.
+    val paddingOff = Seq(SQLConf.READ_SIDE_CHAR_PADDING.key -> "false")
+    val modes = Seq(Seq.empty[(String, String)], paddingOff) ++
+      firstClassCharVarcharConfs.map(c => Seq(c.key -> "true"))
+    val pairs =
+      Seq("CHAR(5)" -> "CHAR(10)", "VARCHAR(5)" -> "VARCHAR(10)", "CHAR(5)" -> "VARCHAR(5)")
+    for (modeConfs <- modes; (leftType, rightType) <- pairs) {
+      withSQLConf(Seq(SQLConf.CBO_ENABLED.key -> "true") ++ modeConfs: _*) {
+        val (left, right) = ("char_varchar_join_left", "char_varchar_join_right")
+        withTable(left, right) {
+          sql(s"CREATE TABLE $left(a $leftType) USING parquet")
+          sql(s"CREATE TABLE $right(b $rightType) USING parquet")
+          Seq(left, right).foreach { t =>
+            sql(s"INSERT INTO $t SELECT $fiveCharValues")
+          }
+          sql(s"ANALYZE TABLE $left COMPUTE STATISTICS FOR COLUMNS a")
+          sql(s"ANALYZE TABLE $right COMPUTE STATISTICS FOR COLUMNS b")
+          Seq(s"$left JOIN $right ON a = b", s"$right JOIN $left ON b = a").foreach { join =>
+            checkRows(s"SELECT * FROM $join", 100000, s"$modeConfs, $leftType, $rightType") {
+              case j: Join => j
+            }
+          }
+          // As first-class types a union of the columns casts them to their common type and has
+          // 10 groups. Without first-class types a union of CHAR(5) and CHAR(10) keeps the
+          // CHAR(10) values padded to 10 characters next to the 5-character ones, so it has 20
+          // groups; the other pairs have 10.
+          val firstClass = modeConfs.exists(c => firstClassCharVarcharConfs.exists(_.key == c._1))
+          if (rightType != "CHAR(10)" || firstClass) {
+            checkRows(s"SELECT k, count(*) FROM (SELECT a AS k FROM $left UNION ALL " +
+                s"SELECT b FROM $right) GROUP BY k", 10, s"$modeConfs, union") {
+              case g: Aggregate => g
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-61871: CBO estimates CHAR predicates that a comparison pads") {
+    // A CHAR column compared with a longer literal is padded to the literal's length, and with
+    // read-side padding off to its own length as well. All are estimated as the column. Under
+    // `preserveCharVarcharTypeInfo` with read-side padding off, a comparison with a literal casts
+    // the column to STRING instead, and one with a CHAR column of the same type pads with a pad
+    // of as many spaces as its length.
+    val paddingOff = SQLConf.READ_SIDE_CHAR_PADDING.key -> "false"
+    val preserve = SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true"
+    Seq(Nil, Seq(paddingOff), Seq(paddingOff, preserve)).foreach { modeConfs =>
+      withSQLConf(Seq(SQLConf.CBO_ENABLED.key -> "true") ++ modeConfs: _*) {
+        val (left, right) = ("char_padded_predicate_left", "char_padded_predicate_right")
+        withTable(left, right) {
+          Seq(left, right).foreach { t =>
+            sql(s"CREATE TABLE $t(c CHAR(5)) USING parquet")
+            sql(s"INSERT INTO $t SELECT $fiveCharValues")
+            sql(s"ANALYZE TABLE $t COMPUTE STATISTICS FOR COLUMNS c")
+          }
+          val clue = modeConfs.toString
+          val longerLiterals = if (modeConfs.contains(preserve)) {
+            Nil
+          } else {
+            Seq("c = '10003  '" -> 100, "c IN ('10003  ', '10004')" -> 200)
+          }
+          val predicates = Seq("c = '10003'" -> 100, "c IN ('10003', '10004')" -> 200)
+          (predicates ++ longerLiterals).foreach { case (condition, expectedRows) =>
+            checkRows(s"SELECT * FROM $left WHERE $condition", expectedRows, clue) {
+              case f: Filter => f
+            }
+          }
+          checkRows(s"SELECT * FROM $left l JOIN $right r ON l.c = r.c", 100000, clue) {
+            case j: Join => j
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-61871: partition pruning estimates a padded CHAR filter with only planStats on") {
+    // A CHAR partition column compared with a longer literal is padded to the literal's length.
+    // Partition pruning estimates the filter when only `planStats` is on, and saves the result
+    // as the pruned relation's statistics.
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "false",
+        SQLConf.PLAN_STATS_ENABLED.key -> "true") {
+      val tableName = "char_padded_partition_pruning_stats"
+      withTable(tableName) {
+        sql(s"CREATE TABLE $tableName(v INT, p CHAR(5)) USING parquet PARTITIONED BY (p)")
+        sql(s"INSERT INTO $tableName SELECT CAST(id AS INT), $fiveCharValues")
+        sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS v, p")
+
+        val query = s"SELECT * FROM $tableName WHERE p = '10003  '"
+        val plan = sql(query).queryExecution.optimizedPlan
+        val prunedStats = plan.collectFirst {
+          case l: LogicalRelation => l.catalogTable.flatMap(_.stats)
+        }.flatten.getOrElse(fail(s"no catalog statistics in\n${plan.treeString}"))
+        assert(prunedStats.rowCount.contains(BigInt(100)), plan.treeString)
+        assert(sql(query).count() == 100)
+      }
+    }
+  }
+
   test("SPARK-60830: partition pruning estimates a filter on a first-class CHAR/VARCHAR column") {
     for (mode <- firstClassCharVarcharConfs; colType <- Seq("CHAR(5)", "VARCHAR(5)")) {
       withSQLConf(SQLConf.CBO_ENABLED.key -> "true", mode.key -> "true") {
