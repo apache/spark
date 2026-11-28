@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
+import scala.collection.mutable
+
 import org.antlr.v4.runtime.{CharStreams, CommonTokenStream, ParserRuleContext}
 
 import org.apache.spark.internal.Logging
@@ -98,7 +100,7 @@ class SubstituteParamsParser extends Logging {
         _.compoundOrSingleStatement())
       (ctx, new SubstituteParmsAstBuilder().extractParameterLocations(ctx))
     }
-    val (ctx, parameterLocations) = parseParameterLocations() match {
+    val (ctx, unresolvedParameterLocations) = parseParameterLocations() match {
       // A rule that accepts any tokens, such as `SET .*?`, parses a statement such as
       // `SET VAR v = :p?`, which is not valid without optional references. Only the parser that
       // builds the plan can tell, so parse a statement with a `?` that the grammar did not parse
@@ -114,6 +116,8 @@ class SubstituteParamsParser extends Logging {
       case parsed =>
         parsed
     }
+    val parameterLocations = resolveConditionalNamedParameters(
+      unresolvedParameterLocations, namedParams, positionalParams)
     // In a statement with optional references, a `?` after an identifier or a non-reserved keyword
     // is an optional reference where the syntax allows a reference. The remaining markers must
     // not take the values of such a `?` silently, so a value without a marker is an error. With
@@ -167,6 +171,49 @@ class SubstituteParamsParser extends Logging {
     ParameterSubstitution(substitutedSql, consumedPositionalParams, positionMapper,
       parsedWithOptionalReferences = AbstractParser.parsedWithOptionalReferences(tokenStream))
   }
+
+  private def resolveConditionalNamedParameters(
+      locations: ParameterLocationInfo,
+      namedParams: Map[String, String],
+      positionalParams: List[String]): ParameterLocationInfo = {
+    if (locations.conditionalNamedParameterLocations.isEmpty) {
+      return locations
+    }
+
+    val replacementsByEnd = mutable.Map[Int, String]()
+    locations.namedParameterLocations.foreach { case (name, parameterLocations) =>
+      namedParams.get(name).foreach { replacement =>
+        parameterLocations.foreach(location => replacementsByEnd += location.end -> replacement)
+      }
+    }
+    locations.positionalParameterLocations.zip(positionalParams).foreach {
+      case (location, replacement) => replacementsByEnd += location.end -> replacement
+    }
+
+    val resolvedNamedLocations =
+      mutable.Map[String, mutable.ListBuffer[ParameterLocation]]()
+    locations.namedParameterLocations.foreach { case (name, parameterLocations) =>
+      resolvedNamedLocations += name -> mutable.ListBuffer(parameterLocations: _*)
+    }
+    locations.conditionalNamedParameterLocations.sortBy(_.location.start).foreach { candidate =>
+      if (replacementsByEnd.get(candidate.precedingParameterEnd).exists(isPlainStringLiteral)) {
+        resolvedNamedLocations
+          .getOrElseUpdate(candidate.name, mutable.ListBuffer()) += candidate.location
+        namedParams.get(candidate.name).foreach { replacement =>
+          replacementsByEnd += candidate.location.end -> replacement
+        }
+      }
+    }
+
+    locations.copy(
+      namedParameterLocations =
+        resolvedNamedLocations.view.mapValues(_.toList).toMap,
+      conditionalNamedParameterLocations = Nil)
+  }
+
+  // Typed literals have prefixes; collated strings have suffixes or casts.
+  private def isPlainStringLiteral(sql: String): Boolean =
+    sql.length >= 2 && sql.head == '\'' && sql.last == '\''
 
   /**
    * Apply substitutions to the original SQL text at specified locations.
@@ -237,8 +284,7 @@ class SubstituteParamsParser extends Logging {
         substitutions += Substitution(location, value)
     }
 
-    val substitutedText = applySubstitutions(sqlText, substitutions.toList)
-    (substitutedText, substitutions.toList)
+    applySubstitutions(sqlText, substitutions.toList)
   }
 
   /**
@@ -262,32 +308,42 @@ class SubstituteParamsParser extends Logging {
 
   /**
    * Apply a list of substitutions to the SQL text.
-   * Inserts a space separator when a parameter is immediately preceded by a quote
-   * to avoid back-to-back quotes after substitution.
+   * Inserts space separators around quote-adjacent parameters and between consecutive parameters
+   * so replacement tokens retain their intended boundaries.
    *
    * ANTLR's CodePointCharStream reports token positions in Unicode code points, but
    * Java/Scala String indices are in UTF-16 code units. Supplementary characters
    * (e.g. emojis) occupy 1 code point but 2 code units, so we must convert.
    */
-  private def applySubstitutions(sqlText: String, substitutions: List[Substitution]): String = {
+  private def applySubstitutions(
+      sqlText: String,
+      substitutions: List[Substitution]): (String, List[Substitution]) = {
     val sortedSubstitutions = substitutions.sortBy(-_.start)
+    val parameterEnds = substitutions.iterator.map(_.end).toSet
 
     var result = sqlText
-    sortedSubstitutions.foreach { substitution =>
+    val appliedSubstitutions = sortedSubstitutions.map { substitution =>
       val startCU = result.offsetByCodePoints(0, substitution.start)
       val endCU = result.offsetByCodePoints(0, substitution.end)
       val prefix = result.substring(0, startCU)
       val replacement = substitution.replacement
       val suffix = result.substring(endCU)
 
-      val needsSpace = startCU > 0 &&
-        (result.charAt(startCU - 1) == '\'' || result.charAt(startCU - 1) == '"') &&
-        replacement.nonEmpty && !replacement.charAt(0).isWhitespace
+      val needsLeadingSpace = replacement.nonEmpty && !replacement.charAt(0).isWhitespace &&
+        (parameterEnds.contains(substitution.start) ||
+          (startCU > 0 &&
+            (result.charAt(startCU - 1) == '\'' || result.charAt(startCU - 1) == '"')))
+      val needsTrailingSpace = replacement.nonEmpty &&
+        !replacement.charAt(replacement.length - 1).isWhitespace && suffix.nonEmpty &&
+        (suffix.charAt(0) == '\'' || suffix.charAt(0) == '"')
 
-      val space = if (needsSpace) " " else ""
-      result = s"$prefix$space$replacement$suffix"
+      val emittedReplacement =
+        (if (needsLeadingSpace) " " else "") + replacement +
+          (if (needsTrailingSpace) " " else "")
+      result = s"$prefix$emittedReplacement$suffix"
+      substitution.copy(replacement = emittedReplacement)
     }
-    result
+    (result, appliedSubstitutions)
   }
 }
 

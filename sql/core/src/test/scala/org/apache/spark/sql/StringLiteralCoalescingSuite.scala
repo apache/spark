@@ -874,23 +874,28 @@ class StringLiteralCoalescingSuite extends SharedSparkSession {
 
   test("parameter substitution with quote spacing - legacy consecutive string literals disabled") {
     // With LEGACY_CONSECUTIVE_STRING_LITERALS enabled, '' would normally produce a single quote
-    // But with parameter substitution, 'literal':param should insert a space to prevent
-    // the closing quote and opening quote from being interpreted as an escape sequence
-    withSQLConf("spark.sql.legacy.consecutiveStringLiterals.enabled" -> "false") {
+    // Separators on both sides of parameters preserve coalescing instead of escaping a quote.
+    withSQLConf(
+        "spark.sql.legacy.parameterSubstitution.constantsOnly" -> "false",
+        "spark.sql.legacy.consecutiveStringLiterals.enabled" -> "false") {
       checkAnswer(
-        spark.sql("SELECT 'hello':p, 'hello''world'", Map("p" -> "world")),
-        // Space parameter separates literals, no singleton quote in middle
-        Row("helloworld", "hello'world")
+        spark.sql(
+          "SELECT 'hello':p, :p'hello', 'x' :a:b, 'hello''world'",
+          Map("p" -> "world", "a" -> "A", "b" -> "B")),
+        Row("helloworld", "worldhello", "xAB", "hello'world")
       )
     }
   }
 
   test("parameter substitution with quote spacing - legacy consecutive string literals enabled") {
-    withSQLConf("spark.sql.legacy.consecutiveStringLiterals.enabled" -> "true") {
+    withSQLConf(
+        "spark.sql.legacy.parameterSubstitution.constantsOnly" -> "false",
+        "spark.sql.legacy.consecutiveStringLiterals.enabled" -> "true") {
       checkAnswer(
-        spark.sql("SELECT 'hello':p, 'hello''world'", Map("p" -> "world")),
-        // Space parameter separates literals, no singleton quote in middle
-        Row("helloworld", "helloworld")
+        spark.sql(
+          "SELECT 'hello':p, :p'hello', 'x' :a:b, 'hello''world'",
+          Map("p" -> "world", "a" -> "A", "b" -> "B")),
+        Row("helloworld", "worldhello", "xAB", "helloworld")
       )
     }
   }
@@ -906,6 +911,11 @@ class StringLiteralCoalescingSuite extends SharedSparkSession {
         spark.sql("SELECT '{\"name\":\"joe\"}' :name", Map("name" -> "replaced")),
         Row("{\"name\":\"joe\"}replaced")
       )
+
+      val variant = spark.sql("SELECT parse_json('{\"a\":1}')").head().get(0)
+      checkAnswer(
+        spark.sql("SELECT CAST(:variant:a AS INT)", Map("variant" -> variant)),
+        Row(1))
     }
   }
 }
