@@ -46,9 +46,15 @@ class WholeStageCodegenEvaluatorFactory(
       val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
       buffer.init(partitionIndex, inputs.toArray)
       new Iterator[InternalRow] {
+        // `durationMs()` is the time since the pipeline started, and callers may call `hasNext`
+        // again after it returned false, so add it once, at the end of this pipeline.
+        private var durationAdded = false
         override def hasNext: Boolean = {
           val v = buffer.hasNext
-          if (!v) durationMs += buffer.durationMs()
+          if (!v && !durationAdded) {
+            durationMs += buffer.durationMs()
+            durationAdded = true
+          }
           v
         }
         override def next(): InternalRow = buffer.next()
