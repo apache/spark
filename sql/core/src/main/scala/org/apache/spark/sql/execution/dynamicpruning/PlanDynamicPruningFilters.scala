@@ -60,17 +60,16 @@ case class PlanDynamicPruningFilters(sparkSession: SparkSession) extends Rule[Sp
     val sparkPlan = QueryExecution.createSparkPlan(
       sparkSession.sessionState.planner, buildPlan)
     val requiredMode = broadcastMode(buildKeys, sparkPlan.output)
+    // As in `PlanAdaptiveDynamicPruningFilters`, only a broadcast with the same mode can be reused.
+    // Otherwise the filter's own broadcast would broadcast the plan a second time.
     val canReuseExchange = plan.exists {
-      case join: BroadcastHashJoinExec =>
+      case join: BroadcastHashJoinExec if !join.isNullAwareAntiJoin =>
         val (candidateKeys, candidatePlan) = join.buildSide match {
           case BuildLeft => (join.leftKeys, join.left)
           case BuildRight => (join.rightKeys, join.right)
         }
-        // Preserve existing direct reuse; only a projected domain requires the exact hash mode.
         candidatePlan.sameResult(sparkPlan) &&
-          (projection.isEmpty ||
-            (!join.isNullAwareAntiJoin &&
-              broadcastMode(candidateKeys, candidatePlan.output) == requiredMode))
+          broadcastMode(candidateKeys, candidatePlan.output) == requiredMode
       case _ => false
     }
 
