@@ -1743,11 +1743,12 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
         originalAttempt.tasks(1), failureReason, null))
       assert(mapOutputTracker.findMissingPartitions(outputDep.shuffleId) === Some(Seq(0, 1)))
 
-      // A delayed migration report can restore an output cleared by the barrier failure.
+      // The barrier failure invalidated the whole shuffle, so a delayed migration report does not
+      // restore the cleared output.
       val relocatedHost = makeBlockManagerId("hostD")
       mapOutputTracker.updateMapOutput(outputDep.shuffleId, 200L, relocatedHost)
-      assert(completedStatus.location === relocatedHost)
-      assert(mapOutputTracker.findMissingPartitions(outputDep.shuffleId) === Some(Seq(1)))
+      assert(completedStatus.location === makeBlockManagerId("hostC"))
+      assert(mapOutputTracker.findMissingPartitions(outputDep.shuffleId) === Some(Seq(0, 1)))
       assert(mapStage.latestInfo.attemptNumber() === 0)
 
       scheduler.resubmitFailedStages()
@@ -4598,6 +4599,51 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     complete(taskSets(4), Seq((Success, 11), (Success, 12)))
 
     // Job successful ended.
+    assert(results === Map(0 -> 11, 1 -> 12))
+    results.clear()
+    assertDataStructuresEmpty()
+  }
+
+  test("SPARK-62353: migration does not restore map outputs removed by a checksum mismatch " +
+      "rollback") {
+    val shuffleMapRdd1 = new MyRDD(sc, 2, Nil)
+    val shuffleDep1 = new ShuffleDependency(
+      shuffleMapRdd1, new HashPartitioner(2), _checksumMismatchFullRetryEnabled = true)
+    val shuffleId1 = shuffleDep1.shuffleId
+    val shuffleMapRdd2 = new MyRDD(sc, 2, List(shuffleDep1), tracker = mapOutputTracker)
+    val shuffleDep2 = new ShuffleDependency(
+      shuffleMapRdd2, new HashPartitioner(2), _checksumMismatchFullRetryEnabled = true)
+    val shuffleId2 = shuffleDep2.shuffleId
+    val finalRdd = new MyRDD(sc, 2, List(shuffleDep2), tracker = mapOutputTracker)
+    submit(finalRdd, Array(0, 1))
+
+    completeShuffleMapStageSuccessfully(0, 0, 2, Seq("hostA", "hostA"), checksumVal = 100)
+    // The second stage's first task fails to fetch from hostA, losing both of its inputs there.
+    // The failed attempt's other task then registers its output on hostB.
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(0),
+      FetchFailed(makeBlockManagerId("hostA"), shuffleId1, 0L, 0, 0, "ignored"),
+      null))
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(1), Success, makeMapStatus("hostB", 2, mapTaskId = 7),
+      Seq.empty, Array.empty, createFakeTaskInfoWithId(1)))
+    scheduler.resubmitFailedStages()
+
+    // The first rerun task reports a different checksum, which rolls back the second stage.
+    runEvent(makeCompletionEvent(
+      taskSets(2).tasks(0), Success, makeMapStatus("hostC", 2, checksumVal = 101)))
+    assert(mapOutputTracker.getNumAvailableOutputs(shuffleId2) == 0)
+
+    // Graceful decommission of hostB finishes migrating the rolled-back output.
+    mapOutputTracker.updateMapOutput(shuffleId2, 7L, makeBlockManagerId("hostD"))
+    assert(mapOutputTracker.getNumAvailableOutputs(shuffleId2) == 0)
+
+    runEvent(makeCompletionEvent(
+      taskSets(2).tasks(1), Success, makeMapStatus("hostC", 2, checksumVal = 100)))
+    // The second stage reruns every partition instead of reusing the migrated old output.
+    checkAndCompleteRetryStage(3, 1, shuffleId2, numTasks = 2)
+
+    complete(taskSets(4), Seq((Success, 11), (Success, 12)))
     assert(results === Map(0 -> 11, 1 -> 12))
     results.clear()
     assertDataStructuresEmpty()
