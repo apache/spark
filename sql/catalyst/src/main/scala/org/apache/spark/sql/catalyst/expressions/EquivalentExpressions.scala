@@ -137,9 +137,14 @@ class EquivalentExpressions(
       // one level would leave operands past the first (which are conditionally evaluated) to be
       // treated as always-evaluated, so a subexpression they share could be hoisted and eagerly
       // evaluated, breaking short-circuit semantics (e.g. a spurious NPE or divide-by-zero).
+      // `In` short-circuits the same way: it evaluates `value`, then the list elements until one
+      // of them matches, so only `value` is guaranteed to be evaluated. An element past the first
+      // match is conditional, and so is the whole list when `value` is NULL, which makes `value`
+      // the operand to peel down to.
       expr match {
         case and: And => skipForShortcut(and.left)
         case or: Or => skipForShortcut(or.left)
+        case in: In if in.list.nonEmpty => skipForShortcut(in.value)
         case other => other
       }
     } else {
@@ -154,7 +159,7 @@ class EquivalentExpressions(
   //        be called outside of that scope, only always-evaluated arguments can be evaluated
   //        ahead of time.
   // The caller has already applied `skipForShortcut`, so these cases are asked about the operand
-  // that the peel lands on rather than about the `And`/`Or` chain above it.
+  // that the peel lands on rather than about the `And`/`Or`/`In` above it.
   private def childrenToRecurse(expr: Expression): Seq[Expression] = expr match {
     case _: CodegenFallback => Nil
     case t: TransformExpression if t.fallsBackToEval => Nil
@@ -263,13 +268,19 @@ class EquivalentExpressions(
     if (!skip && !updateExprInMap(expr, map, useCount)) {
       val uc = useCount.sign
       // Peel first: which children may be recursed into is a question about the operand that is
-      // always evaluated, and `And`/`Or` are not `ConditionalExpression`s. Asking
+      // always evaluated, and `And`/`Or`/`In` are not `ConditionalExpression`s. Asking
       // `childrenToRecurse` about the chain above that operand walks past its guards; asking
       // `commonChildrenToRecurse` about the chain reaches no branch group at all.
+      // The operand the peel lands on is added itself, not only its children: it is always
+      // evaluated, so it is a candidate like any other always-evaluated expression. The peel
+      // cannot go further from it, so the call below takes the `else` branch for it.
       val alwaysEvaluated = skipForShortcut(expr)
-      childrenToRecurse(alwaysEvaluated).foreach(updateExprTree(_, map, uc))
-      commonChildrenToRecurse(alwaysEvaluated).filter(_.nonEmpty)
-        .foreach(updateCommonExprs(_, map, uc))
+      if (alwaysEvaluated ne expr) {
+        updateExprTree(alwaysEvaluated, map, uc)
+      } else {
+        childrenToRecurse(expr).foreach(updateExprTree(_, map, uc))
+        commonChildrenToRecurse(expr).filter(_.nonEmpty).foreach(updateCommonExprs(_, map, uc))
+      }
     }
   }
 
