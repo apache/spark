@@ -2,10 +2,10 @@
 TakeOrderedAndProject (30)
 +- * Filter (29)
    +- Window (28)
-      +- WindowGroupLimit (27)
+      +- * WindowGroupLimit (27)
          +- * Sort (26)
             +- Exchange (25)
-               +- WindowGroupLimit (24)
+               +- * WindowGroupLimit (24)
                   +- * Sort (23)
                      +- * HashAggregate (22)
                         +- Exchange (21)
@@ -141,7 +141,7 @@ Results [9]: [i_category#18, i_class#19, i_brand#20, i_product_name#21, d_year#2
 Input [9]: [i_category#18, i_class#19, i_brand#20, i_product_name#21, d_year#22, d_qoy#23, d_moy#24, s_store_id#25, sumsales#32]
 Arguments: [i_category#18 ASC NULLS FIRST, sumsales#32 DESC NULLS LAST], false, 0
 
-(24) WindowGroupLimit
+(24) WindowGroupLimit [codegen id : 5]
 Input [9]: [i_category#18, i_class#19, i_brand#20, i_product_name#21, d_year#22, d_qoy#23, d_moy#24, s_store_id#25, sumsales#32]
 Arguments: [i_category#18], [sumsales#32 DESC NULLS LAST], rank(sumsales#32), 100, Partial
 
@@ -153,7 +153,7 @@ Arguments: hashpartitioning(i_category#18, 5), ENSURE_REQUIREMENTS, [plan_id=4]
 Input [9]: [i_category#18, i_class#19, i_brand#20, i_product_name#21, d_year#22, d_qoy#23, d_moy#24, s_store_id#25, sumsales#32]
 Arguments: [i_category#18 ASC NULLS FIRST, sumsales#32 DESC NULLS LAST], false, 0
 
-(27) WindowGroupLimit
+(27) WindowGroupLimit [codegen id : 6]
 Input [9]: [i_category#18, i_class#19, i_brand#20, i_product_name#21, d_year#22, d_qoy#23, d_moy#24, s_store_id#25, sumsales#32]
 Arguments: [i_category#18], [sumsales#32 DESC NULLS LAST], rank(sumsales#32), 100, Final
 

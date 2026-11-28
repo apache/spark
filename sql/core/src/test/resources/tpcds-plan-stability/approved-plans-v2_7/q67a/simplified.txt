@@ -3,13 +3,13 @@ TakeOrderedAndProject [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_
     Filter [rk]
       InputAdapter
         Window [sumsales,i_category]
-          WindowGroupLimit [i_category,sumsales]
-            WholeStageCodegen (46)
+          WholeStageCodegen (46)
+            WindowGroupLimit [i_category,sumsales]
               Sort [i_category,sumsales]
                 InputAdapter
                   Exchange [i_category] #1
-                    WindowGroupLimit [i_category,sumsales]
-                      WholeStageCodegen (45)
+                    WholeStageCodegen (45)
+                      WindowGroupLimit [i_category,sumsales]
                         Sort [i_category,sumsales]
                           Union
                             HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] [sum(coalesce((ss_sales_price * cast(ss_quantity as decimal(10,0))), 0.00)),i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sumsales,sum,isEmpty]

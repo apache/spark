@@ -28,7 +28,7 @@ TakeOrderedAndProject (56)
                         :                       +- * Project (29)
                         :                          +- * Filter (28)
                         :                             +- Window (27)
-                        :                                +- WindowGroupLimit (26)
+                        :                                +- * WindowGroupLimit (26)
                         :                                   +- * Sort (25)
                         :                                      +- * HashAggregate (24)
                         :                                         +- Exchange (23)
@@ -177,7 +177,7 @@ Results [3]: [s_state#14, MakeDecimal(sum(UnscaledValue(ss_net_profit#10))#17,17
 Input [3]: [s_state#14, _w0#18, s_state#14]
 Arguments: [s_state#14 ASC NULLS FIRST, _w0#18 DESC NULLS LAST], false, 0
 
-(26) WindowGroupLimit
+(26) WindowGroupLimit [codegen id : 5]
 Input [3]: [s_state#14, _w0#18, s_state#14]
 Arguments: [s_state#14], [_w0#18 DESC NULLS LAST], rank(_w0#18), 5, Final
 

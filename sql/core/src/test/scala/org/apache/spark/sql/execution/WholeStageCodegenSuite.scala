@@ -49,6 +49,7 @@ import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregat
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.debug.{codegenString, codegenStringSeq}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, CartesianProductExec, ShuffledHashJoinExec, SortMergeAsOfJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -1058,7 +1059,16 @@ class WholeStageCodegenSuite extends SharedSparkSession
       PlanRefCase("merge rows", Nil,
         _ => mergeRows(l.selectExpr("CAST(v1 AS INT) AS t", "CAST(k1 AS INT) AS s")),
         Set("MergeRows")))
-    aggs ++ smj ++ shj ++ bhj ++ bnlj ++ rangeJoin ++ (asOfJoin +: others)
+    val windowGroupLimit = Seq(
+      PlanRefCase("window group limit, rank", Nil,
+        _ => l.withColumn("rn", rank().over(Window.partitionBy("k1").orderBy("v1")))
+          .where($"rn" <= 3),
+        Set("WindowGroupLimit")),
+      PlanRefCase("window group limit, dense_rank", Nil,
+        _ => l.withColumn("rn", dense_rank().over(Window.partitionBy("k1").orderBy("v1")))
+          .where($"rn" <= 3),
+        Set("WindowGroupLimit")))
+    aggs ++ smj ++ shj ++ bhj ++ bnlj ++ rangeJoin ++ (asOfJoin +: others) ++ windowGroupLimit
   }
 
   gridTest("SPARK-61761: Whole-stage codegen stages do not serialize plan nodes into tasks")(

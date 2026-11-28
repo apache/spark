@@ -3,13 +3,13 @@ TakeOrderedAndProject [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_
     Filter [rk]
       InputAdapter
         Window [sumsales,i_category]
-          WindowGroupLimit [i_category,sumsales]
-            WholeStageCodegen (82)
+          WholeStageCodegen (82)
+            WindowGroupLimit [i_category,sumsales]
               Sort [i_category,sumsales]
                 InputAdapter
                   Exchange [i_category] #1
-                    WindowGroupLimit [i_category,sumsales]
-                      WholeStageCodegen (81)
+                    WholeStageCodegen (81)
+                      WindowGroupLimit [i_category,sumsales]
                         Sort [i_category,sumsales]
                           InputAdapter
                             Union

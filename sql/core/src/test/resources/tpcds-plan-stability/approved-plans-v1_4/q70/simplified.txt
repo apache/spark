@@ -47,8 +47,8 @@ TakeOrderedAndProject [lochierarchy,s_state,rank_within_parent,total_sum,s_count
                                                     Filter [ranking]
                                                       InputAdapter
                                                         Window [_w0,s_state]
-                                                          WindowGroupLimit [s_state,_w0]
-                                                            WholeStageCodegen (5)
+                                                          WholeStageCodegen (5)
+                                                            WindowGroupLimit [s_state,_w0]
                                                               Sort [s_state,_w0]
                                                                 HashAggregate [s_state,sum] [sum(UnscaledValue(ss_net_profit)),_w0,sum]
                                                                   InputAdapter
