@@ -29,6 +29,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FsUrlStreamHandlerFactory, Path}
 
 import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.deploy.history.HistorySnapshotStore
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CONFIG, CONFIG2, PATH, VALUE}
 import org.apache.spark.sql.catalyst.analysis.RelationCache
@@ -133,10 +134,19 @@ private[sql] class SharedState(
    * data to show.
    */
   lazy val streamingQueryStatusListener: Option[StreamingQueryStatusListener] = {
-    sparkContext.ui.flatMap { ui =>
+    val kvStore = sparkContext.statusStore.store.asInstanceOf[ElementTrackingStore]
+    val uiListener = sparkContext.ui.flatMap { ui =>
       if (conf.get(STREAMING_UI_ENABLED)) {
-        val kvStore = sparkContext.statusStore.store.asInstanceOf[ElementTrackingStore]
         new StreamingQueryTab(new StreamingQueryStatusStore(kvStore), ui)
+        Some(new StreamingQueryStatusListener(conf, kvStore))
+      } else {
+        None
+      }
+    }
+    // The History Server replays streaming events regardless of the live UI settings, so history
+    // snapshots need them too.
+    uiListener.orElse {
+      if (HistorySnapshotStore.isEnabled(conf)) {
         Some(new StreamingQueryStatusListener(conf, kvStore))
       } else {
         None
