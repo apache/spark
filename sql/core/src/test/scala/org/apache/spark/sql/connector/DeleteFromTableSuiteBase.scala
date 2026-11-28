@@ -413,6 +413,19 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
       Row(3) :: Row(5) :: Nil)
   }
 
+  test("SPARK-61970: delete with a condition on a CHAR field of a struct") {
+    createTable("pk INT NOT NULL, s STRUCT<c: CHAR(3)>, dep STRING")
+    append("pk INT NOT NULL, s STRUCT<c: STRING>, dep STRING",
+      """{ "pk": 1, "s": { "c": "a" }, "dep": "hr" }
+        |{ "pk": 2, "s": { "c": "b" }, "dep": "software" }
+        |{ "pk": 3, "s": { "c": "x" }, "dep": "hr" }
+        |""".stripMargin)
+
+    sql(s"DELETE FROM $tableNameAsString WHERE s.c = 'a' OR s.c IN ('b', 'c')")
+
+    checkAnswer(sql(s"SELECT pk FROM $tableNameAsString"), Row(3) :: Nil)
+  }
+
   test("SPARK-61462: delete with a correlated subquery on a CHAR column") {
     withTempView("deleted") {
       createTable("pk INT NOT NULL, c CHAR(3), dep STRING")

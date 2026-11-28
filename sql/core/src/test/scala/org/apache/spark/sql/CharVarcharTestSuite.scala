@@ -660,6 +660,97 @@ trait CharVarcharTestSuite extends QueryTest {
     }
   }
 
+  test("SPARK-61970: char type comparison: struct field and string literal") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(s STRUCT<c: CHAR(3)>, n STRUCT<s: STRUCT<c: CHAR(3)>>) USING $format")
+      sql("INSERT INTO t VALUES (struct('a'), struct(struct('a')))")
+      testConditions(spark.table("t"), Seq(
+        ("s.c = 'a'", true),
+        ("'a' = s.c", true),
+        ("s.c = 'a  '", true),
+        ("s.c > 'a'", false),
+        ("s.c IN ('a', 'b')", true),
+        ("s.c = 'abcd'", false),
+        ("n.s.c = 'a'", true),
+        ("n.s.c IN ('b', 'a')", true),
+        ("s.c <=> null", false)))
+    }
+  }
+
+  test("SPARK-61970: a reordered struct field keeps its own raw type") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(s STRUCT<c: CHAR(3), v: STRING>) USING $format")
+      sql("INSERT INTO t VALUES (named_struct('c', 'x', 'v', 'a'))")
+      // Dataset.to reorders the fields of the struct and keeps the column's metadata.
+      val df = spark.table("t").to(StructType.fromDDL("s STRUCT<v: STRING, c: STRING>"))
+      checkAnswer(df.selectExpr("s.v = 'a'", "s.c = 'x'"), Row(true, true))
+      // It matches field names case-insensitively, and takes the target's spelling.
+      val renamed = spark.table("t").to(StructType.fromDDL("s STRUCT<C: STRING, V: STRING>"))
+      checkAnswer(renamed.selectExpr("s.C = 'x'", "s.V = 'a'"), Row(true, true))
+    }
+    withTable("t") {
+      sql(s"CREATE TABLE t(n STRUCT<s: STRUCT<c: CHAR(3), v: STRING>>) USING $format")
+      sql("INSERT INTO t VALUES (named_struct('s', named_struct('c', 'x', 'v', 'a')))")
+      // The fields of a nested struct are reordered too.
+      val df = spark.table("t").to(StructType.fromDDL("n STRUCT<s: STRUCT<v: STRING, c: STRING>>"))
+      checkAnswer(df.selectExpr("n.s.c = 'x'", "n.s.v = 'a'"), Row(true, true))
+    }
+  }
+
+  test("SPARK-61970: comparisons with a struct field keep constants that fail") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(s STRUCT<c: CHAR(3)>) USING $format")
+      sql("INSERT INTO t VALUES (named_struct('c', 'a'))")
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        // The comparison is in a branch that is never evaluated.
+        checkAnswer(sql("SELECT IF(false, s.c = CAST(1 / 0 AS STRING), true) FROM t"), Row(true))
+        checkAnswer(
+          sql("SELECT IF(false, s.c IN ('a', CAST(1 / 0 AS STRING)), true) FROM t"), Row(true))
+      }
+      // An invalid comparison reports its type mismatch rather than failing to evaluate.
+      val e = intercept[AnalysisException](sql("SELECT s.c = array(1) FROM t").collect())
+      assert(e.getCondition == "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES")
+    }
+  }
+
+  test("SPARK-61970: char type comparison with a constant in filters and outer references") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(id INT, c CHAR(3), s STRUCT<c: CHAR(3)>) USING $format")
+      sql("INSERT INTO t VALUES (1, 'a', named_struct('c', 'a'))")
+      Seq(
+        "c = 'a'" -> "t.c = 'a'",
+        "s.c = 'a'" -> "t.s.c = 'a'",
+        "'a' = s.c" -> "'a' = t.s.c",
+        "s.c IN ('b', 'a')" -> "t.s.c IN ('b', 'a')").foreach { case (cond, outerCond) =>
+        // a filter, which goes through filter pushdown
+        checkAnswer(sql(s"SELECT id FROM t WHERE $cond"), Row(1))
+        // an outer reference
+        checkAnswer(
+          sql(s"SELECT id FROM t WHERE EXISTS (SELECT 1 FROM range(1) WHERE $outerCond)"),
+          Row(1))
+      }
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        // A top-level column, in a branch that is never evaluated.
+        checkAnswer(sql("SELECT IF(false, c = CAST(1 / 0 AS STRING), true) FROM t"), Row(true))
+        checkAnswer(
+          sql("SELECT IF(false, c IN ('a', CAST(1 / 0 AS STRING)), true) FROM t"), Row(true))
+        // The elements that evaluate are padded, so an earlier element matches before the
+        // one that fails is evaluated.
+        checkAnswer(
+          sql("SELECT CASE WHEN id = 1 THEN s.c IN ('a', CAST(1 / 0 AS STRING)) END FROM t"),
+          Row(true))
+      }
+    }
+    withTable("t") {
+      sql(s"CREATE TABLE t(c CHAR(3)) USING $format")
+      sql("INSERT INTO t VALUES ('a')")
+      // Dataset.to changes the collation of the column and keeps its metadata.
+      val df = spark.table("t").to(StructType.fromDDL("c STRING COLLATE UTF8_LCASE"))
+      checkAnswer(df.where("c = 'a'"), Row("a  "))
+      checkAnswer(df.selectExpr("c = 'a'"), Row(true))
+    }
+  }
+
   test("SPARK-59278: char type comparison: struct nullability is preserved") {
     // Padding rebuilds a struct field by field, which must not turn a NULL struct into a
     // non-NULL struct of NULL fields. Single-field (s*) and multi-field (m*) structs agree.
@@ -4146,6 +4237,39 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
           sql("SELECT '123456' as col").write.format(format).save(dir.toString)
           sql(s"CREATE TABLE t (col $typ(2)) using $format LOCATION '$dir'")
           checkAnswer(sql("select * from t"), Row("123456"))
+        }
+      }
+    }
+  }
+
+  test("SPARK-61970: struct field and string literal without read-side padding") {
+    withTempPath { dir =>
+      withTable("t") {
+        sql("SELECT named_struct('c', 'a') AS s UNION ALL SELECT named_struct('c', 'a  ')")
+          .write.format(format).save(dir.toString)
+        sql(s"CREATE TABLE t (s STRUCT<c: CHAR(3)>) USING $format LOCATION '$dir'")
+        withSQLConf(SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+          // The field, which the scan doesn't pad, is padded in the comparison too, so values
+          // stored with and without the trailing spaces both match either form of the constant.
+          Seq("s.c = 'a'", "s.c = 'a  '", "s.c IN ('a')", "s.c IN ('a  ', 'b')").foreach { cond =>
+            checkAnswer(sql(s"SELECT s.c FROM t WHERE $cond"), Seq(Row("a"), Row("a  ")))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-61970: struct field whose raw type does not parse back") {
+    withTempPath { dir =>
+      withTable("t") {
+        sql("SELECT named_struct('a-b', 'x', 'n', 'x') AS s")
+          .write.format(format).save(dir.toString)
+        sql(s"CREATE TABLE t (s STRUCT<`a-b`: CHAR(3), n: STRING>) USING $format LOCATION '$dir'")
+        withSQLConf(SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+          // The raw type string writes `a-b` unquoted, so it is not parsed, and the comparisons
+          // on the struct's fields keep working, without padding.
+          checkAnswer(sql("SELECT s.n FROM t WHERE s.n = 'x'"), Row("x"))
+          checkAnswer(sql("SELECT s.n FROM t WHERE s.n IN ('x', 'y')"), Row("x"))
         }
       }
     }
