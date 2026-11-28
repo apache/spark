@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.{Literal => ExprLiteral}
 import org.apache.spark.sql.catalyst.optimizer.{ConstantFolding, Optimizer}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
+import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMON_EXPR_REF, PLAN_EXPRESSION, WITH_EXPRESSION}
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, DefaultCatalogManager, DefaultValue, FunctionCatalog, Identifier, TableCatalog, TableCatalogCapability}
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
@@ -302,7 +302,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
       analyzer.checkAnalysis(analyzed)
       // Eagerly execute finish-analysis and constant-folding rules before checking whether the
       // expression is foldable and resolved.
-      ConstantFolding(DefaultColumnOptimizer.FinishAnalysis(analyzed))
+      finishAnalysisAndFold(analyzed)
     } catch {
       case ex: AnalysisException =>
         throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
@@ -609,6 +609,48 @@ object ResolveDefaultColumns extends QueryErrorsBase
    * This is an Optimizer for convert default column expressions to foldable literals.
    */
   object DefaultColumnOptimizer extends Optimizer(DefaultColumnAnalyzer.catalogManager)
+
+  /**
+   * Runs the finish-analysis rules on the plan of a default value and constant-folds it. A `With`,
+   * which NULLIF and BETWEEN build, is not foldable, so it is folded first by `foldWiths`.
+   */
+  private[sql] def finishAnalysisAndFold(plan: LogicalPlan): LogicalPlan =
+    ConstantFolding(DefaultColumnOptimizer.FinishAnalysis(plan).mapExpressions(foldWiths))
+
+  /**
+   * `e` with each `With` folded as far as its definitions allow. Each foldable definition is
+   * evaluated, and replaced by its value if that succeeds, so no definition is copied. When every
+   * definition has a value, the values are substituted at the references, and a child that is then
+   * foldable is evaluated to a literal. Whatever does not fold, or fails to evaluate, is left to
+   * `ConstantFolding`.
+   */
+  private def foldWiths(e: Expression): Expression = e match {
+    // `ConstantFolding` evaluates a foldable expression whole, and `typeof` reads only the type of
+    // its argument, so a `With` under a foldable expression is left to it.
+    case _ if e.foldable || !e.containsPattern(WITH_EXPRESSION) => e
+    case w: With => foldWith(w.mapChildren(foldWiths).asInstanceOf[With])
+    case _ => e.mapChildren(foldWiths)
+  }
+
+  private def foldWith(w: With): Expression = {
+    val defs = w.defs.map {
+      case d if d.child.foldable && !d.child.isInstanceOf[ExprLiteral] =>
+        Try(evalToLiteral(d.child)).map(v => d.withNewChildren(Seq(v))).getOrElse(d)
+      case d => d
+    }
+    val values = defs.collect { case CommonExpressionDef(v: ExprLiteral, id) => id -> v }.toMap
+    val folded = if (values.size < defs.length) None else {
+      val child = w.child.transformWithPruning(_.containsPattern(COMMON_EXPR_REF)) {
+        case ref: CommonExpressionRef if values.contains(ref.id) => values(ref.id)
+      }
+      if (child.foldable) Try(evalToLiteral(child)).toOption else None
+    }
+    // `withNewChildren` rebuilds the references of a definition whose nullability changed.
+    folded.getOrElse(w.withNewChildren(w.child +: defs))
+  }
+
+  private def evalToLiteral(e: Expression): ExprLiteral =
+    ExprLiteral.create(e.freshCopyIfContainsStatefulExpression().eval(EmptyRow), e.dataType)
 
   /**
    * This is a FunctionCatalog for performing analysis using built-in functions only. It is a helper
