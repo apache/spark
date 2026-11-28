@@ -219,46 +219,20 @@ struct<id:bigint,last(id) OVER (ORDER BY id DESC NULLS LAST RANGE BETWEEN CURREN
 select x.id, last(x.id) over (order by x.id range between current row and 4 following)
 from range(9223372036854775804, 9223372036854775807) x
 -- !query schema
-struct<>
+struct<id:bigint,last(id) OVER (ORDER BY id ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 4 FOLLOWING):bigint>
 -- !query output
-org.apache.spark.SparkArithmeticException
-{
-  "errorClass" : "ARITHMETIC_OVERFLOW",
-  "sqlState" : "22003",
-  "messageParameters" : {
-    "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "message" : "overflow"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "fragment" : ""
-  } ]
-}
+9223372036854775804	9223372036854775806
+9223372036854775805	9223372036854775806
+9223372036854775806	9223372036854775806
 
 
 -- !query
 select x.id, last(x.id) over (order by x.id desc range between current row and 5 following)
 from range(-9223372036854775806, -9223372036854775805) x
 -- !query schema
-struct<>
+struct<id:bigint,last(id) OVER (ORDER BY id DESC NULLS LAST RANGE BETWEEN CURRENT ROW AND 5 FOLLOWING):bigint>
 -- !query output
-org.apache.spark.SparkArithmeticException
-{
-  "errorClass" : "ARITHMETIC_OVERFLOW",
-  "sqlState" : "22003",
-  "messageParameters" : {
-    "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "message" : "overflow"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "fragment" : ""
-  } ]
-}
+-9223372036854775806	-9223372036854775806
 
 
 -- !query

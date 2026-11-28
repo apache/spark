@@ -180,7 +180,7 @@ SELECT COUNT(*) OVER (PARTITION BY 1 ORDER BY cast(1 as tinyint) DESC RANGE BETW
 -- !query analysis
 Project [count(1) OVER (PARTITION BY 1 ORDER BY CAST(1 AS TINYINT) DESC NULLS LAST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)#xL]
 +- Project [count(1) OVER (PARTITION BY 1 ORDER BY CAST(1 AS TINYINT) DESC NULLS LAST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)#xL, count(1) OVER (PARTITION BY 1 ORDER BY CAST(1 AS TINYINT) DESC NULLS LAST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)#xL]
-   +- Window [count(1) windowspecdefinition(1, cast(1 as tinyint) DESC NULLS LAST, specifiedwindowframe(RangeFrame, currentrow$(), cast(1 as tinyint))) AS count(1) OVER (PARTITION BY 1 ORDER BY CAST(1 AS TINYINT) DESC NULLS LAST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)#xL], [1], [cast(1 as tinyint) DESC NULLS LAST]
+   +- Window [count(1) windowspecdefinition(1, cast(1 as tinyint) DESC NULLS LAST, specifiedwindowframe(RangeFrame, currentrow$(), 1)) AS count(1) OVER (PARTITION BY 1 ORDER BY CAST(1 AS TINYINT) DESC NULLS LAST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)#xL], [1], [cast(1 as tinyint) DESC NULLS LAST]
       +- Project
          +- SubqueryAlias t
             +- View (`t`, [1#x])
@@ -194,7 +194,7 @@ SELECT COUNT(*) OVER (PARTITION BY 1 ORDER BY cast(1 as smallint) DESC RANGE BET
 -- !query analysis
 Project [count(1) OVER (PARTITION BY 1 ORDER BY CAST(1 AS SMALLINT) DESC NULLS LAST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)#xL]
 +- Project [count(1) OVER (PARTITION BY 1 ORDER BY CAST(1 AS SMALLINT) DESC NULLS LAST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)#xL, count(1) OVER (PARTITION BY 1 ORDER BY CAST(1 AS SMALLINT) DESC NULLS LAST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)#xL]
-   +- Window [count(1) windowspecdefinition(1, cast(1 as smallint) DESC NULLS LAST, specifiedwindowframe(RangeFrame, currentrow$(), cast(1 as smallint))) AS count(1) OVER (PARTITION BY 1 ORDER BY CAST(1 AS SMALLINT) DESC NULLS LAST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)#xL], [1], [cast(1 as smallint) DESC NULLS LAST]
+   +- Window [count(1) windowspecdefinition(1, cast(1 as smallint) DESC NULLS LAST, specifiedwindowframe(RangeFrame, currentrow$(), 1)) AS count(1) OVER (PARTITION BY 1 ORDER BY CAST(1 AS SMALLINT) DESC NULLS LAST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)#xL], [1], [cast(1 as smallint) DESC NULLS LAST]
       +- Project
          +- SubqueryAlias t
             +- View (`t`, [1#x])

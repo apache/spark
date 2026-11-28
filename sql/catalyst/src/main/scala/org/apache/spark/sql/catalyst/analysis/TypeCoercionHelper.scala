@@ -871,15 +871,35 @@ abstract class TypeCoercionHelper {
             Seq(order),
             SpecifiedWindowFrame(RangeFrame, lower, upper)
           ) =>
+        val boundaryType = integralBoundaryType(order.dataType, lower, upper)
+          .getOrElse(order.dataType)
         s.copy(
           frameSpecification = SpecifiedWindowFrame(
             RangeFrame,
-            createBoundaryCast(lower, order.dataType),
-            createBoundaryCast(upper, order.dataType)
+            createBoundaryCast(lower, boundaryType),
+            createBoundaryCast(upper, boundaryType)
           )
         )
 
       case other => other
+    }
+
+    /**
+     * For an integral order type and integral offsets, returns the widest of these types. The
+     * offsets are not narrowed to the order type, where they might not fit: a range frame ordered
+     * by an integral type compares the values with their bounds exactly.
+     */
+    private def integralBoundaryType(
+        orderType: DataType,
+        lower: Expression,
+        upper: Expression): Option[DataType] = {
+      val offsets = Seq(lower, upper).filterNot(_.isInstanceOf[SpecialFrameBoundary])
+      if (orderType.isInstanceOf[IntegralType] &&
+          offsets.forall(o => o.resolved && o.dataType.isInstanceOf[IntegralType])) {
+        Some((orderType +: offsets.map(_.dataType)).maxBy(_.defaultSize))
+      } else {
+        None
+      }
     }
 
     private def createBoundaryCast(boundary: Expression, dt: DataType): Expression = {
