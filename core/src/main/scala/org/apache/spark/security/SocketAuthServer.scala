@@ -34,7 +34,7 @@ import org.apache.spark.util.{ThreadUtils, Utils}
 
 
 /**
- * Creates a server in the JVM to communicate with external processes (e.g., Python and R) for
+ * Creates a server in the JVM to communicate with external processes (e.g., Python) for
  * handling one batch of data, with authentication and error handling.
  *
  * The socket server can only accept one connection, or close if no connection

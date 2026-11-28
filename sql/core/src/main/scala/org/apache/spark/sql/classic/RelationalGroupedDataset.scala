@@ -20,7 +20,6 @@ package org.apache.spark.sql.classic
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.annotation.Stable
 import org.apache.spark.api.python.PythonEvalType
-import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql
 import org.apache.spark.sql.{AnalysisException, Column, Encoder}
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute, UnresolvedOrdinal}
@@ -222,48 +221,6 @@ class RelationalGroupedDataset protected[sql](
       case _ =>
         throw QueryExecutionErrors.pivotNotAfterGroupByUnsupportedError()
     }
-  }
-
-  /**
-   * Applies the given serialized R function `func` to each group of data. For each unique group,
-   * the function will be passed the group key and an iterator that contains all of the elements in
-   * the group. The function can return an iterator containing elements of an arbitrary type which
-   * will be returned as a new `DataFrame`.
-   *
-   * This function does not support partial aggregation, and as a result requires shuffling all
-   * the data in the [[Dataset]]. If an application intends to perform an aggregation over each
-   * key, it is best to use the reduce function or an
-   * `org.apache.spark.sql.expressions#Aggregator`.
-   *
-   * Internally, the implementation will spill to disk if any given group is too large to fit into
-   * memory.  However, users must take care to avoid materializing the whole iterator for a group
-   * (for example, by calling `toList`) unless they are sure that this is possible given the memory
-   * constraints of their cluster.
-   *
-   * @since 2.0.0
-   */
-  private[sql] def flatMapGroupsInR(
-      f: Array[Byte],
-      packageNames: Array[Byte],
-      broadcastVars: Array[Broadcast[Object]],
-      outputSchema: StructType): DataFrame = {
-      val groupingNamedExpressions = groupingExprs.map(alias)
-      val groupingCols = groupingNamedExpressions.map(Column(_))
-      val groupingDataFrame = df.select(groupingCols : _*)
-      val groupingAttributes = groupingNamedExpressions.map(_.toAttribute)
-      Dataset.ofRows(
-        df.sparkSession,
-        FlatMapGroupsInR(
-          f,
-          packageNames,
-          broadcastVars,
-          outputSchema,
-          groupingDataFrame.exprEnc.deserializer,
-          df.exprEnc.deserializer,
-          df.exprEnc.schema,
-          groupingAttributes,
-          df.logicalPlan.output,
-          df.logicalPlan))
   }
 
   /**

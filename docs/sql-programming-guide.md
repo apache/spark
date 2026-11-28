@@ -28,7 +28,7 @@ computation. This unification means that developers can easily switch back and f
 different APIs based on which provides the most natural way to express a given transformation.
 
 All of the examples on this page use sample data included in the Spark distribution and can be run in
-the `spark-shell`, `pyspark` shell, or `sparkR` shell.
+the `spark-shell` or `pyspark` shell.
 
 ## SQL
 
@@ -49,15 +49,15 @@ manipulated using functional transformations (`map`, `flatMap`, `filter`, etc.).
 The Dataset API is available in [Scala][scala-datasets] and
 [Java][java-datasets]. Python does not have the support for the Dataset API. But due to Python's dynamic nature,
 many of the benefits of the Dataset API are already available (i.e. you can access the field of a row by name naturally
-`row.columnName`). The case for R is similar.
+`row.columnName`).
 
 A DataFrame is a *Dataset* organized into named columns. It is conceptually
 equivalent to a table in a relational database or a data frame in R/Python, but with richer
 optimizations under the hood. DataFrames can be constructed from a wide array of [sources](sql-data-sources.html) such
 as: structured data files, tables in Hive, external databases, or existing RDDs.
 The DataFrame API is available in
-[Python](api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.html#pyspark.sql.DataFrame), Scala,
-Java and [R](api/R/index.html).
+[Python](api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.html#pyspark.sql.DataFrame), Scala
+and Java.
 In Scala and Java, a DataFrame is represented by a Dataset of `Row`s.
 In [the Scala API][scala-datasets], `DataFrame` is simply a type alias of `Dataset[Row]`.
 While, in [Java API][java-datasets], users need to use `Dataset<Row>` to represent a `DataFrame`.

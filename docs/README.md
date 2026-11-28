@@ -28,7 +28,7 @@ whichever version of Spark you currently have checked out of revision control.
 
 ## Prerequisites
 
-The Spark documentation build uses a number of tools to build HTML docs and API docs in Scala, Java, Python, R, and SQL.
+The Spark documentation build uses a number of tools to build HTML docs and API docs in Scala, Java, Python, and SQL.
 
 You need to have [Ruby 3][ruby] and [Python 3][python] installed. Make sure the `bundle` command is available. If not, install it as follows:
 
@@ -53,20 +53,7 @@ $ cd "$SPARK_HOME"
 $ pip install --upgrade --group dev
 ```
 
-To generate the Python or R API docs, you'll also need to [install Pandoc](https://pandoc.org/installing.html).
-
-### R API Documentation (Optional)
-
-If you'd like to generate R API documentation, install these libraries:
-
-```sh
-$ sudo Rscript -e 'install.packages(c("remotes", "knitr", "testthat", "rmarkdown"), repos="https://cloud.r-project.org/")'
-$ sudo Rscript -e 'remotes::install_version("roxygen2", version = "7.1.2", repos="https://cloud.r-project.org/")'
-$ sudo Rscript -e "remotes::install_version('pkgdown', version='2.0.1', repos='https://cloud.r-project.org')"
-$ sudo Rscript -e "remotes::install_version('preferably', version='0.4', repos='https://cloud.r-project.org')"
-```
-
-Note: Other versions of roxygen2 might work in SparkR documentation generation but `RoxygenNote` field in `$SPARK_HOME/R/pkg/DESCRIPTION` is 7.1.2, which is updated if the version is mismatched.
+To generate the Python API docs, you'll also need to [install Pandoc](https://pandoc.org/installing.html).
 
 ## Generating the Documentation HTML
 
@@ -101,29 +88,26 @@ $ bundle exec jekyll serve --watch
 $ PRODUCTION=1 bundle exec jekyll build
 ```
 
-## API Docs (Scaladoc, Javadoc, Sphinx, roxygen2, MkDocs)
+## API Docs (Scaladoc, Javadoc, Sphinx, MkDocs)
 
 You can build just the Spark scaladoc and javadoc by running `./build/sbt unidoc` from the `$SPARK_HOME` directory.
 
 Similarly, you can build just the PySpark docs by running `make html` from the
 `$SPARK_HOME/python/docs` directory. Documentation is only generated for classes that are listed as
-public in `__init__.py`. The SparkR docs can be built by running `$SPARK_HOME/R/create-docs.sh`, and
-the SQL docs can be built by running `$SPARK_HOME/sql/create-docs.sh`
+public in `__init__.py`. The SQL docs can be built by running `$SPARK_HOME/sql/create-docs.sh`
 after [building Spark](https://github.com/apache/spark#building-spark) first.
 
 When you run `bundle exec jekyll build` in the `docs` directory, it will also copy over the scaladoc and javadoc for the various
 Spark subprojects into the `docs` directory (and then also into the `_site` directory). We use a
 jekyll plugin to run `./build/sbt unidoc` before building the site so if you haven't run it (recently) it
 may take some time as it generates all of the scaladoc and javadoc using [Unidoc](https://github.com/sbt/sbt-unidoc).
-The jekyll plugin also generates the PySpark docs using [Sphinx](http://sphinx-doc.org/), SparkR docs
-using [roxygen2](https://cran.r-project.org/web/packages/roxygen2/index.html) and SQL docs
+The jekyll plugin also generates the PySpark docs using [Sphinx](http://sphinx-doc.org/) and SQL docs
 using [MkDocs](https://www.mkdocs.org/).
 
 To control what API docs get built, you can set any combination of the following shell variables before you run `bundle exec jekyll build`:
 * `SKIP_API=1`: Skip building all the API docs.
 * `SKIP_SCALADOC=1`: Skip the Scala and Java API docs.
 * `SKIP_PYTHONDOC=1`: Skip the Python API docs.
-* `SKIP_RDOC=1`: Skip the R API docs.
 * `SKIP_SQLDOC=1`: Skip the SQL API docs.
 
 ## Build docs with docker image (Optional)

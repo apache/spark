@@ -16,6 +16,8 @@
  */
 package org.apache.spark.deploy.k8s.submit
 
+import scala.annotation.nowarn
+
 import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.SparkException
@@ -39,6 +41,9 @@ class KubernetesDriverBuilder {
   def buildFromFeatures(
       conf: KubernetesDriverConf,
       client: KubernetesClient): KubernetesDriverSpec = {
+    // Reject R applications up front: some feature steps upload files, and
+    // DriverCommandFeatureStep can be excluded.
+    rejectRApplication(conf.mainAppResource)
     val initialPod = conf.get(Config.KUBERNETES_DRIVER_PODTEMPLATE_FILE)
       .map { file =>
         KubernetesUtils.loadPodFromTemplate(
@@ -109,4 +114,9 @@ class KubernetesDriverBuilder {
     }
   }
 
+  @nowarn("cat=deprecation")
+  private def rejectRApplication(resource: MainAppResource): Unit = resource match {
+    case RMainAppResource(res) => throw DriverCommandFeatureStep.rApplicationNotSupported(res)
+    case _ =>
+  }
 }

@@ -4055,62 +4055,6 @@ External users can query the static sql config values via `SparkSession.conf` or
 </tr>
 </table>
 
-### SparkR (deprecated)
-
-<table class="spark-config">
-<thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
-<tr>
-  <td><code>spark.r.numRBackendThreads</code></td>
-  <td>2</td>
-  <td>
-    Number of threads used by RBackend to handle RPC calls from SparkR package.
-  </td>
-  <td>1.4.0</td>
-</tr>
-<tr>
-  <td><code>spark.r.command</code></td>
-  <td>Rscript</td>
-  <td>
-    Executable for executing R scripts in cluster modes for both driver and workers.
-  </td>
-  <td>1.5.3</td>
-</tr>
-<tr>
-  <td><code>spark.r.driver.command</code></td>
-  <td>spark.r.command</td>
-  <td>
-    Executable for executing R scripts in client modes for driver. Ignored in cluster modes.
-  </td>
-  <td>1.5.3</td>
-</tr>
-<tr>
-  <td><code>spark.r.shell.command</code></td>
-  <td>R</td>
-  <td>
-    Executable for executing sparkR shell in client modes for driver. Ignored in cluster modes. It is the same as environment variable <code>SPARKR_DRIVER_R</code>, but take precedence over it.
-    <code>spark.r.shell.command</code> is used for sparkR shell while <code>spark.r.driver.command</code> is used for running R script.
-  </td>
-  <td>2.1.0</td>
-</tr>
-<tr>
-  <td><code>spark.r.backendConnectionTimeout</code></td>
-  <td>6000</td>
-  <td>
-    Connection timeout set by R process on its connection to RBackend in seconds.
-  </td>
-  <td>2.1.0</td>
-</tr>
-<tr>
-  <td><code>spark.r.heartBeatInterval</code></td>
-  <td>100</td>
-  <td>
-    Interval for heartbeats sent from SparkR backend to R process to prevent connection timeout.
-  </td>
-  <td>2.1.0</td>
-</tr>
-
-</table>
-
 ### GraphX
 
 <table class="spark-config">
@@ -4165,11 +4109,6 @@ The following variables can be set in `spark-env.sh`:
     <td><code>PYSPARK_DRIVER_PYTHON</code></td>
     <td>Python binary executable to use for PySpark in driver only (default is <code>PYSPARK_PYTHON</code>).
     Property <code>spark.pyspark.driver.python</code> take precedence if it is set</td>
-  </tr>
-  <tr>
-    <td><code>SPARKR_DRIVER_R</code></td>
-    <td>R binary executable to use for SparkR shell (default is <code>R</code>).
-    Property <code>spark.r.shell.command</code> take precedence if it is set</td>
   </tr>
   <tr>
     <td><code>SPARK_LOCAL_IP</code></td>

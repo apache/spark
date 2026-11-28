@@ -8,5 +8,3 @@
   url: ml-migration-guide.html
 - text: PySpark (Python on Spark)
   url: pyspark-migration-guide.html
-- text: SparkR (R on Spark)
-  url: sparkr-migration-guide.html

@@ -92,8 +92,6 @@ jobs:
       image_docs_url_link: ${{ steps.infra-image-link.outputs.image_docs_url_link }}
       image_lint_url: ${{ steps.infra-image-lint-outputs.outputs.image_lint_url }}
       image_lint_url_link: ${{ steps.infra-image-link.outputs.image_lint_url_link }}
-      image_sparkr_url: ${{ steps.infra-image-sparkr-outputs.outputs.image_sparkr_url }}
-      image_sparkr_url_link: ${{ steps.infra-image-link.outputs.image_sparkr_url_link }}
       image_pyspark_url: ${{ steps.infra-image-pyspark-outputs.outputs.image_pyspark_url }}
       image_pyspark_url_link: ${{ steps.infra-image-link.outputs.image_pyspark_url_link }}
     steps:
@@ -128,11 +126,10 @@ jobs:
             tpcds=`./dev/is-changed.py -m sql`
             docker=`./dev/is-changed.py -m docker-integration-tests`
             rust_sdk=`./dev/is-changed.py -m rust-sdk`
-            # Skip PySpark, SparkR, TPC-DS when only static UI resources (JS/CSS/HTML) changed.
+            # Skip PySpark, TPC-DS when only static UI resources (JS/CSS/HTML) changed.
             # These tests are unaffected by UI static resource modifications.
             # Also we only run the very slow transpile changes when that logic changes
             transpile=false
-            sparkr=false
             static_only=false
             changed_files=$(git diff --name-only "$APACHE_SPARK_REF" HEAD 2>/dev/null)
             if [ -n "$changed_files" ]; then
@@ -146,17 +143,6 @@ jobs:
               for f in $changed_files; do
                 case "$f" in
                   *transpile*) transpile=true; break ;;
-                esac
-              done
-              # The scheduled builds cover SparkR. On PRs, run SparkR tests only when the files
-              # of the `sparkr` module or its Scala backend change, not when only its
-              # dependencies such as `hive` and `mllib` change.
-              for f in $changed_files; do
-                case "$f" in
-                  R/*|dev/spark-test-image/sparkr/*) sparkr=true; break ;;
-                  core/src/main/scala/org/apache/spark/api/r/*) sparkr=true; break ;;
-                  sql/core/src/main/scala/org/apache/spark/sql/api/r/*) sparkr=true; break ;;
-                  mllib/src/main/scala/org/apache/spark/ml/r/*) sparkr=true; break ;;
                 esac
               done
               # Run the Python linter only when the files it checks, its configurations, its
@@ -174,7 +160,6 @@ jobs:
             if [ "$static_only" = "true" ]; then
               pyspark=false
               pandas=false
-              sparkr=false
               tpcds=false
               docker=false
             fi
@@ -191,7 +176,6 @@ jobs:
             yarn=false
             kubernetes=false
             oidc_e2e=false
-            sparkr=false
             tpcds=false
             docker=false
             rust_sdk=false
@@ -210,7 +194,6 @@ jobs:
               \"pyspark-pandas\": \"$pandas\",
               \"pyspark-periodic\": \"$pyspark_periodic\",
               \"pyspark-connect-old-client\": \"$pyspark_connect_old_client\",
-              \"sparkr\": \"$sparkr\",
               \"tpcds-1g\": \"$tpcds\",
               \"docker-integration-tests\": \"$docker\",
               \"lint\" : \"true\",
@@ -273,14 +256,6 @@ jobs:
         IMG_NAME="apache-spark-ci-image-lint:${{ inputs.branch }}-${{ github.run_id }}"
         IMG_URL="ghcr.io/$REPO_OWNER/$IMG_NAME"
         echo "image_lint_url=$IMG_URL" >> $GITHUB_OUTPUT
-    - name: Generate infra image URL (SparkR)
-      id: infra-image-sparkr-outputs
-      run: |
-        # Convert to lowercase to meet Docker repo name requirement
-        REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-        IMG_NAME="apache-spark-ci-image-sparkr:${{ inputs.branch }}-${{ github.run_id }}"
-        IMG_URL="ghcr.io/$REPO_OWNER/$IMG_NAME"
-        echo "image_sparkr_url=$IMG_URL" >> $GITHUB_OUTPUT
     - name: Generate infra image URL (PySpark ${{ env.PYSPARK_IMAGE_TO_TEST }})
       id: infra-image-pyspark-outputs
       if: ${{ env.PYSPARK_IMAGE_TO_TEST }}
@@ -299,7 +274,6 @@ jobs:
         # Should delete the link and directly use image_docs_url after SPARK 3.x EOL
         echo "image_docs_url_link=${{ steps.infra-image-docs-outputs.outputs.image_docs_url }}" >> $GITHUB_OUTPUT
         echo "image_lint_url_link=${{ steps.infra-image-lint-outputs.outputs.image_lint_url }}" >> $GITHUB_OUTPUT
-        echo "image_sparkr_url_link=${{ steps.infra-image-sparkr-outputs.outputs.image_sparkr_url }}" >> $GITHUB_OUTPUT
         echo "image_pyspark_url_link=${{ steps.infra-image-pyspark-outputs.outputs.image_pyspark_url }}" >> $GITHUB_OUTPUT
 
   # Build: build Spark and run the tests for specified modules.
@@ -474,8 +448,7 @@ jobs:
       fromJson(needs.precondition.outputs.required).pyspark == 'true' ||
       fromJson(needs.precondition.outputs.required).pyspark-pandas == 'true' ||
       fromJson(needs.precondition.outputs.required).lint == 'true' ||
-      fromJson(needs.precondition.outputs.required).docs == 'true' ||
-      fromJson(needs.precondition.outputs.required).sparkr == 'true'
+      fromJson(needs.precondition.outputs.required).docs == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 120
     permissions:
@@ -523,17 +496,6 @@ jobs:
             ${{ needs.precondition.outputs.image_lint_url }}
           # Use the infra image cache to speed up
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-lint-cache:${{ inputs.branch }}
-      - name: Build and push (SparkR)
-        if: ${{ fromJson(needs.precondition.outputs.required).sparkr == 'true' && hashFiles('dev/spark-test-image/sparkr/Dockerfile') != '' }}
-        id: docker_build_sparkr
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
-        with:
-          context: ./dev/spark-test-image/sparkr/
-          push: true
-          tags: |
-            ${{ needs.precondition.outputs.image_sparkr_url }}
-          # Use the infra image cache to speed up
-          cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-sparkr-cache:${{ inputs.branch }}
       - name: Build and push (PySpark with ${{ env.PYSPARK_IMAGE_TO_TEST }})
         if: ${{ (fromJson(needs.precondition.outputs.required).pyspark == 'true' || fromJson(needs.precondition.outputs.required).pyspark-pandas == 'true') && env.PYSPARK_IMAGE_TO_TEST != '' }}
         id: docker_build_pyspark
@@ -558,7 +520,6 @@ jobs:
         fromJson(needs.precondition.outputs.required).pyspark == 'true' ||
         fromJson(needs.precondition.outputs.required).pyspark-pandas == 'true' ||
         fromJson(needs.precondition.outputs.required).pyspark-periodic == 'true' ||
-        fromJson(needs.precondition.outputs.required).sparkr == 'true' ||
         fromJson(needs.precondition.outputs.required).docker-integration-tests == 'true' ||
         fromJson(needs.precondition.outputs.required).k8s-integration-tests == 'true' ||
         fromJson(needs.precondition.outputs.required).oidc-e2e == 'true' ||
@@ -788,69 +749,6 @@ jobs:
         name: unit-tests-log-${{ matrix.modules }}--${{ matrix.java }}-${{ inputs.hadoop }}-hive2.3-${{ env.PYTHON_TO_TEST }}
         path: "**/target/unit-tests.log"
 
-  sparkr:
-    needs: [precondition, infra-image, precompile]
-    if: fromJson(needs.precondition.outputs.required).sparkr == 'true'
-    name: "Build modules: sparkr"
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
-    container:
-      image: ${{ needs.precondition.outputs.image_sparkr_url_link }}
-    env:
-      HADOOP_PROFILE: ${{ inputs.hadoop }}
-      HIVE_PROFILE: hive2.3
-      GITHUB_PREV_SHA: ${{ github.event.before }}
-      SPARK_LOCAL_IP: localhost
-      SKIP_UNIDOC: true
-      SKIP_MIMA: true
-      SKIP_PACKAGING: true
-    steps:
-    - name: Bootstrap composite actions
-      uses: actions/checkout@v7
-    - name: Checkout and sync Spark repository
-      uses: ./.github/actions/checkout-and-sync
-      with:
-        ref: ${{ needs.precondition.outputs.head_sha }}
-        set-safe-directory: 'true'
-    - name: Setup build environment
-      uses: ./.github/actions/setup-build-env
-      with:
-        java-version: ${{ inputs.java }}
-        free-disk-space: container
-    - name: Download precompiled artifact
-      uses: actions/download-artifact@v8
-      with:
-        name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
-    - name: Extract precompiled artifact
-      run: |
-        zstd -dc compile-artifact.tar.zst | tar -xf -
-        rm compile-artifact.tar.zst
-    - name: Run tests
-      env: ${{ fromJSON(inputs.envs) }}
-      run: |
-        # The followings are also used by `r-lib/actions/setup-r` to avoid
-        # R issues at docker environment
-        export TZ=UTC
-        export _R_CHECK_SYSTEM_CLOCK_=FALSE
-        export SKIP_SCALA_BUILD=true
-        echo "Reusing precompiled artifact, skipping local SBT build."
-        ./dev/run-tests --parallelism 1 --modules sparkr
-    - name: Upload test results to report
-      if: always()
-      uses: actions/upload-artifact@v7
-      with:
-        name: test-results-sparkr--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
-        path: |
-          **/target/test-reports/*.xml
-          **/target/surefire-reports/*.xml
-    - name: Test Summary
-      if: always()
-      uses: test-summary/action@37b508cfee6d4d080eedd00b5bb240a6a784a6a5 # v2.6
-      with:
-        paths: |
-          **/target/test-reports/*.xml
-          **/target/surefire-reports/*.xml
-
   buf:
     needs: [precondition]
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).buf == 'true'
@@ -980,11 +878,6 @@ jobs:
         SKIP_SCALA_BUILD: true
         SKIP_MIMA: true
       run: ./dev/run-tests --modules lint-js
-    - name: R linter
-      env:
-        SKIP_SCALA_BUILD: true
-        SKIP_MIMA: true
-      run: ./dev/run-tests --modules lint-r
 
   java25:
     needs: [precondition]
@@ -1061,10 +954,9 @@ jobs:
         # language docs to be built beforehand.
         cd docs; SKIP_ERRORDOC=1 SKIP_API=1 bundle exec jekyll build; cd ..
         if [ -f "./dev/is-changed.py" ]; then
-          # Skip PySpark and SparkR docs while keeping Scala/Java/SQL docs
+          # Skip PySpark docs while keeping Scala/Java/SQL docs
           pyspark_modules=`cd dev && python3.12 -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark')))"`
           if [ `./dev/is-changed.py -m $pyspark_modules` = false ]; then export SKIP_PYTHONDOC=1; fi
-          if [ `./dev/is-changed.py -m sparkr` = false ]; then export SKIP_RDOC=1; fi
         fi
         cd docs
         bundle exec jekyll build
@@ -1269,10 +1161,6 @@ jobs:
         run: |
           zstd -dc compile-artifact.tar.zst | tar -xf -
           rm compile-artifact.tar.zst
-      - name: Install R
-        run: |
-          sudo apt update
-          sudo apt-get install r-base
       - name: Start Minikube
         uses: medyagh/setup-minikube@e9e035a86bbc3caea26a450bd4dbf9d0c453682e # v0.0.21
         with:
@@ -1300,7 +1188,7 @@ jobs:
           kubectl create clusterrolebinding serviceaccounts-cluster-admin --clusterrole=cluster-admin --group=system:serviceaccounts || true
           kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.14.2/installer/volcano-development.yaml || true
           eval $(minikube docker-env)
-          build/sbt -Phadoop-3 -Psparkr -Pkubernetes -Pvolcano -Pkubernetes-integration-tests -Dspark.kubernetes.test.volcanoMaxConcurrencyJobNum=1 -Dtest.exclude.tags=local "kubernetes-integration-tests/test"
+          build/sbt -Phadoop-3 -Pkubernetes -Pvolcano -Pkubernetes-integration-tests -Dspark.kubernetes.test.volcanoMaxConcurrencyJobNum=1 -Dtest.exclude.tags=local "kubernetes-integration-tests/test"
       - name: Upload Spark on K8S integration tests log files
         if: ${{ !success() }}
         uses: actions/upload-artifact@v7

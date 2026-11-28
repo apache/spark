@@ -32,7 +32,7 @@ def generate_llms_txt(docs_path: Path, output_path: Path, version: str = "latest
     content.append("")
     content.append(
         "> Apache Spark™ is a unified analytics engine for large-scale data processing. "
-        "It provides high-level APIs in Java, Scala, Python, and R, and an optimized engine "
+        "It provides high-level APIs in Java, Scala, and Python, and an optimized engine "
         "that supports general execution graphs. It also supports a rich set of higher-level "
         "tools including Spark SQL for SQL and structured data processing, MLlib for machine "
         "learning, GraphX for graph processing, and Structured Streaming for incremental "
@@ -63,7 +63,6 @@ def generate_llms_txt(docs_path: Path, output_path: Path, version: str = "latest
         ),
         ("MLlib", f"https://spark.apache.org/docs/{version}/ml-guide.html"),
         ("GraphX", f"https://spark.apache.org/docs/{version}/graphx-programming-guide.html"),
-        ("SparkR", f"https://spark.apache.org/docs/{version}/sparkr.html"),
         (
             "Spark SQL CLI",
             f"https://spark.apache.org/docs/{version}/"
@@ -85,7 +84,6 @@ def generate_llms_txt(docs_path: Path, output_path: Path, version: str = "latest
             f"https://spark.apache.org/docs/{version}/api/scala/org/apache/spark/index.html",
         ),
         ("Spark Java API", f"https://spark.apache.org/docs/{version}/api/java/index.html"),
-        ("Spark R API", f"https://spark.apache.org/docs/{version}/api/R/index.html"),
         (
             "Spark SQL Built-in Functions",
             f"https://spark.apache.org/docs/{version}/api/sql/index.html",

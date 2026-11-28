@@ -56,14 +56,6 @@ You may need to grant write privilege to the user who starts the Spark applicati
 {% include_example spark_hive java/org/apache/spark/examples/sql/hive/JavaSparkHiveExample.java %}
 </div>
 
-<div data-lang="r"  markdown="1">
-
-When working with Hive one must instantiate `SparkSession` with Hive support. This
-adds support for finding tables in the MetaStore and writing queries using HiveQL.
-
-{% include_example spark_hive r/RSparkSQLExample.R %}
-
-</div>
 </div>
 
 ### Specifying storage format for Hive tables

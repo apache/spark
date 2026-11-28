@@ -30,8 +30,7 @@ import org.apache.spark.sql.execution.UnaryExecNode
  * A relation produced by applying a function that takes an iterator of batches
  * such as pandas DataFrame or PyArrow's record batches, and outputs an iterator of them.
  *
- * This is somewhat similar with [[FlatMapGroupsInPandasExec]] and
- * `org.apache.spark.sql.catalyst.plans.logical.MapPartitionsInRWithArrow`
+ * This is somewhat similar with [[FlatMapGroupsInPandasExec]].
  */
 trait MapInBatchExec extends UnaryExecNode with PythonPhaseMetrics {
   protected val func: Expression

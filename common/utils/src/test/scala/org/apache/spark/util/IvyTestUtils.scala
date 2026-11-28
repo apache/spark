@@ -19,7 +19,6 @@ package org.apache.spark.util
 
 import java.io.{File, FileInputStream, FileOutputStream}
 import java.util.jar.{JarEntry, JarOutputStream, Manifest}
-import java.util.jar.Attributes.Name
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -87,42 +86,6 @@ private[spark] object IvyTestUtils {
         |   return x + 1
       """.stripMargin
     writeFile(dir, "mylib.py", contents)
-  }
-
-  /** Create an example R package that calls the given Java class. */
-  private def createRFiles(
-      dir: File,
-      className: String,
-      packageName: String): Seq[(String, File)] = {
-    val rFilesDir = new File(dir, "R" + File.separator + "pkg")
-    SparkFileUtils.createDirectory(new File(rFilesDir, "R"))
-    val contents =
-      s"""myfunc <- function(x) {
-        |  SparkR:::callJStatic("$packageName.$className", "myFunc", x)
-        |}
-      """.stripMargin
-    val source = writeFile(new File(rFilesDir, "R"), "mylib.R", contents)
-    val description =
-      """Package: sparkPackageTest
-        |Type: Package
-        |Title: Test for building an R package
-        |Version: 0.1
-        |Date: 2015-07-08
-        |Author: Burak Yavuz
-        |Imports: methods, SparkR
-        |Depends: R (>= 3.1), methods, SparkR
-        |Suggests: testthat
-        |Description: Test for building an R package within a jar
-        |License: Apache License (== 2.0)
-        |Collate: 'mylib.R'
-      """.stripMargin
-    val descFile = writeFile(rFilesDir, "DESCRIPTION", description)
-    val namespace =
-      """import(SparkR)
-        |export("myfunc")
-      """.stripMargin
-    val nameFile = writeFile(rFilesDir, "NAMESPACE", namespace)
-    Seq(("R/pkg/R/mylib.R", source), ("R/pkg/DESCRIPTION", descFile), ("R/pkg/NAMESPACE", nameFile))
   }
 
   /** Create a simple testable Class. */
@@ -236,21 +199,10 @@ private[spark] object IvyTestUtils {
       artifact: MavenCoordinate,
       files: Seq[(String, File)],
       useIvyLayout: Boolean,
-      withR: Boolean,
       withManifest: Option[Manifest] = None): File = {
     val jarFile = new File(dir, artifactName(artifact, useIvyLayout))
     val jarFileStream = new FileOutputStream(jarFile)
-    val manifest: Manifest = withManifest.getOrElse {
-      if (withR) {
-        val mani = new Manifest()
-        val attr = mani.getMainAttributes
-        attr.put(Name.MANIFEST_VERSION, "1.0")
-        attr.put(new Name("Spark-HasRPackage"), "true")
-        mani
-      } else {
-        null
-      }
-    }
+    val manifest: Manifest = withManifest.orNull
     val jarStream = if (manifest != null) {
       new JarOutputStream(jarFileStream, manifest)
     } else {
@@ -288,8 +240,7 @@ private[spark] object IvyTestUtils {
       dependencies: Option[Seq[MavenCoordinate]] = None,
       tempDir: Option[File] = None,
       useIvyLayout: Boolean = false,
-      withPython: Boolean = false,
-      withR: Boolean = false): File = {
+      withPython: Boolean = false): File = {
     // Where the root of the repository exists, and what Ivy will search in
     val tempPath = tempDir.getOrElse(SparkFileUtils.createTempDir())
     // Create directory if it doesn't exist
@@ -310,11 +261,7 @@ private[spark] object IvyTestUtils {
         val pythonFile = createPythonFile(root)
         allFiles += Tuple2(pythonFile.getName, pythonFile)
       }
-      if (withR) {
-        val rFiles = createRFiles(root, className, artifact.groupId)
-        allFiles.appendAll(rFiles)
-      }
-      val jarFile = packJar(jarPath, artifact, allFiles.toSeq, useIvyLayout, withR)
+      val jarFile = packJar(jarPath, artifact, allFiles.toSeq, useIvyLayout)
       assert(jarFile.exists(), "Problem creating Jar file")
       val descriptor = createDescriptor(tempPath, artifact, dependencies, useIvyLayout)
       assert(descriptor.exists(), "Problem creating Pom file")
@@ -338,10 +285,9 @@ private[spark] object IvyTestUtils {
       dependencies: Option[String],
       rootDir: Option[File],
       useIvyLayout: Boolean = false,
-      withPython: Boolean = false,
-      withR: Boolean = false): File = {
+      withPython: Boolean = false): File = {
     val deps = dependencies.map(MavenUtils.extractMavenCoordinates)
-    val mainRepo = createLocalRepository(artifact, deps, rootDir, useIvyLayout, withPython, withR)
+    val mainRepo = createLocalRepository(artifact, deps, rootDir, useIvyLayout, withPython)
     deps.foreach { seq => seq.foreach { dep =>
       createLocalRepository(dep, None, Some(mainRepo), useIvyLayout, withPython = false)
     }}
@@ -364,12 +310,11 @@ private[spark] object IvyTestUtils {
       rootDir: Option[File],
       useIvyLayout: Boolean = false,
       withPython: Boolean = false,
-      withR: Boolean = false,
       ivySettings: IvySettings = defaultIvySettings())(f: String => Unit): Unit = {
     val deps = dependencies.map(MavenUtils.extractMavenCoordinates)
     purgeLocalIvyCache(artifact, deps, ivySettings)
     val repo = createLocalRepositoryForTests(artifact, dependencies, rootDir, useIvyLayout,
-      withPython, withR)
+      withPython)
     try {
       f(repo.toURI.toString)
     } finally {

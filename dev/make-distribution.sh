@@ -32,24 +32,16 @@ set -x
 SPARK_HOME="$(cd "`dirname "$0"`/.."; pwd)"
 DISTDIR="$SPARK_HOME/dist"
 
-# The Apache LICENSE and NOTICE are copied into the Python and R package
-# directories below so they are bundled into the source distributions. Remove
-# them on exit so a failed build does not leave stray files behind.
+# The Apache LICENSE and NOTICE are copied into the Python package directory
+# below so they are bundled into the source distribution. Remove them on exit
+# so a failed build does not leave stray files behind.
 function cleanup_dist_license_files {
-  rm -f "$SPARK_HOME/python/LICENSE" "$SPARK_HOME/python/NOTICE" \
-        "$SPARK_HOME/R/pkg/LICENSE" "$SPARK_HOME/R/pkg/NOTICE"
-  # Restore the SparkR DESCRIPTION if a release build patched it in place (see
-  # the R packaging section). Guards against an interrupted build leaving the
-  # tracked DESCRIPTION modified.
-  if [ -f "$SPARK_HOME/R/DESCRIPTION.orig" ]; then
-    mv -f "$SPARK_HOME/R/DESCRIPTION.orig" "$SPARK_HOME/R/pkg/DESCRIPTION"
-  fi
+  rm -f "$SPARK_HOME/python/LICENSE" "$SPARK_HOME/python/NOTICE"
 }
 trap cleanup_dist_license_files EXIT
 
 MAKE_TGZ=false
 MAKE_PIP=false
-MAKE_R=false
 MAKE_SPARK_CONNECT=false
 NAME=none
 MVN="$SPARK_HOME/build/mvn"
@@ -61,10 +53,9 @@ function exit_with_usage {
   echo "make-distribution.sh - tool for making binary distributions of Spark"
   echo ""
   echo "usage:"
-  cl_options="[--name] [--tgz] [--pip] [--r] [--connect] [--mvn <mvn-command>] [--sbt-enabled] [--sbt <sbt-command>]"
+  cl_options="[--name] [--tgz] [--pip] [--connect] [--mvn <mvn-command>] [--sbt-enabled] [--sbt <sbt-command>]"
   echo "make-distribution.sh $cl_options <maven/sbt build options>"
   echo "See Spark's \"Building Spark\" doc for correct Maven/SBT options."
-  echo "SparkR is deprecated from Apache Spark 4.0.0 and will be removed in a future version."
   echo ""
   exit 1
 }
@@ -77,9 +68,6 @@ while (( "$#" )); do
       ;;
     --pip)
       MAKE_PIP=true
-      ;;
-    --r)
-      MAKE_R=true
       ;;
     --connect)
       MAKE_SPARK_CONNECT=true
@@ -321,52 +309,6 @@ else
   echo "Skipping building python distribution package"
 fi
 
-# Make R package - this is used for both CRAN release and packing R layout into distribution
-if [ "$MAKE_R" == "true" ]; then
-  echo "Building R source package"
-  R_PACKAGE_VERSION=`grep Version "$SPARK_HOME/R/pkg/DESCRIPTION" | awk '{print $NF}'`
-  pushd "$SPARK_HOME/R" > /dev/null
-  # Ship the Apache LICENSE and NOTICE inside the SparkR source package. These
-  # are removed again after the package is built.
-  cp "$SPARK_HOME/LICENSE" pkg/LICENSE
-  cp "$SPARK_HOME/NOTICE" pkg/NOTICE
-  # Reference the bundled LICENSE from DESCRIPTION so `R CMD check --as-cran` does
-  # not emit "File LICENSE is not mentioned in the DESCRIPTION file". The committed
-  # DESCRIPTION is left untouched because SparkR CI runs check-cran.sh without the
-  # LICENSE file present; this edit is transient and restored after the build (and
-  # by the EXIT trap on failure). The backup lives outside pkg/ so R CMD check does
-  # not flag it as a non-standard file. NOTE: the "Non-standard file 'NOTICE'" note
-  # cannot be silenced this way and is expected.
-  cp pkg/DESCRIPTION "$SPARK_HOME/R/DESCRIPTION.orig"
-  sed 's/^License: Apache License (== 2.0)$/License: Apache License (== 2.0) + file LICENSE/' \
-    "$SPARK_HOME/R/DESCRIPTION.orig" > pkg/DESCRIPTION
-  # Build source package and run full checks
-  # Do not source the check-cran.sh - it should be run from where it is for it to set SPARK_HOME
-  NO_TESTS=1 "$SPARK_HOME/R/check-cran.sh"
-  mv -f "$SPARK_HOME/R/DESCRIPTION.orig" pkg/DESCRIPTION
-  rm -f pkg/LICENSE pkg/NOTICE
-
-  # Guard against regressions: the SparkR source package must contain LICENSE and
-  # NOTICE at the package root (SPARK-57393).
-  listing=$(tar tzf "SparkR_$R_PACKAGE_VERSION.tar.gz")
-  for required in LICENSE NOTICE; do
-    grep -qE "^[^/]+/$required\$" <<< "$listing" || \
-      { echo "ERROR: SparkR source package is missing $required"; exit 1; }
-  done
-
-  # Move R source package to match the Spark release version if the versions are not the same.
-  # NOTE(shivaram): `mv` throws an error on Linux if source and destination are same file
-  if [ "$R_PACKAGE_VERSION" != "$VERSION" ]; then
-    mv "$SPARK_HOME/R/SparkR_$R_PACKAGE_VERSION.tar.gz" "$SPARK_HOME/R/SparkR_$VERSION.tar.gz"
-  fi
-
-  # Install source package to get it to generate vignettes rds files, etc.
-  VERSION=$VERSION "$SPARK_HOME/R/install-source-package.sh"
-  popd > /dev/null
-else
-  echo "Skipping building R source package"
-fi
-
 # Copy other things
 mkdir "$DISTDIR/conf"
 cp "$SPARK_HOME"/conf/*.template "$DISTDIR/conf"
@@ -385,12 +327,6 @@ if [ "$MAKE_PIP" == "true" ]; then
 fi
 
 cp -r "$SPARK_HOME/sbin" "$DISTDIR"
-# Copy SparkR if it exists
-if [ -d "$SPARK_HOME/R/lib/SparkR" ]; then
-  mkdir -p "$DISTDIR/R/lib"
-  cp -r "$SPARK_HOME/R/lib/SparkR" "$DISTDIR/R/lib"
-  cp "$SPARK_HOME/R/lib/sparkr.zip" "$DISTDIR/R/lib"
-fi
 
 if [ "$MAKE_TGZ" == "true" ]; then
   TARDIR_NAME=spark-$VERSION-bin-$NAME

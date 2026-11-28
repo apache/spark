@@ -384,13 +384,6 @@ def run_shell_script_tests(
             run_cmd(command)
 
 
-def run_sparkr_tests():
-    if which("R"):
-        run_cmd([os.path.join(SPARK_HOME, "R", "run-tests.sh")])
-    else:
-        print("Ignoring SparkR tests as R was not found in PATH")
-
-
 def parse_opts():
     parser = ArgumentParser(prog="run-tests")
     parser.add_argument(
@@ -471,14 +464,6 @@ def main():
     if should_only_test_modules:
         str_test_modules = [m.strip() for m in opts.modules.split(",")]
         test_modules = [m for m in modules.all_modules if m.name in str_test_modules]
-
-    if not should_only_test_modules or modules.sparkr in test_modules:
-        # SparkR tests load the package from R/lib.
-        if which("R"):
-            with titled_block("Installing SparkR"):
-                run_cmd([os.path.join(SPARK_HOME, "R", "install-dev.sh")])
-        else:
-            print("Cannot install SparkR as R was not found in PATH")
 
     build_tool = "sbt"
     scala_version = os.environ.get("SCALA_PROFILE")
@@ -653,9 +638,6 @@ def main():
         if os.environ.get("SKIP_PACKAGING", "false") != "true":
             with titled_block("Running PySpark packaging tests"):
                 run_python_packaging_tests()
-    if any(m.should_run_r_tests for m in test_modules) and not os.environ.get("SKIP_R"):
-        with titled_block("Running SparkR tests"):
-            run_sparkr_tests()
 
 
 def _test():

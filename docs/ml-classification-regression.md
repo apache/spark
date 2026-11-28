@@ -90,13 +90,6 @@ More details on parameters can be found in the [Java API documentation](api/java
 {% include_example java/org/apache/spark/examples/ml/JavaLogisticRegressionWithElasticNetExample.java %}
 </div>
 
-<div data-lang="r" markdown="1">
-
-More details on parameters can be found in the [R API documentation](api/R/reference/spark.logit.html).
-
-{% include_example binomial r/ml/logit.R %}
-</div>
-
 </div>
 
 The `spark.ml` implementation of logistic regression also supports
@@ -193,13 +186,6 @@ training summary for evaluating the model.
 {% include_example java/org/apache/spark/examples/ml/JavaMulticlassLogisticRegressionWithElasticNetExample.java %}
 </div>
 
-<div data-lang="r" markdown="1">
-
-More details on parameters can be found in the [R API documentation](api/R/reference/spark.logit.html).
-
-{% include_example multinomial r/ml/logit.R %}
-</div>
-
 </div>
 
 
@@ -239,14 +225,6 @@ More details on parameters can be found in the [Java API documentation](api/java
 
 </div>
 
-<div data-lang="r" markdown="1">
-
-Refer to the [R API docs](api/R/reference/spark.decisionTree.html) for more details.
-
-{% include_example classification r/ml/decisionTree.R %}
-
-</div>
-
 </div>
 
 ## Random forest classifier
@@ -282,13 +260,6 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/RandomF
 {% include_example java/org/apache/spark/examples/ml/JavaRandomForestClassifierExample.java %}
 </div>
 
-<div data-lang="r" markdown="1">
-
-Refer to the [R API docs](api/R/reference/spark.randomForest.html) for more details.
-
-{% include_example classification r/ml/randomForest.R %}
-</div>
-
 </div>
 
 ## Gradient-boosted tree classifier
@@ -322,13 +293,6 @@ Refer to the [Scala API docs](api/scala/org/apache/spark/ml/classification/GBTCl
 Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/GBTClassifier.html) for more details.
 
 {% include_example java/org/apache/spark/examples/ml/JavaGradientBoostedTreeClassifierExample.java %}
-</div>
-
-<div data-lang="r" markdown="1">
-
-Refer to the [R API docs](api/R/reference/spark.gbt.html) for more details.
-
-{% include_example classification r/ml/gbt.R %}
 </div>
 
 </div>
@@ -380,13 +344,6 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/Multila
 {% include_example java/org/apache/spark/examples/ml/JavaMultilayerPerceptronClassifierExample.java %}
 </div>
 
-<div data-lang="r" markdown="1">
-
-Refer to the [R API docs](api/R/reference/spark.mlp.html) for more details.
-
-{% include_example r/ml/mlp.R %}
-</div>
-
 </div>
 
 ## Linear Support Vector Machine
@@ -423,13 +380,6 @@ Refer to the [Scala API docs](api/scala/org/apache/spark/ml/classification/Linea
 Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/LinearSVC.html) for more details.
 
 {% include_example java/org/apache/spark/examples/ml/JavaLinearSVCExample.java %}
-</div>
-
-<div data-lang="r" markdown="1">
-
-Refer to the [R API docs](api/R/reference/spark.svmLinear.html) for more details.
-
-{% include_example r/ml/svmLinear.R %}
 </div>
 
 </div>
@@ -526,13 +476,6 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/NaiveBa
 {% include_example java/org/apache/spark/examples/ml/JavaNaiveBayesExample.java %}
 </div>
 
-<div data-lang="r" markdown="1">
-
-Refer to the [R API docs](api/R/reference/spark.naiveBayes.html) for more details.
-
-{% include_example r/ml/naiveBayes.R %}
-</div>
-
 </div>
 
 
@@ -568,15 +511,6 @@ Refer to the [Scala API docs](api/scala/org/apache/spark/ml/classification/FMCla
 Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/FMClassifier.html) for more details.
 
 {% include_example java/org/apache/spark/examples/ml/JavaFMClassifierExample.java %}
-</div>
-
-<div data-lang="r" markdown="1">
-
-Refer to the [R API docs](api/R/reference/spark.fmClassifier.html) for more details.
-
-Note: At the moment SparkR doesn't support feature scaling.
-
-{% include_example r/ml/fmClassifier.R %}
 </div>
 
 </div>
@@ -619,13 +553,6 @@ More details on parameters can be found in the [Scala API documentation](api/sca
 More details on parameters can be found in the [Java API documentation](api/java/org/apache/spark/ml/regression/LinearRegression.html).
 
 {% include_example java/org/apache/spark/examples/ml/JavaLinearRegressionWithElasticNetExample.java %}
-</div>
-
-<div data-lang="r" markdown="1">
-
-More details on parameters can be found in the [R API documentation](api/R/reference/spark.lm.html).
-
-{% include_example r/ml/lm_with_elastic_net.R %}
 </div>
 
 </div>
@@ -770,13 +697,6 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/regression/Generalized
 {% include_example java/org/apache/spark/examples/ml/JavaGeneralizedLinearRegressionExample.java %}
 </div>
 
-<div data-lang="r" markdown="1">
-
-Refer to the [R API docs](api/R/reference/spark.glm.html) for more details.
-
-{% include_example r/ml/glm.R %}
-</div>
-
 </div>
 
 
@@ -811,13 +731,6 @@ More details on parameters can be found in the [Scala API documentation](api/sca
 More details on parameters can be found in the [Java API documentation](api/java/org/apache/spark/ml/regression/DecisionTreeRegressor.html).
 
 {% include_example java/org/apache/spark/examples/ml/JavaDecisionTreeRegressionExample.java %}
-</div>
-
-<div data-lang="r" markdown="1">
-
-Refer to the [R API docs](api/R/reference/spark.decisionTree.html) for more details.
-
-{% include_example regression r/ml/decisionTree.R %}
 </div>
 
 </div>
@@ -856,13 +769,6 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/regression/RandomFores
 {% include_example java/org/apache/spark/examples/ml/JavaRandomForestRegressorExample.java %}
 </div>
 
-<div data-lang="r" markdown="1">
-
-Refer to the [R API docs](api/R/reference/spark.randomForest.html) for more details.
-
-{% include_example regression r/ml/randomForest.R %}
-</div>
-
 </div>
 
 ## Gradient-boosted tree regression
@@ -896,13 +802,6 @@ Refer to the [Scala API docs](api/scala/org/apache/spark/ml/regression/GBTRegres
 Refer to the [Java API docs](api/java/org/apache/spark/ml/regression/GBTRegressor.html) for more details.
 
 {% include_example java/org/apache/spark/examples/ml/JavaGradientBoostedTreeRegressorExample.java %}
-</div>
-
-<div data-lang="r" markdown="1">
-
-Refer to the [R API docs](api/R/reference/spark.gbt.html) for more details.
-
-{% include_example regression r/ml/gbt.R %}
 </div>
 
 </div>
@@ -992,13 +891,6 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/regression/AFTSurvival
 {% include_example java/org/apache/spark/examples/ml/JavaAFTSurvivalRegressionExample.java %}
 </div>
 
-<div data-lang="r" markdown="1">
-
-Refer to the [R API docs](api/R/reference/spark.survreg.html) for more details.
-
-{% include_example r/ml/survreg.R %}
-</div>
-
 </div>
 
 
@@ -1072,13 +964,6 @@ Refer to the [`IsotonicRegression` Java docs](api/java/org/apache/spark/ml/regre
 {% include_example java/org/apache/spark/examples/ml/JavaIsotonicRegressionExample.java %}
 </div>
 
-<div data-lang="r" markdown="1">
-
-Refer to the [`IsotonicRegression` R API docs](api/R/reference/spark.isoreg.html) for more details on the API.
-
-{% include_example r/ml/isoreg.R %}
-</div>
-
 </div>
 
 
@@ -1114,15 +999,6 @@ Refer to the [Scala API docs](api/scala/org/apache/spark/ml/regression/FMRegress
 Refer to the [Java API docs](api/java/org/apache/spark/ml/regression/FMRegressor.html) for more details.
 
 {% include_example java/org/apache/spark/examples/ml/JavaFMRegressorExample.java %}
-</div>
-
-<div data-lang="r" markdown="1">
-
-Refer to the [R API documentation](api/R/reference/spark.fmRegressor.html) for more details.
-
-Note: At the moment SparkR doesn't support feature scaling.
-
-{% include_example r/ml/fmRegressor.R %}
 </div>
 
 </div>

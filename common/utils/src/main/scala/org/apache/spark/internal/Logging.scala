@@ -383,8 +383,7 @@ trait Logging {
         if (replLevel != rootLogger.getLevel()) {
           if (!silent) {
             System.err.printf("Setting default log level to \"%s\".\n", replLevel)
-            System.err.println("To adjust logging level use sc.setLogLevel(newLevel). " +
-              "For SparkR, use setLogLevel(newLevel).")
+            System.err.println("To adjust logging level use sc.setLogLevel(newLevel).")
             Logging.setLogLevelPrinted = true
           }
           Logging.sparkShellThresholdLevel = replLevel

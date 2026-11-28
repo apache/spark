@@ -23,7 +23,6 @@ class ApplicationMasterArguments(val args: Array[String]) {
   var userJar: String = null
   var userClass: String = null
   var primaryPyFile: String = null
-  var primaryRFile: String = null
   var userArgs: Seq[String] = Nil
   var propertiesFile: String = null
   var distCacheConf: String = null
@@ -51,10 +50,6 @@ class ApplicationMasterArguments(val args: Array[String]) {
           primaryPyFile = value
           args = tail
 
-        case ("--primary-r-file") :: value :: tail =>
-          primaryRFile = value
-          args = tail
-
         case ("--arg") :: value :: tail =>
           userArgsBuffer += value
           args = tail
@@ -72,13 +67,6 @@ class ApplicationMasterArguments(val args: Array[String]) {
       }
     }
 
-    if (primaryPyFile != null && primaryRFile != null) {
-      // scalastyle:off println
-      System.err.println("Cannot have primary-py-file and primary-r-file at the same time")
-      // scalastyle:on println
-      System.exit(-1)
-    }
-
     userArgs = userArgsBuffer.toList
   }
 
@@ -93,7 +81,6 @@ class ApplicationMasterArguments(val args: Array[String]) {
       |  --jar JAR_PATH       Path to your application's JAR file
       |  --class CLASS_NAME   Name of your application's main class
       |  --primary-py-file    A main Python file
-      |  --primary-r-file     A main R file
       |  --arg ARG            Argument to be passed to your application's main class.
       |                       Multiple invocations are possible, each will be passed in order.
       |  --properties-file FILE Path to a custom Spark properties file.

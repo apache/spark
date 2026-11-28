@@ -562,7 +562,6 @@ spark.sql.execution.arrow.pyspark.enabled
 spark.sql.execution.arrow.pyspark.fallback.enabled
 spark.sql.execution.arrow.pyspark.selfDestruct.enabled
 spark.sql.execution.arrow.pyspark.validateSchema.enabled
-spark.sql.execution.arrow.sparkr.enabled
 spark.sql.execution.arrow.transformWithStateInPySpark.maxStateRecordsPerBatch
 spark.sql.execution.arrow.useLargeVarTypes
 spark.sql.execution.broadcastHashJoin.outputPartitioningExpandLimit

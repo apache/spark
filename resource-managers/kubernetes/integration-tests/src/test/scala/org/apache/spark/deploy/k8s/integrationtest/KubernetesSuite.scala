@@ -43,7 +43,7 @@ import org.apache.spark.internal.config._
 class KubernetesSuite extends SparkFunSuite
   with BeforeAndAfterAll with BeforeAndAfter with BasicTestsSuite with SparkConfPropagateSuite
   with SecretsTestsSuite with PythonTestsSuite with ClientModeTestsSuite with PodTemplateSuite
-  with VolumeSuite with PVTestsSuite with DepsTestsSuite with DecommissionSuite with RTestsSuite
+  with VolumeSuite with PVTestsSuite with DepsTestsSuite with DecommissionSuite
   with ExecutorResizeSuite with Logging with Eventually with Matchers {
 
 
@@ -51,7 +51,6 @@ class KubernetesSuite extends SparkFunSuite
 
   protected var sparkHomeDir: Path = _
   protected var pyImage: String = _
-  protected var rImage: String = _
 
   protected var image: String = _
   protected var testBackend: IntegrationTestBackend = _
@@ -172,7 +171,6 @@ class KubernetesSuite extends SparkFunSuite
       s"No directory found for spark home specified at $sparkHomeDir.")
     image = testImageRef(sys.props.getOrElse(CONFIG_KEY_IMAGE_JVM, "spark"))
     pyImage = testImageRef(sys.props.getOrElse(CONFIG_KEY_IMAGE_PYTHON, "spark-py"))
-    rImage = testImageRef(sys.props.getOrElse(CONFIG_KEY_IMAGE_R, "spark-r"))
 
     containerLocalSparkDistroExamplesJar =
       s"local:///opt/spark/examples/jars/${Utils.getExamplesJarName()}"
@@ -547,14 +545,6 @@ class KubernetesSuite extends SparkFunSuite
       === standardNonJVMMemory)
   }
 
-  protected def doBasicDriverRPodCheck(driverPod: Pod): Unit = {
-    assert(driverPod.getMetadata.getName === driverPodName)
-    assert(driverPod.getSpec.getContainers.get(0).getImage === rImage)
-    assert(driverPod.getSpec.getContainers.get(0).getName === "spark-kubernetes-driver")
-    assert(driverPod.getSpec.getContainers.get(0).getResources.getRequests.get("memory").getAmount
-      === standardNonJVMMemory)
-  }
-
 
   protected def doBasicExecutorPodCheck(executorPod: Pod): Unit = {
     assert(executorPod.getSpec.getContainers.get(0).getImage === image)
@@ -565,13 +555,6 @@ class KubernetesSuite extends SparkFunSuite
 
   protected def doBasicExecutorPyPodCheck(executorPod: Pod): Unit = {
     assert(executorPod.getSpec.getContainers.get(0).getImage === pyImage)
-    assert(executorPod.getSpec.getContainers.get(0).getName === "spark-kubernetes-executor")
-    assert(executorPod.getSpec.getContainers.get(0).getResources.getRequests.get("memory").getAmount
-      === standardNonJVMMemory)
-  }
-
-  protected def doBasicExecutorRPodCheck(executorPod: Pod): Unit = {
-    assert(executorPod.getSpec.getContainers.get(0).getImage === rImage)
     assert(executorPod.getSpec.getContainers.get(0).getName === "spark-kubernetes-executor")
     assert(executorPod.getSpec.getContainers.get(0).getResources.getRequests.get("memory").getAmount
       === standardNonJVMMemory)
@@ -651,7 +634,6 @@ private[spark] object KubernetesSuite {
   val pvTestTag = Tag("pv")
   val schedulingTestTag = Tag("schedule")
   val decomTestTag = Tag("decom")
-  val rTestTag = Tag("r")
   val MinikubeTag = Tag("minikube")
   val SPARK_PI_MAIN_CLASS: String = "org.apache.spark.examples.SparkPi"
   val SPARK_DFS_READ_WRITE_TEST = "org.apache.spark.examples.DFSReadWriteTest"

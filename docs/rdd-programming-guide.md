@@ -948,8 +948,7 @@ The following table lists some of the common transformations supported by Spark.
 RDD API doc
 ([Python](api/python/reference/api/pyspark.RDD.html#pyspark.RDD),
  [Scala](api/scala/org/apache/spark/rdd/RDD.html),
- [Java](api/java/index.html?org/apache/spark/api/java/JavaRDD.html),
- [R](api/R/reference/index.html))
+ [Java](api/java/index.html?org/apache/spark/api/java/JavaRDD.html))
 and pair RDD functions doc
 ([Scala](api/scala/org/apache/spark/rdd/PairRDDFunctions.html),
  [Java](api/java/index.html?org/apache/spark/api/java/JavaPairRDD.html))
@@ -1062,8 +1061,7 @@ The following table lists some of the common actions supported by Spark. Refer t
 RDD API doc
 ([Python](api/python/reference/api/pyspark.RDD.html#pyspark.RDD),
  [Scala](api/scala/org/apache/spark/rdd/RDD.html),
- [Java](api/java/index.html?org/apache/spark/api/java/JavaRDD.html),
- [R](api/R/reference/index.html))
+ [Java](api/java/index.html?org/apache/spark/api/java/JavaRDD.html))
 
 and pair RDD functions doc
 ([Scala](api/scala/org/apache/spark/rdd/PairRDDFunctions.html),
@@ -1599,8 +1597,7 @@ You can see some [example Spark programs](https://spark.apache.org/examples.html
 In addition, Spark includes several samples in the `examples` directory
 ([Python]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python),
  [Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples),
- [Java]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples),
- [R]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/r)).
+ [Java]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples)).
 You can run Java and Scala examples by passing the class name to Spark's `bin/run-example` script; for instance:
 
     ./bin/run-example SparkPi
@@ -1609,10 +1606,6 @@ For Python examples, use `spark-submit` instead:
 
     ./bin/spark-submit examples/src/main/python/pi.py
 
-For R examples, use `spark-submit` instead:
-
-    ./bin/spark-submit examples/src/main/r/dataframe.R
-
 For help on optimizing your programs, the [configuration](configuration.html) and
 [tuning](tuning.html) guides provide information on best practices. They are especially important for
 making sure that your data is stored in memory in an efficient format.
@@ -1620,4 +1613,4 @@ For help on deploying, the [cluster mode overview](cluster-overview.html) descri
 in distributed operation and supported cluster managers.
 
 Finally, full API documentation is available in
-[Python](api/python/), [Scala](api/scala/org/apache/spark/), [Java](api/java/) and [R](api/R/).
+[Python](api/python/), [Scala](api/scala/org/apache/spark/) and [Java](api/java/).

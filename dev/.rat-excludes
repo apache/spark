@@ -87,14 +87,7 @@ local-1430917381535_2
 local-1430917381536
 local-1642039451826
 eventlog_v2_local-1766844910796
-DESCRIPTION
-NAMESPACE
 test_support/*
-.*\.Rd
-help/*
-html/*
-INDEX
-.lintr
 gen-java.*
 .*\.avpr
 .*\.parquet
@@ -102,7 +95,6 @@ spark-deps-.*
 .*\.csv
 .*\.tsv
 .*\.sql
-.Rbuildignore
 spark-warehouse
 structured-streaming/*
 kafka-source-initial-offset-version-2.1.0.bin

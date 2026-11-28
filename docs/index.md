@@ -34,13 +34,13 @@ source, visit [Building Spark](building-spark.html).
 
 Spark runs on both Windows and UNIX-like systems (e.g. Linux, Mac OS), and it should run on any platform that runs a supported version of Java. This should include JVMs on x86_64 and ARM64. It's easy to run locally on one machine --- all you need is to have `java` installed on your system `PATH`, or the `JAVA_HOME` environment variable pointing to a Java installation.
 
-Spark runs on Java 21/25, Scala 2.13, Python 3.11+, and R 4.0+ (Deprecated).
+Spark runs on Java 21/25, Scala 2.13, and Python 3.11+.
 Java 25 prior to version 25.0.3 support is deprecated as of Spark 4.2.0.
 When using the Scala API, it is necessary for applications to use the same version of Scala that Spark was compiled for. Since Spark 4.0.0, it's Scala 2.13.
 
 # Running the Examples and Shell
 
-Spark comes with several sample programs. Python, Scala, Java, and R examples are in the
+Spark comes with several sample programs. Python, Scala, and Java examples are in the
 `examples/src/main` directory.
 
 To run Spark interactively in a Python interpreter, use
@@ -69,15 +69,6 @@ The `--master` option specifies the
 [master URL for a distributed cluster](submitting-applications.html#master-urls), or `local` to run
 locally with one thread, or `local[N]` to run locally with N threads. You should start by using
 `local` for testing. For a full list of options, run the Spark shell with the `--help` option.
-
-Since version 1.4, Spark has provided an [R API](sparkr.html) (only the DataFrame APIs are included).
-To run Spark interactively in an R interpreter, use `bin/sparkR`:
-
-    ./bin/sparkR --master "local[2]"
-
-Example applications are also provided in R. For example:
-
-    ./bin/spark-submit examples/src/main/r/dataframe.R
 
 ## Running Spark Client Applications Anywhere with Spark Connect
 
@@ -111,7 +102,6 @@ options for deployment:
 * [Spark Streaming](streaming-programming-guide.html): processing data streams using DStreams (old API)
 * [MLlib](ml-guide.html): applying machine learning algorithms
 * [GraphX](graphx-programming-guide.html): processing graphs
-* [SparkR (Deprecated)](sparkr.html): processing data with Spark in R
 * [PySpark](api/python/getting_started/index.html): processing data with Spark in Python
 * [Spark SQL CLI](sql-distributed-sql-engine-spark-sql-cli.html): processing data with SQL on the command line
 * [Declarative Pipelines](declarative-pipelines-programming-guide.html): building data pipelines that create and maintain multiple tables
@@ -121,7 +111,6 @@ options for deployment:
 * [Spark Python API (Sphinx)](api/python/index.html)
 * [Spark Scala API (Scaladoc)](api/scala/org/apache/spark/index.html)
 * [Spark Java API (Javadoc)](api/java/index.html)
-* [Spark R API (Roxygen2)](api/R/index.html)
 * [Spark SQL, Built-in Functions (MkDocs)](api/sql/index.html)
 
 **Deployment Guides:**
@@ -165,5 +154,4 @@ options for deployment:
   are available online for free.
 * [Code Examples](https://spark.apache.org/examples.html): more are also available in the `examples` subfolder of Spark ([Python]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python),
  [Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples),
- [Java]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples),
- [R]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/r))
+ [Java]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples))

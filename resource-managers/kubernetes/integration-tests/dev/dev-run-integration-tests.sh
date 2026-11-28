@@ -29,7 +29,6 @@ JAVA_IMAGE_TAG=
 BASE_IMAGE_NAME=
 JVM_IMAGE_NAME=
 PYTHON_IMAGE_NAME=
-R_IMAGE_NAME=
 DOCKER_FILE=
 SPARK_MASTER=
 NAMESPACE=
@@ -118,10 +117,6 @@ while (( "$#" )); do
       PYTHON_IMAGE_NAME="$2"
       shift
       ;;
-    --r-image-name)
-      R_IMAGE_NAME="$2"
-      shift
-      ;;
     --java-version)
       JAVA_VERSION="$2"
       shift
@@ -193,12 +188,10 @@ fi
 BASE_IMAGE_NAME=${BASE_IMAGE_NAME:-spark}
 JVM_IMAGE_NAME=${JVM_IMAGE_NAME:-${BASE_IMAGE_NAME}}
 PYTHON_IMAGE_NAME=${PYTHON_IMAGE_NAME:-${BASE_IMAGE_NAME}-py}
-R_IMAGE_NAME=${R_IMAGE_NAME:-${BASE_IMAGE_NAME}-r}
 
 properties+=(
   -Dspark.kubernetes.test.jvmImage=$JVM_IMAGE_NAME
   -Dspark.kubernetes.test.pythonImage=$PYTHON_IMAGE_NAME
-  -Dspark.kubernetes.test.rImage=$R_IMAGE_NAME
 )
 
 (

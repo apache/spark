@@ -90,8 +90,6 @@ public class SparkLauncher extends AbstractLauncher<SparkLauncher> {
 
   static final String PYSPARK_PYTHON = "spark.pyspark.python";
 
-  static final String SPARKR_R_SHELL = "spark.r.shell.command";
-
   /** Logger name to use when launching a child process. */
   public static final String CHILD_PROCESS_LOGGER_NAME = "spark.launcher.childProcLoggerName";
 

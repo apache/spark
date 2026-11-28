@@ -441,10 +441,6 @@ If the requirements are not met, please consider using the <code>JdbcConnectionP
 {% include_example jdbc_dataset java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
 </div>
 
-<div data-lang="r"  markdown="1">
-{% include_example jdbc_dataset r/RSparkSQLExample.R %}
-</div>
-
 <div data-lang="SQL"  markdown="1">
 
 {% highlight sql %}

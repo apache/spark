@@ -46,12 +46,6 @@ Using the data from the above example:
 {% include_example basic_parquet_example java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
 </div>
 
-<div data-lang="r"  markdown="1">
-
-{% include_example basic_parquet_example r/RSparkSQLExample.R %}
-
-</div>
-
 <div data-lang="SQL"  markdown="1">
 
 {% highlight sql %}
@@ -162,12 +156,6 @@ turned it off by default starting from 1.5.0. You may enable it by
 {% include_example schema_merging java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
 </div>
 
-<div data-lang="r"  markdown="1">
-
-{% include_example schema_merging r/RSparkSQLExample.R %}
-
-</div>
-
 </div>
 
 ### Hive metastore Parquet table conversion
@@ -230,14 +218,6 @@ spark.catalog.refreshTable("my_table")
 {% highlight java %}
 // spark is an existing SparkSession
 spark.catalog().refreshTable("my_table");
-{% endhighlight %}
-
-</div>
-
-<div data-lang="r"  markdown="1">
-
-{% highlight r %}
-refreshTable("my_table")
 {% endhighlight %}
 
 </div>

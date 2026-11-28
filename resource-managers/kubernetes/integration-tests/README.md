@@ -88,15 +88,15 @@ pushed. The default is `docker.io/kubespark`.
 
 ### Customising the Image Names
 
-If your image names do not follow the standard Spark naming convention - `spark`, `spark-py` and `spark-r` - then you can customise the names using several options.
+If your image names do not follow the standard Spark naming convention - `spark` and `spark-py` - then you can customise the names using several options.
 
 If you use the same basic pattern but a different prefix for the name e.g. `apache-spark` you can just set `--base-image-name <base-name>` e.g.
 
     ./dev/dev-run-integration-tests.sh --base-image-name apache-spark
     
-Alternatively if you use completely custom names then you can set each individually via the `--jvm-image-name <name>`, `--python-image-name <name>` and `--r-image-name <name>` arguments e.g.
+Alternatively if you use completely custom names then you can set each individually via the `--jvm-image-name <name>` and `--python-image-name <name>` arguments e.g.
 
-    ./dev/dev-run-integration-tests.sh --jvm-image-name jvm-spark --python-image-name pyspark --r-image-name sparkr
+    ./dev/dev-run-integration-tests.sh --jvm-image-name jvm-spark --python-image-name pyspark
 
 ## Spark Distribution Under Test
 
@@ -258,13 +258,6 @@ to the wrapper scripts and using the wrapper scripts will simply set these appro
     <td><code>spark-py</code></td>
   </tr>
   <tr>
-    <td><code>spark.kubernetes.test.rImage</code></td>
-    <td>
-      The image name for the R based Spark image to test
-    </td>
-    <td><code>spark-r</code></td>
-  </tr>
-  <tr>
     <td><code>spark.kubernetes.test.dockerFile</code></td>
     <td>
       The path to the custom Dockerfile
@@ -341,7 +334,7 @@ to the wrapper scripts and using the wrapper scripts will simply set these appro
 
 You can use SBT in the same way to build image and run all K8s integration tests except Minikube-only ones.
 
-    build/sbt -Psparkr -Pkubernetes -Pkubernetes-integration-tests \
+    build/sbt -Pkubernetes -Pkubernetes-integration-tests \
         -Dtest.exclude.tags=minikube \
         -Dspark.kubernetes.test.deployMode=docker-desktop \
         -Dspark.kubernetes.test.imageTag=2027-01-01 \
@@ -349,7 +342,7 @@ You can use SBT in the same way to build image and run all K8s integration tests
 
 The following is an example to rerun tests with the pre-built image.
 
-    build/sbt -Psparkr -Pkubernetes -Pkubernetes-integration-tests \
+    build/sbt -Pkubernetes -Pkubernetes-integration-tests \
         -Dtest.exclude.tags=minikube \
         -Dspark.kubernetes.test.deployMode=docker-desktop \
         -Dspark.kubernetes.test.imageTag=2027-01-01 \
@@ -357,20 +350,19 @@ The following is an example to rerun tests with the pre-built image.
 
 In addition, you can run a single test selectively.
 
-    build/sbt -Psparkr -Pkubernetes -Pkubernetes-integration-tests \
+    build/sbt -Pkubernetes -Pkubernetes-integration-tests \
         -Dspark.kubernetes.test.deployMode=docker-desktop \
         -Dspark.kubernetes.test.imageTag=2027-01-01 \
         'kubernetes-integration-tests/testOnly -- -z "Run SparkPi with a very long application name"'
 
-You can also specify your specific dockerfile to build JVM/Python/R based image to test.
+You can also specify your specific dockerfile to build JVM/Python based image to test.
 
-    build/sbt -Psparkr -Pkubernetes -Pkubernetes-integration-tests \
+    build/sbt -Pkubernetes -Pkubernetes-integration-tests \
         -Dtest.exclude.tags=minikube \
         -Dspark.kubernetes.test.deployMode=docker-desktop \
         -Dspark.kubernetes.test.imageTag=2027-01-01 \
         -Dspark.kubernetes.test.dockerFile=/path/to/Dockerfile \
         -Dspark.kubernetes.test.pyDockerFile=/path/to/py/Dockerfile \
-        -Dspark.kubernetes.test.rDockerFile=/path/to/r/Dockerfile \
         'kubernetes-integration-tests/test'
 
 # Running the Volcano Integration Tests

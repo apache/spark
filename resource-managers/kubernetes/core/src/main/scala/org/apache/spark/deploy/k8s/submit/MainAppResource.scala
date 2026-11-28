@@ -59,8 +59,13 @@ object JavaMainAppResource {
 case class PythonMainAppResource(primaryResource: String)
   extends MainAppResource with NonJVMResource
 
+/**
+ * SparkR was removed in Apache Spark 5.0.0. This class is kept so that code referring to it
+ * still compiles, but building a driver pod for it fails.
+ */
 @Stable
 @DeveloperApi
 @Since("2.4.0")
+@deprecated("SparkR was removed in Apache Spark 5.0.0", "5.0.0")
 case class RMainAppResource(primaryResource: String)
   extends MainAppResource with NonJVMResource

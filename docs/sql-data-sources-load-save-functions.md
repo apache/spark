@@ -41,10 +41,6 @@ In the simplest form, the default data source (`parquet` unless otherwise config
 {% include_example generic_load_save_functions java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
 </div>
 
-<div data-lang="r"  markdown="1">
-{% include_example generic_load_save_functions r/RSparkSQLExample.R %}
-</div>
-
 </div>
 
 ### Manually Specifying Options
@@ -76,10 +72,6 @@ To load a JSON file you can use:
 {% include_example manual_load_options java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
 </div>
 
-<div data-lang="r"  markdown="1">
-{% include_example manual_load_options r/RSparkSQLExample.R %}
-</div>
-
 </div>
 
 To load a CSV file you can use:
@@ -96,10 +88,6 @@ To load a CSV file you can use:
 
 <div data-lang="java"  markdown="1">
 {% include_example manual_load_options_csv java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
-</div>
-
-<div data-lang="r"  markdown="1">
-{% include_example manual_load_options_csv r/RSparkSQLExample.R %}
 </div>
 
 </div>
@@ -125,10 +113,6 @@ ORC data source:
 
 <div data-lang="java"  markdown="1">
 {% include_example manual_save_options_orc java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
-</div>
-
-<div data-lang="r"  markdown="1">
-{% include_example manual_save_options_orc r/RSparkSQLExample.R %}
 </div>
 
 <div data-lang="SQL"  markdown="1">
@@ -162,10 +146,6 @@ Parquet data source:
 
 <div data-lang="java"  markdown="1">
 {% include_example manual_save_options_parquet java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
-</div>
-
-<div data-lang="r"  markdown="1">
-{% include_example manual_save_options_parquet r/RSparkSQLExample.R %}
 </div>
 
 <div data-lang="SQL"  markdown="1">
@@ -203,10 +183,6 @@ file directly with SQL.
 
 <div data-lang="java"  markdown="1">
 {% include_example direct_sql java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
-</div>
-
-<div data-lang="r"  markdown="1">
-{% include_example direct_sql r/RSparkSQLExample.R %}
 </div>
 
 <div data-lang="SQL"  markdown="1">

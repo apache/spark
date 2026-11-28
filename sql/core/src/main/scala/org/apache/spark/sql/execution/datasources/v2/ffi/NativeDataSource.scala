@@ -1132,7 +1132,7 @@ class NativePartitionReader(
       // consumer may still read the batch that next returned, unless next was called since, or
       // the reader is closed in a task without a thread that the task does not wait for.
       if (!reading) {
-        // TODO(SPARK-61195): In a task that runs PipedRDD, script transformation or the R runner,
+        // TODO(SPARK-61195): In a task that runs PipedRDD or script transformation,
         // the batch stays allocated until a garbage collection. Once these operators stop their
         // threads and wait for them before the completion listeners close the readers of the
         // task, a reader closed in a task can always free its batch here, and TaskInputThreads

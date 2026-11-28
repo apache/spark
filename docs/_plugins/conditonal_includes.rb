@@ -36,7 +36,6 @@ module Jekyll
         'SKIP_API',
         'SKIP_SCALADOC',
         'SKIP_PYTHONDOC',
-        'SKIP_RDOC',
         'SKIP_SQLDOC',
       ]
       set_flags = skip_flags.select { |flag| ENV[flag] }

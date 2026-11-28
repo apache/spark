@@ -67,13 +67,13 @@ to be runnable, use `./dev/make-distribution.sh` in the project root directory. 
 it uses Maven as building tool, and can be configured with Maven profile settings and so on
 like the direct Maven build. Example:
 
-    ./dev/make-distribution.sh --name custom-spark --pip --r --tgz -Psparkr -Phive -Phive-thriftserver -Pyarn -Pkubernetes
+    ./dev/make-distribution.sh --name custom-spark --pip --tgz -Phive -Phive-thriftserver -Pyarn -Pkubernetes
 
-This will build Spark distribution along with Python pip and R packages.
+This will build Spark distribution along with Python pip packages.
 
 To switch to SBT (experimental), use `--sbt-enabled`. Example:
 
-    ./dev/make-distribution.sh --name custom-spark --pip --r --tgz --sbt-enabled -Psparkr -Phive -Phive-thriftserver -Pyarn -Pkubernetes
+    ./dev/make-distribution.sh --name custom-spark --pip --tgz --sbt-enabled -Phive -Phive-thriftserver -Pyarn -Pkubernetes
 
 For more information on usage, run `./dev/make-distribution.sh --help`
 
@@ -246,16 +246,6 @@ If you are building PySpark with SBT and wish to run the PySpark tests, you will
 The run-tests script also can be limited to a specific Python version or a specific module
 
     ./python/run-tests --python-executables=python --modules=pyspark-sql
-
-## Running R Tests (deprecated)
-
-To run the SparkR tests you will need to install the [knitr](https://cran.r-project.org/package=knitr), [rmarkdown](https://cran.r-project.org/package=rmarkdown), [testthat](https://cran.r-project.org/package=testthat), [e1071](https://cran.r-project.org/package=e1071) and [survival](https://cran.r-project.org/package=survival) packages first:
-
-    Rscript -e "install.packages(c('knitr', 'rmarkdown', 'testthat', 'e1071', 'survival'), repos='https://cloud.r-project.org/')"
-
-You can run just the SparkR tests using the command:
-
-    ./R/run-tests.sh
 
 ## Running Docker-based Integration Test Suites
 
