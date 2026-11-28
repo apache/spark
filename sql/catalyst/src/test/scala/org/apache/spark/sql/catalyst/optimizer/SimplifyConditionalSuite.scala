@@ -79,6 +79,16 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper {
       Literal.create(null, IntegerType))
   }
 
+  test("SPARK-62196: preserve conditional branches that return different signed zeros") {
+    Seq((Literal(0.0f), Literal(-0.0f)), (Literal(0.0d), Literal(-0.0d))).foreach {
+      case (positiveZero, negativeZero) =>
+        val ifExpr = If($"c", positiveZero, negativeZero)
+        assertEquivalent(ifExpr, ifExpr)
+        val caseWhen = CaseWhen(Seq(($"c", positiveZero)), Some(negativeZero))
+        assertEquivalent(caseWhen, caseWhen)
+    }
+  }
+
   test("simplify if") {
     assertEquivalent(
       If(TrueLiteral, Literal(10), Literal(20)),
