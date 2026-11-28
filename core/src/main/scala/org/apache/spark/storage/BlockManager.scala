@@ -20,7 +20,7 @@ package org.apache.spark.storage
 import java.io._
 import java.lang.ref.{ReferenceQueue => JReferenceQueue, WeakReference}
 import java.nio.ByteBuffer
-import java.nio.channels.Channels
+import java.nio.channels.{Channels, ClosedByInterruptException}
 import java.util.Collections
 import java.util.concurrent.{CompletableFuture, ConcurrentHashMap, TimeUnit}
 import java.util.zip.Checksum
@@ -37,6 +37,7 @@ import scala.util.control.NonFatal
 import com.codahale.metrics.{MetricRegistry, MetricSet}
 import com.esotericsoftware.kryo.KryoException
 import com.google.common.cache.CacheBuilder
+import org.apache.commons.lang3.exception.ExceptionUtils
 
 import org.apache.spark._
 import org.apache.spark.errors.SparkCoreErrors
@@ -1136,6 +1137,25 @@ private[spark] class BlockManager(
       (t.isInstanceOf[KryoException] && t.getCause.isInstanceOf[IOException])
 
   /**
+   * Whether a failed local read was caused by an interrupt rather than a bad block file. An
+   * interrupt closes an interruptible read channel (ClosedByInterruptException) even when the
+   * file is healthy. Spark marks the task context interrupted before it interrupts the thread, so
+   * the context also covers a kill whose interrupt flag was already cleared.
+   */
+  private[storage] def isInterruptRelated(
+      t: Throwable,
+      taskContext: Option[TaskContext]): Boolean = {
+    // getThrowableList stops on a cyclic cause chain.
+    val causedByInterrupt = ExceptionUtils.getThrowableList(t).asScala.exists {
+      case _: ClosedByInterruptException | _: InterruptedIOException |
+           _: InterruptedException => true
+      case _ => false
+    }
+    causedByInterrupt || Thread.currentThread().isInterrupted ||
+      taskContext.exists(_.isInterrupted())
+  }
+
+  /**
    * Get block from local block manager as an iterator of Java objects.
    */
   def getLocalValues(blockId: BlockId): Option[BlockResult] =
@@ -1214,8 +1234,14 @@ private[spark] class BlockManager(
               releaseLock(blockId, taskContext)
               if (isIORelatedException(t)) {
                 logInfo(extendMessageWithBlockDetails(t.getMessage, blockId))
-                // Remove the block so that its unavailability is reported to the driver
-                removeBlock(blockId)
+                if (isInterruptRelated(t, taskContext)) {
+                  // The read was interrupted (e.g. a task kill), so the file is likely healthy.
+                  // Keep it: a local-checkpoint block cannot be recomputed.
+                  logInfo(log"Keeping block ${MDC(BLOCK_ID, blockId)} after an interrupted read")
+                } else {
+                  // Remove the block so that its unavailability is reported to the driver
+                  removeBlock(blockId)
+                }
               }
               throw t
           }
