@@ -68,25 +68,24 @@ object RowSetUtilsBenchmark extends BenchmarkBase {
     val schema = schemaOf(numCols)
     // Both cases share the same underlying Row objects (built once) so that large row counts
     // don't require two independent copies of the row payload resident at the same time.
-    val rowsIndexedSeq = (0 until numRows).map(rowOf(schema, _)).toIndexedSeq
-    val rowsList = rowsIndexedSeq.toList
+    val rowsList = (0 until numRows).map(rowOf(schema, _)).toList
 
     val benchmark = new Benchmark(
       s"toTRowSet, $numRows rows x $numCols cols", numRows, output = output)
 
-    benchmark.addCase("rows: List (pre-existing .toList)") { _ =>
-      RowSetUtils.toTRowSet(0L, rowsList, schema, protocolVersion)
+    benchmark.addCase("LegacyRowSetUtils") { _ =>
+      LegacyRowSetUtils.toTRowSet(0L, rowsList, schema, protocolVersion)
     }
 
-    benchmark.addCase("rows: IndexedSeq (.toIndexedSeq)") { _ =>
-      RowSetUtils.toTRowSet(0L, rowsIndexedSeq, schema, protocolVersion)
+    benchmark.addCase("RowSetUtils") { _ =>
+      RowSetUtils.toTRowSet(0L, rowsList, schema, protocolVersion)
     }
 
     benchmark.run()
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    runBenchmark("RowSetUtils.toTRowSet: List vs Array result materialization") {
+    runBenchmark("LegacyRowSetUtils vs RowSetUtils result materialization") {
       // Column count fixed at a realistic wide-result width (150); row count scales from a small
       // page up to a large `maxRows` fetch.
       Seq(100, 1000, 10000, 100000, 1000000).foreach { numRows =>
