@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.window
 
+import org.apache.spark.SparkArithmeticException
 import org.apache.spark.sql.{DataFrame, Encoder, Encoders, QueryTest, Row}
 import org.apache.spark.sql.expressions.{Aggregator, MutableAggregationBuffer, Window}
 import org.apache.spark.sql.expressions.UserDefinedAggregateFunction
@@ -395,6 +396,24 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
         max($"vt").over(winSpec(-3, 3)).as("mxt")))
   }
 
+
+  test("SPARK-61623: SUM fails only if the sum of a frame overflows") {
+    // The sum of two rows is in range, the sum of three rows is not. With a block size of 16,
+    // every partition of 40 rows has two full blocks.
+    def build(lo: Int): DataFrame = baseDF.select($"id", $"pk",
+      sum(lit(Long.MaxValue / 2)).over(winSpec(lo, 0)).as("s"))
+    withSQLConf(
+        SQLConf.ANSI_ENABLED.key -> "true",
+        SQLConf.WINDOW_SEGMENT_TREE_BLOCK_SIZE.key -> "16") {
+      checkEquivalence(() => build(-1))
+      withSQLConf(enableSegTree.toSeq: _*) {
+        checkAnswer(build(-1).where($"id" >= 3).select($"s").distinct(),
+          Row(Long.MaxValue - 1))
+        val e = intercept[SparkArithmeticException](build(-2).collect())
+        assert(e.getCondition == "ARITHMETIC_OVERFLOW")
+      }
+    }
+  }
 
   test("collect_list falls back cleanly (non-DeclarativeAggregate)") {
     // collect_list is TypedImperativeAggregate; eligibleForSegTree must decline.
