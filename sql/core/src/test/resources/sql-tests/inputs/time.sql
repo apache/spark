@@ -15,6 +15,11 @@ select to_time(time_str, fmt_str) from time_view;
 select typeof(to_time('00:12:00', null));
 select typeof(to_time('00:12:00', cast(null as string)));
 
+-- SPARK-61087: `to_time` and `try_to_time` truncate the result to TIME(6).
+select to_time('00:00:00.1234567'), to_time('00:00:00.123456789', 'HH:mm:ss.SSSSSSSSS');
+select try_to_time('00:00:00.123456789');
+select to_time('00:00:00.1234567') = time'00:00:00.123456';
+
 -- missing fields in `to_time`
 select to_time("11", "HH");
 -- invalid: there is no 13 hours
@@ -318,6 +323,13 @@ SELECT time_from_seconds(-1);           -- invalid: negative -> exception
 SELECT time_from_seconds(86400);        -- invalid: >= 86400 -> exception
 SELECT time_from_seconds(90000);        -- invalid: >= 86400 -> exception
 SELECT time_from_seconds(NULL);
+
+-- SPARK-61087: time_from_seconds truncates the result to TIME(6).
+SELECT time_from_seconds(52200.123456789);
+SELECT time_from_seconds(CAST(0.0000001 AS DOUBLE));
+SELECT time_from_seconds(CAST(8.2 AS DOUBLE));
+SELECT time_from_seconds(0.0000001) = TIME'00:00:00';
+SELECT time_from_seconds(-0.0000001);   -- invalid: negative -> exception
 
 -- time_from_millis (valid: 0 to 86399999)
 SELECT time_from_millis(0);

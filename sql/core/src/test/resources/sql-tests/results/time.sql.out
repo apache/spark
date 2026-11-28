@@ -64,6 +64,30 @@ time(6)
 
 
 -- !query
+select to_time('00:00:00.1234567'), to_time('00:00:00.123456789', 'HH:mm:ss.SSSSSSSSS')
+-- !query schema
+struct<to_time(00:00:00.1234567):time(6),to_time(00:00:00.123456789, HH:mm:ss.SSSSSSSSS):time(6)>
+-- !query output
+00:00:00.123456	00:00:00.123456
+
+
+-- !query
+select try_to_time('00:00:00.123456789')
+-- !query schema
+struct<try_to_time(to_time(00:00:00.123456789)):time(6)>
+-- !query output
+00:00:00.123456
+
+
+-- !query
+select to_time('00:00:00.1234567') = time'00:00:00.123456'
+-- !query schema
+struct<(to_time(00:00:00.1234567) = TIME '00:00:00.123456'):boolean>
+-- !query output
+true
+
+
+-- !query
 select to_time("11", "HH")
 -- !query schema
 struct<to_time(11, HH):time(6)>
@@ -2478,6 +2502,53 @@ SELECT time_from_seconds(NULL)
 struct<time_from_seconds(NULL):time(6)>
 -- !query output
 NULL
+
+
+-- !query
+SELECT time_from_seconds(52200.123456789)
+-- !query schema
+struct<time_from_seconds(52200.123456789):time(6)>
+-- !query output
+14:30:00.123456
+
+
+-- !query
+SELECT time_from_seconds(CAST(0.0000001 AS DOUBLE))
+-- !query schema
+struct<time_from_seconds(CAST(1E-7 AS DOUBLE)):time(6)>
+-- !query output
+00:00:00
+
+
+-- !query
+SELECT time_from_seconds(CAST(8.2 AS DOUBLE))
+-- !query schema
+struct<time_from_seconds(CAST(8.2 AS DOUBLE)):time(6)>
+-- !query output
+00:00:08.2
+
+
+-- !query
+SELECT time_from_seconds(0.0000001) = TIME'00:00:00'
+-- !query schema
+struct<(time_from_seconds(1E-7) = TIME '00:00:00'):boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT time_from_seconds(-0.0000001)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "rangeMessage" : "Invalid TIME value: must be between 00:00:00 and 23:59:59.999999999, but got -1000 nanoseconds"
+  }
+}
 
 
 -- !query
