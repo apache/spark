@@ -26,7 +26,7 @@ import org.apache.arrow.vector.ipc.ArrowStreamWriter
 import org.apache.arrow.vector.ipc.WriteChannel
 import org.apache.arrow.vector.ipc.message.MessageSerializer
 
-import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.spark.{SparkEnv, TaskContext, TaskKilledException}
 import org.apache.spark.api.python.{BasePythonRunner, PythonWorker}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.arrow
@@ -73,6 +73,10 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
 
   protected var writer: ArrowStreamWriter = _
 
+  // Input has one writer, but task completion can run on another thread.
+  private val arrowInputLock = new Object
+  private var inputWriteInProgress = false
+
   // Whether `root` and `allocator` have been closed.
   private var rootAndAllocatorClosed = false
 
@@ -90,10 +94,11 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
   /**
    * Closes `root` and `allocator` if `writer` has been created, which creates them, and they are
    * not closed yet. Besides `close()` at the end of the input, a task completion listener calls
-   * this, since the task can complete before the input is exhausted, e.g. when it fails, is
-   * killed, or stops reading the output early.
+   * this when no input write is in progress. Otherwise, `writeNextInputToStream` calls it in its
+   * `finally` block as the active write exits. Both cover a task that completes before the input
+   * is exhausted, e.g. when it fails, is killed, or stops reading the output early.
    */
-  private def closeRootAndAllocator(): Unit = {
+  private def closeRootAndAllocator(): Unit = arrowInputLock.synchronized {
     if (writer != null && !rootAndAllocatorClosed) {
       rootAndAllocatorClosed = true
       root.close()
@@ -107,11 +112,16 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
       inputIterator: Iterator[IN],
       partitionIndex: Int,
       context: TaskContext): Writer = {
-    // Task completion listeners run after the writer is done: it runs on the task thread unless
-    // it is pipelined, and the pipelined writer is stopped and awaited before them (see
-    // `BasePythonRunner.startPipelinedWriter`). The listener does not end `writer`, since the
-    // stream that it writes to may be closed already, and nothing sends it to the worker anymore.
-    context.addTaskCompletionListener[Unit](_ => closeRootAndAllocator())
+    // A caller such as PipedRDD can consume input on a helper thread that outlives the task.
+    // Let an active write clean up when it exits, without waiting here for upstream I/O.
+    // Do not end the writer: its output stream may already be closed.
+    context.addTaskCompletionListener[Unit] { _ =>
+      arrowInputLock.synchronized {
+        if (!inputWriteInProgress) {
+          closeRootAndAllocator()
+        }
+      }
+    }
     new Writer(env, worker, inputIterator, partitionIndex, context) {
 
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
@@ -119,14 +129,28 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
       }
 
       override def writeNextInputToStream(dataOut: DataOutputStream): Boolean = {
-
-        if (writer == null) {
-          writer = new ArrowStreamWriter(root, null, dataOut)
-          writer.start()
+        arrowInputLock.synchronized {
+          if (context.isCompleted()) {
+            throw new TaskKilledException("Task completed before writing Python Arrow input")
+          }
+          inputWriteInProgress = true
         }
+        Utils.tryWithSafeFinally {
+          if (writer == null) {
+            writer = new ArrowStreamWriter(root, null, dataOut)
+            writer.start()
+          }
 
-        assert(writer != null)
-        writeNextBatchToArrowStream(root, writer, dataOut, inputIterator)
+          assert(writer != null)
+          writeNextBatchToArrowStream(root, writer, dataOut, inputIterator)
+        } {
+          arrowInputLock.synchronized {
+            inputWriteInProgress = false
+            if (context.isCompleted()) {
+              closeRootAndAllocator()
+            }
+          }
+        }
       }
     }
   }
