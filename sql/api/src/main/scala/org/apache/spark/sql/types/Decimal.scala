@@ -490,7 +490,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     if (decimalVal.eq(null) && other.decimalVal.eq(null) && _scale == other._scale) {
       if (longVal < other.longVal) -1 else if (longVal == other.longVal) 0 else 1
     } else {
-      toBigDecimal.compare(other.toBigDecimal)
+      toJavaBigDecimal.compareTo(other.toJavaBigDecimal)
     }
   }
 
