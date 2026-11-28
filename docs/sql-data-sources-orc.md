@@ -193,8 +193,10 @@ When reading from Hive metastore ORC tables and inserting to Hive metastore ORC 
     <td>
       If true, aggregates will be pushed down to ORC for optimization. Support MIN, MAX and
       COUNT as aggregate expression. For MIN/MAX, support boolean, integer, float and date
-      type. For COUNT, support all data types. If statistics is missing from any ORC file
-      footer, exception would be thrown.
+      type. For COUNT, support all data types. Aggregates are not pushed down when an
+      aggregated column has a default value for files without it, e.g. after
+      <code>ALTER TABLE ... ADD COLUMN ... DEFAULT</code>. If statistics is missing from any ORC
+      file footer, exception would be thrown.
     </td>
     <td>3.3.0</td>
   </tr>
