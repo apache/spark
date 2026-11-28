@@ -542,9 +542,9 @@ ORDER BY symbol
 -- !query analysis
 Sort [symbol#x ASC NULLS FIRST], true
 +- Project [symbol#x, 10#x]
-   +- Project [symbol#x, __pivot_max(__auto_generated_subquery_name.bid_price) AS `max(__auto_generated_subquery_name.bid_price)`#x[0] AS 10#x]
-      +- Aggregate [symbol#x], [symbol#x, pivotfirst(h#x, max(__auto_generated_subquery_name.bid_price)#x, 10, 0, 0) AS __pivot_max(__auto_generated_subquery_name.bid_price) AS `max(__auto_generated_subquery_name.bid_price)`#x]
-         +- Aggregate [symbol#x, h#x], [symbol#x, h#x, max(bid_price#x) AS max(__auto_generated_subquery_name.bid_price)#x]
+   +- Project [symbol#x, __pivot_max((IF((__auto_generated_subquery_name.h IN (CAST(10 AS INT))), __auto_generated_subquery_name.bid_price, CAST(NULL AS DECIMAL(5,2))))) AS `max(__auto_generated_subquery_name.bid_price)` AS `max(__auto_generated_subquery_name.bid_price)`#x[0] AS 10#x]
+      +- Aggregate [symbol#x], [symbol#x, pivotfirst(h#x, max(__auto_generated_subquery_name.bid_price)#x, 10, 0, 0) AS __pivot_max((IF((__auto_generated_subquery_name.h IN (CAST(10 AS INT))), __auto_generated_subquery_name.bid_price, CAST(NULL AS DECIMAL(5,2))))) AS `max(__auto_generated_subquery_name.bid_price)` AS `max(__auto_generated_subquery_name.bid_price)`#x]
+         +- Aggregate [symbol#x, if (h#x IN (cast(10 as int))) h#x else null], [symbol#x, if (h#x IN (cast(10 as int))) h#x else null AS h#x, max(if (h#x IN (cast(10 as int))) bid_price#x else null) AS max(__auto_generated_subquery_name.bid_price)#x]
             +- SubqueryAlias __auto_generated_subquery_name
                +- Project [symbol#x, bid_price#x, extract(hour, quote_time#x) AS h#x]
                   +- AsOfJoin (trade_time#x >= quote_time#x), (symbol#x = symbol#x), Inner
