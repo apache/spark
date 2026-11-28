@@ -1206,7 +1206,7 @@ class DataFrame(ParentDataFrame):
             normalizedCumWeights.append(normalizedCumWeights[-1] + v)
         j = 1
         length = len(normalizedCumWeights)
-        splits = []
+        splits: List[ParentDataFrame] = []
         while j < length:
             lowerBound = normalizedCumWeights[j - 1]
             upperBound = normalizedCumWeights[j]
@@ -1225,7 +1225,7 @@ class DataFrame(ParentDataFrame):
             splits.append(samplePlan)
             j += 1
 
-        return splits  # type: ignore[return-value]
+        return splits
 
     def observe(
         self,

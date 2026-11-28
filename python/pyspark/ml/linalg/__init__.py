@@ -1106,9 +1106,9 @@ class DenseMatrix(Matrix):
                 _format_float_list(self.values[:8]) + ["..."] + _format_float_list(self.values[-8:])
             )
 
-        entries = ", ".join(entries)  # type: ignore[assignment]
+        entries_str = ", ".join(entries)
         return "DenseMatrix({0}, {1}, [{2}], {3})".format(
-            self.numRows, self.numCols, entries, self.isTransposed
+            self.numRows, self.numCols, entries_str, self.isTransposed
         )
 
     def toArray(self) -> np.ndarray:
@@ -1268,11 +1268,11 @@ class SparseMatrix(Matrix):
         if len(self.colPtrs) > 16:
             colPtrs = colPtrs[:8] + ["..."] + colPtrs[-8:]
 
-        values = ", ".join(values)  # type: ignore[assignment]
-        rowIndices = ", ".join([str(ind) for ind in rowIndices])  # type: ignore[assignment]
-        colPtrs = ", ".join([str(ptr) for ptr in colPtrs])  # type: ignore[assignment]
+        values_str = ", ".join(values)
+        row_indices_str = ", ".join([str(ind) for ind in rowIndices])
+        col_ptrs_str = ", ".join([str(ptr) for ptr in colPtrs])
         return "SparseMatrix({0}, {1}, [{2}], [{3}], [{4}], {5})".format(
-            self.numRows, self.numCols, colPtrs, rowIndices, values, self.isTransposed
+            self.numRows, self.numCols, col_ptrs_str, row_indices_str, values_str, self.isTransposed
         )
 
     def __reduce__(self) -> Tuple[Type["SparseMatrix"], Tuple[int, int, bytes, bytes, bytes, int]]:
