@@ -1128,6 +1128,62 @@ trait MergeIntoSchemaEvolutionExtraSourceColumnTests extends MergeIntoSchemaEvol
     expectErrorWithoutEvolutionContains = "Cannot write extra fields"
   )
 
+  testNestedStructsEvolution(
+    "SPARK-59188: source has extra field for struct in array of arrays and set all columns")(
+    target = Seq(
+      """{ "pk": 0, "a": [[{ "c1": 1, "c2": "a" }], [{ "c1": 2, "c2": "b" }]],
+        | "dep": "sales" }""".stripMargin.replace("\n", ""),
+      """{ "pk": 1, "a": [[{ "c1": 1, "c2": "a" }], [{ "c1": 2, "c2": "b" }]],
+        | "dep": "hr" }""".stripMargin.replace("\n", "")
+    ),
+    source = Seq(
+      // Source has new column c3 in the struct nested two arrays deep
+      """{ "pk": 1, "a": [[{ "c1": 10, "c2": "c", "c3": true }],
+        | [{ "c1": 20, "c2": "d", "c3": false }]], "dep": "hr" }""".stripMargin.replace("\n", ""),
+      """{ "pk": 2, "a": [[{ "c1": 30, "c2": "d", "c3": false }],
+        | [{ "c1": 40, "c2": "e", "c3": true }]],
+        | "dep": "engineering" }""".stripMargin.replace("\n", "")
+    ),
+    targetSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("a", ArrayType(ArrayType(StructType(Seq(
+        StructField("c1", IntegerType),
+        StructField("c2", StringType)
+      ))))),
+      StructField("dep", StringType)
+    )),
+    sourceSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("a", ArrayType(ArrayType(StructType(Seq(
+        StructField("c1", IntegerType),
+        StructField("c2", StringType),
+        StructField("c3", BooleanType) // new column
+      ))))),
+      StructField("dep", StringType)
+    )),
+    cond = "t.pk = s.pk",
+    clauses = Seq(updateAll(), insertAll()),
+    result = Seq(
+      """{ "pk": 0, "a": [[{ "c1": 1, "c2": "a", "c3": null }],
+        | [{ "c1": 2, "c2": "b", "c3": null }]], "dep": "sales" }""".stripMargin.replace("\n", ""),
+      """{ "pk": 1, "a": [[{ "c1": 10, "c2": "c", "c3": true }],
+        | [{ "c1": 20, "c2": "d", "c3": false }]], "dep": "hr" }""".stripMargin.replace("\n", ""),
+      """{ "pk": 2, "a": [[{ "c1": 30, "c2": "d", "c3": false }],
+        | [{ "c1": 40, "c2": "e", "c3": true }]],
+        | "dep": "engineering" }""".stripMargin.replace("\n", "")
+    ),
+    resultSchema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("a", ArrayType(ArrayType(StructType(Seq(
+        StructField("c1", IntegerType),
+        StructField("c2", StringType),
+        StructField("c3", BooleanType)
+      ))))),
+      StructField("dep", StringType)
+    )),
+    expectErrorWithoutEvolutionContains = "Cannot write extra fields"
+  )
+
   testEvolution("source has extra field for struct in map and set all columns")(
     targetData = {
       val schema = StructType(Seq(
