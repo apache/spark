@@ -178,6 +178,11 @@ private[sql] object ArrowUtils {
   // `timestampNanosStructKey`, the tag lives on a child field so it cannot collide with user
   // metadata on the struct itself.
   private val calendarIntervalStructKey = "SPARK::calendarInterval::struct"
+  // Marks the wkb child of a GEOMETRY or GEOGRAPHY field in the lossless representation (see
+  // `toArrowField` with `losslessInternalTypes = true`). Such a field holds the WKB that each
+  // value was created from, instead of the little-endian WKB written for other consumers, so that
+  // a value read back has the bytes, and the hash, that it had when written.
+  private val geoWkbAsCreatedKey = "SPARK::geo::wkbAsCreated"
   private def toArrowMetaData(metadata: Metadata) = {
     if (metadata != null && !metadata.isEmpty) {
       Map(metadataKey -> metadata.json).asJava
@@ -307,7 +312,11 @@ private[sql] object ArrowUtils {
    *   (nanosecond timestamps, CalendarInterval) map to lossless struct representations instead.
    *   Only internal-storage callers with no external Arrow consumer (e.g. the Arrow-based Dataset
    *   cache) should pass true; interchange paths must keep the default. See
-   *   `toTimestampNanosStructField` for the full rationale.
+   *   `toTimestampNanosStructField` for the full rationale. Also, when true, the wkb child of each
+   *   GEOMETRY and GEOGRAPHY field, nested ones included, is tagged (see `geoWkbAsCreatedKey`) and
+   *   holds the WKB that each value was created from, which can be big-endian, instead of
+   *   little-endian WKB; a consumer whose declared field is not tagged converts such a column
+   *   instead of copying it.
    */
   def toArrowField(
       name: String,
@@ -389,7 +398,8 @@ private[sql] object ArrowUtils {
           false,
           toArrowType(BinaryType, timeZoneId, largeVarTypes),
           null,
-          Map("geometry" -> "true", "srid" -> g.srid.toString).asJava)
+          (Map("geometry" -> "true", "srid" -> g.srid.toString) ++
+            Option.when(losslessInternalTypes)(geoWkbAsCreatedKey -> "true")).asJava)
 
         new Field(
           name,
@@ -408,7 +418,8 @@ private[sql] object ArrowUtils {
           false,
           toArrowType(BinaryType, timeZoneId, largeVarTypes),
           null,
-          Map("geography" -> "true", "srid" -> g.srid.toString).asJava)
+          (Map("geography" -> "true", "srid" -> g.srid.toString) ++
+            Option.when(losslessInternalTypes)(geoWkbAsCreatedKey -> "true")).asJava)
 
         new Field(
           name,
@@ -572,7 +583,10 @@ private[sql] object ArrowUtils {
    * declared schema is the exact header the consumer will decode with, so congruence with it is
    * the complete correctness condition, not an approximation of it. Field names, nullability, and
    * metadata are ignored -- they do not affect the buffer layout -- except for Map entry
-   * children, whose names carry the key/value semantics (see mapEntryNamesMatchDeclared). The two
+   * children, whose names carry the key/value semantics (see mapEntryNamesMatchDeclared), and
+   * the tag of a GEOMETRY or GEOGRAPHY field whose WKB is kept as created (see
+   * geoWkbAsCreatedKey): such WKB can be big-endian, so a declared field without the tag rejects
+   * it, and the fallback writes little-endian WKB. The two
    * failure directions stay asymmetric: a false reject merely takes the row-based re-encoding
    * fallback (slower, still correct, and with the value-domain guards such as DATETIME_OVERFLOW
    * reinstated), while a false accept corrupts the stream -- so anything not provably congruent
@@ -580,6 +594,10 @@ private[sql] object ArrowUtils {
    */
   def isCompatibleWithDeclaredField(actual: Field, declared: Field): Boolean = {
     actual.getDictionary == null &&
+    // TODO: Let ColumnarArrowPythonInput copy the congruent columns of a batch and convert only
+    // the others, as ArrowBatchingDataWriter.canCopy decides per column for columnar writes.
+    // Today one tagged GEOMETRY or GEOGRAPHY column makes it convert the whole batch row by row.
+    (!isGeoWkbAsCreated(actual) || isGeoWkbAsCreated(declared)) &&
     sameLayoutArrowType(actual.getType, declared.getType) &&
     actual.getChildren.size == declared.getChildren.size &&
     mapEntryNamesMatchDeclared(actual, declared) &&
@@ -587,6 +605,15 @@ private[sql] object ArrowUtils {
       isCompatibleWithDeclaredField(a, d)
     }
   }
+
+  // Whether the field is the wkb child of a GEOMETRY or GEOGRAPHY field whose WKB is kept as each
+  // value was created (see `geoWkbAsCreatedKey`).
+  private def isGeoWkbAsCreated(field: Field): Boolean =
+    field.getMetadata.getOrDefault(geoWkbAsCreatedKey, "false") == "true"
+
+  /** Whether a GEOMETRY or GEOGRAPHY field holds the WKB that each value was created from. */
+  def keepsGeoWkbAsCreated(field: Field): Boolean =
+    field.getChildren.asScala.exists(isGeoWkbAsCreated)
 
   // An Arrow Map binds its key/value semantics to the entry-struct children by name (the spec
   // puts the key first and MapVector addresses the children as "key"/"value"), yet Arrow
@@ -705,7 +732,8 @@ private[sql] object ArrowUtils {
    *
    * @param losslessInternalTypes
    *   see `toArrowField`: opt-in full-domain struct encoding of nanosecond timestamps and
-   *   CalendarInterval for internal storage; interchange paths must keep the default.
+   *   CalendarInterval, and GEOMETRY and GEOGRAPHY WKB kept as created, for internal storage;
+   *   interchange paths must keep the default.
    */
   def toArrowSchema(
       schema: StructType,

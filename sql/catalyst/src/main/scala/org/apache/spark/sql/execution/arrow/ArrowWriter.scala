@@ -142,12 +142,14 @@ object ArrowWriter {
         val children = (0 until vector.size()).map { ordinal =>
           createFieldWriter(vector.getChildByOrdinal(ordinal))
         }
-        new GeometryWriter(dt, vector, children.toArray)
+        new GeometryWriter(
+          dt, vector, children.toArray, ArrowUtils.keepsGeoWkbAsCreated(vector.getField))
       case (dt: GeographyType, vector: StructVector) =>
         val children = (0 until vector.size()).map { ordinal =>
           createFieldWriter(vector.getChildByOrdinal(ordinal))
         }
-        new GeographyWriter(dt, vector, children.toArray)
+        new GeographyWriter(
+          dt, vector, children.toArray, ArrowUtils.keepsGeoWkbAsCreated(vector.getField))
       // The Arrow view types are readable through ArrowColumnVector but have no field writers.
       // Their Spark types resolve to the non-view vector cases above, so without this case they
       // would fall through to UNSUPPORTED_DATATYPE naming a fully supported Spark type; report
@@ -534,37 +536,47 @@ private[arrow] class StructWriter(
   }
 }
 
+// Writes the SRID and the WKB of each value. With `keepWkbAsCreated`, the WKB is copied as the
+// value was created; otherwise it is written as little-endian WKB.
 private[arrow] class GeographyWriter(
     dt: GeographyType,
     valueVector: StructVector,
-    children: Array[ArrowFieldWriter]) extends StructWriter(valueVector, children) {
+    children: Array[ArrowFieldWriter],
+    keepWkbAsCreated: Boolean) extends StructWriter(valueVector, children) {
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
     valueVector.setIndexDefined(count)
 
-    val geom = STUtils.deserializeGeog(input.getBinaryView(ordinal), dt)
-    val bytes = geom.getBytes
-    val srid = geom.getSrid
-
-    val row = InternalRow(srid, bytes)
+    val value = input.getBinaryView(ordinal)
+    val row = if (keepWkbAsCreated) {
+      InternalRow(STUtils.geoSrid(value), STUtils.geoWkbAsCreated(value))
+    } else {
+      val geog = STUtils.deserializeGeog(value, dt)
+      InternalRow(geog.getSrid, geog.getBytes)
+    }
     children(0).write(row, 0)
     children(1).write(row, 1)
   }
 }
 
+// Writes the SRID and the WKB of each value. With `keepWkbAsCreated`, the WKB is copied as the
+// value was created; otherwise it is written as little-endian WKB.
 private[arrow] class GeometryWriter(
     dt: GeometryType,
     valueVector: StructVector,
-    children: Array[ArrowFieldWriter]) extends StructWriter(valueVector, children) {
+    children: Array[ArrowFieldWriter],
+    keepWkbAsCreated: Boolean) extends StructWriter(valueVector, children) {
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
     valueVector.setIndexDefined(count)
 
-    val geom = STUtils.deserializeGeom(input.getBinaryView(ordinal), dt)
-    val bytes = geom.getBytes
-    val srid = geom.getSrid
-
-    val row = InternalRow(srid, bytes)
+    val value = input.getBinaryView(ordinal)
+    val row = if (keepWkbAsCreated) {
+      InternalRow(STUtils.geoSrid(value), STUtils.geoWkbAsCreated(value))
+    } else {
+      val geom = STUtils.deserializeGeom(value, dt)
+      InternalRow(geom.getSrid, geom.getBytes)
+    }
     children(0).write(row, 0)
     children(1).write(row, 1)
   }

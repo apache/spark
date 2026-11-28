@@ -29,11 +29,13 @@ import org.apache.arrow.vector.complex.{MapVector, StructVector}
 import org.apache.arrow.vector.types.pojo.{ArrowType, Field, FieldType}
 
 import org.apache.spark.{SparkConf, SparkException, SparkUnsupportedOperationException, TaskContext}
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow}
+import org.apache.spark.sql.catalyst.util.STUtils
 import org.apache.spark.sql.columnar.CachedBatch
 import org.apache.spark.sql.execution.arrow.ArrowWriter
+import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
 import org.apache.spark.sql.types._
@@ -2606,6 +2608,68 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
       } finally {
         cached.unpersist()
       }
+    }
+  }
+
+  test("SPARK-61081: geometry and geography keep their WKB bytes through the cache") {
+    // POINT(1 2) as little-endian and as big-endian WKB. The cached plan keeps reporting its hash
+    // partitioning on `g`, which holds only if each value reads back with the bytes it was hashed
+    // from.
+    val littleEndian = "X'0101000000000000000000F03F0000000000000040'"
+    val bigEndian = "X'00000000013FF00000000000004000000000000000'"
+    val hashes = Seq("hash(g)", "hash(s)", "hash(a)", "hash(map_values(m))")
+    Seq("ST_GeomFromWKB(%s, 4326)", "ST_GeogFromWKB(%s)").foreach { fromWkb =>
+      Seq(false, true).foreach { vectorized =>
+        withSQLConf(SQLConf.CACHE_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+          val input = spark.sql(
+            "SELECT g, named_struct('g', g) AS s, array(g) AS a, map(1, g) AS m FROM (" +
+              s"SELECT ${fromWkb.format(littleEndian)} AS g UNION ALL " +
+              s"SELECT ${fromWkb.format(bigEndian)} AS g)")
+            .repartition(8, $"g")
+          def groups(df: DataFrame): DataFrame =
+            df.groupBy($"g").count().selectExpr("hash(g)", "count")
+          val expectedHashes = input.selectExpr(hashes: _*).collect().toSeq
+          val expectedGroups = groups(input).collect().toSeq
+          val cached = input.cache()
+          try {
+            checkAnswer(cached.selectExpr(hashes: _*), expectedHashes)
+            checkAnswer(groups(cached), expectedGroups)
+            checkAnswer(cached.selectExpr("count(DISTINCT g)"), Row(2))
+          } finally {
+            cached.unpersist()
+            InMemoryRelation.clearSerializer()
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-61081: geometry and geography from non-Arrow columnar input keep their WKB bytes") {
+    // POINT(1 2) as big-endian WKB, which the cache must not re-encode as little-endian WKB.
+    val bigEndian = "00000000013FF00000000000004000000000000000"
+      .grouped(2).map(Integer.parseInt(_, 16).toByte).toArray
+    val conf = spark.sessionState.conf
+    val ser = new ArrowCachedBatchSerializer
+    Seq[(DataType, Array[Byte])](
+      (GeometryType(4326), STUtils.stGeomFromWKB(bigEndian, 4326).getBytes),
+      (GeographyType(4326), STUtils.stGeogFromWKB(bigEndian, 4326).getBytes)).foreach {
+      case (dt, physical) =>
+        val schema = Seq(AttributeReference("g", dt, nullable = true)())
+        val batchRdd = spark.sparkContext.parallelize(Seq(0), 1).mapPartitions { _ =>
+          val vector = new OnHeapColumnVector(1, dt)
+          vector.putByteArray(0, physical)
+          Iterator(new ColumnarBatch(Array[ColumnVector](vector), 1))
+        }
+        val cached = ser.convertColumnarBatchToCachedBatch(
+          batchRdd, schema, StorageLevel.MEMORY_ONLY, conf)
+        cached.persist()
+        try {
+          val values = ser.convertCachedBatchToInternalRow(cached, schema, schema, conf)
+            .map(_.getBinaryView(0).getBytes.clone()).collect()
+          assert(values.length == 1 && values.head.sameElements(physical), dt.toString)
+        } finally {
+          cached.unpersist()
+        }
     }
   }
 
