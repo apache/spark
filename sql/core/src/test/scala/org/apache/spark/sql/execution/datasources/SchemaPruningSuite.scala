@@ -524,6 +524,16 @@ abstract class SchemaPruningSuite
     checkAnswer(query, Row(true) :: Row(true) :: Nil)
   }
 
+  testSchemaPruning("select ArrayAggregate over nested fields of array of struct") {
+    val query = spark.table("contacts")
+      .where("p = 1")
+      .selectExpr(
+        "aggregate(friends, '', (acc, f) -> concat(acc, f.last), acc -> concat(name.first, acc))")
+
+    checkScan(query, "struct<name:struct<first:string>,friends:array<struct<last:string>>>")
+    checkAnswer(query, Row("JaneSmith") :: Row("John") :: Nil)
+  }
+
   testSchemaPruning("select nested field returned by ArrayFilter") {
     val query = spark.table("contacts")
       .where("p = 1")
