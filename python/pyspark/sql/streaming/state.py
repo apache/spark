@@ -216,8 +216,8 @@ class GroupState:
             raise PySparkRuntimeError(
                 errorClass="CANNOT_WITHOUT",
                 messageParameters={
-                    "condition1": "set timeout duration",
-                    "condition2": "enabling processing time timeout in applyInPandasWithState",
+                    "condition1": "set timeout timestamp",
+                    "condition2": "enabling event time timeout in applyInPandasWithState",
                 },
             )
 
