@@ -340,6 +340,33 @@ class CollationAggregationSuite
     }
   }
 
+  test("SortAggregateExec groups collated keys holding a calendar interval") {
+    // max over the STRING column rules out hash and object-hash aggregation, so the plan
+    // runs SortAggregateExec without conf changes. A (collated string, interval) key
+    // reaches the group checker with an interval field, which the interpreted ordering
+    // cannot compare; the checker uses the generated comparator, where the interval
+    // compares with CalendarInterval.compareTo. ('foo', 1 day) and ('FOO', 1 day) are
+    // one group, while ('foo', 2 days) is a separate group even though its collated
+    // string matches.
+    val result = sql(
+      """
+        |SELECT iv, SUM(v) AS total, MAX(name) AS longest
+        |FROM (
+        |  SELECT CAST(s AS STRING COLLATE UTF8_LCASE) AS s,
+        |         make_interval(0, 0, 0, d) AS iv, name, v
+        |  FROM VALUES
+        |    ('foo', 1, 'a', 1), ('FOO', 1, 'b', 2), ('foo', 2, 'c', 4)
+        |  AS data(s, d, name, v)
+        |)
+        |GROUP BY s, iv
+        |ORDER BY total
+        |""".stripMargin)
+    assertUsesSortAggregate(result)
+    checkAnswer(result, Seq(
+      Row(new CalendarInterval(0, 1, 0L), 3L, "b"),
+      Row(new CalendarInterval(0, 2, 0L), 4L, "c")))
+  }
+
   // collect_set is non-deterministic in which representative of a collation-equal group it keeps,
   // so tests assert on a collation-collapsed form (lower(...)) rather than a fixed case.
 

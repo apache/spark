@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, SpecificInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, CalendarIntervalType, Decimal, DecimalType, GeographyType, GeometryType, IntegerType, LongType, MapType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, CalendarIntervalType, Decimal, DecimalType, GeographyType, GeometryType, IntegerType, LongType, MapType, StringType, StructField, StructType, TestUDT}
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.hash.Murmur3_x86_32
 import org.apache.spark.unsafe.types.{BinaryView, CalendarInterval, UTF8String}
@@ -387,6 +387,126 @@ class UnsafeRowUtilsSuite extends SparkFunSuite with SQLConfHelper {
               row.getSizeInBytes) == expectedHash)
           }
         }
+    }
+  }
+
+  test("rowEqualityChecker for binary-stable and collated grouping keys") {
+    val collatedString = StringType(CollationFactory.collationNameToId("UTF8_LCASE"))
+    val schema = StructType(Seq(
+      StructField("s", collatedString, nullable = false),
+      StructField("i", IntegerType, nullable = false)))
+    val projection = UnsafeProjection.create(schema)
+    def key(s: String, i: Int): UnsafeRow = {
+      val row = new SpecificInternalRow(schema)
+      row.update(0, UTF8String.fromString(s))
+      row.setInt(1, i)
+      projection(row).copy()
+    }
+
+    // The collated checker comes in two forms -- with and without the byte pre-check --
+    // which agree on which keys are equal and differ only in whether byte-identical keys
+    // take a shortcut past the interpreted ordering. Both are exercised below.
+    val binaryCheckers = Seq(true, false).map { checkBytesFirst =>
+      UnsafeRowUtils.rowEqualityChecker(Seq(StringType, IntegerType), checkBytesFirst)
+    }
+    val collatedCheckers = Seq(true, false).map { checkBytesFirst =>
+      UnsafeRowUtils.rowEqualityChecker(Seq(collatedString, IntegerType), checkBytesFirst)
+    }
+
+    // Byte-identical keys are equal under every checker.
+    val foo1 = key("foo", 1)
+    for (checker <- binaryCheckers ++ collatedCheckers) {
+      assert(checker(foo1, key("foo", 1)))
+    }
+
+    // 'foo' and 'FOO' differ in bytes, so they are equal only under the collated checkers.
+    for (checker <- binaryCheckers) {
+      assert(!checker(foo1, key("FOO", 1)))
+    }
+    for (checker <- collatedCheckers) {
+      assert(checker(foo1, key("FOO", 1)))
+    }
+
+    // The collated checkers still compare the remaining fields, and distinguish values
+    // that differ under the collation.
+    for (checker <- collatedCheckers) {
+      assert(!checker(foo1, key("foo", 2)))
+      assert(!checker(foo1, key("FOO", 2)))
+      assert(!checker(foo1, key("bar", 1)))
+    }
+  }
+
+  test("rowEqualityChecker for grouping keys holding a CALENDAR INTERVAL") {
+    // The interpreted ordering cannot compare a CALENDAR INTERVAL (its physical ordering
+    // throws), so a key whose types hold one must use the generated comparator, which
+    // compares intervals with CalendarInterval.compareTo.
+    val collatedString = StringType(CollationFactory.collationNameToId("UTF8_LCASE"))
+    val schema = StructType(Seq(
+      StructField("s", collatedString, nullable = false),
+      StructField("iv", CalendarIntervalType, nullable = false)))
+    val projection = UnsafeProjection.create(schema)
+    def key(s: String, days: Int): UnsafeRow = {
+      val row = new SpecificInternalRow(schema)
+      row.update(0, UTF8String.fromString(s))
+      row.update(1, new CalendarInterval(0, days, 0L))
+      projection(row).copy()
+    }
+
+    // Both checkBytesFirst forms, which agree on which keys are equal.
+    val checkers = Seq(true, false).map { checkBytesFirst =>
+      UnsafeRowUtils.rowEqualityChecker(
+        Seq(collatedString, CalendarIntervalType), checkBytesFirst)
+    }
+
+    val fooOneDay = key("foo", 1)
+    for (checker <- checkers) {
+      // Byte-identical keys are equal.
+      assert(checker(fooOneDay, key("foo", 1)))
+      // Keys differing only in the string's case are equal under the collation.
+      assert(checker(fooOneDay, key("FOO", 1)))
+      // Keys whose intervals differ are unequal, whether or not the strings match.
+      assert(!checker(fooOneDay, key("foo", 2)))
+      assert(!checker(fooOneDay, key("FOO", 2)))
+    }
+  }
+
+  test("rowEqualityChecker for grouping keys holding a user-defined type") {
+    // The interpreted ordering unwraps a user-defined type only when a key field
+    // itself is one, so a key holding one inside an array or map reaches a physical
+    // ordering that does not support it; a key whose types hold one must use the
+    // generated comparator, which compares the user-defined type through its SQL
+    // type at every depth.
+    val collatedString = StringType(CollationFactory.collationNameToId("UTF8_LCASE"))
+    val udtArray = ArrayType(new TestUDT.MyDenseVectorUDT, containsNull = false)
+    val schema = StructType(Seq(
+      StructField("s", collatedString, nullable = false),
+      StructField("arr", udtArray, nullable = false)))
+    val projection = UnsafeProjection.create(schema)
+    def key(s: String, xs: Double*): UnsafeRow = {
+      val row = new SpecificInternalRow(schema)
+      row.update(0, UTF8String.fromString(s))
+      // The internal form of the array field is one array of the SQL type's representation
+      // (an array of doubles) per user-defined value.
+      val vectors =
+        new GenericArrayData(Seq(new GenericArrayData(xs.map(_.asInstanceOf[Any]).toArray)))
+      row.update(1, vectors)
+      projection(row).copy()
+    }
+
+    // Both checkBytesFirst forms, which agree on which keys are equal.
+    val checkers = Seq(true, false).map { checkBytesFirst =>
+      UnsafeRowUtils.rowEqualityChecker(Seq(collatedString, udtArray), checkBytesFirst)
+    }
+
+    val fooOneTwo = key("foo", 1.0, 2.0)
+    for (checker <- checkers) {
+      // Byte-identical keys are equal.
+      assert(checker(fooOneTwo, key("foo", 1.0, 2.0)))
+      // Keys differing only in the string's case are equal under the collation.
+      assert(checker(fooOneTwo, key("FOO", 1.0, 2.0)))
+      // Keys whose arrays differ are unequal, whether or not the strings match.
+      assert(!checker(fooOneTwo, key("foo", 3.0, 4.0)))
+      assert(!checker(fooOneTwo, key("FOO", 3.0, 4.0)))
     }
   }
 
