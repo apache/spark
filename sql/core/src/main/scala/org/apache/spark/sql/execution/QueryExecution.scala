@@ -48,7 +48,9 @@ import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableU
 import org.apache.spark.sql.execution.datasources.v2.{TransactionalExec, V2TableRefreshUtil}
 import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
 import org.apache.spark.sql.execution.exchange.{EnablePipelinedShuffle, EnsureRequirements, PipelinedShuffleEligibility, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange.DistributedPipelinedShuffle
 import org.apache.spark.sql.execution.joins.ChoosePerPartitionRuntimeFilters
+import org.apache.spark.sql.execution.metric.SQLLastAttemptAccumulator
 import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
 import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqMetadata
 import org.apache.spark.sql.execution.streaming.runtime.{IncrementalExecution, InsertShuffleBeforeStatefulCartesianProduct, WatermarkPropagator}
@@ -411,6 +413,7 @@ class QueryExecution(
   /**
    * RDD consumers and partition-at-a-time iterators can outlive one SQL job. Give them a
    * separate plan whose shuffles retain output, without changing this execution's plan.
+   * Distributed batch reuses the ordinary child prepared by the rule. In laptop mode we replan.
    * Reuse one fallback per execution and retain its session for lazy planning and AQE.
    * Closing that session here would stop the shared SparkContext.
    */
@@ -421,7 +424,13 @@ class QueryExecution(
       case q: QueryStageExec => hasShuffle(q.plan)
       case other => other.children.exists(hasShuffle)
     }
-    if (!sparkSession.sessionState.conf.localPipelinedShuffleEnabled ||
+    if (!sparkSession.sparkContext.isLocal &&
+        sparkSession.sessionState.conf.getConf(SQLConf.DISTRIBUTED_PIPELINED_SHUFFLE_ENABLED)) {
+      executedPlan match {
+        case p: exchange.PipelinedShuffleResultExec => withExecutedPlan(p.child)
+        case _ => this
+      }
+    } else if (!sparkSession.sessionState.conf.localPipelinedShuffleEnabled ||
         !PipelinedShuffleEligibility.enabled(executedPlan, sparkSession.sessionState.conf) ||
         !hasShuffle(executedPlan)) {
       this
@@ -435,6 +444,29 @@ class QueryExecution(
   }
 
   private[sql] def withRegularShuffle: QueryExecution = lazyRegularShuffle.get
+
+  // Keep only the last completed action's RDD scopes. Listener views retain their own plan.
+  @volatile private var completedScopes: Option[Either[String, Seq[String]]] = None
+  private[execution] def metricScopes: Either[String, Seq[String]] = completedScopes.getOrElse {
+    val plan = executedPlan match {
+      case p: exchange.PipelinedShuffleResultExec => p.child
+      case other => other
+    }
+    SQLLastAttemptAccumulator.extractStageRDDScopes(plan)
+  }
+  private[execution] def recordMetricScopes(): Unit = {
+    if (completedScopes.isDefined) completedScopes = None
+  }
+
+  private[execution] def withExecutedPlan(plan: SparkPlan): QueryExecution =
+    new QueryExecution(sparkSession, commandExecuted, tracker, mode, shuffleCleanupModeOpt,
+        refreshPhaseEnabled, analyzerOpt = Some(analyzer)) {
+      override def executedPlan: SparkPlan = plan
+      override val id: Long = QueryExecution.this.id
+      override def recordMetricScopes(): Unit = {
+        QueryExecution.this.completedScopes = Some(metricScopes)
+      }
+    }
 
   val lazyToRdd = LazyTry {
     new SQLExecutionRDD(
@@ -466,8 +498,9 @@ class QueryExecution(
   }
 
   protected def preparations: Seq[Rule[SparkPlan]] = {
-    QueryExecution.preparations(sparkSession,
+    val rules = QueryExecution.preparations(sparkSession,
       Option(InsertAdaptiveSparkPlan(AdaptiveExecutionContext(sparkSession, this))), false)
+    if (transactionOpt.isDefined) rules.filterNot(_ eq DistributedPipelinedShuffle) else rules
   }
 
   protected def executePhase[T](phase: String)(block: => T): T = sparkSession.withActive {
@@ -891,7 +924,7 @@ object QueryExecution {
       (if (subquery) {
         Nil
       } else {
-        Seq(ReuseExchangeAndSubquery)
+        Seq(ReuseExchangeAndSubquery, DistributedPipelinedShuffle)
       }) ++
       // Opt-in (SPARK-57399): runs last so it observes the final reuse decision (a reused
       // exchange means fan-out, which it refuses to make pipelined).

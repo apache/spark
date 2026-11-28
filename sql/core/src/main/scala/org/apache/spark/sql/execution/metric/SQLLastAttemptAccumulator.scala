@@ -256,7 +256,7 @@ trait SQLLastAttemptAccumulator[IN, OUT, PARTIAL, DRIVER_ACC]
       case None => // pass
     }
     // Otherwise, gather the RDD scopes from the plan and find metric updates from these scopes.
-    val scopes = SQLLastAttemptAccumulator.extractStageRDDScopes(qe.executedPlan)
+    val scopes = qe.metricScopes
     scopes match {
       case Left(bailOutReason) =>
         unexpectedLastAttemptMetricOperation(
@@ -292,7 +292,8 @@ trait SQLLastAttemptAccumulator[IN, OUT, PARTIAL, DRIVER_ACC]
 
 object SQLLastAttemptAccumulator extends Logging {
 
-  private[metric] def extractStageRDDScopes(sparkPlan: SparkPlan): Either[String, Seq[String]] = {
+  private[execution] def extractStageRDDScopes(
+      sparkPlan: SparkPlan): Either[String, Seq[String]] = {
     var bailOutReason: Option[String] = None
 
     // recurse, setting the bailOutReason on failure, or returning the list of scopes on success.

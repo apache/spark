@@ -206,6 +206,14 @@ case class ShuffleExchangeExec(
 
   override def nodeName: String = "Exchange"
 
+  // Batch and streaming RTM rules mark existing exchanges. A case-class copy drops TreeNode tags,
+  // including the link to the logical plan, so preserve them when enabling pipelined shuffle.
+  private[sql] def withPipelinedShuffle: ShuffleExchangeExec = {
+    val marked = copy(pipelined = true)
+    marked.copyTagsFrom(this)
+    marked
+  }
+
   // The default arg string is positional, so printing `pipelined` unconditionally would add a bare
   // `false` to every shuffle in every plan. Show it only when set, and name it when shown.
   override def stringArgs: Iterator[Any] = {
@@ -213,7 +221,9 @@ case class ShuffleExchangeExec(
     // the child on its own. Exchange's `[plan_id=...]` suffix is re-appended here.
     val argsWithoutPipelined = productIterator.toSeq.dropRight(1).iterator
     val pipelinedArg = if (pipelined) Iterator("isPipelined=true") else Iterator.empty
-    argsWithoutPipelined ++ pipelinedArg ++ Iterator(s"[plan_id=$id]")
+    val candidate = getTagValue(DistributedPipelinedShuffle.candidate)
+      .iterator.map(_ => "batchPipelinedCandidate=true")
+    argsWithoutPipelined ++ pipelinedArg ++ candidate ++ Iterator(s"[plan_id=$id]")
   }
 
   private lazy val serializer: Serializer =
@@ -247,6 +257,10 @@ case class ShuffleExchangeExec(
 
   override def shuffleId: Int = shuffleDependency.shuffleId
 
+  // Cleanup after a failed prefix must not construct dependencies or start broadcast jobs.
+  @transient @volatile private var allocatedShuffleId: Option[Int] = None
+  private[exchange] def initializedShuffleId: Option[Int] = allocatedShuffleId
+
   /**
    * A [[ShuffleDependency]] that will partition rows of its child based on
    * the partitioning scheme defined in `newPartitioning`. Those partitions of
@@ -265,6 +279,7 @@ case class ShuffleExchangeExec(
         serializer,
         writeMetrics,
         pipelined)
+      allocatedShuffleId = Some(dep.shuffleId)
       metrics("numPartitions").set(dep.partitioner.numPartitions)
       val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
       SQLMetrics.postDriverMetricUpdates(

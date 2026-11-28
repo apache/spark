@@ -91,3 +91,35 @@ case class ReusedExchangeExec(override val output: Seq[Attribute], child: Exchan
        |""".stripMargin
   }
 }
+
+/** Partial reads use ordinary shuffle because unread partitions can block pipelined writers. */
+private[sql] case class PipelinedShuffleResultExec(child: SparkPlan, exchangeIds: Set[Int])
+  extends UnaryExecNode {
+  override def output: Seq[Attribute] = child.output
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+  override def outputPartitioning: Partitioning = child.outputPartitioning
+
+  @transient private val fullInput = DistributedPipelinedShuffle.pipeline(child, exchangeIds)
+
+  private def collectPlan(): SparkPlan = {
+    val id = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+    if (id == null) return child
+    val qe = SQLExecution.getQueryExecution(id.toLong)
+    if (qe == null || !(qe.executedPlan eq this)) return child
+    // Exchanges cache their shuffle dependencies. Clone the plan so each SQL execution gets fresh
+    // shuffle IDs even when a previous action on the same Dataset has cleaned up its shuffles.
+    val selected = fullInput.clone()
+    selected.setTagValue(DistributedPipelinedShuffle.ownsShuffles, ())
+    SQLExecution.updatePhysicalPlan(id.toLong, qe.withExecutedPlan(selected))
+    selected
+  }
+
+  override def executeCollect(): Array[InternalRow] = collectPlan().executeCollect()
+  override private[spark] def executeCollectIterator(): (Long, Iterator[InternalRow]) = {
+    val plan = if (child.isInstanceOf[TakeOrderedAndProjectExec]) child else collectPlan()
+    plan.executeCollectIterator()
+  }
+  override protected def doExecute(): RDD[InternalRow] = child.execute()
+  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
+    copy(child = newChild)
+}
