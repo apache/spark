@@ -317,3 +317,34 @@ PIVOT (
   FOR course IN ('dotNET', 'Java')
 ) pv
 JOIN years y ON pv.year = y.y;
+
+-- pivot with star arguments nested in the aggregates: every star-expanded column, including the
+-- pivot column, is referenced by the aggregates and drops out of the implicit grouping
+SELECT * FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  count(DISTINCT *)
+  FOR course IN ('dotNET', 'Java')
+);
+
+SELECT * FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  max(struct(*))
+  FOR course IN ('dotNET', 'Java')
+);
+
+-- pivot with a star that cannot be expanded in the aggregates
+SELECT * FROM courseSales
+PIVOT (
+  *
+  FOR year IN (2012, 2013)
+);
+
+SELECT * FROM courseSales
+PIVOT (
+  * IN (1, 2)
+  FOR year IN (2012, 2013)
+);
