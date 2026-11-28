@@ -509,6 +509,22 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           errorClass = "UNSUPPORTED_FEATURE.OVERWRITE_BY_SUBQUERY",
           messageParameters = Map.empty)
 
+      case i: InsertIntoSuppliedRelation
+          if i.replaceWhere.exists(_.exists(_.isInstanceOf[SubqueryExpression])) =>
+        i.replaceWhere.get.failAnalysis(
+          errorClass = "UNSUPPORTED_FEATURE.OVERWRITE_BY_SUBQUERY",
+          messageParameters = Map.empty)
+
+      case i: InsertIntoSuppliedRelation
+          if i.replaceWhere.exists(c => c.resolved && c.dataType != BooleanType) =>
+        val condition = i.replaceWhere.get
+        condition.failAnalysis(
+          errorClass = "DATATYPE_MISMATCH.FILTER_NOT_BOOLEAN",
+          messageParameters = Map(
+            "sqlExpr" -> toSQLExpr(condition),
+            "filter" -> toSQLExpr(condition),
+            "type" -> toSQLType(condition.dataType)))
+
       case p: PlanWithUnresolvedIdentifier if !p.identifierExpr.resolved =>
         p.identifierExpr.failAnalysis(
           errorClass = "NOT_A_CONSTANT_STRING.NOT_CONSTANT",

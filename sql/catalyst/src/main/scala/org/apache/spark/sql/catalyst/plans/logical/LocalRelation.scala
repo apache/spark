@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LOCAL_RELATION, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -122,4 +122,21 @@ case class LocalRelation(
   override def maxRows: Option[Long] = Some(data.length.toLong)
 
   override val nodePatterns: Seq[TreePattern] = Seq(LOCAL_RELATION)
+}
+
+/**
+ * INSERT whose target resolved to a caller-supplied overlay relation. Analysis
+ * only: the statement is not executed.
+ */
+case class InsertIntoSuppliedRelation(
+    table: LocalRelation,
+    query: LogicalPlan,
+    replaceWhere: Option[Expression] = None) extends UnaryCommand {
+  override def child: LogicalPlan = query
+  // The REPLACE WHERE condition is resolved against the supplied relation, not the query.
+  override def inputSet: AttributeSet = table.outputSet
+  override protected def withNewChildInternal(
+      newChild: LogicalPlan): InsertIntoSuppliedRelation = {
+    copy(query = newChild)
+  }
 }

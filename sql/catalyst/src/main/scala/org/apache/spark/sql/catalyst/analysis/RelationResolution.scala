@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.catalog.{
   TemporaryViewRelation,
   UnresolvedCatalogRelation
 }
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.catalog.{
   CatalogManager,
@@ -245,6 +245,19 @@ class RelationResolution(
   def resolveRelation(
       u: UnresolvedRelation,
       timeTravelSpec: Option[TimeTravelSpec] = None): Option[LogicalPlan] = {
+    if (u.getTagValue(SuppliedRelationRegistry.CATALOG_TARGET_TAG).isDefined) {
+      // A catalog-only command target is never replaced by a supplied relation.
+      SuppliedRelationRegistry.create(Nil).runWith {
+        resolveAnyRelation(u, timeTravelSpec)
+      }
+    } else {
+      resolveAnyRelation(u, timeTravelSpec)
+    }
+  }
+
+  private def resolveAnyRelation(
+      u: UnresolvedRelation,
+      timeTravelSpec: Option[TimeTravelSpec]): Option[LogicalPlan] = {
     val isWriteTarget = u.options.containsKey(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)
     val hasTimeTravelWriteOptions =
       isWriteTarget && CatalogV2Util.containsTimeTravelOptions(u.options)
@@ -267,14 +280,16 @@ class RelationResolution(
     val isTimeTravel = finalTimeTravelSpec.isDefined || hasTimeTravelWriteOptions
     val identifier = u.multipartIdentifier
 
-    // system.session.v (3 parts): only local temp view by name; same as SessionCatalog matching.
+    // system.session.v (3 parts): overlay, then local temp view by name.
     if (CatalogManager.isFullyQualifiedSystemSessionViewName(identifier)) {
       val normalized = normalizeSessionQualifiedViewIdentifier(identifier)
-      return resolveTempView(
-        normalized,
-        u.isStreaming,
-        isTimeTravel
-      )
+      return lookupSuppliedRelation(
+        SuppliedRelationRegistry.sessionIdentity(identifier.last)).orElse(
+        resolveTempView(
+          normalized,
+          u.isStreaming,
+          isTimeTravel
+        ))
     }
 
     // Two-part session.v: local temp view `v`, or persistent relation `v` in schema `session`.
@@ -282,8 +297,10 @@ class RelationResolution(
     if (identifier.length == 2 &&
         identifier.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
       val viewNameOnly = Seq(identifier.last)
+      val sessionIdent = SuppliedRelationRegistry.sessionIdentity(identifier.last)
       val tempSession = () =>
-        resolveTempView(viewNameOnly, u.isStreaming, isTimeTravel)
+        lookupSuppliedRelation(sessionIdent).orElse(
+          resolveTempView(viewNameOnly, u.isStreaming, isTimeTravel))
       val persistentSessionDb = () =>
         tryResolvePersistent(u, identifier, finalTimeTravelSpec)
       return if (conf.prioritizeSystemCatalog) {
@@ -293,14 +310,19 @@ class RelationResolution(
       }
     }
 
-    // Multi-part (but not session-qualified): try temp view first (e.g. global_temp.tbl1), then
-    // persistent.
+    // Multi-part (but not session-qualified): overlay and temp view (e.g. global_temp.tbl1),
+    // then persistent.
     if (identifier.length > 1) {
-      return resolveTempView(
-        identifier,
-        u.isStreaming,
-        isTimeTravel
-      ).orElse(tryResolvePersistent(u, identifier, finalTimeTravelSpec))
+      val globalOverlay =
+        if (identifier.length == 2 && v1SessionCatalog.isGlobalTempViewDB(identifier.head)) {
+          lookupSuppliedRelation(
+            SuppliedRelationRegistry.canonicalize(catalogManager, identifier))
+        } else {
+          None
+        }
+      return globalOverlay
+        .orElse(resolveTempView(identifier, u.isStreaming, isTimeTravel))
+        .orElse(tryResolvePersistent(u, identifier, finalTimeTravelSpec))
     }
 
     // 1-part name: try each step in [[relationResolutionSteps]] order (from
@@ -309,7 +331,9 @@ class RelationResolution(
     for (step <- steps) {
       val result = step match {
         case SessionScopeStep =>
-          resolveTempView(identifier, u.isStreaming, isTimeTravel)
+          lookupSuppliedRelation(
+            SuppliedRelationRegistry.sessionIdentity(identifier.head)).orElse(
+            resolveTempView(identifier, u.isStreaming, isTimeTravel))
         case PersistentCatalogStep(prefix) =>
           tryResolvePersistent(u, prefix ++ identifier, finalTimeTravelSpec)
       }
@@ -319,12 +343,26 @@ class RelationResolution(
   }
 
   /**
+   * Schema-only stand-in for a caller-supplied relation identity. Eclipses the
+   * real object of that identity for this analysis.
+   */
+  private def lookupSuppliedRelation(identity: Seq[String]): Option[LogicalPlan] = {
+    SuppliedRelationRegistry.lookup(identity, conf.resolver).map { schema =>
+      val local = LocalRelation(schema)
+      local.setTagValue(SuppliedRelationRegistry.IDENTITY_TAG, identity)
+      SubqueryAlias(identity, local)
+    }
+  }
+
+  /**
    * Try to resolve the identifier as a persistent table/view (current catalog/namespace).
    */
   private def tryResolvePersistent(
       u: UnresolvedRelation,
       identifier: Seq[String],
       finalTimeTravelSpec: Option[TimeTravelSpec]): Option[LogicalPlan] = {
+    val supplied = lookupSuppliedPersistentRelation(identifier)
+    if (supplied.isDefined) return supplied
     expandIdentifier(identifier) match {
       case CatalogAndIdentifier(catalog, ident) =>
         val planId = u.getTagValue(LogicalPlan.PLAN_ID_TAG)
@@ -456,6 +494,19 @@ class RelationResolution(
             }
           }
       case _ => None
+    }
+  }
+
+  /** A caller-supplied relation whose identity is `identifier` qualified as persistent. */
+  private def lookupSuppliedPersistentRelation(identifier: Seq[String]): Option[LogicalPlan] = {
+    if (SuppliedRelationRegistry.get().isEmpty) {
+      None
+    } else {
+      expandIdentifier(identifier) match {
+        case CatalogAndIdentifier(catalog, ident) =>
+          lookupSuppliedRelation(ident.toQualifiedNameParts(catalog))
+        case _ => None
+      }
     }
   }
 

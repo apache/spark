@@ -192,7 +192,12 @@ object ResolveExecuteImmediate {
       if (parsedPlan.isInstanceOf[CompoundBody]) {
         throw QueryCompilationErrors.sqlScriptInExecuteImmediate(sqlString)
       }
-      session.sessionState.analyzer.executeAndCheck(parsedPlan, new QueryPlanningTracker)
+      // A parse_sql call analyzes its payload with the call's own analyzer, and the payload sees
+      // only session variables, not the supplied locals.
+      val analyzer = CallAnalyzerRegistry.get().getOrElse(session.sessionState.analyzer)
+      SuppliedVariableRegistry.withoutLocals {
+        analyzer.executeAndCheck(parsedPlan, new QueryPlanningTracker)
+      }
     }
   }
 

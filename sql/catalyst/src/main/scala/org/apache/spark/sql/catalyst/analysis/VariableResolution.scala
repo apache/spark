@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import java.util.Locale
 
 import org.apache.spark.sql.catalyst.{SQLConfHelper, SqlScriptingContextManager}
-import org.apache.spark.sql.catalyst.catalog.TempVariableManager
+import org.apache.spark.sql.catalyst.catalog.{TempVariableManager, VariableDefinition}
 import org.apache.spark.sql.catalyst.expressions.{
   Expression,
   ExtractValue,
@@ -159,15 +159,23 @@ class VariableResolution(
   def lookupVariable(nameParts: Seq[String]): Option[VariableReference] = {
     val namePartsCaseAdjusted = normalizeNameParts(nameParts)
 
+    lookupScriptLocal(nameParts, namePartsCaseAdjusted)
+      .orElse(lookupSuppliedLocal(nameParts, namePartsCaseAdjusted))
+      .orElse(lookupSession(nameParts, namePartsCaseAdjusted))
+  }
+
+  // If variable name is qualified with session.<varName> treat it as a session variable.
+  private def maybeScriptLocalName(nameParts: Seq[String]): Boolean =
+    !(nameParts.length > 2 ||
+      (nameParts.length == 2 && isForbiddenLabelOrForVariableName(nameParts.head)))
+
+  private def lookupScriptLocal(
+      nameParts: Seq[String],
+      namePartsCaseAdjusted: Seq[String]): Option[VariableReference] = {
     SqlScriptingContextManager
       .get()
       .flatMap(_.getVariableManager)
-      // If variable name is qualified with session.<varName> treat it as a session variable.
-      .filterNot(
-        _ =>
-          nameParts.length > 2
-          || (nameParts.length == 2 && isForbiddenLabelOrForVariableName(nameParts.head))
-      )
+      .filter(_ => maybeScriptLocalName(nameParts))
       .flatMap(_.get(namePartsCaseAdjusted))
       .map { varDef =>
         VariableReference(
@@ -177,23 +185,51 @@ class VariableResolution(
           varDef
         )
       }
-      .orElse(
-        if (maybeTempVariableName(nameParts) &&
-            allowUnqualifiedSessionTempVariableLookup(nameParts)) {
-          tempVariableManager
-            .get(namePartsCaseAdjusted)
-            .map { varDef =>
-              VariableReference(
-                nameParts,
-                FakeSystemCatalog,
-                Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), namePartsCaseAdjusted.last),
-                varDef
-              )
-            }
-        } else {
-          None
+  }
+
+  private def lookupSuppliedLocal(
+      nameParts: Seq[String],
+      namePartsCaseAdjusted: Seq[String]): Option[VariableReference] = {
+    if (SuppliedVariableRegistry.isSessionName(nameParts)) {
+      None
+    } else {
+      SuppliedVariableRegistry.lookup(nameParts, conf.resolver).map { dataType =>
+        // A name that is not a session name is qualified, as in proc.p.
+        val ident = Identifier.of(
+          Array(namePartsCaseAdjusted.dropRight(1).last), namePartsCaseAdjusted.last)
+        VariableReference(
+          nameParts,
+          FakeLocalCatalog,
+          ident,
+          VariableDefinition(ident, "NULL", Literal.create(null, dataType)))
+      }
+    }
+  }
+
+  private def lookupSession(
+      nameParts: Seq[String],
+      namePartsCaseAdjusted: Seq[String]): Option[VariableReference] = {
+    if (!(SuppliedVariableRegistry.isSessionName(nameParts) &&
+        allowUnqualifiedSessionTempVariableLookup(nameParts))) {
+      None
+    } else {
+      val sessionName = SuppliedVariableRegistry.sessionIdentity(namePartsCaseAdjusted.last)
+      val ident = Identifier.of(
+        Array(CatalogManager.SESSION_NAMESPACE),
+        namePartsCaseAdjusted.last)
+      val supplied = SuppliedVariableRegistry.lookup(sessionName, conf.resolver).map { dataType =>
+        VariableReference(
+          nameParts,
+          FakeSystemCatalog,
+          ident,
+          VariableDefinition(ident, "NULL", Literal.create(null, dataType)))
+      }
+      supplied.orElse {
+        tempVariableManager.get(namePartsCaseAdjusted).map { varDef =>
+          VariableReference(nameParts, FakeSystemCatalog, ident, varDef)
         }
-      )
+      }
+    }
   }
 
   private def resolveVariable(

@@ -19,7 +19,11 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import java.util.HashMap
 
-import org.apache.spark.sql.catalyst.analysis.{RelationResolution, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{
+  RelationResolution,
+  SuppliedRelationRegistry,
+  UnresolvedRelation
+}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.LookupCatalog
 import org.apache.spark.util.ArrayImplicits._
@@ -83,7 +87,8 @@ trait RelationMetadataProvider extends LookupCatalog {
             Seq(catalog.name()) ++ ident.namespace().toImmutableArraySeq ++ Seq(ident.name()),
           options = unresolvedRelation.options,
           isStreaming = unresolvedRelation.isStreaming,
-          timeTravelSpec = None
+          timeTravelSpec = None,
+          suppliedRelations = SuppliedRelationRegistry.get().isDefined
         )
       case _ =>
         val searchPath = relationResolution.resolutionSearchPathForError
