@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.analysis.resolver
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.resolver.{
   ExplicitlyUnsupportedResolverFeature,
   Resolver
 }
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.functions.expr
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -137,6 +139,51 @@ class ExplicitlyUnsupportedResolverFeatureSuite extends SharedSparkSession {
     )
   }
 
+  test("Implicitly named subquery whose outer references the post-resolution rules change") {
+    withTable("n1", "n2") {
+      spark.sql("CREATE TABLE n1(c CHAR(2)) USING PARQUET")
+      spark.sql("CREATE TABLE n2(c5 CHAR(5), s STRING) USING PARQUET")
+      spark.sql("INSERT INTO n1 VALUES ('a')")
+      spark.sql("INSERT INTO n2 VALUES ('a', 'a')")
+      // `ApplyCharTypePadding` splits the IN and references the outer `n1.c` once per split IN,
+      // so the outer references of the subqueries change from (c) to (c, c).
+      val condition = "n1.c IN (n2.c5, n2.s)"
+      val exists = s"EXISTS (SELECT 1 FROM n2 WHERE $condition)"
+      val scalar = s"(SELECT count(*) FROM n2 WHERE $condition)"
+      val query = s"SELECT $exists, $scalar FROM n1"
+      checkResolution(
+        query,
+        shouldPass = false,
+        expectedMessage = Some("an implicitly named column whose subquery has its outer references")
+      )
+      checkResolution(s"SELECT $exists AS e, $scalar AS `exists(c)` FROM n1", shouldPass = true)
+      checkResolution(s"SELECT c FROM n1 WHERE $exists", shouldPass = true)
+      // The post-resolution rules change the plans of these subqueries, but not their outer
+      // references or their SQL, so they are kept.
+      checkResolution("SELECT EXISTS (SELECT 1 FROM n2 WHERE n1.c = n2.c5) FROM n1",
+        shouldPass = true)
+      checkResolution("SELECT EXISTS (SELECT 1 FROM n2) FROM n1", shouldPass = true)
+
+      // Dual run falls back to the fixed-point Analyzer, which names the columns after the
+      // changed outer references.
+      withSQLConf(
+        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "true",
+        SQLConf.ANALYZER_DUAL_RUN_SAMPLE_RATE.key -> "1.0") {
+        val df = spark.sql(query)
+        assert(df.columns.toSeq == Seq("exists(c, c)", "scalarsubquery(c, c)"))
+        assert(df.collect().toSeq == Seq(Row(true, 1)))
+
+        // An unaliased column of a DataFrame is named after its SQL too.
+        val n1 = spark.createDataFrame(spark.table("n1").collectAsList(), spark.table("n1").schema)
+        val existsColumn = expr("EXISTS (SELECT 1 FROM n2 WHERE c IN (n2.c5, n2.s))")
+        val dfExists = n1.select(existsColumn)
+        assert(dfExists.columns.toSeq == Seq("exists(c, c)"))
+        assert(dfExists.collect().toSeq == Seq(Row(true)))
+        assert(n1.select(existsColumn.as("e")).columns.toSeq == Seq("e"))
+      }
+    }
+  }
+
   private def checkResolution(
       sqlText: String,
       shouldPass: Boolean = false,
@@ -152,7 +199,8 @@ class ExplicitlyUnsupportedResolverFeatureSuite extends SharedSparkSession {
     val resolver = new Resolver(
       spark.sessionState.catalogManager,
       extensions = spark.sessionState.analyzer.singlePassResolverExtensions,
-      metadataResolverExtensions = spark.sessionState.analyzer.singlePassMetadataResolverExtensions
+      metadataResolverExtensions = spark.sessionState.analyzer.singlePassMetadataResolverExtensions,
+      extendedRewriteRules = spark.sessionState.analyzer.singlePassPostHocResolutionRules
     )
 
     if (shouldPass) {
