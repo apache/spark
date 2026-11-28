@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming
 
 import java.io.File
 import java.util.concurrent.{CountDownLatch, ExecutionException, Semaphore, TimeUnit}
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable.ListBuffer
 
@@ -29,6 +30,7 @@ import org.scalatest.time.{Seconds, Span}
 
 import org.apache.spark.{SparkIllegalArgumentException, TestUtils}
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.connector.read.streaming
 import org.apache.spark.sql.execution.streaming.checkpointing.{AsyncCommitLog, AsyncOffsetSeqLog, CommitMetadata, OffsetSeq}
 import org.apache.spark.sql.execution.streaming.runtime.{AsyncProgressTrackingMicroBatchExecution, LongOffset, MemoryStream, StreamExecution, StreamingQueryWrapper}
@@ -80,6 +82,67 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
       super.commit(end)
       commits += end
       commitThreads += Thread.currentThread()
+    }
+  }
+
+  class FailingMemoryStream(sparkSession: SparkSession)
+    extends MemoryStreamCapture[Int](id = 0, sparkSession) {
+
+    val failCommit = new AtomicBoolean(false)
+    val failLatestOffset = new AtomicBoolean(false)
+
+    override def latestOffset(
+        startOffset: streaming.Offset,
+        limit: streaming.ReadLimit): streaming.Offset = {
+      if (failLatestOffset.get) {
+        throw new IllegalStateException("latestOffset failed")
+      }
+      super.latestOffset(startOffset, limit)
+    }
+
+    override def commit(end: streaming.Offset): Unit = {
+      if (failCommit.get) {
+        throw new IllegalStateException("source commit failed")
+      }
+      super.commit(end)
+    }
+  }
+
+  /**
+   * Runs batches 0 and 1 of the query and leaves the source commit of batch 0 queued. The offset
+   * log write of batch 1 queues that commit, so the write is blocked until batch 1 has started,
+   * which would otherwise commit it.
+   */
+  def withQueuedSourceCommit(
+      checkpointDir: File,
+      startQuery: () => StreamingQuery,
+      addData: Int => Unit)(body: StreamingQuery => Unit): Unit = {
+    withSQLConf(
+      SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key ->
+        classOf[FailureInjectionCheckpointFileManager].getName) {
+      val injectionState = FailureInjectionFileSystem.registerTempPath(checkpointDir.getPath)
+      val semaphore = FailureInjectionFileSystem.createAtomicDelaySemaphore
+      try {
+        val query = startQuery()
+        addData(0)
+        query.processAllAvailable()
+        injectionState.delayCreateAtomicRegex = Seq(".*/offsets/1")
+        addData(1)
+        query.processAllAvailable()
+        eventually(timeout(streamingTimeout)) {
+          assert(semaphore.hasQueuedThreads)
+        }
+        injectionState.delayCreateAtomicRegex = Seq.empty
+        semaphore.release()
+        waitPendingOffsetWrites(query.asInstanceOf[StreamingQueryWrapper].streamingQuery)
+        body(query)
+      } finally {
+        injectionState.delayCreateAtomicRegex = Seq.empty
+        if (semaphore.hasQueuedThreads) {
+          semaphore.release()
+        }
+        FailureInjectionFileSystem.removePathFromTempToInjectionState(checkpointDir.getPath)
+      }
     }
   }
 
@@ -918,6 +981,78 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
             semaphore.release()
           }
           FailureInjectionFileSystem.removePathFromTempToInjectionState(checkpointDir.getPath)
+        }
+      }
+    }
+  }
+
+  private def startNoopQuery(df: DataFrame, checkpointDir: File): StreamingQuery =
+    df.writeStream
+      .format("noop")
+      .option(ASYNC_PROGRESS_TRACKING_ENABLED, true)
+      .option(ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS, 0)
+      .option("checkpointLocation", checkpointDir.getAbsolutePath)
+      .start()
+
+  test("SPARK-60524: a source commit failure on stop fails the query and still terminates it") {
+    withTempDir { checkpointDir =>
+      val inputData = new FailingMemoryStream(spark)
+      val startQuery = () => startNoopQuery(inputData.toDF(), checkpointDir)
+      withQueuedSourceCommit(checkpointDir, startQuery, inputData.addData(_)) { query =>
+        assert(inputData.commits.isEmpty)
+        inputData.failCommit.set(true)
+        query.stop()
+        val e = intercept[StreamingQueryException](query.awaitTermination())
+        assert(e.cause.getMessage == "source commit failed")
+        assert(!query.isActive)
+        assert(!spark.streams.active.exists(_.id == query.id))
+
+        inputData.failCommit.set(false)
+        val restartedQuery = startQuery()
+        inputData.addData(2)
+        restartedQuery.processAllAvailable()
+        restartedQuery.stop()
+        assert(restartedQuery.exception.isEmpty)
+      }
+    }
+  }
+
+  test("SPARK-60524: a source commit failure of a failed query is suppressed") {
+    withTempDir { checkpointDir =>
+      val inputData = new FailingMemoryStream(spark)
+      val startQuery = () => startNoopQuery(inputData.toDF(), checkpointDir)
+      withQueuedSourceCommit(checkpointDir, startQuery, inputData.addData(_)) { query =>
+        inputData.failCommit.set(true)
+        inputData.failLatestOffset.set(true)
+        val e = intercept[StreamingQueryException](query.awaitTermination())
+        assert(e.cause.getMessage == "latestOffset failed")
+        assert(e.cause.getSuppressed.map(_.getMessage).toSeq == Seq("source commit failed"))
+        assert(!spark.streams.active.exists(_.id == query.id))
+      }
+    }
+  }
+
+  test("SPARK-60524: the remaining source offsets are committed before the sources stop") {
+    withTempDir { srcDir =>
+      withTempDir { tmpDir =>
+        withTempDir { checkpointDir =>
+          // Deleting committed files runs on a thread pool that stopping the source shuts down.
+          val df = spark.readStream
+            .format("text")
+            .option("cleanSource", "delete")
+            .load(srcDir.getCanonicalPath)
+          def addFile(i: Int): Unit = {
+            val file = stringToFile(new File(tmpDir, s"$i.txt"), i.toString)
+            assert(file.renameTo(new File(srcDir, file.getName)))
+          }
+          withQueuedSourceCommit(checkpointDir, () => startNoopQuery(df, checkpointDir), addFile) {
+            query =>
+              assert(new File(srcDir, "0.txt").exists())
+              query.stop()
+              assert(query.exception.isEmpty)
+              assert(!spark.streams.active.exists(_.id == query.id))
+              assert(!new File(srcDir, "0.txt").exists())
+          }
         }
       }
     }
