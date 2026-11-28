@@ -272,7 +272,7 @@ printed all 1 rows.
 --! name
 bool_and_decimal_error
 --! expected_error
-[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] Cannot resolve "bool_and(1.0)" due to data type mismatch: The first parameter requires the "BOOLEAN" type, however "1.0" has the type "DECIMAL(10,1)". SQLSTATE: 42K09
+[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] Cannot resolve "bool_and(1.0)" due to data type mismatch: The first parameter requires the "BOOLEAN" type, however "1.0" has the type "DECIMAL(2,1)". SQLSTATE: 42K09
 !-- end
 
 
