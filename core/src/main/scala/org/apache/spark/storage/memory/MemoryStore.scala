@@ -926,12 +926,27 @@ private[storage] class PartiallySerializedBlock[T](
   def finishWritingToStream(os: OutputStream): Unit = {
     verifyNotConsumedAndNotDiscarded()
     consumed = true
-    // `unrolled`'s underlying buffers will be freed once this input stream is fully read:
-    unrolledBuffer.toInputStream(dispose = true).transferTo(os)
-    memoryStore.releaseUnrollMemoryForThisTask(memoryMode, unrollMemory)
-    redirectableOutputStream.setOutputStream(os)
-    while (rest.hasNext) {
-      serializationStream.writeObject(rest.next())(classTag)
+    try {
+      // `unrolled`'s underlying buffers will be freed once this input stream is fully read:
+      unrolledBuffer.toInputStream(dispose = true).transferTo(os)
+      memoryStore.releaseUnrollMemoryForThisTask(memoryMode, unrollMemory)
+      redirectableOutputStream.setOutputStream(os)
+      while (rest.hasNext) {
+        serializationStream.writeObject(rest.next())(classTag)
+      }
+    } catch {
+      case t: Throwable =>
+        // Close the stream to free resources such as native compression contexts. close() might
+        // write buffered data or end-of-stream markers, so discard that output instead of
+        // writing it to `os`. The unrolled buffer and the unroll memory are freed as before, by
+        // the task completion listener and by Task.
+        try {
+          redirectableOutputStream.setOutputStream(OutputStream.nullOutputStream())
+          serializationStream.close()
+        } catch {
+          case cleanupError: Throwable if cleanupError ne t => t.addSuppressed(cleanupError)
+        }
+        throw t
     }
     serializationStream.close()
   }
