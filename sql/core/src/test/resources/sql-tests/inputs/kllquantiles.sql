@@ -355,6 +355,18 @@ SELECT kll_sketch_get_quantile_bigint(CAST(NULL AS BINARY), 0.5) AS null_sketch;
 -- NULL sketch to get_rank
 SELECT kll_sketch_get_rank_float(CAST(NULL AS BINARY), 5.0) AS null_sketch;
 
+-- Tests covering empty sketches
+-- An aggregate over a group whose values are all NULL returns an empty sketch, whose quantiles
+-- are NULL, as percentile_approx is for the group
+SELECT k,
+       kll_sketch_get_n_bigint(kll_sketch_agg_bigint(v)) AS n,
+       kll_sketch_get_quantile_bigint(kll_sketch_agg_bigint(v), 0.5) AS median,
+       kll_sketch_get_quantile_bigint(kll_sketch_agg_bigint(v), array(0.25, 0.75)) AS quartiles,
+       percentile_approx(v, 0.5) AS approx_median
+FROM VALUES ('a', 1L), ('a', 3L), ('b', CAST(NULL AS BIGINT)) AS tab(k, v)
+GROUP BY k
+ORDER BY k;
+
 -- Tests for the optional k parameter
 -- Positive tests with valid k values
 SELECT LENGTH(kll_sketch_to_string_bigint(kll_sketch_agg_bigint(col1, 8))) > 0 AS k_min_value

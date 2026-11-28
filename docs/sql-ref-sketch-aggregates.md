@@ -1115,13 +1115,21 @@ SELECT kll_sketch_get_quantile_bigint(
   ARRAY(0.25, 0.5, 0.75, 0.95))
 FROM VALUES (1), (2), (3), (4), (5), (6), (7), (8), (9), (10) tab(col);
 -- Result: Array of values at 25th, 50th, 75th, and 95th percentiles
+
+-- An empty sketch, here of a group whose values are all NULL, returns NULL
+SELECT kll_sketch_get_quantile_bigint(kll_sketch_agg_bigint(col), 0.5)
+FROM VALUES (CAST(NULL AS BIGINT)) tab(col);
+-- Result: NULL
 ```
 
 **Errors:**
-- Throws an error if rank values are outside [0.0, 1.0].
+- Throws an error if rank values are outside [0.0, 1.0], also for an empty sketch.
 
 **Notes:**
 - A NULL sketch, scalar NULL rank, or NULL rank array returns NULL.
+- An empty sketch returns NULL, for a scalar rank or a rank array. `kll_sketch_agg_*` returns an
+  empty sketch when it has no non-NULL input values, such as for a group whose values are all
+  NULL or for no input rows.
 - NULL elements in a rank array already typed as ARRAY&lt;DOUBLE&gt; are treated as 0.0,
   requesting the minimum quantile. For example, `ARRAY(0.5D, NULL)` is accepted.
   A NULL-containing array that needs an implicit element cast, such as `ARRAY(0.5, NULL)`,

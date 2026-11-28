@@ -11626,6 +11626,9 @@ object functions {
    * NULL-containing array that needs an implicit element cast fails analysis. For example, SQL
    * `array(0.5D, NULL)` is accepted, but `array(0.5, NULL)` fails.
    *
+   * An empty sketch, such as the one that `kll_sketch_agg_bigint` returns for no non-NULL input
+   * values, also returns NULL, but a rank outside [0, 1] still fails.
+   *
    * @param sketch
    *   The KLL bigint sketch binary representation. A column that evaluates to a binary.
    * @param rank
@@ -11648,6 +11651,9 @@ object functions {
    * NULL-containing array that needs an implicit element cast fails analysis. For example, SQL
    * `array(0.5D, NULL)` is accepted, but `array(0.5, NULL)` fails.
    *
+   * An empty sketch, such as the one that `kll_sketch_agg_float` returns for no non-NULL input
+   * values, also returns NULL, but a rank outside [0, 1] still fails.
+   *
    * @param sketch
    *   The KLL float sketch binary representation. A column that evaluates to a binary.
    * @param rank
@@ -11669,6 +11675,9 @@ object functions {
    * has element type DOUBLE, NULL elements are treated as 0.0, requesting the minimum quantile. A
    * NULL-containing array that needs an implicit element cast fails analysis. For example, SQL
    * `array(0.5D, NULL)` is accepted, but `array(0.5, NULL)` fails.
+   *
+   * An empty sketch, such as the one that `kll_sketch_agg_double` returns for no non-NULL input
+   * values, also returns NULL, but a rank outside [0, 1] still fails.
    *
    * @param sketch
    *   The KLL double sketch binary representation. A column that evaluates to a binary.

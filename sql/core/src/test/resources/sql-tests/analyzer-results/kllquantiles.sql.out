@@ -681,6 +681,22 @@ Project [kll_sketch_get_rank_float(cast(null as binary), cast(5.0 as float)) AS 
 
 
 -- !query
+SELECT k,
+       kll_sketch_get_n_bigint(kll_sketch_agg_bigint(v)) AS n,
+       kll_sketch_get_quantile_bigint(kll_sketch_agg_bigint(v), 0.5) AS median,
+       kll_sketch_get_quantile_bigint(kll_sketch_agg_bigint(v), array(0.25, 0.75)) AS quartiles,
+       percentile_approx(v, 0.5) AS approx_median
+FROM VALUES ('a', 1L), ('a', 3L), ('b', CAST(NULL AS BIGINT)) AS tab(k, v)
+GROUP BY k
+ORDER BY k
+-- !query analysis
+Sort [k#x ASC NULLS FIRST], true
++- Aggregate [k#x], [k#x, kll_sketch_get_n_bigint(kll_sketch_agg_bigint(v#xL, None, 0, 0)) AS n#xL, kll_sketch_get_quantile_bigint(kll_sketch_agg_bigint(v#xL, None, 0, 0), cast(0.5 as double)) AS median#xL, kll_sketch_get_quantile_bigint(kll_sketch_agg_bigint(v#xL, None, 0, 0), cast(array(0.25, 0.75) as array<double>)) AS quartiles#x, percentile_approx(v#xL, cast(0.5 as double), 10000, 0, 0) AS approx_median#xL]
+   +- SubqueryAlias tab
+      +- LocalRelation [k#x, v#xL]
+
+
+-- !query
 SELECT LENGTH(kll_sketch_to_string_bigint(kll_sketch_agg_bigint(col1, 8))) > 0 AS k_min_value
 FROM t_long_1_5_through_7_11
 -- !query analysis

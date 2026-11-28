@@ -583,6 +583,22 @@ NULL
 
 
 -- !query
+SELECT k,
+       kll_sketch_get_n_bigint(kll_sketch_agg_bigint(v)) AS n,
+       kll_sketch_get_quantile_bigint(kll_sketch_agg_bigint(v), 0.5) AS median,
+       kll_sketch_get_quantile_bigint(kll_sketch_agg_bigint(v), array(0.25, 0.75)) AS quartiles,
+       percentile_approx(v, 0.5) AS approx_median
+FROM VALUES ('a', 1L), ('a', 3L), ('b', CAST(NULL AS BIGINT)) AS tab(k, v)
+GROUP BY k
+ORDER BY k
+-- !query schema
+struct<k:string,n:bigint,median:bigint,quartiles:array<bigint>,approx_median:bigint>
+-- !query output
+a	2	1	[1,3]	1
+b	0	NULL	NULL	NULL
+
+
+-- !query
 SELECT LENGTH(kll_sketch_to_string_bigint(kll_sketch_agg_bigint(col1, 8))) > 0 AS k_min_value
 FROM t_long_1_5_through_7_11
 -- !query schema
