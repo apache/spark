@@ -297,7 +297,9 @@ class KubernetesSuite extends SparkFunSuite
     runSparkApplicationAndVerifyCompletion(
       appResource,
       SPARK_REMOTE_MAIN_CLASS,
-      Seq(s"Mounting of ${appArgs.head} was true"),
+      Seq(
+        s"Driver local file ${appArgs.head} exists: true",
+        s"Mounting of ${appArgs.head} was true"),
       Seq(),
       appArgs,
       driverPodChecker,
