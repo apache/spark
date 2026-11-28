@@ -269,4 +269,328 @@ class RemoveRedundantAliasAndProjectSuite extends PlanTest {
       comparePlans(optimized, Union(Seq(project, projectWithoutAlias)))
     }
   }
+
+  test("SPARK-62383: RemoveRedundantAliases preserves Union branch uniqueness across " +
+    "non-project barriers") {
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val aDup = Alias(a, "a")()
+    val bRedundant = Alias(b, "b")()
+    val aDupAttr = aDup.toAttribute
+    val bRedundantAttr = bRedundant.toAttribute
+
+    val first = Project(
+      Seq(Alias(a, "a")(), Alias(a, "a")(), Alias(b, "b")()),
+      LocalRelation(a, b))
+    // Non-first branch has a Repartition between the top Project and the deduplicating Alias,
+    // plus an unrelated redundant alias on `b` that can still be safely removed.
+    val second = Project(
+      Seq(a, aDupAttr, bRedundantAttr),
+      Repartition(2, true, Project(Seq(a, aDup, bRedundant), LocalRelation(a, b))))
+    val expectedSecond =
+      Repartition(2, true, Project(Seq(a, aDup, b), LocalRelation(a, b)))
+
+    val union = Union(Seq(first, second))
+    withSQLConf(SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED.key -> "true") {
+      val optimized = Optimize.execute(union)
+      assert(optimized.resolved)
+      comparePlans(optimized, Union(Seq(first, expectedSecond)))
+    }
+
+    withSQLConf(SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED.key -> "false") {
+      val optimized = Optimize.execute(union)
+      val strippedSecond = Repartition(2, true, Project(Seq(a, a, b), LocalRelation(a, b)))
+      comparePlans(optimized, Union(Seq(first, strippedSecond)))
+    }
+  }
+
+  test("SPARK-62383: RemoveRedundantAliases preserves double and multi-way aliases in " +
+    "Union child") {
+    val a = AttributeReference("a", IntegerType)()
+    val a1 = Alias(a, "a")()
+    val a2 = Alias(a, "a")()
+    val a3 = Alias(a, "a")()
+    val first = Project(Seq(Alias(a, "a")(), Alias(a, "a")()), LocalRelation(a))
+    val second = Project(Seq(a1, a2), LocalRelation(a))
+    val union = Union(Seq(first, second))
+
+    // Also cover the reversed order `[Alias(a, "a"), a]`: the same Project outputs the wrapped
+    // attribute, so the branch is protected as a whole and the alias stays.
+    val reversedSecond = Project(Seq(a1, a), LocalRelation(a))
+    val reversedUnion = Union(Seq(first, reversedSecond))
+
+    // 3-way colliding duplicate group: `k - 1` exclusion drops `a1` and keeps `a2` and `a3`.
+    val tripleFirst = Project(
+      Seq(Alias(a, "a")(), Alias(a, "a")(), Alias(a, "a")()), LocalRelation(a))
+    val tripleUnion = Union(Seq(tripleFirst, Project(Seq(a1, a2, a3), LocalRelation(a))))
+    val tripleWithMiddleBare = Union(
+      Seq(tripleFirst, Project(Seq(a1, a, a2), LocalRelation(a))))
+
+    // Four independent collision groups: one round has to protect every group, not just one
+    // attribute overall. This pins the `k - 1` rule, not the collision-set implementation.
+    val b = AttributeReference("b", IntegerType)()
+    val c = AttributeReference("c", IntegerType)()
+    val d = AttributeReference("d", IntegerType)()
+    val abcd = LocalRelation(a, b, c, d)
+    val groupsFirst = Project(
+      Seq(Alias(a, "a")(), Alias(a, "a")(), Alias(b, "b")(), Alias(b, "b")(),
+        Alias(c, "c")(), Alias(c, "c")(), Alias(d, "d")(), Alias(d, "d")()), abcd)
+    val groups = Seq(
+      (Alias(a, "a")(), Alias(a, "a")()), (Alias(b, "b")(), Alias(b, "b")()),
+      (Alias(c, "c")(), Alias(c, "c")()), (Alias(d, "d")(), Alias(d, "d")()))
+    val groupsOperation = Project(groups.flatMap { case (kept, dropped) => Seq(kept, dropped) },
+      abcd)
+    val groupsSecond = Project(
+      Seq(a, groups(0)._2, b, groups(1)._2, c, groups(2)._2, d, groups(3)._2), abcd)
+
+    withSQLConf(SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED.key -> "true") {
+      val optimized = Optimize.execute(union)
+      assert(optimized.resolved)
+      comparePlans(optimized, Union(Seq(first, Project(Seq(a, a2), LocalRelation(a)))))
+
+      val optReversed = Optimize.execute(reversedUnion)
+      assert(optReversed.resolved)
+      comparePlans(optReversed, reversedUnion)
+
+      val optTriple = Optimize.execute(tripleUnion)
+      assert(optTriple.resolved)
+      comparePlans(optTriple, Union(Seq(tripleFirst, Project(Seq(a, a2, a3), LocalRelation(a)))))
+
+      val optMiddleBare = Optimize.execute(tripleWithMiddleBare)
+      assert(optMiddleBare.resolved)
+      comparePlans(optMiddleBare, tripleWithMiddleBare)
+
+      val optGroups = Optimize.execute(Union(Seq(groupsFirst, groupsOperation)))
+      assert(optGroups.resolved)
+      comparePlans(optGroups, Union(Seq(groupsFirst, groupsSecond)))
+    }
+
+    withSQLConf(SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED.key -> "false") {
+      val optimized = Optimize.execute(union)
+      comparePlans(optimized, Union(Seq(first, Project(Seq(a, a), LocalRelation(a)))))
+    }
+  }
+
+  test("SPARK-62383: RemoveRedundantAliases preserves ExprId uniqueness when Union branches " +
+    "share ExprIds") {
+    val x = AttributeReference("x", IntegerType)()
+    val id = AttributeReference("id", IntegerType)()
+    val idDup = Alias(id, "id")()
+    val idDupAttr = idDup.toAttribute
+    val xNull = Alias(Literal(null, IntegerType), "x")(x.exprId)
+    val idNull = Alias(Literal(null, IntegerType), "id")(id.exprId)
+    val idDupNull = Alias(Literal(null, IntegerType), "id")(idDup.exprId)
+
+    val first = Project(Seq(x, idNull, idDupNull), LocalRelation(x))
+    val second = Project(
+      Seq(xNull, id, idDupAttr),
+      Repartition(2, true, Project(Seq(id, idDup), LocalRelation(id))))
+    val union = Union(Seq(first, second))
+
+    withSQLConf(SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED.key -> "true") {
+      val optimized = Optimize.execute(union)
+      assert(optimized.resolved)
+      comparePlans(optimized, union)
+    }
+
+    withSQLConf(SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED.key -> "false") {
+      val optimized = Optimize.execute(union)
+      val strippedSecond = Project(
+        Seq(xNull, id, id),
+        Repartition(2, true, Project(Seq(id, id), LocalRelation(id))))
+      comparePlans(optimized, Union(Seq(first, strippedSecond)))
+    }
+  }
+
+  test("SPARK-62383: RemoveRedundantAliases converges when Join sits inside a non-first " +
+    "Union child") {
+    val x = AttributeReference("x", IntegerType)()
+    val leftAlias = Alias(x, "x")()
+    val topAlias = Alias(leftAlias.toAttribute, "x")()
+    val rightAlias1 = Alias(x, "x")()
+    val rightAlias2 = Alias(x, "x")()
+
+    val r = LocalRelation(x)
+    val left = Project(Seq(leftAlias), r)
+    val right = Project(Seq(rightAlias1, rightAlias2), r)
+    val join = Join(left, right, org.apache.spark.sql.catalyst.plans.Inner, None, JoinHint.NONE)
+    val second = Project(
+      Seq(leftAlias.toAttribute, topAlias, rightAlias1.toAttribute, rightAlias2.toAttribute),
+      join)
+    val first = Project(
+      Seq(Alias(x, "x")(), Alias(x, "x")(), Alias(x, "x")(), Alias(x, "x")()),
+      r)
+    val union = Union(Seq(first, second))
+    val expectedSecond = Project(
+      Seq(x, Alias(x, "x")(exprId = topAlias.exprId),
+        rightAlias1.toAttribute, rightAlias2.toAttribute),
+      Join(r, right, org.apache.spark.sql.catalyst.plans.Inner, None, JoinHint.NONE))
+    val barrierUnion = Union(Seq(first, Repartition(2, true, second)))
+
+    // The collision moves from the top projection to the right side of the join: preserving
+    // `leftAlias` keeps `x` out of `newLeft.outputSet`, so the next pass strips both right aliases
+    // and a further pass keeps `rightAlias2`.
+    val cascadeSecond = Project(
+      Seq(topAlias, leftAlias.toAttribute, rightAlias1.toAttribute, rightAlias2.toAttribute),
+      join)
+    val cascadeUnion = Union(Seq(first, Repartition(2, true, cascadeSecond)))
+    val expectedCascadeSecond = Repartition(2, true, Project(
+      Seq(topAlias, leftAlias.toAttribute, x, rightAlias2.toAttribute),
+      Join(left, Project(Seq(x, rightAlias2), r),
+        org.apache.spark.sql.catalyst.plans.Inner, None, JoinHint.NONE)))
+
+    withSQLConf(SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED.key -> "true") {
+      val optimized = Optimize.execute(union)
+      assert(optimized.resolved)
+      // `topAlias` aliases `leftAlias`, which the same node also outputs, so the branch keeps the
+      // aliases that produce its output, exactly like the first child, and stays unchanged.
+      comparePlans(optimized, Union(Seq(first, second)))
+
+      val optBarrier = Optimize.execute(barrierUnion)
+      assert(optBarrier.resolved)
+      comparePlans(optBarrier, Union(Seq(first, Repartition(2, true, expectedSecond))))
+
+      val optCascade = Optimize.execute(cascadeUnion)
+      assert(optCascade.resolved)
+      comparePlans(optCascade, Union(Seq(first, expectedCascadeSecond)))
+    }
+  }
+
+  test("SPARK-62383: RemoveRedundantAliases resolves a deep Join cascade through the retries") {
+    val x = AttributeReference("x", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val leftAlias = Alias(x, "x")()
+    val bAlias = Alias(b, "b")()
+    val legs = Seq.fill(12)(Alias(x, "x")())
+    val r = LocalRelation(x, b)
+
+    // `b` reaches the branch output through the left leg, so `bAlias` is well-formed.
+    // `innerRedundant` is not part of the branch output and must still be stripped.
+    val innerRedundant = Alias(b, "b")()
+    val join = legs.grouped(2).foldLeft[LogicalPlan](Project(Seq(leftAlias, b, innerRedundant),
+        r)) {
+      case (left, Seq(first, second)) =>
+        Join(left, Project(Seq(first, second), r),
+          org.apache.spark.sql.catalyst.plans.Inner, None, JoinHint.NONE)
+    }
+    // The top of the branch passes the legs' attributes through without re-aliasing one of its own
+    // outputs, so the branch takes the retry path: every leg alias is stripped first and then
+    // protected again until the branch output is distinct.
+    val second = Project(bAlias +: legs.map(_.toAttribute), join)
+    val first = Project(
+      Alias(b, "b")() +: legs.map(_ => Alias(x, "x")()), r)
+
+    withSQLConf(SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED.key -> "true") {
+      val optimized = Optimize.execute(Union(Seq(first, second)))
+      assert(optimized.resolved)
+      val branchOutput = optimized.children(1).output
+      assert(branchOutput.map(_.exprId).distinct.size == branchOutput.size)
+      // `b AS b` collides with nothing, so it is stripped: the branch was processed, not skipped.
+      assert(!branchOutput.exists(_.exprId == bAlias.exprId))
+      // An alias below the output is stripped as well.
+      assert(!optimized.exists(_.output.exists(_.exprId == innerRedundant.exprId)))
+    }
+  }
+
+  test("SPARK-62383: RemoveRedundantAliases preserves Union uniqueness for Aggregate, Window, " +
+    "and chains") {
+    val a = AttributeReference("a", IntegerType)()
+    val a1 = Alias(a, "a")()
+    val a2 = Alias(a1.toAttribute, "a")()
+    val b = AttributeReference("b", IntegerType)()
+
+    // Unrelated lower alias on bare `a` is still stripped while top deduplicating alias stays.
+    val lowerDup = Alias(a, "a")()
+    val chainFirst = Project(Seq(Alias(a, "a")(), Alias(a, "a")()), LocalRelation(a))
+    val chainSecond = Project(
+      Seq(a, a1.toAttribute),
+      Repartition(2, true,
+        Project(Seq(a, a1.toAttribute, lowerDup),
+          Project(Seq(a1, a), LocalRelation(a)))))
+    val expectedChainSecond = Project(
+      Seq(a, a1.toAttribute),
+      Repartition(2, true,
+        Project(Seq(a, a1.toAttribute, a),
+          Project(Seq(a1, a), LocalRelation(a)))))
+
+    // Chained alias across barriers: inner `a1` can be stripped while outer `a2` stays.
+    val twoLevelSecond = Project(
+      Seq(a, a2.toAttribute),
+      Repartition(2, true,
+        Project(Seq(a, a2),
+          Repartition(2, true, Project(Seq(a, a1), LocalRelation(a))))))
+    val expectedTwoLevelSecond = Repartition(2, true,
+      Project(Seq(a, Alias(a, "a")(exprId = a2.exprId)),
+        Repartition(2, true, Project(Seq(a, a), LocalRelation(a)))))
+
+    // Aggregate and Window behind a Repartition barrier in non-first Union child.
+    val aggSecond = Repartition(2, true,
+      Aggregate(Seq(a), Seq(a, Alias(a, "a")()), LocalRelation(a)))
+    val winSecond = Repartition(2, true,
+      Window(Seq(Alias(a, "a")()), Seq(a), Nil, LocalRelation(a, b)))
+
+    withSQLConf(SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED.key -> "true") {
+      val optChain = Optimize.execute(Union(Seq(chainFirst, chainSecond)))
+      assert(optChain.resolved)
+      comparePlans(optChain, Union(Seq(chainFirst, expectedChainSecond)))
+
+      val optTwoLevel = Optimize.execute(Union(Seq(chainFirst, twoLevelSecond)))
+      assert(optTwoLevel.resolved)
+      comparePlans(optTwoLevel, Union(Seq(chainFirst, expectedTwoLevelSecond)))
+
+      val optAgg = Optimize.execute(Union(Seq(chainFirst, aggSecond)))
+      assert(optAgg.resolved)
+      comparePlans(optAgg, Union(Seq(chainFirst, aggSecond)))
+
+      val winFirst = Project(
+        Seq(Alias(a, "a")(), Alias(b, "b")(), Alias(a, "a")()), LocalRelation(a, b))
+      val optWin = Optimize.execute(Union(Seq(winFirst, winSecond)))
+      assert(optWin.resolved)
+      comparePlans(optWin, Union(Seq(winFirst, winSecond)))
+
+      // Nested Unions with Repartition barriers, inner removable alias, and duplicate aliases.
+      val innerFirst = Project(
+        Seq(Alias(a, "a")(), Alias(a, "a")(), Alias(b, "b")()), LocalRelation(a, b))
+      val innerDup = Alias(a, "a")()
+      val innerSecond = Repartition(2, true,
+        Project(Seq(a, innerDup, Alias(b, "b")()), LocalRelation(a, b)))
+      val innerUnion = Union(Seq(innerFirst, innerSecond))
+      val innerOut = innerUnion.output.head
+      val outerFirst = Project(
+        Seq(Alias(a, "a")(), Alias(a, "a")(), Alias(b, "b")()), LocalRelation(a, b))
+      val outerDup = Alias(innerOut, "a")()
+      val outerSecond = Project(
+        Seq(innerOut, outerDup, innerUnion.output(2)),
+        Repartition(2, true, innerUnion))
+      val expectedInnerSecond = Repartition(2, true,
+        Project(Seq(a, innerDup, Alias(b, "b")()), LocalRelation(a, b)))
+      val expectedOuterSecond = Project(
+        Seq(innerOut, outerDup, innerUnion.output(2)),
+        Repartition(2, true, Union(Seq(innerFirst, expectedInnerSecond))))
+      val optNested = Optimize.execute(Union(Seq(outerFirst, outerSecond)))
+      assert(optNested.resolved)
+      comparePlans(optNested, Union(Seq(outerFirst, expectedOuterSecond)))
+    }
+  }
+
+  test("SPARK-62383: an Aggregate branch that re-aliases an output is protected") {
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val first = Project(Seq(Alias(a, "a")(), Alias(b, "b")()), LocalRelation(a, b))
+    val aggAlias = Alias(a, "a")()
+    val second = Aggregate(Seq(a), Seq(a, aggAlias), LocalRelation(a, b))
+    val union = Union(Seq(first, second))
+
+    withSQLConf(SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED.key -> "true") {
+      val optimized = Optimize.execute(union)
+      assert(optimized.resolved)
+      assert(optimized.children(1).output.exists(_.exprId == aggAlias.exprId))
+    }
+
+    withSQLConf(SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED.key -> "false") {
+      val optimized = Optimize.execute(union)
+      assert(optimized.resolved)
+      assert(!optimized.children(1).output.exists(_.exprId == aggAlias.exprId))
+    }
+  }
 }

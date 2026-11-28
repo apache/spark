@@ -3168,6 +3168,31 @@ class DatasetSuite extends SharedSparkSession
       assert(result.toSet == Set(ClassData("a", 3), ClassData("b", 3)))
     }
   }
+
+  test("SPARK-62383: RemoveRedundantAliases cleans ObjectType alias inside Union branches " +
+    "with duplicates") {
+    val left = Seq(("a", "a")).toDF("a", "b")
+    val rightBase = Seq(ClassData("a", 1), ClassData("a", 2), ClassData("b", 3)).toDS()
+      .groupByKey(_.a)
+      .mapGroups { (k: String, it: Iterator[ClassData]) => ClassData(k, it.map(_.b).sum) }
+      .mapPartitions(iter => iter)
+      .toDF("a", "b")
+    val right = rightBase.select($"a", $"a")
+    val expected = Seq(Row("a", "a"), Row("a", "a"), Row("b", "b"))
+
+    Seq(
+      CodegenObjectFactoryMode.CODEGEN_ONLY -> "true",
+      CodegenObjectFactoryMode.NO_CODEGEN -> "false"
+    ).foreach { case (factoryMode, wholeStage) =>
+      withSQLConf(
+        SQLConf.CODEGEN_FACTORY_MODE.key -> factoryMode.toString,
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage) {
+        checkAnswer(right.repartition(2).union(left), expected)
+        checkAnswer(left.union(right.repartition(2)), expected)
+        checkAnswer(left.union(rightBase.repartition(2).select($"a", $"a")), expected)
+      }
+    }
+  }
 }
 
 /**
