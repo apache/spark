@@ -162,6 +162,9 @@ case class UnresolvedRelation(
 
   override def name: String = tableName
 
+  /** Whether this relation is the target of a write, i.e. it requires write privileges. */
+  def isWriteTarget: Boolean = options.containsKey(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)
+
   def requireWritePrivileges(privileges: Set[TableWritePrivilege]): UnresolvedRelation = {
     if (privileges.nonEmpty) {
       val newOptions = new java.util.HashMap[String, String]

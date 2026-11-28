@@ -302,7 +302,10 @@ expression (CTE).
 Resolution follows [Object name resolution](#object-name-resolution), with one addition for
 unqualified references: when the reference is inside a `WITH` clause, Spark first matches the
 identifier against CTEs from the innermost `WITH` outward. If no CTE matches, Spark walks the
-SQL Path.
+SQL Path. The target of `INSERT`, `DELETE`, `UPDATE` and `MERGE` is an exception: it is never
+matched against a CTE, and resolves through the SQL Path as if no CTE were in scope. Every other
+reference to the same name in the statement, such as one in a `WHERE` subquery or the `MERGE`
+source, still matches the CTE.
 
 If the relation cannot be resolved, Spark raises `TABLE_OR_VIEW_NOT_FOUND`. The error includes
 the effective search path, for example

@@ -228,14 +228,28 @@ class ParseSqlResultSuite extends SparkFunSuite {
     assert(targetTableRefs(insert) === Set(Seq("t")))
     assert(sourceTableRefs(insert) === Set(Seq("src")))
 
+    // DELETE, UPDATE and MERGE targets are not resolved against a CTE either, while the rest of
+    // the statement still sees the CTE.
     val otherDml = Seq(
-      "WITH t AS (SELECT * FROM src) DELETE FROM t WHERE a = 1",
-      "WITH t AS (SELECT * FROM src) UPDATE t SET a = 1",
+      "WITH t AS (SELECT * FROM src) DELETE FROM t WHERE a IN (SELECT a FROM t)",
+      "WITH t AS (SELECT * FROM src) UPDATE t SET a = 1 WHERE a IN (SELECT a FROM t)",
       "WITH t AS (SELECT * FROM src) " +
         "MERGE INTO t USING t AS s ON t.a = s.a WHEN MATCHED THEN DELETE")
     otherDml.foreach { sql =>
-      assert(targetTableRefs(sql).isEmpty, sql)
+      assert(targetTableRefs(sql) === Set(Seq("t")), sql)
       assert(sourceTableRefs(sql) === Set(Seq("src")), sql)
+    }
+
+    // The legacy config substitutes DELETE, UPDATE and MERGE targets with the CTE again, so the
+    // CTE shadows them. It does not change INSERT.
+    SQLConf.withExistingConf(new SQLConf) {
+      SQLConf.get.setConf(SQLConf.LEGACY_CTE_SUBSTITUTE_DML_TARGET, true)
+      otherDml.foreach { sql =>
+        assert(targetTableRefs(sql).isEmpty, sql)
+        assert(sourceTableRefs(sql) === Set(Seq("src")), sql)
+      }
+      assert(targetTableRefs(insert) === Set(Seq("t")))
+      assert(sourceTableRefs(insert) === Set(Seq("src")))
     }
   }
 
