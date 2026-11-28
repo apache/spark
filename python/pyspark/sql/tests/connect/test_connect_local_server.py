@@ -146,18 +146,37 @@ class LocalConnectServerReuseTests(unittest.TestCase):
             "spark.local.connect.reuse": "true",
             "spark.connect.grpc.binding.port": "0",
         }
+        # SPARK-62027: spark-submit passes the configurations in groups of ten.
         env = {
-            "PYSPARK_REMOTE_INIT_CONF_LEN": "1",
+            "PYSPARK_REMOTE_INIT_CONF_LEN": "2",
             "PYSPARK_REMOTE_INIT_CONF_0": json.dumps(initial),
+            "PYSPARK_REMOTE_INIT_CONF_1": json.dumps({"spark.jars": "/tmp/a.jar"}),
         }
         with mock.patch.dict(os.environ, env):
             self.assertEqual(
                 local_server.startup_seed_conf(opts),
                 {
                     "spark.sql.shuffle.partitions": "8",
+                    "spark.jars": "/tmp/a.jar",
                     "spark.sql.warehouse.dir": opts["spark.sql.warehouse.dir"],
                 },
             )
+
+    def test_remote_init_conf_from_env(self) -> None:
+        # SPARK-62027: every group of configurations that spark-submit passes is kept.
+        from unittest import mock
+
+        from pyspark.sql.connect.utils import remote_init_conf_from_env
+
+        groups = [{f"spark.test.conf{i}": str(i) for i in range(j, j + 10)} for j in (0, 10, 20)]
+        env = {"PYSPARK_REMOTE_INIT_CONF_LEN": str(len(groups))}
+        env.update({f"PYSPARK_REMOTE_INIT_CONF_{i}": json.dumps(g) for i, g in enumerate(groups)})
+        with mock.patch.dict(os.environ, env):
+            self.assertEqual(
+                remote_init_conf_from_env(), {f"spark.test.conf{i}": str(i) for i in range(30)}
+            )
+        with mock.patch.dict(os.environ, {"PYSPARK_REMOTE_INIT_CONF_LEN": "0"}):
+            self.assertEqual(remote_init_conf_from_env(), {})
 
     def test_start_delegates_launch_options(self) -> None:
         from unittest import mock

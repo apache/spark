@@ -14,7 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import json
+import os
 import sys
+from typing import Any, Dict
 
 from pyspark.errors import PySparkImportError
 from pyspark.loose_version import LooseVersion
@@ -121,3 +124,16 @@ def require_minimum_zstandard_version() -> None:
 
 def get_python_ver() -> str:
     return "%d.%d" % sys.version_info[:2]
+
+
+def remote_init_conf_from_env() -> Dict[str, Any]:
+    """
+    Return the configurations that spark-submit passes to a Spark Connect Python application.
+
+    PythonRunner splits them into groups of ten, one per ``PYSPARK_REMOTE_INIT_CONF_<i>``
+    environment variable, so merge every group.
+    """
+    conf: Dict[str, Any] = {}
+    for i in range(int(os.environ.get("PYSPARK_REMOTE_INIT_CONF_LEN", "0"))):
+        conf.update(json.loads(os.environ[f"PYSPARK_REMOTE_INIT_CONF_{i}"]))
+    return conf
