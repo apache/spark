@@ -33,6 +33,7 @@ import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, InMemo
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec}
@@ -158,7 +159,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
           "functionName" -> "`collate`",
           "expectedNum" -> "2",
           "actualNum" -> paramCount.toString,
-          "docroot" -> "https://spark.apache.org/docs/latest"),
+          "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot),
         context = ExpectedContext(fragment = s"collate($args)", start = 7, stop = 15 + args.length)
       )
     })
@@ -783,8 +784,9 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         sql("select map('a' COLLATE UTF8_LCASE, 'b', 'c')")
       },
       condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      sqlState = "42605",
       parameters = Map("functionName" -> "`map`", "expectedNum" -> "2n (n > 0)",
-        "actualNum" -> "3", "docroot" -> "https://spark.apache.org/docs/latest")
+        "actualNum" -> "3", "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot)
     )
 
     // make sure we fail this query even when collations are in

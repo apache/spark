@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLExpr, toSQLType}
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{BooleanType, IntegerType, StringType, TestUDT}
 
 class WrapUDTExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -91,11 +92,12 @@ class WrapUDTExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
             FunctionRegistry.internal.lookupFunction(FunctionIdentifier("wrap_udt"), arguments)
           },
           condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+          sqlState = "42605",
           parameters = Map(
             "functionName" -> "`wrap_udt`",
             "expectedNum" -> "2",
             "actualNum" -> actualNum,
-            "docroot" -> SPARK_DOC_ROOT))
+            "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot))
     }
   }
 

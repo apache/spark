@@ -300,6 +300,7 @@ class JsonObjectSuite extends QueryTest with SharedSparkSession {
       sql("SELECT json_object('id', 7, 'name')")
     }
     assert(e.getCondition == "WRONG_NUM_ARGS.WITHOUT_SUGGESTION")
+    assert(e.getSqlState == "42605")
   }
 
   test("mixing the VALUE/colon form and the comma form is a parse error") {
@@ -1695,6 +1696,7 @@ world'))"""))
     Seq("builtin.json_object", "system.builtin.json_object").foreach { func =>
       val e = intercept[AnalysisException](sql(s"SELECT $func('a', 1, 'b')"))
       assert(e.getCondition == "WRONG_NUM_ARGS.WITHOUT_SUGGESTION", s"for $func")
+      assert(e.getSqlState == "42605", s"for $func")
     }
   }
 

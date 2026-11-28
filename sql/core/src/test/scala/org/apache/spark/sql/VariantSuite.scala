@@ -29,6 +29,7 @@ import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, ExpressionEvalHelper, Literal}
 import org.apache.spark.sql.catalyst.expressions.variant.{VariantExplode, VariantExpressionEvalUtils, VariantGet}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.errors.QueryExecutionErrors.toSQLId
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.functions._
@@ -237,11 +238,12 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
         sql("SELECT variant_delete(parse_json('{}'))").collect()
       },
       condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      sqlState = "42605",
       parameters = Map(
         "functionName" -> toSQLId("variant_delete"),
         "expectedNum" -> "> 1",
         "actualNum" -> "1",
-        "docroot" -> "https://spark.apache.org/docs/latest"))
+        "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot))
   }
 
   test("non-literal variant_delete") {
@@ -825,11 +827,12 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
         sql("SELECT variant_pick(parse_json('{}'))").collect()
       },
       condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      sqlState = "42605",
       parameters = Map(
         "functionName" -> toSQLId("variant_pick"),
         "expectedNum" -> "> 1",
         "actualNum" -> "1",
-        "docroot" -> "https://spark.apache.org/docs/latest"))
+        "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot))
   }
 
   test("variant_pick with dynamic paths") {

@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression, Sort}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{CommandResultExec, OneRowRelationExec, UnionExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate._
@@ -2701,11 +2702,12 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
         sql("SELECT nvl(1, 2, 3)")
       },
       condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      sqlState = "42605",
       parameters = Map(
         "functionName" -> toSQLId("nvl"),
         "expectedNum" -> "2",
         "actualNum" -> "3",
-        "docroot" -> SPARK_DOC_ROOT
+        "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot
       ),
       context = ExpectedContext(
         start = 7,

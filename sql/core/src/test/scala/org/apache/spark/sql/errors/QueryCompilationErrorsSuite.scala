@@ -735,11 +735,12 @@ class QueryCompilationErrorsSuite
         sql("SELECT CAST(1)")
       },
       condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      sqlState = "42605",
       parameters = Map(
         "functionName" -> "`cast`",
         "expectedNum" -> "0",
         "actualNum" -> "1",
-        "docroot" -> SPARK_DOC_ROOT),
+        "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot),
       context = ExpectedContext("", "", 7, 13, "CAST(1)")
     )
   }

@@ -28,7 +28,7 @@ import scala.language.postfixOps
 import scala.reflect.ClassTag
 import scala.util.Random
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkArithmeticException, SparkDateTimeException, SparkException, SparkFunSuite, SparkIllegalArgumentException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.{SparkArithmeticException, SparkDateTimeException, SparkException, SparkFunSuite, SparkIllegalArgumentException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, TimeZoneUTC}
 import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.nanosVal
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.TimestampTypes
 import org.apache.spark.sql.types._
@@ -4175,11 +4176,12 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         CurrentTimestampExpressionBuilder.build("current_timestamp", Seq(Literal(9), Literal(9)))
       },
       condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      sqlState = "42605",
       parameters = Map(
         "functionName" -> "`current_timestamp`",
         "expectedNum" -> "[0, 1]",
         "actualNum" -> "2",
-        "docroot" -> SPARK_DOC_ROOT))
+        "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot))
   }
 
   test("SPARK-57837: LocalTimestampExpressionBuilder") {
@@ -4207,11 +4209,12 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         LocalTimestampExpressionBuilder.build("localtimestamp", Seq(Literal(9), Literal(9)))
       },
       condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      sqlState = "42605",
       parameters = Map(
         "functionName" -> "`localtimestamp`",
         "expectedNum" -> "[0, 1]",
         "actualNum" -> "2",
-        "docroot" -> SPARK_DOC_ROOT))
+        "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot))
   }
 
   test("SPARK-61552: datetime functions with a foldable argument that fails to evaluate") {

@@ -26,7 +26,7 @@ import scala.collection.immutable
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkException}
+import org.apache.spark.SparkException
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, OuterScopes}
@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.{Literal, ScalaUDF}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{QueryExecution, SimpleMode, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, ScalaUDAF}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
@@ -137,11 +138,12 @@ class UDFSuite extends SharedSparkSession {
         df.selectExpr("substr('abcd', 2, 3, 4)")
       },
       condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      sqlState = "42605",
       parameters = Map(
         "functionName" -> toSQLId("substr"),
         "expectedNum" -> "[2, 3]",
         "actualNum" -> "4",
-        "docroot" -> SPARK_DOC_ROOT
+        "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot
       ),
       context = ExpectedContext(
         fragment = "substr('abcd', 2, 3, 4)",
@@ -158,11 +160,12 @@ class UDFSuite extends SharedSparkSession {
         df.selectExpr("foo(2, 3, 4)")
       },
       condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      sqlState = "42605",
       parameters = Map(
         "functionName" -> toSQLId("foo"),
         "expectedNum" -> "1",
         "actualNum" -> "3",
-        "docroot" -> SPARK_DOC_ROOT
+        "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot
       ),
       context = ExpectedContext(
         fragment = "foo(2, 3, 4)",

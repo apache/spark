@@ -20,8 +20,9 @@ package org.apache.spark.sql
 import java.sql.Timestamp
 import java.time.{Instant, LocalDateTime, LocalTime}
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkConf, SparkDateTimeException, SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkConf, SparkDateTimeException, SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.nanoOfSecTruncator
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -1316,11 +1317,12 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
     checkError(
       exception = intercept[AnalysisException](df.selectExpr(tooManyArgs)),
       condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      sqlState = "42605",
       parameters = Map(
         "functionName" -> "`to_timestamp_ntz`",
         "expectedNum" -> "[1, 2, 3]",
         "actualNum" -> "4",
-        "docroot" -> SPARK_DOC_ROOT),
+        "docroot" -> QueryCompilationErrors.sqlFunctionsDocumentationRoot),
       context = ExpectedContext(fragment = tooManyArgs, start = 0, stop = tooManyArgs.length - 1))
     withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false") {
       checkError(
