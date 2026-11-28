@@ -1412,7 +1412,7 @@ case class GetJsonObjectEvaluator(cachedPath: UTF8String) {
 
     case 0 =>
       // we've reached the desired index
-      val dirty = f()
+      val dirty = p.getCurrentToken != VALUE_NULL && f()
 
       while (p.nextToken() != END_ARRAY) {
         // advance the token stream to the end of the array
@@ -1701,7 +1701,7 @@ case class MultiGetJsonObjectEvaluator(
     var token = parser.nextToken()
     while (valid && token != null && token != JsonToken.END_ARRAY) {
       val child = node.indexedChildren.get(index).filter(_.hasUnmatched(matched))
-      if (child.nonEmpty) {
+      if (child.nonEmpty && token != JsonToken.VALUE_NULL) {
         valid = extractValue(parser, child.get, values, matched)
       } else {
         parser.skipChildren()

@@ -219,7 +219,7 @@ class JsonFunctionsSuite extends SharedSparkSession {
     assert(legacy.take(8) == Seq(
       Row("root-zero", "root-one", "raw", null, null, null, null, null),
       Row(null, null, null, "item-zero", "item-one", "{\"x\":1}", "one", null),
-      Row(null, null, null, null, "after-null", "[1,2]", "null", null),
+      Row(null, null, null, null, "after-null", "[1,2]", null, null),
       Row(null, null, null, "first", "second-one", null, null, null),
       Row(null, null, null, "after-null", "first", null, null, null),
       Row(null, null, null, null, null, null, null, null),
@@ -293,7 +293,7 @@ class JsonFunctionsSuite extends SharedSparkSession {
     assert(row.getUTF8String(1).toString == "{\"x\":1}")
     assert(row.getUTF8String(2).toString == "{\"x\":1}")
     assert(row.getUTF8String(3).toString == "3")
-    assert(row.getUTF8String(4).toString == "null")
+    assert(row.isNullAt(4))
     assert(row.isNullAt(5))
     assert(row.getUTF8String(4) == GetJsonObject(
       Literal("""["raw",{"x":1},[2,3],null]"""), Literal("$[3]")).eval())
@@ -301,7 +301,7 @@ class JsonFunctionsSuite extends SharedSparkSession {
     val nestedNull = MultiGetJsonObject(
       Literal("""{"a":[null],"b":1}"""), Seq("$.a[0]", "$.b")).eval()
       .asInstanceOf[InternalRow]
-    assert(nestedNull.getUTF8String(0).toString == "null")
+    assert(nestedNull.isNullAt(0))
     assert(nestedNull.getUTF8String(0) == GetJsonObject(
       Literal("""{"a":[null],"b":1}"""), Literal("$.a[0]")).eval())
     assert(nestedNull.getUTF8String(1).toString == "1")
