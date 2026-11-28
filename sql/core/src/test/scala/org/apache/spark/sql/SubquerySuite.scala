@@ -32,8 +32,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, Log
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
 import org.apache.spark.sql.execution.datasources.FileScanRDD
-import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
-import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, HashedRelationBroadcastMode}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.IntegerType
@@ -3774,6 +3774,46 @@ class SubquerySuite extends SharedSparkSession
         checkAnswer(
           sql(s"SELECT * FROM t1 WHERE b IN (SELECT c FROM t2) AND $guard AND a / b > 1"),
           Row(4, 2))
+      }
+    }
+  }
+
+  test("SPARK-58485: BroadcastExchangeExec prepares scalar subqueries in broadcast mode") {
+    withTable("t1", "t2", "t3") {
+      sql("CREATE TABLE t1(a INT) USING PARQUET")
+      sql("INSERT INTO t1 VALUES (1), (2)")
+
+      sql("CREATE TABLE t2(b INT) USING PARQUET")
+      sql("INSERT INTO t2 VALUES (1), (NULL)")
+
+      sql("CREATE TABLE t3(c INT) USING PARQUET")
+      sql("INSERT INTO t3 VALUES (1)")
+
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB") {
+        val df = spark.sql("""
+            |SELECT *
+            |FROM t1
+            |JOIN t2
+            |ON t1.a = COALESCE(
+            |      t2.b,
+            |      (SELECT MIN(c) FROM t3)
+            |   )
+            |""".stripMargin)
+
+        df.collect();
+
+        val exchanges = collect(df.queryExecution.executedPlan) { case e: BroadcastExchangeExec =>
+          e
+        }
+
+        assert(exchanges.length == 1)
+
+        exchanges.head.mode match {
+          case h: HashedRelationBroadcastMode =>
+            assert(h.key.exists(_.find(_.isInstanceOf[ScalarSubquery]).isDefined))
+          case other =>
+            fail(s"Expected HashedRelationBroadcastMode, got $other")
+        }
       }
     }
   }
