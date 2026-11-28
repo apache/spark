@@ -158,6 +158,23 @@ class CLIUtilityTests(ReusedConnectTestCase):
             unpack_pipeline_spec({"name": "test_pipeline", "storage": "storage_path"}), empty_spec
         )
 
+    def test_unpack_pipeline_spec_with_database_and_schema(self):
+        spec_data = {
+            "name": "test_pipeline",
+            "storage": "storage_path",
+            "database": "test_database",
+            "schema": "test_database",
+        }
+        self.assertEqual(unpack_pipeline_spec(spec_data).database, "test_database")
+
+        with self.assertRaises(PySparkException) as context:
+            unpack_pipeline_spec({**spec_data, "schema": "different_database"})
+        self.check_error(
+            exception=context.exception,
+            errorClass="PIPELINE_SPEC_CONFLICTING_FIELDS",
+            messageParameters={"first_field": "database", "second_field": "schema"},
+        )
+
     def test_unpack_pipeline_spec_bad_configuration(self):
         with self.assertRaises(TypeError) as context:
             unpack_pipeline_spec(
