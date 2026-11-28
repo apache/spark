@@ -145,12 +145,12 @@ class RpcDeadlines:
     because a timeout there would kill the execution with no recovery path.
 
     Note on ``release_relation``: the RemoveRemoteCachedRelation cleanup command is sent over a
-    blocking, non-reattachable ExecutePlan call issued from
-    :meth:`CachedRemoteRelation.__del__`. Unlike a query ExecutePlan, a timeout here does not kill
-    any recoverable execution -- it only abandons a best-effort cache eviction that the server also
-    performs independently -- so this call is given a bounded deadline. Without it the finalizer
-    can block forever if the release response is never delivered, which (on the foreachBatch
-    Connect path) stalls the streaming query indefinitely.
+    blocking, non-reattachable ExecutePlan call, issued by the thread that releases the
+    :class:`CachedRemoteRelation` objects that are garbage-collected. Unlike a query ExecutePlan, a
+    timeout here does not kill any recoverable execution -- it only abandons a best-effort cache
+    eviction that the server also performs independently -- so this call is given a bounded
+    deadline. Without it the thread can block forever if the release response is never delivered,
+    and stop releasing the other relations.
     """
 
     reattachable_execute_plan: Optional[float] = 10 * 60  # 10 min
@@ -1925,6 +1925,8 @@ class SparkConnectClient(object):
                 }
             if b.HasField("ml_command_result"):
                 yield {"ml_command_result": b.ml_command_result}
+            if b.HasField("rdd_command_result"):
+                yield {"rdd_command_result": b.rdd_command_result}
 
         try:
             if self._use_reattachable_execute:
@@ -2267,6 +2269,13 @@ class SparkConnectClient(object):
             self.thread_local.tags = set()
         # Use discard, not remove: removing an absent tag is a documented no-op
         # (see SparkSession.removeTag), matching the Classic behavior.
+        self.thread_local.tags.discard(tag)
+
+    def _remove_tag_allow_missing(self, tag: str) -> None:
+        """Remove a thread-local tag if present (used by Connect SparkContext job-group helpers)."""
+        self._throw_if_invalid_tag(tag)
+        if not hasattr(self.thread_local, "tags"):
+            self.thread_local.tags = set()
         self.thread_local.tags.discard(tag)
 
     def get_tags(self) -> Set[str]:

@@ -22,8 +22,11 @@ import java.util.concurrent.{Callable, CountDownLatch, Executors, TimeUnit}
 import org.apache.spark.{PipelinedShuffleDependency, SparkEnv, SparkFunSuite}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.shuffle.local.pipelined.ChannelShuffleRendezvous
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{classic, SparkSession}
+import org.apache.spark.sql.catalyst.expressions.DirectShufflePartitionID
+import org.apache.spark.sql.catalyst.plans.logical.RepartitionByExpression
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.python.{PythonRDDCoalesce, PythonRDDValues}
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 
 /**
@@ -776,6 +779,26 @@ class PipelinedShuffleSqlSuite extends SparkFunSuite
         require(readBack == 5L, s"expected 5 rows written, got $readBack")
         assertNotPipelined(df, "an exchange below a hidden-shuffle limit op must stay regular")
       }
+    }
+  }
+
+  test("a plan of the RDD API of PySpark on Spark Connect keeps regular shuffles") {
+    // The operators of the RDD API read their inputs as RDDs do. A coalesce of the values of a
+    // shuffle, as `RDD.coalesce` after `RDD.partitionBy` plans it, drains several reduce partitions
+    // in a task, which deadlocks a pipelined writer as a CoalesceExec over a shuffle does.
+    withDeadline(90,
+      "a coalesce of the RDD API over a pipelined shuffle hung: the plan of the RDD API was " +
+        "pipelined and the coalesced read deadlocked the writer") { spark =>
+      val pairs = spark.range(0, 2000000L, 1, 4)
+        .selectExpr("CAST(id % 8 AS INT) AS key", "CAST(CAST(id AS STRING) AS BINARY) AS value")
+        .queryExecution.analyzed
+      val shuffle = RepartitionByExpression(
+        Seq(DirectShufflePartitionID(pairs.output.head)), pairs, 8)
+      val df = classic.Dataset.ofRows(
+        spark.asInstanceOf[classic.SparkSession], PythonRDDCoalesce(2, PythonRDDValues(shuffle)))
+      val n = df.queryExecution.toRdd.count()
+      require(n == 2000000L, s"expected 2000000 rows, got $n")
+      assertNotPipelined(df, "a plan of the RDD API must leave its shuffles regular")
     }
   }
 }

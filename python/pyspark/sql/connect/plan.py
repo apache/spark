@@ -20,6 +20,8 @@
 import functools
 import json
 import pickle
+import queue
+import threading
 from inspect import isclass, signature
 from threading import Lock
 from typing import (
@@ -742,6 +744,35 @@ class WithWatermark(LogicalPlan):
         return plan
 
 
+# The cached remote relations that were garbage-collected, which a thread releases on the server
+# (see CachedRemoteRelation.__del__).
+_relations_to_release: "queue.SimpleQueue[CachedRemoteRelation]" = queue.SimpleQueue()
+_relation_releaser: Optional[threading.Thread] = None
+_relation_releaser_lock = Lock()
+
+
+def _release_relations() -> None:
+    while True:
+        relation = _relations_to_release.get()
+        try:
+            relation._release()
+        except Exception as e:
+            logger.warning(f"Releasing a cached remote relation failed with exception: {e}.")
+        # The relation is freed now rather than when the next one comes.
+        del relation
+
+
+def _start_relation_releaser() -> None:
+    global _relation_releaser
+    with _relation_releaser_lock:
+        if _relation_releaser is None:
+            releaser = threading.Thread(
+                target=_release_relations, name="release-cached-remote-relations", daemon=True
+            )
+            releaser.start()
+            _relation_releaser = releaser
+
+
 class CachedRemoteRelation(LogicalPlan):
     """Logical plan object for a DataFrame reference which represents a DataFrame that's been
     cached on the server with a given id."""
@@ -751,6 +782,9 @@ class CachedRemoteRelation(LogicalPlan):
         self._relation_id = relation_id
         # Needs to hold the session to make a request itself.
         self._spark_session = spark_session
+        # The thread that releases the relation starts here, since starting a thread from a
+        # finalizer can deadlock too.
+        _start_relation_releaser()
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         plan = self._create_proto_relation()
@@ -758,6 +792,18 @@ class CachedRemoteRelation(LogicalPlan):
         return plan
 
     def __del__(self) -> None:
+        # The garbage collector runs a finalizer in any thread, whenever it collects, even while
+        # gRPC holds the locks that a call takes: a call from here could deadlock. So a thread of
+        # its own releases the relation. The finalizer of a resurrected object does not run again.
+        if getattr(self, "_relation_id", None) is not None:
+            try:
+                _relations_to_release.put(self)
+            except Exception:
+                # The queue is gone at the exit of the interpreter.
+                pass
+
+    def _release(self) -> None:
+        """Releases the relation on the server, from the thread of the releases."""
         session = self._spark_session
         # If session is already closed, all cached DataFrame should be released.
         if session is not None and not session.client.is_closed and self._relation_id is not None:
@@ -786,13 +832,12 @@ class CachedRemoteRelation(LogicalPlan):
                             response_deserializer=response_deserializer,
                         )
                         metadata = session.client._execute_plan_metadata(req.operation_id)
-                        # Bound this blocking call with a client-side deadline. It is issued from a
-                        # finalizer with no other timeout at any layer; without a deadline it can
-                        # block forever if the response is never delivered, which stalls the
-                        # foreachBatch Connect handshake (the Python worker never sends its
-                        # completion signal and the driver JVM blocks on the per-batch read). A
-                        # timeout here is non-fatal: the eviction is best effort and the server
-                        # performs it independently, so on timeout we log and move on.
+                        # Bound this blocking call with a client-side deadline. It has no other
+                        # timeout at any layer; without a deadline it can block forever if the
+                        # response is never delivered, which stalls the releases of the other
+                        # cached remote relations. A timeout here is non-fatal: the eviction is best
+                        # effort and the server performs it independently, so on timeout we log and
+                        # move on.
                         timeout = session.client._rpc_deadlines.release_relation
                         channel(req, metadata=metadata, timeout=timeout)  # type: ignore[arg-type]
             except Exception as e:

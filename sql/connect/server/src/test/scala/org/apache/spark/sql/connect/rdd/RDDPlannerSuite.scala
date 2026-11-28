@@ -1,0 +1,314 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.connect.rdd
+
+import java.nio.charset.StandardCharsets.UTF_8
+import java.util.concurrent.atomic.AtomicInteger
+
+import com.google.protobuf.ByteString
+
+import org.apache.spark.api.python.PythonEvalType
+import org.apache.spark.connect.proto
+import org.apache.spark.resource.{ResourceProfileBuilder, TaskResourceRequests}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerStageCompleted}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.classic.Dataset
+import org.apache.spark.sql.connect.SparkConnectTestUtils
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput}
+import org.apache.spark.sql.connect.planner.{SparkConnectPlanner, SparkConnectPlanTest}
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
+import org.apache.spark.sql.execution.LogicalRDD
+import org.apache.spark.sql.execution.python._
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{BinaryType, IntegerType, StructField, StructType}
+
+/** Tests the planning of the relations and the commands of the RDD API of the Python client. */
+class RDDPlannerSuite extends SparkConnectPlanTest {
+
+  private def relation(f: proto.RDDRelation.Builder => Unit): proto.Relation = {
+    val builder = proto.RDDRelation.newBuilder()
+    f(builder)
+    proto.Relation.newBuilder().setRddRelation(builder).build()
+  }
+
+  /** Local data of one binary column. */
+  private def binaryData(values: String*): proto.Relation = createLocalRelationProto(
+    StructType(Seq(StructField("value", BinaryType))),
+    values.map(v => InternalRow(v.getBytes(UTF_8))))
+
+  private def parallelize(numSlices: Int, values: String*): proto.Relation = relation { r =>
+    r.getParallelizeBuilder.setData(binaryData(values: _*)).setNumSlices(numSlices)
+  }
+
+  /** Local data of the pairs of keys and values of a shuffle. */
+  private def pairs(kvs: (Int, String)*): proto.Relation = createLocalRelationProto(
+    StructType(Seq(StructField("key", IntegerType), StructField("value", BinaryType))),
+    kvs.map { case (k, v) => InternalRow(k, v.getBytes(UTF_8)) })
+
+  /**
+   * The values of the pairs of `input` shuffled to the partitions of their keys, as the RDD API
+   * shuffles them: a `RepartitionByExpression` of `DirectShufflePartitionID(key)`, which
+   * `DataFrame.repartitionById` also makes.
+   */
+  private def shuffled(input: proto.Relation, numPartitions: Int): proto.Relation = {
+    val key = proto.Expression.newBuilder()
+    key.getUnresolvedAttributeBuilder.setUnparsedIdentifier("key")
+    val partitionId = proto.Expression.newBuilder()
+    partitionId.getDirectShufflePartitionIdBuilder.setChild(key)
+    val shuffle = proto.Relation.newBuilder()
+    shuffle.getRepartitionByExpressionBuilder
+      .setInput(input)
+      .setNumPartitions(numPartitions)
+      .addPartitionExprs(partitionId)
+    relation(_.getValuesBuilder.setInput(shuffle))
+  }
+
+  /**
+   * The `MapPartitions` relation of a Python function of eval type NON_UDF of `input`, as the RDD
+   * API sends its functions, of `outputType` and the other fields that `f` sets.
+   */
+  private def mapPartitions(input: proto.Relation, outputType: StructType)(
+      f: (proto.MapPartitions.Builder, proto.PythonUDF.Builder) => Unit = (_, _) => ())
+      : proto.Relation = {
+    val udf = proto.PythonUDF
+      .newBuilder()
+      .setOutputType(DataTypeProtoConverter.toConnectProtoType(outputType))
+      .setEvalType(PythonEvalType.NON_UDF)
+      .setCommand(ByteString.copyFrom(Array[Byte](1, 2, 3)))
+      .setPythonVer("3.11")
+    val mp = proto.MapPartitions.newBuilder().setInput(input)
+    f(mp, udf)
+    mp.setFunc(proto.CommonInlineUserDefinedFunction.newBuilder().setPythonUdf(udf))
+    proto.Relation.newBuilder().setMapPartitions(mp).build()
+  }
+
+  private val valueType = StructType(Seq(StructField("value", BinaryType)))
+
+  private val pairsType = StructType(
+    Seq(StructField("key", IntegerType, nullable = false), StructField("value", BinaryType)))
+
+  private def values(rel: proto.Relation): Seq[Seq[String]] = {
+    val plan = transform(rel)
+    Dataset
+      .ofRows(spark, plan)
+      .queryExecution
+      .toRdd
+      .map(_.getBinary(0))
+      .glom()
+      .collect()
+      .map(_.map(new String(_, UTF_8)).toSeq)
+      .toSeq
+  }
+
+  test("parallelize") {
+    val rel = parallelize(3, "a", "b", "c", "d")
+    assert(transform(rel).isInstanceOf[PythonRDDParallelize])
+    assert(values(rel) === Seq(Seq("a"), Seq("b"), Seq("c", "d")))
+  }
+
+  test("parallelize rejects data that is not one binary column") {
+    val data = createLocalRelationProto(
+      StructType(Seq(StructField("n", IntegerType))),
+      Seq(InternalRow(1)))
+    val rel = relation(_.getParallelizeBuilder.setData(data).setNumSlices(1))
+    checkError(
+      exception = intercept[InvalidPlanInput](transform(rel)),
+      condition = "CONNECT_INVALID_PLAN.RDD_PARALLELIZE_INVALID_DATA",
+      parameters = Map("schema" -> "\"STRUCT<n: INT>\""))
+  }
+
+  test("union, coalesce and zip of partitions") {
+    val union = relation { r =>
+      r.getUnionBuilder.addInputs(parallelize(1)).addInputs(parallelize(2, "a", "b"))
+    }
+    assert(values(union) === Seq(Seq(), Seq("a"), Seq("b")))
+    assert(values(relation(_.getUnionBuilder)) === Seq.empty)
+
+    val coalesce = relation(_.getCoalesceBuilder.setInput(union).setNumPartitions(1))
+    assert(transform(coalesce).isInstanceOf[PythonRDDCoalesce])
+    assert(values(coalesce) === Seq(Seq("a", "b")))
+
+    val concatenate = relation { r =>
+      r.getZipPartitionsBuilder
+        .addInputs(parallelize(2, "a", "b"))
+        .addInputs(parallelize(2, "c", "d"))
+        .setConcatenate(true)
+    }
+    assert(values(concatenate) === Seq(Seq("a", "c"), Seq("b", "d")))
+  }
+
+  test("zip takes two inputs") {
+    val rel = relation { r =>
+      r.getZipPartitionsBuilder
+        .addInputs(parallelize(1))
+        .addInputs(parallelize(1))
+        .addInputs(parallelize(1))
+    }
+    checkError(
+      exception = intercept[InvalidPlanInput](transform(rel)),
+      condition = "CONNECT_INVALID_PLAN.RDD_ZIP_INVALID_INPUTS",
+      parameters = Map("numInputs" -> "3"))
+  }
+
+  test("map partitions runs a Python function of eval type NON_UDF as a PythonRDD") {
+    val rel = mapPartitions(parallelize(1), valueType)()
+    val plan = transform(rel).asInstanceOf[PythonRDDMapPartitions]
+    assert(!plan.outputPairs)
+    assert(plan.output.map(_.dataType) === Seq(BinaryType))
+    assert(plan.func.command === Seq[Byte](1, 2, 3))
+    assert(plan.func.pythonVer === "3.11")
+    assert(!plan.isBarrier)
+    // The server's PYTHONHASHSEED, or "0", when the function has none.
+    assert(plan.func.envVars.get("PYTHONHASHSEED") === sys.env.getOrElse("PYTHONHASHSEED", "0"))
+    assert(!plan.func.envVars.containsKey("PYSPARK_CONNECT_RDD_PROFILER"))
+  }
+
+  test("map partitions writes pairs of an output type of keys and values, in a barrier stage") {
+    val rel = mapPartitions(parallelize(1), pairsType) { (mp, udf) =>
+      mp.setIsBarrier(true)
+      udf.setPythonHashSeed("42").addAdditionalIncludes("include.zip")
+    }
+    withSQLConf(SQLConf.PYTHON_UDF_PROFILER.key -> "perf") {
+      val plan = transform(rel).asInstanceOf[PythonRDDMapPartitions]
+      assert(plan.outputPairs)
+      assert(plan.output.map(_.dataType) === Seq(IntegerType, BinaryType))
+      assert(plan.isBarrier)
+      assert(plan.func.envVars.get("PYTHONHASHSEED") === "42")
+      assert(plan.func.envVars.get("PYSPARK_CONNECT_RDD_PROFILER") === "perf")
+      assert(plan.func.pythonIncludes.contains("include.zip"))
+    }
+  }
+
+  test("map partitions runs in the stage of the resource profile of its ID") {
+    val profile = new ResourceProfileBuilder().require(new TaskResourceRequests().cpus(1)).build()
+    spark.sparkContext.resourceProfileManager.addResourceProfile(profile)
+    val rel = mapPartitions(parallelize(1), valueType)((mp, _) => mp.setProfileId(profile.id))
+    val plan = transform(rel).asInstanceOf[PythonRDDWithResources]
+    assert(plan.profile === profile)
+    assert(plan.child.isInstanceOf[PythonRDDMapPartitions])
+  }
+
+  test("map partitions takes an output type of values, or of keys and values") {
+    for (outputType <- Seq(
+        StructType(Seq(StructField("value", IntegerType))),
+        StructType(Seq(StructField("data", BinaryType))),
+        StructType(Seq(StructField("key", IntegerType), StructField("value", BinaryType))),
+        StructType(Seq(StructField("value", BinaryType), StructField("key", IntegerType))))) {
+      checkError(
+        exception =
+          intercept[InvalidPlanInput](transform(mapPartitions(parallelize(1), outputType)())),
+        condition = "CONNECT_INVALID_PLAN.RDD_MAP_PARTITIONS_INVALID_OUTPUT_TYPE",
+        parameters = Map("dataType" -> toSQLType(outputType)))
+    }
+  }
+
+  test("values of a shuffle, and elements") {
+    val rdd = shuffled(pairs(1 -> "a", 0 -> "b"), 3)
+    assert(values(rdd) === Seq(Seq("b"), Seq("a"), Seq()))
+    assert(PythonRDDOperators.numPartitions(transform(rdd)) === Some(3))
+
+    val elements = relation { r =>
+      r.getElementsBuilder
+        .setInput(rdd)
+        .setPartitions(proto.Ints.newBuilder().addValues(1))
+    }
+    val plan = transform(elements).asInstanceOf[PythonRDDElements]
+    assert(plan.partitions === Some(Seq(1)))
+    val rows = Dataset.ofRows(spark, plan).collect()
+    assert(rows.map(_.getInt(0)).toSeq === Seq(1))
+  }
+
+  test("with resources looks up the resource profile of its ID") {
+    val profile = new ResourceProfileBuilder().require(new TaskResourceRequests().cpus(1)).build()
+    spark.sparkContext.resourceProfileManager.addResourceProfile(profile)
+    val rel = relation { r =>
+      r.getWithResourcesBuilder.setInput(parallelize(2, "a", "b")).setProfileId(profile.id)
+    }
+    val plan = transform(rel).asInstanceOf[PythonRDDWithResources]
+    assert(plan.profile === profile)
+    assert(values(rel) === Seq(Seq("a"), Seq("b")))
+  }
+
+  test("to DataFrame takes a struct type") {
+    val rel = relation { r =>
+      r.getToDataFrameBuilder
+        .setInput(parallelize(1))
+        .setSchema(proto.DataType.newBuilder().setInteger(proto.DataType.Integer.newBuilder()))
+    }
+    checkError(
+      exception = intercept[InvalidPlanInput](transform(rel)),
+      condition = "INVALID_SCHEMA_TYPE_NON_STRUCT",
+      parameters = Map("dataType" -> "\"INT\""))
+  }
+
+  test("describe returns the number of partitions") {
+    val planner = new SparkConnectPlanner(SparkConnectTestUtils.createDummySessionHolder(spark))
+    val handler = new RDDCommandHandler(planner)
+    def describe(rel: proto.Relation): Int = {
+      val command = proto.RDDCommand.newBuilder()
+      command.getDescribeBuilder.setRdd(rel)
+      handler.handle(command.build()).getInfo.getNumPartitions
+    }
+    assert(describe(parallelize(4)) === 4)
+    // A relation that is not an RDD of the RDD API is planned to count its partitions.
+    val data = binaryData("a", "b")
+    val expected = Dataset.ofRows(spark, transform(data)).queryExecution.toRdd.getNumPartitions
+    assert(describe(data) === expected)
+  }
+
+  test("pin plans an RDD once, so that the jobs on it share its shuffles") {
+    val holder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    val handler = new RDDCommandHandler(new SparkConnectPlanner(holder))
+    val command = proto.RDDCommand.newBuilder()
+    command.getPinBuilder.setRdd(shuffled(pairs(1 -> "a", 0 -> "b"), 3))
+
+    val mapStages = new AtomicInteger()
+    val listener = new SparkListener {
+      override def onStageCompleted(event: SparkListenerStageCompleted): Unit = {
+        if (event.stageInfo.shuffleDepId.isDefined) mapStages.incrementAndGet()
+      }
+    }
+    spark.sparkContext.listenerBus.waitUntilEmpty()
+    spark.sparkContext.addSparkListener(listener)
+    try {
+      val result = handler.handle(command.build()).getPinned
+      assert(result.getNumPartitions === 3)
+      val pinned = holder.getDataFrameOrThrow(result.getRelation.getRelationId)
+      assert(pinned.asInstanceOf[Dataset[_]].logicalPlan.isInstanceOf[LogicalRDD])
+      // Two jobs on the pinned plan.
+      for (_ <- 0 until 2) {
+        val values = pinned.collect().map(r => new String(r.getAs[Array[Byte]](0), UTF_8))
+        assert(values.toSeq === Seq("b", "a"))
+      }
+      spark.sparkContext.listenerBus.waitUntilEmpty()
+      assert(mapStages.get() === 1)
+    } finally {
+      spark.sparkContext.removeSparkListener(listener)
+    }
+  }
+
+  test("context info") {
+    val planner = new SparkConnectPlanner(SparkConnectTestUtils.createDummySessionHolder(spark))
+    val command = proto.RDDCommand.newBuilder()
+    command.getGetContextInfoBuilder
+    val info = new RDDCommandHandler(planner).handle(command.build()).getContextInfo
+    assert(info.getDefaultParallelism === spark.sparkContext.defaultParallelism)
+    assert(info.getStartTime === spark.sparkContext.startTime)
+    assert(info.getPythonWorkerMemory === "512m")
+  }
+}

@@ -79,6 +79,30 @@ class ResourceProfileTestsMixin:
         rp = ResourceProfileBuilder().require(treqs).build
         df.mapInPandas(func, "id long", False, rp).show(n=10)
 
+    def test_rdd_without_profile(self):
+        rdd = self.spark.sparkContext.parallelize(range(10), 2)
+        self.assertEqual(rdd.map(lambda _: TaskContext.get().cpus()).collect(), [1] * 10)
+
+    def test_rdd_with_profile(self):
+        sc = self.spark.sparkContext
+        treqs = TaskResourceRequests().cpus(3)
+        rp = ResourceProfileBuilder().require(treqs).build
+
+        def cpus(_):
+            return TaskContext.get().cpus()
+
+        # The stage of an RDD with a profile computes the RDDs of the stage with it.
+        rdd = sc.parallelize(range(10), 2).withResources(rp)
+        # The profile, or a registered one with the same resources (SPARK-57467).
+        self.assertEqual(rdd.getResourceProfile().taskResources["cpus"].amount, 3)
+        self.assertEqual(rdd.map(cpus).collect(), [3] * 10)
+        self.assertEqual(
+            sc.parallelize(range(10), 2).map(cpus).withResources(rp).collect(), [3] * 10
+        )
+        # The stage after a shuffle does not have the profile.
+        shuffled = rdd.map(lambda x: (x, x)).partitionBy(2).map(cpus)
+        self.assertEqual(shuffled.collect(), [1] * 10)
+
 
 class ResourceProfileTests(ResourceProfileTestsMixin, ReusedPySparkTestCase):
     @classmethod

@@ -46,6 +46,7 @@ import pyspark.sql.connect.proto.common_pb2
 import pyspark.sql.connect.proto.expressions_pb2
 import pyspark.sql.connect.proto.ml_pb2
 import pyspark.sql.connect.proto.pipelines_pb2
+import pyspark.sql.connect.proto.rdd_pb2
 import pyspark.sql.connect.proto.relations_pb2
 import pyspark.sql.connect.proto.types_pb2
 import sys
@@ -1782,6 +1783,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     PIPELINE_EVENT_RESULT_FIELD_NUMBER: builtins.int
     PIPELINE_COMMAND_RESULT_FIELD_NUMBER: builtins.int
     PIPELINE_QUERY_FUNCTION_EXECUTION_SIGNAL_FIELD_NUMBER: builtins.int
+    RDD_COMMAND_RESULT_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     METRICS_FIELD_NUMBER: builtins.int
     OBSERVED_METRICS_FIELD_NUMBER: builtins.int
@@ -1864,6 +1866,9 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         register its result with the server.
         """
     @property
+    def rdd_command_result(self) -> pyspark.sql.connect.proto.rdd_pb2.RDDCommandResult:
+        """Internal: the result of a command of the RDD API of the Python client."""
+    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """Support arbitrary result objects."""
     @property
@@ -1912,6 +1917,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         | None = ...,
         pipeline_query_function_execution_signal: pyspark.sql.connect.proto.pipelines_pb2.PipelineQueryFunctionExecutionSignal
         | None = ...,
+        rdd_command_result: pyspark.sql.connect.proto.rdd_pb2.RDDCommandResult | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
         metrics: global___ExecutePlanResponse.Metrics | None = ...,
         observed_metrics: collections.abc.Iterable[global___ExecutePlanResponse.ObservedMetrics]
@@ -1943,6 +1949,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"pipeline_event_result",
             "pipeline_query_function_execution_signal",
             b"pipeline_query_function_execution_signal",
+            "rdd_command_result",
+            b"rdd_command_result",
             "response_type",
             b"response_type",
             "result_complete",
@@ -1990,6 +1998,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"pipeline_event_result",
             "pipeline_query_function_execution_signal",
             b"pipeline_query_function_execution_signal",
+            "rdd_command_result",
+            b"rdd_command_result",
             "response_id",
             b"response_id",
             "response_type",
@@ -2033,6 +2043,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             "pipeline_event_result",
             "pipeline_command_result",
             "pipeline_query_function_execution_signal",
+            "rdd_command_result",
             "extension",
         ]
         | None

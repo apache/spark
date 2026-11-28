@@ -15,8 +15,6 @@
 # limitations under the License.
 #
 
-import unittest
-
 from pyspark.errors import AnalysisException
 from pyspark.sql.tests.arrow.test_arrow import ArrowTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
@@ -24,6 +22,10 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
 class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase, PandasOnSparkTestUtils):
+    @property
+    def sc(self):
+        return self.spark.sparkContext
+
     def test_createDataFrame_pandas_with_map_type(self):
         self.check_createDataFrame_pandas_with_map_type(True)
 
@@ -32,14 +34,6 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase, PandasOnSparkTest
 
     def test_createDataFrame_with_ndarray(self):
         self.check_createDataFrame_with_ndarray(True)
-
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_no_partition_frame(self):
-        super().test_no_partition_frame()
-
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_no_partition_toPandas(self):
-        super().test_no_partition_toPandas()
 
     def test_pandas_self_destruct(self):
         df = self.spark.range(100).select("id", "id", "id")
@@ -51,10 +45,6 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase, PandasOnSparkTest
             no_self_destruct_pdf = df.toPandas()
 
         self.assert_eq(self_destruct_pdf, no_self_destruct_pdf)
-
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_toPandas_batch_order(self):
-        super().test_toPandas_batch_order()
 
     def test_toPandas_empty_df_arrow_enabled(self):
         self.check_toPandas_empty_df_arrow_enabled(True)

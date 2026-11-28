@@ -23,6 +23,10 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class TypesParityTests(TypesTestsMixin, ReusedConnectTestCase):
+    @property
+    def sc(self):
+        return self.spark.sparkContext
+
     # SPARK-57462 follow-up: the nanosecond timestamp value path now works over Spark Connect,
     # whose data path goes through Arrow (to_arrow_type / ArrowTableToRowsConversion). The
     # data-path tests -- and the collect map-key collision guard, now mirrored onto the Connect
@@ -52,74 +56,6 @@ class TypesParityTests(TypesTestsMixin, ReusedConnectTestCase):
             )
             self.assertEqual(datetime.datetime(2020, 1, 2, 3, 4, 5, 123456), df.collect()[0].ts)
             self.assertEqual(pd.Timestamp("2020-01-02 03:04:05.123456789"), df.toPandas()["ts"][0])
-
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_apply_schema(self):
-        super().test_apply_schema()
-
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_apply_schema_to_dict_and_rows(self):
-        super().test_apply_schema_to_dict_and_rows()
-
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_apply_schema_to_row(self):
-        super().test_apply_schema_to_row()
-
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_geospatial_create_dataframe_rdd(self):
-        super().test_geospatial_create_dataframe_rdd()
-
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_create_dataframe_schema_mismatch(self):
-        super().test_create_dataframe_schema_mismatch()
-
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_infer_array_element_type_empty_rdd(self):
-        super().test_infer_array_element_type_empty_rdd()
-
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_infer_array_merge_element_types_with_rdd(self):
-        super().test_infer_array_merge_element_types_with_rdd()
-
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_infer_map_pair_type_empty_rdd(self):
-        super().test_infer_map_pair_type_empty_rdd()
-
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_infer_map_merge_pair_types_with_rdd(self):
-        super().test_infer_map_merge_pair_types_with_rdd()
-
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_infer_binary_type(self):
-        super().test_infer_binary_type()
-
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_infer_long_type(self):
-        super().test_infer_long_type()
-
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_infer_nested_dict_as_struct_with_rdd(self):
-        super().test_infer_nested_dict_as_struct_with_rdd()
-
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_infer_nested_schema(self):
-        super().test_infer_nested_schema()
-
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_infer_schema(self):
-        super().test_infer_schema()
-
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_infer_schema_to_local(self):
-        super().test_infer_schema_to_local()
-
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_infer_schema_upcast_int_to_string(self):
-        super().test_infer_schema_upcast_int_to_string()
-
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_rdd_with_udt(self):
-        super().test_rdd_with_udt()
 
     @unittest.skip("Requires JVM access.")
     def test_udt(self):

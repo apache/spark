@@ -36,6 +36,7 @@ from typing import (
     Any,
     Callable,
     Generator,
+    Hashable,
     Iterator,
     List,
     Optional,
@@ -117,6 +118,50 @@ JVM_LONG_MIN: int = -(1 << 63)
 JVM_LONG_MAX: int = (1 << 63) - 1
 
 FuncT = TypeVar("FuncT", bound=Callable[..., Any])
+
+
+# Whether PYTHONHASHSEED was found set, which it stays: the hash of strings is fixed when the
+# interpreter starts. Checking os.environ for every key costs more than hashing most keys.
+_python_hash_seed_set = False
+
+
+def portable_hash(x: Hashable) -> int:
+    """
+    Consistent hash for builtin Spark partition keys (notably ``None`` and tuples containing
+    ``None``), aligned with JVM expectations.
+
+    The algorithm mirrors CPython 2.7 hashing for these cases.
+
+    Examples
+    --------
+    >>> portable_hash(None)
+    0
+    >>> portable_hash((None, 1)) & 0xffffffff
+    219750521
+    """
+    global _python_hash_seed_set
+
+    if not _python_hash_seed_set:
+        if "PYTHONHASHSEED" not in os.environ:
+            raise PySparkRuntimeError(
+                errorClass="PYTHON_HASH_SEED_NOT_SET",
+                messageParameters={},
+            )
+        _python_hash_seed_set = True
+
+    if x is None:
+        return 0
+    if isinstance(x, tuple):
+        h = 0x345678
+        for i in x:
+            h ^= portable_hash(i)
+            h *= 1000003
+            h &= sys.maxsize
+        h ^= len(x)
+        if h == -1:
+            h = -2
+        return int(h)
+    return hash(x)
 
 
 def print_exec(stream: TextIO) -> None:
@@ -970,7 +1015,8 @@ def is_remote_only() -> bool:
     if _is_remote_only is not None:
         return _is_remote_only
     try:
-        from pyspark import core  # noqa: F401
+        # The implementations of Spark Classic, which pyspark-client does not have.
+        from pyspark.core import classic  # noqa: F401
 
         _is_remote_only = False
         return _is_remote_only

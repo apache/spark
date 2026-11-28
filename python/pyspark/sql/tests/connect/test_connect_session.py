@@ -16,6 +16,9 @@
 #
 
 import os
+import subprocess
+import sys
+import textwrap
 import unittest
 import uuid
 from typing import Optional
@@ -319,6 +322,29 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
         )
         self.assertEqual(session.range(1).first()[0], 0)
         self.assertIsInstance(session, RemoteSparkSession)
+
+    def test_api_mode_with_local_master(self):
+        # A local master, or no master, starts a local Spark Connect server, whose JVM must not
+        # get spark.api.mode=connect: it would then be launched as a Spark Connect client.
+        env = {
+            k: v
+            for k, v in os.environ.items()
+            if k
+            not in ("MASTER", "SPARK_REMOTE", "SPARK_LOCAL_REMOTE", "SPARK_CONNECT_MODE_ENABLED")
+        }
+        for master in ['.master("local[1]")', ""]:
+            code = textwrap.dedent(
+                """
+                from pyspark.sql import SparkSession
+                from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
+                spark = SparkSession.builder.config("spark.api.mode", "connect")%s.getOrCreate()
+                assert isinstance(spark, RemoteSparkSession)
+                assert spark.range(1).first()[0] == 0
+                spark.stop()
+                """
+                % master
+            )
+            subprocess.run([sys.executable, "-c", code], env=env, check=True, timeout=600)
 
     def test_authentication(self):
         # All servers start with a default token of "deadbeef", so supply in invalid one

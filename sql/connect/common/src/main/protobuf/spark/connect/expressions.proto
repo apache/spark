@@ -478,6 +478,10 @@ message PythonUDF {
   // (Optional) Intermediate buffer schema for an incremental Python aggregator
   // (see PythonAggregate). Set only for the incremental aggregator eval types.
   optional DataType buffer_type = 6;
+  // (Optional) The PYTHONHASHSEED of the Python workers that run a function of eval type
+  // NON_UDF (the RDD API), so that they hash strings as the client does. The server's when not
+  // set.
+  optional string python_hash_seed = 7;
 }
 
 message ScalarScalaUDF {

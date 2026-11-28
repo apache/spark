@@ -71,12 +71,15 @@ that developers need to be aware of when using Spark Connect:
 2. By design, the Spark Connect protocol uses Spark's logical
    plans as the abstraction to be able to declaratively describe the operations to be executed
    on the server. Consequently, the Spark Connect protocol does not support all the
-   execution APIs of Spark, most importantly RDDs. Alternatives for missing RDD functionality
-   are provided as part of the higher-level DataFrame API.
+   execution APIs of Spark. PySpark runs its RDD API on internal logical operators of the
+   session, which compute the partitions of RDDs as Spark Classic does; other clients do not
+   support RDDs, and alternatives for missing RDD functionality are provided as part of the
+   higher-level DataFrame API.
 3. Spark Connect provides a session-based client for its consumers. This means that the
    client does not have access to properties of the cluster that manipulate the
    environment for all connected clients. Most importantly, the client cannot change the
-   static Spark configuration and has no access to the SparkContext.
+   static Spark configuration and has no access to the SparkContext of the server: the
+   SparkContext of PySpark on Spark Connect belongs to its session.
 
 Apart from these differences the Spark Connect API is code-compatible with classic Spark
 applications: the DataFrame code they contain does not change. What changes is around that code:
@@ -104,8 +107,8 @@ definitions are designed to be backwards compatible.
 **Remote connectivity**: The decoupled architecture allows remote connectivity to Spark beyond SQL
 and JDBC: any application can now interactively use Spark "as a service".
 
-**Simplicity**: The Spark Connect API is the DataFrame API and SQL, without the lower-level RDD
-API (see [How Spark Connect client applications differ from classic Spark applications](#how-spark-connect-client-applications-differ-from-classic-spark-applications)).
+**Simplicity**: The Spark Connect API is the DataFrame API and SQL. PySpark also runs its
+lower-level RDD API on the logical plans of the session (see [How Spark Connect client applications differ from classic Spark applications](#how-spark-connect-client-applications-differ-from-classic-spark-applications)).
 It is fully declarative and consequently easy to learn for new users familiar with SQL.
 
 **Debuggability and observability**: Spark Connect enables interactive debugging
@@ -117,9 +120,11 @@ be monitored using the application's framework native metrics and logging librar
 **PySpark**: Spark Connect supports most PySpark APIs, including
 [DataFrame](api/python/reference/pyspark.sql/dataframe.html),
 [Functions](api/python/reference/pyspark.sql/functions.html), and
-[Column](api/python/reference/pyspark.sql/column.html). However,
-some APIs such as [SparkContext](api/python/reference/api/pyspark.SparkContext.html)
-and [RDD](api/python/reference/api/pyspark.RDD.html) are not supported.
+[Column](api/python/reference/pyspark.sql/column.html), as well as
+[RDD](api/python/reference/api/pyspark.RDD.html) and the
+[SparkContext](api/python/reference/api/pyspark.SparkContext.html) of a session, which
+`SparkSession.sparkContext` returns. Some of their APIs, such as broadcast variables,
+accumulators and Hadoop input and output formats, are not supported.
 You can check which APIs are currently
 supported in the [API reference](api/python/reference/index.html) documentation.
 Supported APIs are labeled "Supports Spark Connect" so you can check whether the

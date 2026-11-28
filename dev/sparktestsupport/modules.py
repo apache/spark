@@ -749,7 +749,7 @@ pyspark_core = Module(
     python_test_goals=[
         # doctests
         "pyspark.conf",
-        "pyspark.core.rdd",
+        "pyspark.core.classic.rdd",
         "pyspark.core.context",
         "pyspark.core.broadcast",
         "pyspark.accumulators",
@@ -761,8 +761,11 @@ pyspark_core = Module(
         "pyspark.util",
         # unittests
         "pyspark.tests.test_appsubmit",
+        "pyspark.tests.test_artifact_spark_context",
         "pyspark.tests.test_broadcast",
+        "pyspark.tests.test_cloudpickle_rust",
         "pyspark.tests.test_conf",
+        "pyspark.tests.test_connect_compatibility",
         "pyspark.tests.test_context",
         "pyspark.tests.test_daemon",
         "pyspark.tests.test_join",
@@ -901,7 +904,6 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_resources",
         "pyspark.sql.tests.plot.test_frame_plot",
         "pyspark.sql.tests.plot.test_frame_plot_plotly",
-        "pyspark.sql.tests.test_connect_compatibility",
         "pyspark.sql.tests.coercion.test_pandas_udf_input_type",
         "pyspark.sql.tests.coercion.test_python_udf_input_type",
         "pyspark.sql.tests.coercion.test_pandas_udf_return_type",
@@ -1427,6 +1429,7 @@ pyspark_connect = Module(
     dependencies=[pyspark_sql, connect],
     source_file_regexes=[
         "python/pyspark/sql/connect",
+        "python/pyspark/tests/connect",
         "sbin/start-connect-server.sh",
     ],
     python_test_goals=[
@@ -1479,6 +1482,16 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_parity_group",
         "pyspark.sql.tests.connect.test_parity_sql",
         "pyspark.sql.tests.connect.test_parity_job_cancellation",
+        "pyspark.tests.connect.test_parity_binary_files",
+        "pyspark.tests.connect.test_parity_join",
+        "pyspark.tests.connect.test_parity_rdd",
+        "pyspark.tests.connect.test_parity_rddbarrier",
+        "pyspark.tests.connect.test_parity_rddsampler",
+        "pyspark.tests.connect.test_parity_serializers",
+        "pyspark.tests.connect.test_parity_shuffle_sort",
+        "pyspark.tests.connect.test_parity_spark_context_artifacts",
+        "pyspark.tests.connect.test_parity_statcounter",
+        "pyspark.tests.connect.test_parity_taskcontext",
         "pyspark.sql.tests.connect.test_parity_dataframe",
         "pyspark.sql.tests.connect.test_parity_dataframe_query_context",
         "pyspark.sql.tests.connect.test_parity_collection",

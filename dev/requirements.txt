@@ -12,6 +12,7 @@ scikit-learn
 matplotlib
 memory-profiler>=0.61.0
 pyyaml>=3.11
+cloudpickle-rust==0.3.0
 
 # PySpark test dependencies
 unittest-xml-reporting

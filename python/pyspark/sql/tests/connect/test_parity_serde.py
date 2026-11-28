@@ -15,20 +15,14 @@
 # limitations under the License.
 #
 
-import unittest
-
 from pyspark.sql.tests.test_serde import SerdeTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class SerdeParityTests(SerdeTestsMixin, ReusedConnectTestCase):
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_int_array_serialization(self):
-        super().test_int_array_serialization()
-
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_serialize_nested_array_and_map(self):
-        super().test_serialize_nested_array_and_map()
+    @property
+    def sc(self):
+        return self.spark.sparkContext
 
 
 if __name__ == "__main__":

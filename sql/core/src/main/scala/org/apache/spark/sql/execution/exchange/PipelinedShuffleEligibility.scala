@@ -28,6 +28,7 @@ import org.apache.spark.sql.execution.{CoalesceExec, CollectLimitExec, CollectTa
 import org.apache.spark.sql.execution.adaptive.QueryStageExec
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.joins.CartesianProductExec
+import org.apache.spark.sql.execution.python.PythonRDDExec
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -103,9 +104,12 @@ private[sql] object PipelinedShuffleEligibility extends Logging {
     // multi-partition reads and repeated reads of the same partition. Cached inputs also hide
     // shuffle lineage: cache hits skip those readers, while misses may require regular stages.
     // RDD scans can hide arbitrary shuffle lineage and sharing outside the SQL plan as well.
+    // The operators of the RDD API of PySpark on Spark Connect read their inputs as RDDs do:
+    // several partitions in a task, a partition several times or only some partitions, also in
+    // barrier stages and with resource profiles.
     def hasUnsupportedBoundary(p: SparkPlan): Boolean = p match {
       case _: DeserializeToObjectExec | _: InMemoryTableScanExec |
-          _: RDDScanExec | _: ExternalRDDScanExec[_] => true
+          _: RDDScanExec | _: ExternalRDDScanExec[_] | _: PythonRDDExec => true
       case q: QueryStageExec => hasUnsupportedBoundary(q.plan)
       case other => other.children.exists(hasUnsupportedBoundary)
     }

@@ -104,15 +104,15 @@ class TestFunctionPickler(unittest.TestCase):
 
     def _create_code_snippet_body(self, pickled_fn_path: str, fn_output_save_path: str) -> str:
         code_snippet = textwrap.dedent(f"""
-                    from pyspark import cloudpickle
+                    from pyspark.serializers import _cloudpickle_dump, _cloudpickle_load
                     import os
 
                     if __name__ == "__main__":
                         with open("{pickled_fn_path}", "rb") as f:
-                            fn, args, kwargs = cloudpickle.load(f)
+                            fn, args, kwargs = _cloudpickle_load(f)
                         output = fn(*args, **kwargs)
                         with open("{fn_output_save_path}", "wb") as f:
-                            cloudpickle.dump(output, f)
+                            _cloudpickle_dump(output, f)
                     """)
         return code_snippet
 

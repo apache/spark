@@ -17,43 +17,61 @@
 from pyspark.testing.utils import ReusedPySparkTestCase
 
 
-class JoinTests(ReusedPySparkTestCase):
-    def test_narrow_dependency_in_join(self):
+class JoinTestsMixin:
+    """Join / cogroup assertions without JVM stage tracking."""
+
+    def _verify_join_collect_results(self) -> None:
         rdd = self.sc.parallelize(range(10)).map(lambda x: (x, x))
         parted = rdd.partitionBy(2)
         self.assertEqual(2, parted.union(parted).getNumPartitions())
         self.assertEqual(rdd.getNumPartitions() + 2, parted.union(rdd).getNumPartitions())
         self.assertEqual(rdd.getNumPartitions() + 2, rdd.union(parted).getNumPartitions())
 
-        tracker = self.sc.statusTracker()
-
-        self.sc.setJobGroup("test1", "test", True)
         d = sorted(parted.join(parted).collect())
         self.assertEqual(10, len(d))
         self.assertEqual((0, (0, 0)), d[0])
-        jobId = tracker.getJobIdsForGroup("test1")[0]
-        self.assertEqual(2, len(tracker.getJobInfo(jobId).stageIds))
 
-        self.sc.setJobGroup("test2", "test", True)
         d = sorted(parted.join(rdd).collect())
         self.assertEqual(10, len(d))
         self.assertEqual((0, (0, 0)), d[0])
-        jobId = tracker.getJobIdsForGroup("test2")[0]
-        self.assertEqual(3, len(tracker.getJobInfo(jobId).stageIds))
 
-        self.sc.setJobGroup("test3", "test", True)
         d = sorted(parted.cogroup(parted).collect())
         self.assertEqual(10, len(d))
         self.assertEqual([[0], [0]], list(map(list, d[0][1])))
-        jobId = tracker.getJobIdsForGroup("test3")[0]
-        self.assertEqual(2, len(tracker.getJobInfo(jobId).stageIds))
 
-        self.sc.setJobGroup("test4", "test", True)
         d = sorted(parted.cogroup(rdd).collect())
         self.assertEqual(10, len(d))
         self.assertEqual([[0], [0]], list(map(list, d[0][1])))
-        jobId = tracker.getJobIdsForGroup("test4")[0]
-        self.assertEqual(3, len(tracker.getJobInfo(jobId).stageIds))
+
+
+class JoinTests(JoinTestsMixin, ReusedPySparkTestCase):
+    def test_narrow_dependency_in_join(self):
+        self._verify_join_collect_results()
+
+        tracker = self.sc.statusTracker()
+
+        rdd = self.sc.parallelize(range(10)).map(lambda x: (x, x))
+        parted = rdd.partitionBy(2)
+
+        self.sc.setJobGroup("test1", "test", True)
+        sorted(parted.join(parted).collect())
+        job_id = tracker.getJobIdsForGroup("test1")[0]
+        self.assertEqual(2, len(tracker.getJobInfo(job_id).stageIds))
+
+        self.sc.setJobGroup("test2", "test", True)
+        sorted(parted.join(rdd).collect())
+        job_id = tracker.getJobIdsForGroup("test2")[0]
+        self.assertEqual(3, len(tracker.getJobInfo(job_id).stageIds))
+
+        self.sc.setJobGroup("test3", "test", True)
+        sorted(parted.cogroup(parted).collect())
+        job_id = tracker.getJobIdsForGroup("test3")[0]
+        self.assertEqual(2, len(tracker.getJobInfo(job_id).stageIds))
+
+        self.sc.setJobGroup("test4", "test", True)
+        sorted(parted.cogroup(rdd).collect())
+        job_id = tracker.getJobIdsForGroup("test4")[0]
+        self.assertEqual(3, len(tracker.getJobInfo(job_id).stageIds))
 
 
 if __name__ == "__main__":

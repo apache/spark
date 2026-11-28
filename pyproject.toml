@@ -77,6 +77,9 @@ internal_pyspark_devtool = [
     "pystack>=1.6.0; sys_platform=='linux'",
 ]
 
+# Optional: pyspark pickles with cloudpickle-rust when it is installed.
+internal_cloudpickle_rust = ["cloudpickle-rust==0.3.0"]
+
 connect = [
     {include-group = "internal_py4j"},
     {include-group = "internal_pandas"},
@@ -199,6 +202,7 @@ internal_devtools = [
 
 dev = [
     {include-group = "internal_pyspark_devtool"},
+    {include-group = "internal_cloudpickle_rust"},
     {include-group = "internal_lint"},
     {include-group = "internal_test"},
     {include-group = "internal_docs"},
@@ -234,6 +238,7 @@ ci_connect_minimum = [
 
 ci_classic_standard = [
     {include-group = "internal_pyspark_devtool"},
+    {include-group = "internal_cloudpickle_rust"},
     {include-group = "sql"},
     {include-group = "pandas_on_spark"},
     {include-group = "pandas_on_spark_extra"},
@@ -272,6 +277,7 @@ ci_classic_pandas_3 = [
     {include-group = "internal_numpy"},
     {include-group = "internal_py4j"},
     {include-group = "internal_pyspark_devtool"},
+    {include-group = "internal_cloudpickle_rust"},
     {include-group = "pandas_on_spark_extra"},
     # torch should be installed with ml_torch group
     {include-group = "ml_extra_base"},

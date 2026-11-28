@@ -1827,6 +1827,7 @@ class PythonUDF(google.protobuf.message.Message):
     PYTHON_VER_FIELD_NUMBER: builtins.int
     ADDITIONAL_INCLUDES_FIELD_NUMBER: builtins.int
     BUFFER_TYPE_FIELD_NUMBER: builtins.int
+    PYTHON_HASH_SEED_FIELD_NUMBER: builtins.int
     @property
     def output_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
         """(Required) Output type of the Python UDF"""
@@ -1846,6 +1847,11 @@ class PythonUDF(google.protobuf.message.Message):
         """(Optional) Intermediate buffer schema for an incremental Python aggregator
         (see PythonAggregate). Set only for the incremental aggregator eval types.
         """
+    python_hash_seed: builtins.str
+    """(Optional) The PYTHONHASHSEED of the Python workers that run a function of eval type
+    NON_UDF (the RDD API), so that they hash strings as the client does. The server's when not
+    set.
+    """
     def __init__(
         self,
         *,
@@ -1855,16 +1861,21 @@ class PythonUDF(google.protobuf.message.Message):
         python_ver: builtins.str = ...,
         additional_includes: collections.abc.Iterable[builtins.str] | None = ...,
         buffer_type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+        python_hash_seed: builtins.str | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
             "_buffer_type",
             b"_buffer_type",
+            "_python_hash_seed",
+            b"_python_hash_seed",
             "buffer_type",
             b"buffer_type",
             "output_type",
             b"output_type",
+            "python_hash_seed",
+            b"python_hash_seed",
         ],
     ) -> builtins.bool: ...
     def ClearField(
@@ -1872,6 +1883,8 @@ class PythonUDF(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "_buffer_type",
             b"_buffer_type",
+            "_python_hash_seed",
+            b"_python_hash_seed",
             "additional_includes",
             b"additional_includes",
             "buffer_type",
@@ -1882,13 +1895,20 @@ class PythonUDF(google.protobuf.message.Message):
             b"eval_type",
             "output_type",
             b"output_type",
+            "python_hash_seed",
+            b"python_hash_seed",
             "python_ver",
             b"python_ver",
         ],
     ) -> None: ...
+    @typing.overload
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["_buffer_type", b"_buffer_type"]
     ) -> typing_extensions.Literal["buffer_type"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_python_hash_seed", b"_python_hash_seed"]
+    ) -> typing_extensions.Literal["python_hash_seed"] | None: ...
 
 global___PythonUDF = PythonUDF
 
