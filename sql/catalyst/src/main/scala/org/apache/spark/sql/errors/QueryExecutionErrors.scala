@@ -1137,6 +1137,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "jdbcQueryString" -> jdbcQueryString))
   }
 
+  def jdbcWriteTableOptionMissingError(option: String): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "JDBC_WRITE_TABLE_OPTION_MISSING",
+      messageParameters = Map("option" -> toDSOption(option)))
+  }
+
   def emptyOptionError(optionName: String): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
       errorClass = "_LEGACY_ERROR_TEMP_2080",

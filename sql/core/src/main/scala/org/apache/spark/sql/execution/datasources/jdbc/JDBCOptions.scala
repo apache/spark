@@ -317,7 +317,7 @@ class JDBCOptions(
 
 class JdbcOptionsInWrite(
     override val parameters: CaseInsensitiveMap[String])
-  extends JDBCOptions(parameters) {
+  extends JDBCOptions(JdbcOptionsInWrite.checkTableName(parameters)) {
 
   import JDBCOptions._
 
@@ -329,12 +329,19 @@ class JdbcOptionsInWrite(
       JDBCOptions.JDBC_TABLE_NAME -> table)))
   }
 
-  require(
-    parameters.get(JDBC_TABLE_NAME).isDefined,
-    s"Option '$JDBC_TABLE_NAME' is required. " +
-      s"Option '$JDBC_QUERY_STRING' is not applicable while writing.")
-
   val table = parameters(JDBC_TABLE_NAME)
+}
+
+object JdbcOptionsInWrite {
+  // Runs before the JDBCOptions constructor, whose (dbtable, query) check would otherwise reject a
+  // write with neither option with the read-oriented "'dbtable' or 'query' is required" error.
+  private def checkTableName(
+      parameters: CaseInsensitiveMap[String]): CaseInsensitiveMap[String] = {
+    if (!parameters.contains(JDBCOptions.JDBC_TABLE_NAME)) {
+      throw QueryExecutionErrors.jdbcWriteTableOptionMissingError(JDBCOptions.JDBC_TABLE_NAME)
+    }
+    parameters
+  }
 }
 
 object JDBCOptions {
