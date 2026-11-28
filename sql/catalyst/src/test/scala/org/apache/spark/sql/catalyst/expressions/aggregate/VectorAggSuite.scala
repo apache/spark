@@ -111,9 +111,19 @@ class VectorAggSuite extends SparkFunSuite {
     }
   }
 
+  // TODO: Generalize the float and double tests for vector_sum and vector_avg into a single
+  // suite parameterized by the element type, instead of duplicating them per type.
   def createDoubleVectorSum(): (VectorSum, InternalRow) = {
     val input = new BoundReference(0, ArrayType(DoubleType), nullable = true)
     val agg = new VectorSum(input)
+    val buffer = new SpecificInternalRow(agg.aggBufferAttributes.map(_.dataType))
+    agg.initialize(buffer)
+    (agg, buffer)
+  }
+
+  def createDoubleVectorAvg(): (VectorAvg, InternalRow) = {
+    val input = new BoundReference(0, ArrayType(DoubleType), nullable = true)
+    val agg = new VectorAvg(input)
     val buffer = new SpecificInternalRow(agg.aggBufferAttributes.map(_.dataType))
     agg.initialize(buffer)
     (agg, buffer)
@@ -137,8 +147,14 @@ class VectorAggSuite extends SparkFunSuite {
     (0 until arrayData.numElements()).map(i => arrayData.getDouble(i)).toArray
   }
 
+  def evalAsDoubleArray(agg: VectorAvg, buffer: InternalRow): Array[Double] = {
+    val result = agg.eval(buffer)
+    if (result == null) return null
+    val arrayData = result.asInstanceOf[ArrayData]
+    (0 until arrayData.numElements()).map(i => arrayData.getDouble(i)).toArray
+  }
+
   private val floatOnlyVectorFunctions: Map[String, Expression => Expression] = Map(
-    "vector_avg" -> ((v: Expression) => new VectorAvg(v)),
     "vector_cosine_similarity" -> ((v: Expression) => VectorCosineSimilarity(v, v)),
     "vector_inner_product" -> ((v: Expression) => VectorInnerProduct(v, v)),
     "vector_l2_distance" -> ((v: Expression) => VectorL2Distance(v, v)),
@@ -710,7 +726,28 @@ class VectorAggSuite extends SparkFunSuite {
     }
   }
 
-  gridTest("Vector functions other than vector_sum reject double vectors")(
+  test("VectorAvg - result type follows input element type") {
+    val (doubleAgg, _) = createDoubleVectorAvg()
+    assertResult(TypeCheckResult.TypeCheckSuccess)(doubleAgg.checkInputDataTypes())
+    assertResult(ArrayType(DoubleType, containsNull = false))(doubleAgg.dataType)
+
+    val (floatAgg, _, _) = createVectorAvg()
+    assertResult(TypeCheckResult.TypeCheckSuccess)(floatAgg.checkInputDataTypes())
+    assertResult(ArrayType(FloatType, containsNull = false))(floatAgg.dataType)
+  }
+
+  test("VectorAvg - rejects unsupported element type") {
+    val input = new BoundReference(0, ArrayType(IntegerType), nullable = true)
+    new VectorAvg(input).checkInputDataTypes() match {
+      case DataTypeMismatch(errorSubClass, params) =>
+        assertResult("UNEXPECTED_INPUT_TYPE")(errorSubClass)
+        assertResult("\"ARRAY<FLOAT>\" or \"ARRAY<DOUBLE>\"")(params("requiredType"))
+        assertResult("\"ARRAY<INT>\"")(params("inputType"))
+      case other => fail(s"Expected DataTypeMismatch but got $other")
+    }
+  }
+
+  gridTest("Vector functions other than vector_sum and vector_avg reject double vectors")(
       floatOnlyVectorFunctions.keys.toSeq.sorted) { name =>
     val input = new BoundReference(0, ArrayType(DoubleType), nullable = true)
     floatOnlyVectorFunctions(name)(input).checkInputDataTypes() match {
@@ -820,5 +857,201 @@ class VectorAggSuite extends SparkFunSuite {
       },
       condition = "VECTOR_DIMENSION_MISMATCH",
       parameters = Map("functionName" -> "`vector_sum`", "leftDim" -> "2", "rightDim" -> "3"))
+  }
+
+  test("VectorAvg - double: empty buffer returns null") {
+    val (agg, buffer) = createDoubleVectorAvg()
+    assertResult(null)(agg.eval(buffer))
+  }
+
+  test("VectorAvg - double: multiple vectors") {
+    val (agg, buffer) = createDoubleVectorAvg()
+    agg.update(buffer, createDoubleInputRow(Array(1.0, 2.0)))
+    agg.update(buffer, createDoubleInputRow(Array(2.0, 4.0)))
+    agg.update(buffer, createDoubleInputRow(Array(3.0, 6.0)))
+    assertResult(Array(2.0, 4.0))(evalAsDoubleArray(agg, buffer))
+  }
+
+  test("VectorAvg - double: result is independent of later buffer updates") {
+    val (agg, buffer) = createDoubleVectorAvg()
+    agg.update(buffer, createDoubleInputRow(Array(1.0, 2.0, 3.0)))
+    val result = agg.eval(buffer).asInstanceOf[ArrayData]
+
+    agg.update(buffer, createDoubleInputRow(Array(3.0, 4.0, 5.0)))
+    assertResult(Array(2.0, 3.0, 4.0))(evalAsDoubleArray(agg, buffer))
+    assertResult(Array(1.0, 2.0, 3.0))(result.toDoubleArray())
+  }
+
+  test("VectorAvg - double: keeps precision lost by float") {
+    val (agg, buffer) = createDoubleVectorAvg()
+    agg.update(buffer, createDoubleInputRow(Array(16777216.0, 1.0e300)))
+    agg.update(buffer, createDoubleInputRow(Array(16777218.0, 1.0e300)))
+    assertResult(Array(16777217.0, 1.0e300))(evalAsDoubleArray(agg, buffer))
+  }
+
+  test("VectorAvg - double: merge buffers with different counts") {
+    val (agg, buffer1) = createDoubleVectorAvg()
+    val (_, buffer2) = createDoubleVectorAvg()
+    agg.update(buffer1, createDoubleInputRow(Array(16777216.0, 10.0)))
+    agg.update(buffer2, createDoubleInputRow(Array(16777218.0, 1.0)))
+    agg.update(buffer2, createDoubleInputRow(Array(16777218.0, 2.0)))
+    agg.update(buffer2, createDoubleInputRow(Array(16777218.0, 3.0)))
+    agg.merge(buffer1, buffer2)
+    assertResult(Array(16777217.5, 4.0))(evalAsDoubleArray(agg, buffer1))
+  }
+
+  test("VectorAvg - double: merge with empty buffers") {
+    val (agg, buffer1) = createDoubleVectorAvg()
+    val (_, buffer2) = createDoubleVectorAvg()
+    agg.merge(buffer1, buffer2)
+    assertResult(null)(agg.eval(buffer1))
+
+    agg.update(buffer2, createDoubleInputRow(Array(1.5, 2.5)))
+    agg.merge(buffer1, buffer2)
+    assertResult(Array(1.5, 2.5))(evalAsDoubleArray(agg, buffer1))
+  }
+
+  test("VectorAvg - double: null vectors and vectors with null elements are skipped") {
+    val (agg, buffer) = createDoubleVectorAvg()
+    agg.update(buffer, createDoubleInputRow(Array(1.0, 2.0)))
+    agg.update(buffer, createNullInputRow())
+    agg.update(buffer, createDoubleInputRowWithNullElement(Array(null, 10.0)))
+    agg.update(buffer, createDoubleInputRow(Array(3.0, 4.0)))
+    assertResult(Array(2.0, 3.0))(evalAsDoubleArray(agg, buffer))
+  }
+
+  test("VectorAvg - double: empty vectors") {
+    val (agg, buffer) = createDoubleVectorAvg()
+    agg.update(buffer, createDoubleInputRow(Array.empty[Double]))
+    agg.update(buffer, createDoubleInputRow(Array.empty[Double]))
+    assertResult(Array.empty[Double])(evalAsDoubleArray(agg, buffer))
+  }
+
+  test("VectorAvg - double: special values") {
+    val (agg, buffer) = createDoubleVectorAvg()
+    agg.update(buffer, createDoubleInputRow(Array(1.0, 2.0, Double.MaxValue)))
+    agg.update(buffer,
+      createDoubleInputRow(Array(Double.NaN, Double.NegativeInfinity, Double.MaxValue)))
+    val result = evalAsDoubleArray(agg, buffer)
+    assert(result(0).isNaN)
+    assertResult(Double.NegativeInfinity)(result(1))
+    assertResult(Double.MaxValue)(result(2))
+  }
+
+  test("VectorAvg - double: opposite extreme values do not overflow") {
+    val (agg, buffer) = createDoubleVectorAvg()
+    agg.update(buffer, createDoubleInputRow(Array(Double.MaxValue, -Double.MaxValue)))
+    agg.update(buffer, createDoubleInputRow(Array(-Double.MaxValue, Double.MaxValue)))
+    assertResult(Array(0.0, 0.0))(evalAsDoubleArray(agg, buffer))
+
+    val (_, buffer1) = createDoubleVectorAvg()
+    val (_, buffer2) = createDoubleVectorAvg()
+    agg.update(buffer1, createDoubleInputRow(Array(Double.MaxValue, -Double.MaxValue)))
+    agg.update(buffer2, createDoubleInputRow(Array(-Double.MaxValue, Double.MaxValue)))
+    agg.merge(buffer1, buffer2)
+    assertResult(Array(0.0, 0.0))(evalAsDoubleArray(agg, buffer1))
+  }
+
+  test("VectorAvg - double: non-finite results do not depend on input order") {
+    val first =
+      Array(Double.PositiveInfinity, 1.0, Double.NegativeInfinity, Double.PositiveInfinity)
+    val second = Array(1.0, Double.PositiveInfinity, 1.0, Double.NegativeInfinity)
+    def checkResult(result: Array[Double]): Unit = {
+      assertResult(Double.PositiveInfinity)(result(0))
+      assertResult(Double.PositiveInfinity)(result(1))
+      assertResult(Double.NegativeInfinity)(result(2))
+      assert(result(3).isNaN)
+    }
+
+    Seq(Seq(first, second), Seq(second, first)).foreach { vectors =>
+      val (agg, buffer) = createDoubleVectorAvg()
+      vectors.foreach(v => agg.update(buffer, createDoubleInputRow(v)))
+      agg.update(buffer, createDoubleInputRow(Array(2.0, 2.0, 2.0, 2.0)))
+      checkResult(evalAsDoubleArray(agg, buffer))
+
+      val (_, buffer1) = createDoubleVectorAvg()
+      val (_, buffer2) = createDoubleVectorAvg()
+      agg.update(buffer1, createDoubleInputRow(vectors.head))
+      agg.update(buffer2, createDoubleInputRow(vectors(1)))
+      agg.merge(buffer1, buffer2)
+      checkResult(evalAsDoubleArray(agg, buffer1))
+    }
+  }
+
+  test("VectorAvg - double: finite overflow preserves cumulative weights") {
+    Seq(1, 2, 5).foreach { dim =>
+      val (agg, buffer) = createDoubleVectorAvg()
+      val first = Array.tabulate(dim)(i => if (i % 2 == 0) Double.MaxValue else -Double.MaxValue)
+      agg.update(buffer, createDoubleInputRow(first))
+      agg.update(buffer, createDoubleInputRow(first))
+      // The third update overflows the delta. An unweighted midpoint would incorrectly return zero.
+      agg.update(buffer, createDoubleInputRow(first.map(-_)))
+      val expected = Double.MaxValue / 3
+      val tolerance = math.ulp(expected) * 2
+      evalAsDoubleArray(agg, buffer).zipWithIndex.foreach { case (actual, i) =>
+        val e = if (i % 2 == 0) expected else -expected
+        assert(math.abs(actual - e) <= tolerance, s"Expected $e but got $actual")
+      }
+    }
+  }
+
+  test("VectorAvg - double: non-finite deltas at different positions") {
+    val cases = Seq(
+      (Double.MaxValue, -Double.MaxValue, 0.0),
+      (Double.PositiveInfinity, 1.0, Double.PositiveInfinity),
+      (Double.NegativeInfinity, 1.0, Double.NegativeInfinity),
+      (Double.PositiveInfinity, Double.PositiveInfinity, Double.PositiveInfinity),
+      (Double.NegativeInfinity, Double.NegativeInfinity, Double.NegativeInfinity),
+      (Double.PositiveInfinity, Double.NegativeInfinity, Double.NaN),
+      (Double.NaN, Double.NaN, Double.NaN),
+      (Double.NaN, Double.PositiveInfinity, Double.NaN),
+      (Double.NaN, Double.NegativeInfinity, Double.NaN),
+      (Double.NaN, 1.0, Double.NaN))
+    for {
+      dim <- Seq(1, 3, 5, 8)
+      index <- 0 until dim
+      (left, right, expectedValue) <- cases
+      (oldAvg, value) <- Seq((left, right), (right, left))
+    } {
+      val (agg, buffer) = createDoubleVectorAvg()
+      val first = Array.fill(dim)(1.0)
+      val second = Array.fill(dim)(3.0)
+      val expected = Array.fill(dim)(2.0)
+      first(index) = oldAvg
+      second(index) = value
+      expected(index) = expectedValue
+      val rows = Seq(first, second).map(createDoubleInputRow)
+      rows.foreach(row => agg.update(buffer, row))
+      assertResult(expected.map(JDouble.doubleToLongBits))(
+        evalAsDoubleArray(agg, buffer).map(JDouble.doubleToLongBits))
+
+      val (_, buffer1) = createDoubleVectorAvg()
+      val (_, buffer2) = createDoubleVectorAvg()
+      agg.update(buffer1, rows.head)
+      agg.update(buffer2, rows(1))
+      agg.merge(buffer1, buffer2)
+      assertResult(expected.map(JDouble.doubleToLongBits))(
+        evalAsDoubleArray(agg, buffer1).map(JDouble.doubleToLongBits))
+    }
+  }
+
+  test("VectorAvg - double: dimension mismatch") {
+    val (agg, buffer1) = createDoubleVectorAvg()
+    val (_, buffer2) = createDoubleVectorAvg()
+    agg.update(buffer1, createDoubleInputRow(Array(1.0, 2.0)))
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        agg.update(buffer1, createDoubleInputRow(Array(1.0, 2.0, 3.0)))
+      },
+      condition = "VECTOR_DIMENSION_MISMATCH",
+      parameters = Map("functionName" -> "`vector_avg`", "leftDim" -> "2", "rightDim" -> "3"))
+
+    agg.update(buffer2, createDoubleInputRow(Array(1.0, 2.0, 3.0)))
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        agg.merge(buffer1, buffer2)
+      },
+      condition = "VECTOR_DIMENSION_MISMATCH",
+      parameters = Map("functionName" -> "`vector_avg`", "leftDim" -> "2", "rightDim" -> "3"))
   }
 }
