@@ -400,7 +400,7 @@ abstract class ParquetByteStreamSplitEncodingSuite[T: ClassTag] extends SparkFun
 private object BssWriterHelper {
   def encode(writer: ValuesWriter)(writeAll: ValuesWriter => Unit): Array[Byte] = {
     writeAll(writer)
-    val bytes = writer.getBytes.toByteArray
+    val bytes = writer.getBytes.toInputStream.readAllBytes()
     writer.close()
     bytes
   }

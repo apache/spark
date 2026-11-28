@@ -25,9 +25,11 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.avro.{Schema, SchemaFormatter}
 import org.apache.avro.generic.IndexedRecord
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.avro.AvroParquetWriter
 import org.apache.parquet.hadoop.ParquetWriter
+import org.apache.parquet.hadoop.util.HadoopOutputFile
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.avro.AvroUtils
@@ -44,7 +46,8 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with Shared
          |${SchemaFormatter.format(AvroUtils.JSON_PRETTY_FORMAT, schema)}
        """.stripMargin)
 
-    val writer = AvroParquetWriter.builder[T](new Path(path)).withSchema(schema).build()
+    val outputFile = HadoopOutputFile.fromPath(new Path(path), new Configuration())
+    val writer = AvroParquetWriter.builder[T](outputFile).withSchema(schema).build()
     try f(writer) finally writer.close()
   }
 

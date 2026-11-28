@@ -58,7 +58,7 @@ object VectorizedByteStreamSplitReaderBenchmark extends BenchmarkBase {
       count, count * 4, new DirectByteBufferAllocator())
     var i = 0
     while (i < count) { w.writeInteger(f(i)); i += 1 }
-    val bytes = w.getBytes.toByteArray
+    val bytes = w.getBytes.toInputStream.readAllBytes()
     w.close()
     bytes
   }
@@ -68,7 +68,7 @@ object VectorizedByteStreamSplitReaderBenchmark extends BenchmarkBase {
       count, count * 8, new DirectByteBufferAllocator())
     var i = 0
     while (i < count) { w.writeLong(f(i)); i += 1 }
-    val bytes = w.getBytes.toByteArray
+    val bytes = w.getBytes.toInputStream.readAllBytes()
     w.close()
     bytes
   }
@@ -78,7 +78,7 @@ object VectorizedByteStreamSplitReaderBenchmark extends BenchmarkBase {
       count, count * 4, new DirectByteBufferAllocator())
     var i = 0
     while (i < count) { w.writeFloat(f(i)); i += 1 }
-    val bytes = w.getBytes.toByteArray
+    val bytes = w.getBytes.toInputStream.readAllBytes()
     w.close()
     bytes
   }
@@ -88,7 +88,7 @@ object VectorizedByteStreamSplitReaderBenchmark extends BenchmarkBase {
       count, count * 8, new DirectByteBufferAllocator())
     var i = 0
     while (i < count) { w.writeDouble(f(i)); i += 1 }
-    val bytes = w.getBytes.toByteArray
+    val bytes = w.getBytes.toInputStream.readAllBytes()
     w.close()
     bytes
   }
@@ -235,7 +235,7 @@ object VectorizedByteStreamSplitReaderBenchmark extends BenchmarkBase {
       typeWidth, count, count * typeWidth, new DirectByteBufferAllocator())
     var i = 0
     while (i < count) { w.writeBytes(Binary.fromConstantByteArray(f(i))); i += 1 }
-    val bytes = w.getBytes.toByteArray
+    val bytes = w.getBytes.toInputStream.readAllBytes()
     w.close()
     bytes
   }

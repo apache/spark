@@ -37,7 +37,7 @@ import org.apache.spark.sql.{AnalysisException, DataFrame}
 import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
+import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat, ParquetFooterReader}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, ExtractV2Table, FileScan, FileTable}
 import org.apache.spark.sql.execution.streaming.ManifestFileCommitProtocol
 import org.apache.spark.sql.execution.streaming.runtime._
@@ -784,14 +784,16 @@ abstract class FileStreamSinkSuite extends StreamTest {
     }
 
     // Read back and verify the timestamp column is INT64 (TIMESTAMP_MICROS), not INT96.
-    import org.apache.parquet.hadoop.ParquetFileReader
+    import org.apache.parquet.format.converter.ParquetMetadataConverter
+    import org.apache.parquet.hadoop.util.HadoopInputFile
     import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
     val hadoopConf = spark.sessionState.newHadoopConf()
     val parquetFiles = new java.io.File(outputDir).listFiles()
       .filter(_.getName.endsWith(".parquet"))
     assert(parquetFiles.nonEmpty, "Expected at least one parquet file")
-    val footer = ParquetFileReader.readFooter(hadoopConf,
-      new Path(parquetFiles.head.getAbsolutePath))
+    val footer = ParquetFooterReader.readFooter(
+      HadoopInputFile.fromPath(new Path(parquetFiles.head.getAbsolutePath), hadoopConf),
+      ParquetMetadataConverter.NO_FILTER)
     val tsField = footer.getFileMetaData.getSchema.getFields.asScala
       .find(_.getName == "ts").get.asPrimitiveType()
     assert(tsField.getPrimitiveTypeName === PrimitiveTypeName.INT64)

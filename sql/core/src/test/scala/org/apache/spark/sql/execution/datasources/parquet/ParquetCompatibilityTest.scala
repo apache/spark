@@ -24,9 +24,12 @@ import scala.jdk.CollectionConverters._
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.parquet.column.values.ValuesWriter
-import org.apache.parquet.hadoop.{ParquetFileReader, ParquetWriter}
+import org.apache.parquet.format.converter.ParquetMetadataConverter
+import org.apache.parquet.hadoop.ParquetWriter
 import org.apache.parquet.hadoop.api.WriteSupport
 import org.apache.parquet.hadoop.api.WriteSupport.WriteContext
+import org.apache.parquet.hadoop.util.{HadoopInputFile, HadoopOutputFile}
+import org.apache.parquet.io.OutputFile
 import org.apache.parquet.io.api.Binary
 import org.apache.parquet.io.api.RecordConsumer
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
@@ -48,11 +51,13 @@ private[sql] abstract class ParquetCompatibilityTest extends QueryTest with Parq
     val fs = fsPath.getFileSystem(hadoopConf)
     val parquetFiles = fs.listStatus(fsPath, new PathFilter {
       override def accept(path: Path): Boolean = pathFilter(path)
-    }).toSeq.asJava
+    }).toSeq
 
-    val footers =
-      ParquetFileReader.readAllFootersInParallel(hadoopConf, parquetFiles, true)
-    footers.asScala.head.getParquetMetadata.getFileMetaData.getSchema
+    val footers = parquetFiles.map { status =>
+      ParquetFooterReader.readFooter(
+        HadoopInputFile.fromStatus(status, hadoopConf), ParquetMetadataConverter.SKIP_ROW_GROUPS)
+    }
+    footers.head.getFileMetaData.getSchema
   }
 
   protected def logParquetSchema(path: String): Unit = {
@@ -206,12 +211,13 @@ private[sql] object ParquetCompatibilityTest {
      * the writer is deprecated and should be done through a builder. The default builders include
      * Avro - but for raw Parquet writing we must create our own builder.
      */
-    class ParquetWriterBuilder() extends
-        ParquetWriter.Builder[RecordConsumer => Unit, ParquetWriterBuilder](new Path(path)) {
+    class ParquetWriterBuilder(file: OutputFile) extends
+        ParquetWriter.Builder[RecordConsumer => Unit, ParquetWriterBuilder](file) {
       override def getWriteSupport(conf: Configuration) = testWriteSupport
       override def self() = this
     }
-    val parquetWriter = new ParquetWriterBuilder().build()
+    val outputFile = HadoopOutputFile.fromPath(new Path(path), new Configuration())
+    val parquetWriter = new ParquetWriterBuilder(outputFile).build()
     try recordWriters.foreach(parquetWriter.write) finally parquetWriter.close()
   }
 }

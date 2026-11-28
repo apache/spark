@@ -507,7 +507,7 @@ private object VectorizedRleValuesReaderSuite {
   private val PastEnd = "reading past the end of the encoded values"
 
   private def varint(value: Long): Array[Byte] =
-    BytesInput.fromUnsignedVarLong(value).toByteArray
+    BytesInput.fromUnsignedVarLong(value).toInputStream.readAllBytes()
 
   /**
    * Runs readBatch end-to-end and asserts null-bits, non-null values, and def levels.

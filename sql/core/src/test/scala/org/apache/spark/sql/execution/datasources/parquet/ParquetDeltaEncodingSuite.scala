@@ -288,7 +288,7 @@ abstract class ParquetDeltaEncodingSuite[T] extends ParquetCompatibilityTest
     for (useDirect <- Seq(true, false)) {
       writeData(data, length)
       reader = new VectorizedDeltaBinaryPackedReader
-      val page = writer.getBytes.toByteArray
+      val page = writer.getBytes.toInputStream.readAllBytes()
 
       assert(estimatedSize(length) >= page.length)
       writableColumnVector = new OnHeapColumnVector(data.length, getSparkSqlType)

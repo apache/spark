@@ -251,7 +251,7 @@ class ParquetDeltaLengthByteArrayEncodingSuite
           lengths.foreach(lengthWriter.writeInteger)
           val bytes = BytesInput.concat(
             lengthWriter.getBytes,
-            BytesInput.from(data.getBytes(StandardCharsets.UTF_8))).toByteArray
+            BytesInput.from(data.getBytes(StandardCharsets.UTF_8))).toInputStream.readAllBytes()
           VectorizedPlainValuesReaderSuite.toStream(bytes, split)
         }
       }

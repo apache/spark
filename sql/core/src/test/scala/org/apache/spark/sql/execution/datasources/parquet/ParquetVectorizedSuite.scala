@@ -505,7 +505,7 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
     val cd = new ColumnDescriptor(Array("a"), ty, 0, 1)
     // The dictionary page repeats values, otherwise the writer falls back to PLAIN.
     val dictValues = Seq.fill(5)(7) :+ 8
-    val readStore = writeMixedEncodingPages(cd, maxDefinitionLevel = 1, Seq(
+    val readStore = writeMixedEncodingPages(parquetSchema, cd, maxDefinitionLevel = 1, Seq(
       EncodedPage(Seq.fill(3)(0), Seq.fill(3)(1), Seq(1, 2, 3), dictionaryEncoded = false),
       EncodedPage(Seq.fill(6)(0), Seq.fill(6)(1), dictValues, dictionaryEncoded = true)))
     // Any batch size above 3 reads the PLAIN page and the start of the dictionary page into the
@@ -520,9 +520,11 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
     val (parquetSchema, cd) = arraySchema("int32")
     // One element per row: the batch holds no more values than rows.
     val singleElementValues = Seq.fill(5)(7) :+ 8
-    val singleElementStore = writeMixedEncodingPages(cd, maxDefinitionLevel = 3, Seq(
-      EncodedPage(Seq(0, 0), Seq(3, 3), Seq(1, 2), dictionaryEncoded = false),
-      EncodedPage(Seq.fill(6)(0), Seq.fill(6)(3), singleElementValues, dictionaryEncoded = true)))
+    val singleElementStore = writeMixedEncodingPages(parquetSchema, cd, maxDefinitionLevel = 3,
+      Seq(
+        EncodedPage(Seq(0, 0), Seq(3, 3), Seq(1, 2), dictionaryEncoded = false),
+        EncodedPage(Seq.fill(6)(0), Seq.fill(6)(3), singleElementValues,
+          dictionaryEncoded = true)))
     for (batchSize <- 3 to 8; useOffHeap <- Seq(false, true)) {
       checkAnswer(8, parquetSchema, singleElementStore,
         (Seq(1, 2) ++ singleElementValues).map(i => Row(Seq(i))), batchSize,
@@ -535,7 +537,7 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
     // Five elements per row: the batch holds more values than rows.
     val rls = Seq(0, 1, 1, 1, 1, 0, 1, 1, 1, 1)
     val multiElementValues = Seq.fill(5)(7) ++ Seq.fill(5)(8)
-    val multiElementStore = writeMixedEncodingPages(cd, maxDefinitionLevel = 3, Seq(
+    val multiElementStore = writeMixedEncodingPages(parquetSchema, cd, maxDefinitionLevel = 3, Seq(
       EncodedPage(rls, Seq.fill(10)(3), 1 to 10, dictionaryEncoded = false),
       EncodedPage(rls, Seq.fill(10)(3), multiElementValues, dictionaryEncoded = true)))
     for (batchSize <- 3 to 4; useOffHeap <- Seq(false, true)) {
@@ -553,8 +555,8 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
     val primitiveSchema = MessageTypeParser.parseMessageType(
       "message root { optional int32 a; }")
     val ty = primitiveSchema.asGroupType().getType("a").asPrimitiveType()
-    val primitiveStore = writeMixedEncodingPages(new ColumnDescriptor(Array("a"), ty, 0, 1),
-      maxDefinitionLevel = 1, Seq(
+    val primitiveStore = writeMixedEncodingPages(primitiveSchema,
+      new ColumnDescriptor(Array("a"), ty, 0, 1), maxDefinitionLevel = 1, Seq(
         EncodedPage(Seq.fill(3)(0), Seq.fill(3)(1), Seq(1, 2, 3), dictionaryEncoded = false),
         EncodedPage(Seq.fill(6)(0), Seq.fill(6)(1), Seq(7, 7, 7, 7, 7, 8),
           dictionaryEncoded = true)),
@@ -566,7 +568,7 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
 
     val (nestedSchema, cd) = arraySchema("int32")
     val rls = Seq(0, 1, 0, 1, 0, 1)
-    val nestedStore = writeMixedEncodingPages(cd, maxDefinitionLevel = 3, Seq(
+    val nestedStore = writeMixedEncodingPages(nestedSchema, cd, maxDefinitionLevel = 3, Seq(
       EncodedPage(rls, Seq.fill(6)(3), 1 to 6, dictionaryEncoded = false),
       EncodedPage(rls ++ rls, Seq.fill(12)(3), Seq.fill(10)(7) ++ Seq(8, 8),
         dictionaryEncoded = true)),
@@ -585,7 +587,7 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
     val (parquetSchema, cd) = arraySchema("binary", Some("UTF8"))
     val rls = Seq(0, 1, 1, 0, 1)
     val dls = Seq.fill(5)(3)
-    val readStore = writeMixedEncodingPages(cd, maxDefinitionLevel = 3, Seq(
+    val readStore = writeMixedEncodingPages(parquetSchema, cd, maxDefinitionLevel = 3, Seq(
       EncodedPage(rls, dls, Seq("x", "x", "x", "x", "y"), dictionaryEncoded = true),
       EncodedPage(rls, dls, Seq("a", "b", "c", "d", "e"), dictionaryEncoded = false),
       EncodedPage(rls, dls, Seq("x", "y", "y", "y", "y"), dictionaryEncoded = true)))
@@ -1066,7 +1068,8 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
     val pageFirstRowIndexes = ArrayBuffer.empty[Long]
     pageSizes.foreach { size =>
       pageFirstRowIndexes += i
-      writeDataPage(cd, memPageStore, repetitionLevels.slice(i, i + size).toImmutableArraySeq,
+      writeDataPage(parquetSchema, cd, memPageStore,
+        repetitionLevels.slice(i, i + size).toImmutableArraySeq,
         definitionLevels.slice(i, i + size), inputValues.slice(i, i + size), maxDef,
         dictionaryEnabled)
       i += size
@@ -1113,8 +1116,8 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
     pageSizes.foreach { size =>
       pageFirstRowIndexes += numRows
       numRows += rls.slice(i, i + size).count(_ == 0)
-      writeDataPage(cd, memPageStore, rls.slice(i, i + size), dls.slice(i, i + size),
-        values.slice(i, i + size), maxDefLevel, dictionaryEnabled)
+      writeDataPage(parquetSchema, cd, memPageStore, rls.slice(i, i + size),
+        dls.slice(i, i + size), values.slice(i, i + size), maxDefLevel, dictionaryEnabled)
       i += size
     }
 
@@ -1125,11 +1128,13 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
 
   /**
    * Write a single data page using repetition levels, definition levels and values provided.
+   * `schema` must have `columnDesc` as its only column.
    *
    * Note that this requires `repetitionLevels`, `definitionLevels` and `values` to have the same
    * number of elements. For null values, the corresponding slots in `values` will be skipped.
    */
   private def writeDataPage(
+      schema: MessageType,
       columnDesc: ColumnDescriptor,
       pageWriteStore: PageWriteStore,
       repetitionLevels: Seq[Int],
@@ -1137,7 +1142,7 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
       values: Seq[Any],
       maxDefinitionLevel: Int,
       dictionaryEnabled: Boolean = false): Unit = {
-    val columnWriterStore = new ColumnWriteStoreV1(pageWriteStore,
+    val columnWriterStore = new ColumnWriteStoreV1(schema, pageWriteStore,
       ParquetProperties.builder()
           .withPageSize(4096)
           .withDictionaryEncoding(dictionaryEnabled)
@@ -1209,6 +1214,7 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
    * ranges to read, as returned by column index filtering.
    */
   private def writeMixedEncodingPages(
+      schema: MessageType,
       columnDesc: ColumnDescriptor,
       maxDefinitionLevel: Int,
       pages: Seq[EncodedPage],
@@ -1217,8 +1223,8 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
 
     val written = pages.map { page =>
       val store = new MemPageStore(page.repetitionLevels.count(_ == 0))
-      writeDataPage(columnDesc, store, page.repetitionLevels, page.definitionLevels, page.values,
-        maxDefinitionLevel, page.dictionaryEncoded)
+      writeDataPage(schema, columnDesc, store, page.repetitionLevels, page.definitionLevels,
+        page.values, maxDefinitionLevel, page.dictionaryEncoded)
       val reader = store.getPageReader(columnDesc)
       val dictionary = Option(reader.readDictionaryPage())
       val dataPage = reader.readPage().asInstanceOf[DataPageV1]
@@ -1227,7 +1233,7 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
       (dictionary, dataPage)
     }
     val dictionaries = written.flatMap(_._1).map { d =>
-      (d.getBytes.toByteArray.toSeq, d.getDictionarySize, d.getEncoding)
+      (d.getBytes.toInputStream.readAllBytes().toSeq, d.getDictionarySize, d.getEncoding)
     }.distinct
     assert(dictionaries.length <= 1, "the dictionary pages have different dictionaries")
     val dictionary = dictionaries.headOption.map { case (bytes, size, encoding) =>

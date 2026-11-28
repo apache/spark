@@ -76,7 +76,7 @@ object VectorizedDeltaReaderBenchmark extends BenchmarkBase {
       BLOCK_SIZE, MINI_BLOCK_NUM, PAGE_SIZE, PAGE_SIZE, new DirectByteBufferAllocator)
     var i = 0
     while (i < values.length) { writer.writeInteger(values(i)); i += 1 }
-    val out = writer.getBytes.toByteArray
+    val out = writer.getBytes.toInputStream.readAllBytes()
     writer.close()
     out
   }
@@ -124,7 +124,7 @@ object VectorizedDeltaReaderBenchmark extends BenchmarkBase {
       BLOCK_SIZE, MINI_BLOCK_NUM, PAGE_SIZE, PAGE_SIZE, new DirectByteBufferAllocator)
     var i = 0
     while (i < values.length) { writer.writeLong(values(i)); i += 1 }
-    val out = writer.getBytes.toByteArray
+    val out = writer.getBytes.toInputStream.readAllBytes()
     writer.close()
     out
   }
@@ -170,7 +170,7 @@ object VectorizedDeltaReaderBenchmark extends BenchmarkBase {
     val writer = new DeltaByteArrayWriter(PAGE_SIZE, PAGE_SIZE, new DirectByteBufferAllocator)
     var i = 0
     while (i < values.length) { writer.writeBytes(Binary.fromConstantByteArray(values(i))); i += 1 }
-    val out = writer.getBytes.toByteArray
+    val out = writer.getBytes.toInputStream.readAllBytes()
     writer.close()
     out
   }
@@ -242,7 +242,7 @@ object VectorizedDeltaReaderBenchmark extends BenchmarkBase {
       PAGE_SIZE, PAGE_SIZE, new DirectByteBufferAllocator)
     var i = 0
     while (i < values.length) { writer.writeBytes(Binary.fromConstantByteArray(values(i))); i += 1 }
-    val out = writer.getBytes.toByteArray
+    val out = writer.getBytes.toInputStream.readAllBytes()
     writer.close()
     out
   }
