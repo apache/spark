@@ -125,6 +125,12 @@
       <scope>provided</scope>
     </dependency>
     <dependency>
+      <groupId>com.thesamet.scalapb</groupId>
+      <artifactId>scalapb-runtime_${scala.binary.version}</artifactId>
+      <version>0.11.20</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-tags_${scala.binary.version}</artifactId>
       <type>test-jar</type>
