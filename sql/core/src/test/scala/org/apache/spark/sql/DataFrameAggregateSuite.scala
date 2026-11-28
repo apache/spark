@@ -61,6 +61,32 @@ class DataFrameAggregateSuite extends SharedSparkSession
 
   val absTol = 1e-8
 
+  for (numPartitions <- Seq(1, 3)) {
+    test(s"SPARK-61529: approximate array cardinality with $numPartitions partitions") {
+      val ids = spark.range(100)
+      val input = ids.selectExpr("array(CAST(id AS INT)) AS a")
+        .union(ids.selectExpr("array(CAST(id AS INT), CAST(NULL AS INT)) AS a"))
+        .repartition(numPartitions)
+      val result = input.agg(
+        count_distinct($"a"),
+        approx_count_distinct($"a"),
+        approx_count_distinct($"a", 0.01)).head()
+      assert(result.getLong(0) == 200L)
+      assert(math.abs(result.getLong(1) - 200L) < 30L)
+      assert(math.abs(result.getLong(2) - 200L) < 6L)
+    }
+  }
+
+  test("SPARK-61529: array cardinality respects string collation") {
+    val input = sql(
+      """SELECT array(collate('A', 'UTF8_LCASE')) AS a
+        |UNION ALL SELECT array(collate('a', 'UTF8_LCASE'))
+        |UNION ALL SELECT array(collate('A', 'UTF8_LCASE'), CAST(NULL AS STRING))
+        |UNION ALL SELECT array(collate('a', 'UTF8_LCASE'), CAST(NULL AS STRING))""".stripMargin)
+    checkAnswer(input.agg(count_distinct($"a"), approx_count_distinct($"a", 0.01)),
+      Row(2L, 2L))
+  }
+
   test("groupBy") {
     checkAnswer(
       testData2.groupBy("a").agg(sum($"b")),
