@@ -1404,6 +1404,13 @@ private[spark] class BlockManager(
     } else {
       null
     }
+    // An empty buffer is only invalid when the block's serialized size is known to be non-zero. A
+    // block held only as deserialized objects in memory is serialized when served, and its memSize
+    // estimates the objects, so it can legitimately arrive empty: for example, Kryo writes no bytes
+    // for an empty partition.
+    val status = locationsAndStatus.status
+    val expectNonEmptyBuffer =
+      status.diskSize > 0 || (status.memSize > 0 && !status.storageLevel.deserialized)
     var runningFailureCount = 0
     var totalFailureCount = 0
     val locations = sortLocations(locationsAndStatus.locations)
@@ -1415,7 +1422,7 @@ private[spark] class BlockManager(
       val data = try {
         val buf = blockTransferService.fetchBlockSync(loc.host, loc.port, loc.executorId,
           blockId.toString, tempFileManager)
-        if (blockSize > 0 && buf.size() == 0) {
+        if (expectNonEmptyBuffer && buf.size() == 0) {
           throw SparkException.internalError("Empty buffer received for non empty block " +
             s"when fetching remote block $blockId from $loc", category = "STORAGE")
         }
