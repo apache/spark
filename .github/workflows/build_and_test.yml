@@ -959,7 +959,10 @@ jobs:
       run: |
         python3.12 ./dev/structured_logging_style.py
     - name: Java linter
-      run: ./dev/lint-java
+      env:
+        SKIP_SCALA_BUILD: true
+        SKIP_MIMA: true
+      run: ./dev/run-tests --modules lint-java
     - name: Spark connect jvm client mima check
       run: ./dev/connect-jvm-client-mima-check
     # The callers that pass `jobs` without `lint-python`, e.g. scheduled builds, run these steps.

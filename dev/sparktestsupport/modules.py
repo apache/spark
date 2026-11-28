@@ -98,11 +98,7 @@ ignored_file_patterns = (
     "/dev/check_pyspark_custom_errors.py",
     "/dev/check-license",
     "/dev/check-protos.py",
-    "/dev/checkstyle-suppressions.xml",
-    "/dev/checkstyle.xml",
     "/dev/connect-jvm-client-mima-check",
-    "/dev/java-file-header",
-    "/dev/lint-java",
     "/dev/lint-python",
     "/dev/lint-scala",
     "/dev/mima",
@@ -1953,6 +1949,8 @@ build = Module(
     source_file_regexes=[
         ".*pom.xml",
         "dev/test-dependencies.sh",
+        # A new sbt version affects every test.
+        r"project/build\.properties$",
     ],
     shell_script_test_goals=[ShellScriptTestGoal("dev/test-dependencies.sh")],
 )
@@ -1976,6 +1974,29 @@ lint_js = Module(
         r"dev/spark-test-image/lint/",
     ],
     shell_script_test_goals=[ShellScriptTestGoal("dev/lint-js")],
+)
+
+lint_java = Module(
+    name="lint-java",
+    dependencies=[],
+    source_file_regexes=[
+        # This rule is broader than what the linter checks so that a `.java` path in any other
+        # directory still selects a module instead of being unclaimed.
+        r".*\.java$",
+        # `dev/lint-java` runs Maven `checkstyle:check`, whose default resource includes also feed
+        # each module's resource `.properties` files to `dev/checkstyle.xml`. This rule is broader
+        # than that, so that we don't have to track which directories checkstyle reads.
+        r".*\.properties$",
+        r"dev/checkstyle\.xml$",
+        r"dev/checkstyle-suppressions\.xml$",
+        r"dev/java-file-header$",
+        r"dev/lint-java$",
+        # Only the root pom.xml drives this linter's behavior.
+        r"pom\.xml$",
+        # The image `dev/lint-java` runs in, which `build/mvn` needs `curl` or `wget` in.
+        r"dev/spark-test-image/lint/",
+    ],
+    shell_script_test_goals=[ShellScriptTestGoal("dev/lint-java")],
 )
 
 lint_r = Module(
