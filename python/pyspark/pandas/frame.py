@@ -68,7 +68,6 @@ if TYPE_CHECKING:
     from pandas.io.formats.style import Styler
 
 from pandas.core.accessor import CachedAccessor  # type: ignore[attr-defined]
-from pandas.core.dtypes.common import infer_dtype_from_object  # type: ignore[attr-defined]
 from pandas.core.dtypes.inference import is_sequence  # type: ignore[attr-defined]
 
 from pyspark import StorageLevel
@@ -124,6 +123,7 @@ from pyspark.pandas.utils import (
     column_labels_level,
     combine_frames,
     default_session,
+    infer_dtype_from_object,
     is_ansi_mode_enabled,
     is_name_like_tuple,
     is_name_like_value,

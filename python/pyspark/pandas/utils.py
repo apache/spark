@@ -40,8 +40,10 @@ from typing import (
     overload,
 )
 
+import numpy as np
 import pandas as pd
-from pandas.api.types import is_list_like
+from pandas.api.extensions import ExtensionDtype
+from pandas.api.types import DatetimeTZDtype, is_list_like, pandas_dtype
 
 from pyspark import pandas as ps
 from pyspark.errors import PySparkTypeError, UnsupportedOperationException
@@ -1142,6 +1144,75 @@ def _floor_divide_func(c1: Column, c2: Column) -> Column:
         # A decimal cannot be matched by name: typeof reports its precision, as in decimal(10,2).
         .otherwise(floating_result)
     )
+
+
+def infer_dtype_from_object(dtype: Any) -> type:
+    """
+    Get a numpy dtype.type-style object for a dtype object.
+
+    This is a port of ``pandas.core.dtypes.common.infer_dtype_from_object``, a private pandas
+    helper that pandas 3.1 removed. It only relies on public pandas and NumPy APIs.
+
+    If no dtype can be found, ``object`` is returned.
+
+    Parameters
+    ----------
+    dtype : dtype, type or str
+        The dtype object whose numpy dtype.type-style object we want to extract.
+
+    Returns
+    -------
+    type
+
+    Examples
+    --------
+    >>> infer_dtype_from_object("int64")
+    <class 'numpy.int64'>
+    >>> infer_dtype_from_object(np.dtype("float32"))
+    <class 'numpy.float32'>
+    >>> infer_dtype_from_object(np.number)
+    <class 'numpy.number'>
+    >>> infer_dtype_from_object("datetime")
+    <class 'numpy.datetime64'>
+    """
+    if isinstance(dtype, type) and issubclass(dtype, np.generic):
+        # Type object from a dtype
+        return dtype
+    elif isinstance(dtype, (np.dtype, ExtensionDtype)):
+        # dtype object
+        if isinstance(dtype, np.dtype) and dtype.kind in "mM":
+            unit = np.datetime_data(dtype)[0]
+            if unit not in ["generic", "ns"]:
+                raise ValueError(
+                    f"{repr(dtype.name)} is too specific of a frequency, "
+                    f"try passing {repr(dtype.type.__name__)}"
+                )
+        if hasattr(dtype, "numpy_dtype"):
+            return dtype.numpy_dtype.type
+        return dtype.type
+
+    try:
+        dtype = pandas_dtype(dtype)
+    except TypeError:
+        pass
+
+    if isinstance(dtype, ExtensionDtype):
+        return dtype.type
+    elif isinstance(dtype, str):
+        if dtype in ["datetimetz", "datetime64tz"]:
+            return DatetimeTZDtype.type
+        elif dtype in ["period"]:
+            raise NotImplementedError
+
+        if dtype in ["datetime", "timedelta"]:
+            dtype += "64"
+        try:
+            return infer_dtype_from_object(getattr(np, dtype))
+        except (AttributeError, TypeError):
+            # Handles Python objects that are valid dtypes, and type codes such as 'e'.
+            pass
+
+    return infer_dtype_from_object(np.dtype(dtype))
 
 
 def log_advice(message: str) -> None:
