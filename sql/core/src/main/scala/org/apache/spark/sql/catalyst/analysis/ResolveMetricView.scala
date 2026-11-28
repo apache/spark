@@ -217,7 +217,7 @@ case class ResolveMetricView(session: SparkSession) extends Rule[LogicalPlan] {
           case mv: MetricViewPlaceholder
             if mv.metadata.identifier == metricView.metadata.identifier =>
             ResolvedMetricView(
-              mv.metadata.identifier,
+              mv.metadata.fullIdent,
               Project(sourceProjList ++ dimensionExprs, mv.child)
             )
         }
