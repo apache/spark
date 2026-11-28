@@ -482,10 +482,10 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
       // go into a project. Only the always-evaluated arguments are rewritten as above. In the rest,
       // a `With` stays where it is, as in a conditional branch, and only the definitions that gain
       // something from memoizing keep it.
-      // TODO: a deterministic definition in a lambda function that reads no lambda variable is
-      //       evaluated each time the lambda function is, although its value is the same for the
-      //       whole evaluation of the higher-order function. It could be memoized lazily around
-      //       that function instead.
+      // TODO: a deterministic definition in a lambda function that reads none of that function's
+      //       variables is evaluated each time the lambda function is, although its value is the
+      //       same for the whole evaluation of the higher-order function. It could be memoized
+      //       lazily around the higher-order function instead.
       case h: HigherOrderFunction =>
         val newExpr = h.mapChildren { c =>
           if (h.alwaysEvaluatedArguments.exists(_ eq c)) {
