@@ -62,6 +62,9 @@ def identify_changed_files_from_git_commits(patch_sha, target_branch=None, targe
     """
     Given a git commit and target ref, use the set of files changed in the diff in order to
     determine which modules' tests should be run.
+
+    Uses ``--no-renames`` so a moved file is listed as a deletion of its old path plus an
+    addition of its new path. Without that flag, git reports only the old path.
     """
     if target_branch is None and target_ref is None:
         raise AttributeError("must specify either target_branch or target_ref")
@@ -73,7 +76,8 @@ def identify_changed_files_from_git_commits(patch_sha, target_branch=None, targe
     else:
         diff_target = target_ref
     raw_output = subprocess.check_output(
-        ["git", "diff", "--name-only", patch_sha, diff_target], universal_newlines=True
+        ["git", "diff", "--name-only", "--no-renames", patch_sha, diff_target],
+        universal_newlines=True,
     )
     # Remove any empty strings
     return [f for f in raw_output.split("\n") if f]
