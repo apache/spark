@@ -112,7 +112,7 @@ case class SchemaOfCsvEvaluator(options: Map[String, String]) {
   private lazy val csvInferSchema = new CSVInferSchema(csvOptions)
 
   final def evaluate(csv: UTF8String): Any = {
-    val row = csvParser.parseLine(csv.toString)
+    val row = UnivocityParser.parseLine(csvParser, csv.toString)
     assert(row != null, "Parsed CSV record should not be null.")
     val header = row.zipWithIndex.map { case (_, index) => s"_c$index" }
     val startType: Array[DataType] = Array.fill[DataType](header.length)(NullType)
