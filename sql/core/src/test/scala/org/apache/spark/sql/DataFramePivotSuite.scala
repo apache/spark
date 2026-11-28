@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.time.LocalDateTime
+import java.time.{LocalDateTime, Year}
 import java.util.Locale
 
 import org.apache.spark.sql.catalyst.expressions.aggregate.PivotFirst
@@ -340,6 +340,22 @@ class DataFramePivotSuite extends SharedSparkSession {
     val expected = Seq((3, 1, 1), (2, 1, 1)).toDF()
     val actual = df.groupBy("x").pivot("s").count()
     checkAnswer(actual, expected)
+  }
+
+  test("SPARK-59684: pivoting by a struct column") {
+    val df = Seq(1.0d, 2.0d).toDF("v").selectExpr("v", "struct(v, v) AS s", "array(struct(v)) AS a")
+    checkAnswer(
+      df.groupBy("v").pivot("s").count(),
+      Row(1.0d, 1L, null) :: Row(2.0d, null, 1L) :: Nil)
+    checkAnswer(
+      df.groupBy("v").pivot("a").agg(first("v")),
+      Row(1.0d, 1.0d, null) :: Row(2.0d, null, 2.0d) :: Nil)
+    val udtDf = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(Row(1, Row(Year.of(2020))), Row(2, Row(Year.of(2021))))),
+      new StructType().add("v", IntegerType).add("s", new StructType().add("y", new YearUDT)))
+    checkAnswer(
+      udtDf.groupBy("v").pivot("s").count(),
+      Row(1, 1L, null) :: Row(2, null, 1L) :: Nil)
   }
 
   test("SPARK-35480: percentile_approx should work with pivot") {
