@@ -21,6 +21,8 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 
 trait PythonSQLMetrics { self: SparkPlan =>
+  // PythonPhaseMetrics supplies the phase schema; Python decides whether to collect timing.
+  // A zero pythonNumTimingReports means detailed timing data is unavailable.
   protected val pythonMetrics: Map[String, SQLMetric] = {
     PythonSQLMetrics.pythonSizeMetricsDesc.map { case (k, v) =>
       k -> SQLMetrics.createSizeMetric(sparkContext, v)
@@ -28,12 +30,14 @@ trait PythonSQLMetrics { self: SparkPlan =>
       k -> SQLMetrics.createTimingMetric(sparkContext, v)
     } ++ PythonSQLMetrics.pythonOtherMetricsDesc.map { case (k, v) =>
       k -> SQLMetrics.createMetric(sparkContext, v)
-    } ++ additionalMetrics
+    } ++ additionalMetrics ++ phaseMetrics
   }
 
   // Hook for subtraits to add operator-specific metrics on top of the shared ones above. Default
   // empty so the shared trait stays minimal; see [[PythonPickleBatchMetrics]].
   protected def additionalMetrics: Map[String, SQLMetric] = Map.empty
+
+  protected def phaseMetrics: Map[String, SQLMetric] = Map.empty
 
   protected def createPythonPhaseMetrics(): Map[String, SQLMetric] = {
     PythonSQLMetrics.pythonPhaseTimingMetricsDesc.map { case (k, v) =>
@@ -85,6 +89,11 @@ object PythonSQLMetrics {
   }
 }
 
+/** Shared detailed timing schema for Python execution operators. */
+trait PythonPhaseMetrics extends PythonSQLMetrics { self: SparkPlan =>
+  override protected def phaseMetrics: Map[String, SQLMetric] = createPythonPhaseMetrics()
+}
+
 /**
  * Metrics specific to the regular (pickle-serialized) Python UDF input batching path in
  * [[BatchEvalPythonExec.getInputIterator]]. Mixed in only by the operators that pickle their
@@ -105,7 +114,7 @@ object PythonSQLMetrics {
  * Also kept out of pythonSizeMetricsDesc, which feeds the Python data source DSv2 metric
  * declarations (UserDefinedPythonDataSource.createPythonMetrics) that never populate these.
  */
-trait PythonPickleBatchMetrics extends PythonSQLMetrics { self: SparkPlan =>
+trait PythonPickleBatchMetrics extends PythonPhaseMetrics { self: SparkPlan =>
   override protected def additionalMetrics: Map[String, SQLMetric] =
     PythonPickleBatchMetrics.pickleBatchSizeMetricsDesc.map { case (k, v) =>
       k -> SQLMetrics.createSizeMetric(sparkContext, v)

@@ -279,8 +279,10 @@ class SymmetricHashJoinStateManagerV4(
 
         if (attr.dataType.isInstanceOf[StructType]) {
           // NOTE: We assume this is window struct, as same as WatermarkSupport.watermarkExpression
-          row.getStruct(idx, 2).getLong(1)
+          // A NULL window is never evicted, as in state formats V2 and V3, where its end is NULL.
+          if (row.isNullAt(idx)) Long.MaxValue else row.getStruct(idx, 2).getLong(1)
         } else {
+          // A NULL timestamp is read as time 0.
           row.getLong(idx)
         }
 

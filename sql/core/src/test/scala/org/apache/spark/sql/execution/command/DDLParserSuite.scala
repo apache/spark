@@ -61,7 +61,8 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val v2 = "INSERT OVERWRITE DIRECTORY USING parquet SELECT 1 as a"
     checkError(
       exception = parseException(v2),
-      condition = "_LEGACY_ERROR_TEMP_0049",
+      condition = "INSERT_OVERWRITE_DIRECTORY_PATH.MISSING",
+      sqlState = "42601",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = "INSERT OVERWRITE DIRECTORY USING parquet",
@@ -96,7 +97,8 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
         | OPTIONS ('path' '/tmp/file', a 1, b 0.1, c TRUE)""".stripMargin
     checkError(
       exception = parseException(v4),
-      condition = "_LEGACY_ERROR_TEMP_0049",
+      condition = "INSERT_OVERWRITE_DIRECTORY_PATH.BOTH_SPECIFIED",
+      sqlState = "42601",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = fragment4,
@@ -389,7 +391,8 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
         |FROM testData""".stripMargin
     checkError(
       exception = parseException(sql4),
-      condition = "_LEGACY_ERROR_TEMP_0048",
+      condition = "UNSUPPORTED_FEATURE.TRANSFORM_RECORD_READER_WRITER",
+      sqlState = "0A000",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql4,
@@ -530,6 +533,17 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
         fragment = v3,
         start = 0,
         stop = 36))
+
+    val v4 = "CREATE TEMPORARY VIEW IF NOT EXISTS a AS SELECT 1"
+    checkError(
+      exception = parseException(v4),
+      condition = "INVALID_SQL_SYNTAX.CREATE_TEMP_VIEW_WITH_IF_NOT_EXISTS",
+      sqlState = "42000",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = v4,
+        start = 0,
+        stop = 48))
   }
 
   test("create temp view - full") {

@@ -198,11 +198,9 @@ case class CheckConstraint(
   // ALTER TABLE calls this on the optimized plan, where the current time, date, catalog, user and
   // the like are replaced by their values at the time of the ALTER TABLE. A condition that
   // `withPredicateDecision` finds reading one is stored without a predicate, so that writes check
-  // `predicateSql`. ALTER TABLE does not build the predicate from the analyzed condition instead,
-  // because `V2ExpressionBuilder` folds `CAST('today' AS DATE)` there as an ordinary cast.
-  // CREATE and REPLACE TABLE call this on the analyzed condition (`ResolveTableSpec`), where that
-  // folding still happens (SPARK-60451). Only `AddCheckConstraint` decides, so they always store
-  // the predicate if there is one.
+  // `predicateSql`. CREATE and REPLACE TABLE call this on the analyzed condition
+  // (`ResolveTableSpec`). Only `AddCheckConstraint` decides, so they always store the predicate if
+  // there is one.
   def toV2Constraint: Constraint = {
     val predicate = if (omitPredicate.contains(true)) {
       null
@@ -288,12 +286,9 @@ object CheckConstraint {
    * from a VARIANT, or of a string that only the optimizer makes constant.
    */
   private def castReadsCurrentDate(cast: Cast): Boolean = {
-    val completesTime = TimestampFamily.isLtz(cast.dataType)
-    (completesTime || SpecialDatetimeValues.rewrites(cast.dataType)) &&
-      SpecialDatetimeValues.constantString(cast).exists { s =>
-        SpecialDatetimeValues.readsCurrentDate(s, cast.dataType) ||
-          (completesTime && DateTimeUtils.isTimeOnlyTimestamp(s))
-      }
+    cast.specialDatetimeValue.exists(SpecialDatetimeValues.readsCurrentDate(_, cast.dataType)) ||
+      (TimestampFamily.isLtz(cast.dataType) &&
+        SpecialDatetimeValues.constantString(cast).exists(DateTimeUtils.isTimeOnlyTimestamp))
   }
 
   /**

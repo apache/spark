@@ -625,7 +625,7 @@ class TestingRelationCatalog extends RelationCatalog {
 
 /**
  * A v2 catalog that does not implement ViewCatalog. Used by capability-gate tests: the gate
- * fires in `Analyzer.lookupTableOrView(viewOnly=true)` for ALTER VIEW and in
+ * fires in `RelationResolution.lookupTableOrView(viewOnly=true)` for ALTER VIEW and in
  * [[CheckViewReferences]] for CREATE VIEW -- in both cases before `loadTable` is called --
  * so this catalog's content is intentionally empty.
  */

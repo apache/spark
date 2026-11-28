@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.joins
 
 import java.lang.management.ManagementFactory
+import java.time.{Duration, Period}
 import java.util.concurrent.atomic.AtomicInteger
 
 import com.sun.management.UnixOperatingSystemMXBean
@@ -54,21 +55,33 @@ class SortMergeAsOfJoinScannerSuite extends SparkFunSuite with LocalSparkContext
       parameters = Map("message" -> "The Nearest AS-OF join has no ordered scan"))
   }
 
-  test("nearest join has no cursor scan") {
+  test("a nearest cursor scan built by hand needs the TRUE as-of condition and no residual one") {
+    sc = new SparkContext("local", "SortMergeAsOfJoinScannerSuite", new SparkConf(false))
     val leftKey = AttributeReference("leftKey", IntegerType)()
     val rightKey = AttributeReference("rightKey", IntegerType)()
-    // A scanner built by hand must fail, not run the cursor of another direction. It fails when
-    // it is built, so also with no rows, where the cursor would not check any right row.
-    Seq((Seq(5), Seq(1, 9)), (Seq(5), Seq.empty[Int]), (Seq.empty[Int], Seq.empty[Int])).foreach {
-      case (leftValues, rightValues) =>
+    // The nearest cursor checks no condition, so a scanner built by hand with one must fail, not
+    // skip it. It fails when it is built, so also with no rows, where it would check no row.
+    for {
+      (asOfCondition, residualCondition) <- Seq(
+        (Not(EqualTo(leftKey, rightKey)), None),
+        (Literal.TrueLiteral, Some(GreaterThan(leftKey, rightKey))),
+        (And(Literal.TrueLiteral, Literal.TrueLiteral), None))
+      (leftValues, rightValues) <- Seq((Seq(5), Seq(1, 9)), (Seq.empty[Int], Seq.empty[Int]))
+    } {
+      withClue(s"$asOfCondition, residual $residualCondition, left $leftValues: ") {
         val error = intercept[SparkException] {
-          runScan(leftValues, rightValues, leftKey, rightKey, Literal.TrueLiteral, Nearest,
-            useCursorScan = true)
+          sc.parallelize(Seq(0), 1).mapPartitions { _ =>
+            Iterator.single(matchedRightKeys(newScanner(leftKey, rightKey, leftValues,
+              rightValues, asOfCondition, residualCondition, direction = Nearest,
+              useCursorScan = true)))
+          }.collect()
         }
         checkError(
           exception = error.getCause.asInstanceOf[SparkException],
           condition = "INTERNAL_ERROR",
-          parameters = Map("message" -> "The Nearest AS-OF join has no cursor scan"))
+          parameters = Map("message" -> ("The nearest AS-OF join cursor scan needs the TRUE " +
+            "as-of condition and no residual one")))
+      }
     }
   }
 
@@ -181,7 +194,7 @@ class SortMergeAsOfJoinScannerSuite extends SparkFunSuite with LocalSparkContext
     assert(compiled == Seq((false, false), (false, false), (true, true)))
   }
 
-  test("cursor scan evaluates the as-of condition twice per left row") {
+  test("cursor scan evaluates the right as-of key twice per left row") {
     val leftKey = AttributeReference("leftKey", IntegerType)()
     val rightKey = AttributeReference("rightKey", IntegerType)()
     val leftValues = 5 to 95 by 10
@@ -201,8 +214,49 @@ class SortMergeAsOfJoinScannerSuite extends SparkFunSuite with LocalSparkContext
         val (cursorKeys, evaluations, cursorTasks) = runScan(
           leftValues, rightValues, leftKey, rightKey, condition, direction, useCursorScan = true)
         assert(cursorKeys == expected)
-        assert(evaluations == 20, s"evaluated the as-of condition $evaluations times")
+        assert(evaluations == 20, s"evaluated the right as-of key $evaluations times")
         assert(cursorTasks == 1)
+      }
+    }
+  }
+
+  test("cursor scan evaluates the tolerance limit once per left row") {
+    sc = new SparkContext("local", "SortMergeAsOfJoinScannerSuite", new SparkConf(false))
+    for {
+      direction <- Seq(Backward, Forward)
+      // Each left row is 5 from its closest right row: inside a tolerance of 5, outside one of 2.
+      (tolerance, inside) <- Seq(5 -> true, 2 -> false)
+      // A DataFrame tolerance puts the bound in the as-of condition, and SQL puts it in ON.
+      boundInResidual <- Seq(false, true)
+      useCursorScan <- Seq(false, true)
+    } {
+      withClue(s"$direction, tolerance $tolerance, bound in the residual $boundInResidual, " +
+          s"cursor scan $useCursorScan: ") {
+        val (matchedKeys, evaluations) = sc.parallelize(Seq(0), 1)
+          .mapPartitions { _ =>
+            val leftKey = AttributeReference("leftKey", IntegerType)()
+            val rightKey = AttributeReference("rightKey", IntegerType)()
+            val count = new AtomicInteger()
+            val (comparison, bound) = direction match {
+              case Backward => (GreaterThanOrEqual(leftKey, rightKey), GreaterThanOrEqual(
+                rightKey, CountedEvaluation(Subtract(leftKey, Literal(tolerance)), count)))
+              case _ => (LessThanOrEqual(leftKey, rightKey), LessThanOrEqual(
+                rightKey, CountedEvaluation(Add(leftKey, Literal(tolerance)), count)))
+            }
+            val (condition, residual) =
+              if (boundInResidual) (comparison, Some(bound)) else (And(comparison, bound), None)
+            val scanner = newScanner(leftKey, rightKey, 5 to 95 by 10, 0 to 100 by 10,
+              condition, residual, direction = direction, useCursorScan = useCursorScan)
+            Iterator.single((matchedRightKeys(scanner), count.get()))
+          }.collect().head
+
+        val closest = if (direction == Backward) 0 to 90 by 10 else 10 to 100 by 10
+        assert(matchedKeys == (if (inside) closest.toList else Nil))
+        // The buffered scan checks the bound on the right rows that pass the comparison, until
+        // one also passes the bound. For these 10 left rows that takes 55 checks, or 10 when the
+        // first such row of a forward scan passes. The cursor scan checks only the closest row.
+        val expected = if (useCursorScan || (direction == Forward && inside)) 10 else 55
+        assert(evaluations == expected, s"evaluated the limit $evaluations times")
       }
     }
   }
@@ -223,6 +277,116 @@ class SortMergeAsOfJoinScannerSuite extends SparkFunSuite with LocalSparkContext
       Seq(false, true).foreach { useCursorScan =>
         withClue(s"$direction, cursor scan $useCursorScan: ") {
           assert(runTagScan(leftValues, rightRows, direction, useCursorScan) == expected)
+        }
+      }
+    }
+  }
+
+  test("nearest cursor scan reads each right key it passes once, and one stop key per left row") {
+    val leftKey = AttributeReference("leftKey", IntegerType)()
+    val rightKey = AttributeReference("rightKey", IntegerType)()
+    val rightValues = 0 to 100 by 10
+    Seq(
+      // Each left key is halfway between two right keys, so the row before wins.
+      (5 to 95 by 10, (0 to 90 by 10).toList),
+      // Each left key is nearer to the right key after it.
+      (6 to 96 by 10, (10 to 100 by 10).toList)
+    ).foreach { case (leftValues, expected) =>
+      withClue(s"left keys ${leftValues.head} to ${leftValues.last}: ") {
+        // The buffered scan reads the right keys from the first one to the first one above the
+        // left key: 2 to 11 keys for these 10 left rows, so 65.
+        val (bufferedKeys, bufferedEvaluations, bufferedTasks) = runScan(
+          leftValues, rightValues, leftKey, rightKey, Literal.TrueLiteral, Nearest,
+          useCursorScan = false)
+        assert(bufferedKeys == expected)
+        assert(bufferedEvaluations == 65,
+          s"evaluated the right as-of key $bufferedEvaluations times")
+        assert(bufferedTasks == 0)
+
+        // It reads in right keys 0 to 90 once each, and each left row also reads the key it
+        // stops at (10 to 100), so 10 + 10 = 20.
+        val (cursorKeys, evaluations, cursorTasks) = runScan(
+          leftValues, rightValues, leftKey, rightKey, Literal.TrueLiteral, Nearest,
+          useCursorScan = true)
+        assert(cursorKeys == expected)
+        assert(evaluations == 20, s"evaluated the right as-of key $evaluations times")
+        assert(cursorTasks == 1)
+      }
+    }
+  }
+
+  test("nearest cursor scan keeps the first row of its best key while it reads the next rows") {
+    // Tags grow and shrink, so the reused best-row buffer has to resize and drop older bytes. The
+    // right input reuses one row object, so a kept row that is not a copy would change.
+    val longTag = "a tag that is longer than the tags around it"
+    val rightRows = Seq(10 -> "a", 20 -> longTag, 20 -> "the second 20", 30 -> "bb", 40 -> null,
+      50 -> "c" * 30)
+    val leftValues = Seq(5, 15, 21, 25, 26, 30, 34, 45, 55, 60)
+    // 15, 25 and 45 are halfway between two right keys, so the row before wins. 21 and 25 keep
+    // the first row at 20 while the cursor reads the second one and 30.
+    val expected = Seq(Some(10 -> "a"), Some(10 -> "a"), Some(20 -> longTag), Some(20 -> longTag),
+      Some(30 -> "bb"), Some(30 -> "bb"), Some(30 -> "bb"), Some(40 -> null), Some(50 -> "c" * 30),
+      Some(50 -> "c" * 30))
+    Seq(false, true).foreach { useCursorScan =>
+      withClue(s"cursor scan $useCursorScan: ") {
+        assert(runTagScan(leftValues, rightRows, Nearest, useCursorScan) == expected)
+      }
+    }
+  }
+
+  test("nearest cursor scan reads the ON key of a waiting right row only when the cursor moves") {
+    sc = new SparkContext("local", "SortMergeAsOfJoinScannerSuite", new SparkConf(false))
+    // Rows are (ON key, as-of key). ON key 1 has one right row, above all its left rows. ON key 2
+    // has no right rows, and the next right row has ON key 3.
+    val rightRows = Seq(1 -> 100, 3 -> 0)
+    for (leftRowsPerKey <- Seq(1, 4); useCursorScan <- Seq(false, true)) {
+      withClue(s"$leftRowsPerKey left rows per ON key, cursor scan $useCursorScan: ") {
+        val leftRows = Seq(1, 2).flatMap(on => (0 until leftRowsPerKey).map(on -> _)) :+ (3 -> 5)
+        val (matches, evaluations) = sc.parallelize(Seq(0), 1)
+          .mapPartitions { _ =>
+            val leftOn = AttributeReference("leftOn", IntegerType)()
+            val leftAsOf = AttributeReference("leftAsOf", IntegerType)()
+            val rightOn = AttributeReference("rightOn", IntegerType)()
+            val rightAsOf = AttributeReference("rightAsOf", IntegerType)()
+            val count = new AtomicInteger()
+            val scanner = new SortMergeAsOfJoinScanner(
+              leftIter = leftRows.iterator.map { case (on, asOf) => InternalRow(on, asOf) },
+              rightIter = rightRows.iterator.map { case (on, asOf) => InternalRow(on, asOf) },
+              leftOutput = Seq(leftOn, leftAsOf),
+              rightOutput = Seq(rightOn, rightAsOf),
+              leftKeys = Seq(leftOn),
+              rightKeys = Seq(CountedEvaluation(rightOn, count)),
+              leftSortExprs = Seq(leftAsOf),
+              rightSortExprs = Seq(rightAsOf),
+              asOfCondition = Literal.TrueLiteral,
+              joinType = LeftOuter,
+              residualCondition = None,
+              numOutputRows = new SQLMetric("sum"),
+              spillSize = new SQLMetric("sum"),
+              direction = Nearest,
+              inMemoryThreshold = 256,
+              sizeInBytesSpillThreshold = Long.MaxValue,
+              spillThreshold = 256,
+              useCursorScan = useCursorScan,
+              numAsOfCursorTasks = new SQLMetric("sum"))
+            try {
+              val matched = scanner.iterator.map { row =>
+                if (row.isNullAt(3)) None else Some(row.getInt(3))
+              }.toList
+              Iterator.single((matched, count.get()))
+            } finally {
+              scanner.close()
+            }
+          }.collect().head
+
+        val expected =
+          Seq.fill(leftRowsPerKey)(Some(100)) ++ Seq.fill(leftRowsPerKey)(None) :+ Some(0)
+        assert(matches == expected)
+        if (useCursorScan) {
+          // A group start reads the ON key of each right row it skips once, and of the row it
+          // stops at twice: 2 for ON key 1, 3 for ON key 2 and 2 for ON key 3. Then the cursor
+          // moves once, to the input end, which has no ON key. So 7, whatever the left row count.
+          assert(evaluations == 7, s"evaluated the right ON key $evaluations times")
         }
       }
     }
@@ -249,6 +413,97 @@ class SortMergeAsOfJoinScannerSuite extends SparkFunSuite with LocalSparkContext
       Backward, GreaterThanOrEqual(longL, longR), None, Seq(longL), Seq(longR)))
   }
 
+  test("cursor scan accepts a tolerance bound on the right key after the comparison, " +
+      "strict or not") {
+    val l = AttributeReference("l", IntegerType)()
+    val r = AttributeReference("r", IntegerType)()
+    val lower = Subtract(l, Literal(3))
+    val upper = Add(l, Literal(3))
+    Seq(
+      Backward -> And(GreaterThanOrEqual(l, r), GreaterThanOrEqual(r, lower)),
+      Backward -> And(GreaterThanOrEqual(l, r), GreaterThan(r, lower)),
+      Backward -> And(GreaterThan(l, r), GreaterThanOrEqual(r, lower)),
+      Backward -> And(GreaterThan(l, r), GreaterThan(r, lower)),
+      Forward -> And(LessThanOrEqual(l, r), LessThanOrEqual(r, upper)),
+      Forward -> And(LessThanOrEqual(l, r), LessThan(r, upper)),
+      Forward -> And(LessThan(l, r), LessThanOrEqual(r, upper)),
+      Forward -> And(LessThan(l, r), LessThan(r, upper)),
+      // The optimizer folds a forward tolerance of 0, `l + 0`, to `l`.
+      Forward -> And(LessThanOrEqual(l, r), LessThanOrEqual(r, l))
+    ).foreach { case (direction, condition) =>
+      assert(supportsCursorScan(direction, condition, None, Seq(l), Seq(r)),
+        s"$direction $condition")
+    }
+
+    // The limits that a DATE or TIMESTAMP key gets from an interval tolerance, or that a DATE
+    // key gets from a whole number of days.
+    Seq(
+      DateType -> ((key: Expression) => DateAdd(key, Literal(-2))),
+      DateType -> ((key: Expression) => DateSub(key, Literal(2))),
+      DateType -> ((key: Expression) => DateAddYMInterval(key, Literal(Period.ofMonths(-2)))),
+      TimestampType -> ((key: Expression) =>
+        TimestampAddInterval(key, Literal(Duration.ofDays(-2)), Some("UTC"))),
+      TimestampType -> ((key: Expression) =>
+        TimestampAddYMInterval(key, Literal(Period.ofMonths(-2)), Some("UTC")))
+    ).foreach { case (dataType, limitOf) =>
+      val dl = AttributeReference("l", dataType)()
+      val dr = AttributeReference("r", dataType)()
+      val condition = And(GreaterThanOrEqual(dl, dr), GreaterThanOrEqual(dr, limitOf(dl)))
+      assert(supportsCursorScan(Backward, condition, None, Seq(dl), Seq(dr)), condition)
+    }
+  }
+
+  test("cursor scan accepts a tolerance bound on the right key as the whole residual " +
+      "condition, strict or not") {
+    val l = AttributeReference("l", IntegerType)()
+    val r = AttributeReference("r", IntegerType)()
+    val lower = Subtract(l, Literal(3))
+    val upper = Add(l, Literal(3))
+    for {
+      (direction, comparisons, bounds) <- Seq(
+        (Backward, Seq(GreaterThanOrEqual(l, r), GreaterThan(l, r)),
+          Seq(GreaterThanOrEqual(r, lower), GreaterThan(r, lower), GreaterThanOrEqual(r, l))),
+        (Forward, Seq(LessThanOrEqual(l, r), LessThan(l, r)),
+          Seq(LessThanOrEqual(r, upper), LessThan(r, upper), LessThanOrEqual(r, l))))
+      comparison <- comparisons
+      bound <- bounds
+    } {
+      assert(supportsCursorScan(direction, comparison, Some(bound), Seq(l), Seq(r)),
+        s"$direction $comparison ON $bound")
+    }
+
+    // A SQL `t.ts - INTERVAL 5 SECONDS` folds to this limit.
+    val tl = AttributeReference("l", TimestampType)()
+    val tr = AttributeReference("r", TimestampType)()
+    val timestampBound =
+      GreaterThanOrEqual(tr, TimestampAddInterval(tl, Literal(Duration.ofSeconds(-5)), Some("UTC")))
+    assert(supportsCursorScan(
+      Backward, GreaterThanOrEqual(tl, tr), Some(timestampBound), Seq(tl), Seq(tr)))
+  }
+
+  test("cursor conditions take the bound after the comparison, or else the residual condition") {
+    val l = AttributeReference("l", IntegerType)()
+    val r = AttributeReference("r", IntegerType)()
+    val comparison = GreaterThanOrEqual(l, r)
+    val bound = GreaterThanOrEqual(r, Subtract(l, Literal(3)))
+    val strategy = AsOfScanStrategy.LastMatch
+    assert(strategy.cursorConditions(And(comparison, bound), None) ==
+      ((comparison, Some(bound))))
+    assert(strategy.cursorConditions(comparison, None) == ((comparison, None)))
+    assert(strategy.cursorConditions(comparison, Some(bound)) == ((comparison, Some(bound))))
+    // Each of these stays whole, so supportsCursorScan sees one condition and rejects it.
+    Seq(
+      And(IsNotNull(l), bound),
+      And(comparison, IsNotNull(r)),
+      And(comparison, LessThanOrEqual(r, Add(l, Literal(3))))
+    ).foreach { condition =>
+      assert(strategy.cursorConditions(condition, None) == ((condition, None)), condition)
+    }
+    // With a bound in both, the as-of condition stays whole, so supportsCursorScan rejects it.
+    assert(strategy.cursorConditions(And(comparison, bound), Some(bound)) ==
+      ((And(comparison, bound), Some(bound))))
+  }
+
   test("cursor scan accepts scalar sort keys except TIME, nanosecond timestamps and " +
       "user-defined types") {
     def supportsType(dataType: DataType): Boolean = {
@@ -267,6 +522,30 @@ class SortMergeAsOfJoinScannerSuite extends SparkFunSuite with LocalSparkContext
     ).foreach(dataType => assert(!supportsType(dataType), dataType))
   }
 
+  test("cursor scan accepts a nearest join with the TRUE as-of condition and no residual one, " +
+      "on nearest key types except nanosecond timestamps") {
+    def supportsNearest(leftType: DataType, rightType: DataType): Boolean = {
+      val l = AttributeReference("l", leftType)()
+      val r = AttributeReference("r", rightType)()
+      supportsCursorScan(Nearest, Literal.TrueLiteral, None, Seq(l), Seq(r))
+    }
+    Seq(
+      ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType, DecimalType(38, 18),
+      DateType, TimestampType, TimestampNTZType, YearMonthIntervalType(), DayTimeIntervalType()
+    ).foreach(dataType => assert(supportsNearest(dataType, dataType), dataType))
+    // The cursor compares decimal values exactly, whatever their scales.
+    assert(supportsNearest(DecimalType(10, 2), DecimalType(20, 4)))
+    // Not key pairs of different types or that nearest joins reject, and not nanosecond
+    // timestamps, which the cursor scan has no tests for yet.
+    Seq(
+      IntegerType -> LongType, TimestampType -> TimestampNTZType, StringType -> StringType,
+      TimestampLTZNanosType(9) -> TimestampLTZNanosType(9),
+      TimestampNTZNanosType(9) -> TimestampNTZNanosType(9)
+    ).foreach { case (leftType, rightType) =>
+      assert(!supportsNearest(leftType, rightType), s"$leftType, $rightType")
+    }
+  }
+
   test("cursor scan rejects conditions that need the buffered scan") {
     val l = AttributeReference("l", IntegerType)()
     val r = AttributeReference("r", IntegerType)()
@@ -276,11 +555,55 @@ class SortMergeAsOfJoinScannerSuite extends SparkFunSuite with LocalSparkContext
     val lcaseL = AttributeReference("l", StringType("UTF8_LCASE"))()
     val stringR = AttributeReference("r", StringType)()
     val backward = GreaterThanOrEqual(l, r)
-    Seq(
-      "a residual condition" ->
+    val lower = Subtract(l, Literal(1))
+    val accepted = Seq(
+      "a residual condition that is not a tolerance bound" ->
         supportsCursorScan(Backward, backward, Some(LessThan(l2, r2)), Seq(l), Seq(r)),
-      "a nearest join" ->
+      // The closest row can fail a bound that keeps rows far enough away, while a farther row
+      // passes it.
+      "a residual bound from the wrong side" ->
+        supportsCursorScan(Backward, backward, Some(LessThanOrEqual(r, lower)), Seq(l), Seq(r)),
+      // The closest row within the bound can fail the other part, while a farther one passes.
+      "a residual tolerance bound and another condition" ->
+        supportsCursorScan(Backward, backward,
+          Some(And(GreaterThanOrEqual(r, lower), LessThan(l2, r2))), Seq(l), Seq(r)),
+      "a residual tolerance bound on another right column" ->
+        supportsCursorScan(Backward, backward, Some(GreaterThanOrEqual(r2, lower)), Seq(l), Seq(r)),
+      "a residual tolerance limit on another left column" ->
+        supportsCursorScan(Backward, backward,
+          Some(GreaterThanOrEqual(r, Subtract(l2, Literal(3)))), Seq(l), Seq(r)),
+      // The limit must have one value per left row, so it must not read the right row.
+      "a residual tolerance limit that reads a right column" ->
+        supportsCursorScan(Backward, backward, Some(GreaterThanOrEqual(r, Subtract(l, r2))),
+          Seq(l), Seq(r)),
+      "a residual tolerance bound with the limit first" ->
+        supportsCursorScan(Backward, backward, Some(LessThanOrEqual(lower, r)), Seq(l), Seq(r)),
+      "a residual tolerance bound as a distance" ->
+        supportsCursorScan(Backward, backward,
+          Some(LessThanOrEqual(Subtract(l, r), Literal(1))), Seq(l), Seq(r)),
+      "a tolerance bound in both the as-of and the residual condition" ->
+        supportsCursorScan(Backward, And(backward, GreaterThanOrEqual(r, lower)),
+          Some(GreaterThanOrEqual(r, lower)), Seq(l), Seq(r)),
+      // The nearest cursor checks no condition, so it takes only the TRUE as-of condition and
+      // no residual condition.
+      "a nearest join with exact matches off" ->
+        supportsCursorScan(Nearest, Not(EqualTo(l, r)), None, Seq(l), Seq(r)),
+      "a nearest join with a tolerance" ->
+        supportsCursorScan(Nearest,
+          And(GreaterThanOrEqual(r, lower), LessThanOrEqual(r, Add(l, Literal(1)))), None,
+          Seq(l), Seq(r)),
+      "a nearest join with a residual condition" ->
+        supportsCursorScan(Nearest, Literal.TrueLiteral, Some(LessThan(l2, r2)), Seq(l), Seq(r)),
+      "a nearest join with a residual tolerance bound" ->
+        supportsCursorScan(Nearest, Literal.TrueLiteral, Some(GreaterThanOrEqual(r, lower)),
+          Seq(l), Seq(r)),
+      "a nearest join with an as-of condition that is always TRUE but not the TRUE literal" ->
+        supportsCursorScan(Nearest, And(Literal.TrueLiteral, Literal.TrueLiteral), None,
+          Seq(l), Seq(r)),
+      "a nearest join whose as-of condition compares the keys" ->
         supportsCursorScan(Nearest, backward, None, Seq(l), Seq(r)),
+      "a nearest join with two sort keys per side" ->
+        supportsCursorScan(Nearest, Literal.TrueLiteral, None, Seq(l, l2), Seq(r, r2)),
       "a backward join with a forward comparison" ->
         supportsCursorScan(Backward, LessThanOrEqual(l, r), None, Seq(l), Seq(r)),
       "a forward join with a backward comparison" ->
@@ -296,8 +619,41 @@ class SortMergeAsOfJoinScannerSuite extends SparkFunSuite with LocalSparkContext
         supportsCursorScan(Forward, GreaterThanOrEqual(r, l), None, Seq(l), Seq(r)),
       "a strict forward condition with the right side first" ->
         supportsCursorScan(Forward, GreaterThan(r, l), None, Seq(l), Seq(r)),
-      "a tolerance" ->
-        supportsCursorScan(Backward, And(backward, GreaterThanOrEqual(r, Subtract(l, Literal(1)))),
+      // With the bound first, the buffered scan evaluates the limit on right rows that fail the
+      // comparison.
+      "a tolerance bound before the comparison" ->
+        supportsCursorScan(Backward, And(GreaterThanOrEqual(r, lower), backward), None,
+          Seq(l), Seq(r)),
+      // With the limit first, the buffered scan evaluates it on right rows with a NULL key.
+      "a tolerance bound with the limit first" ->
+        supportsCursorScan(Backward, And(backward, LessThanOrEqual(lower, r)), None,
+          Seq(l), Seq(r)),
+      // The closest row can fail such a bound while a farther row passes it.
+      "a tolerance bound from the wrong side" ->
+        supportsCursorScan(Backward, And(backward, LessThanOrEqual(r, Add(l, Literal(1)))),
+          None, Seq(l), Seq(r)),
+      "a tolerance bound on another right column" ->
+        supportsCursorScan(Backward, And(backward, GreaterThanOrEqual(r2, lower)), None,
+          Seq(l), Seq(r)),
+      // The buffered scan evaluates these limits for a NULL left key, which the cursor skips.
+      "a tolerance limit on another left column" ->
+        supportsCursorScan(Backward,
+          And(backward, GreaterThanOrEqual(r, Subtract(l2, Literal(1)))), None, Seq(l), Seq(r)),
+      "a tolerance limit that is not NULL for a NULL left key" ->
+        supportsCursorScan(Backward,
+          And(backward, GreaterThanOrEqual(r, If(IsNull(l), Literal(0), lower))), None,
+          Seq(l), Seq(r)),
+      // A DataFrame tolerance only adds a constant to the left key.
+      "a tolerance limit that does not add to the left key" ->
+        supportsCursorScan(Backward,
+          And(backward, GreaterThanOrEqual(r, Multiply(l, Literal(2)))), None, Seq(l), Seq(r)),
+      // For a NULL left key, the buffered scan still reads the right key in the bound.
+      "a tolerance bound on a computed right key" ->
+        supportsCursorScan(Backward, And(GreaterThanOrEqual(l, Multiply(r, Literal(10))),
+          GreaterThanOrEqual(Multiply(r, Literal(10)), lower)), None, Seq(l),
+          Seq(Multiply(r, Literal(10)))),
+      "a tolerance limit that is not constant" ->
+        supportsCursorScan(Backward, And(backward, GreaterThanOrEqual(r, Subtract(l, l2))),
           None, Seq(l), Seq(r)),
       "a constant operand" ->
         supportsCursorScan(Backward, GreaterThanOrEqual(l, Literal(1)), None, Seq(l), Seq(r)),
@@ -311,7 +667,8 @@ class SortMergeAsOfJoinScannerSuite extends SparkFunSuite with LocalSparkContext
       "sort keys of different collations" ->
         supportsCursorScan(Backward, GreaterThanOrEqual(lcaseL, stringR), None,
           Seq(lcaseL), Seq(stringR))
-    ).foreach { case (name, supported) => assert(!supported, name) }
+    ).collect { case (name, true) => name }
+    assert(accepted.isEmpty, s"accepted: ${accepted.mkString(", ")}")
   }
 
   private def supportsCursorScan(
@@ -325,7 +682,7 @@ class SortMergeAsOfJoinScannerSuite extends SparkFunSuite with LocalSparkContext
 
   /**
    * Runs one scan with no equi-keys in a task. Returns the right key that each left row matched,
-   * how many times the scan evaluated the as-of condition, and the cursor scan task count.
+   * how many times the scan evaluated the right as-of key, and the cursor scan task count.
    */
   private def runScan(
       leftValues: Seq[Int],
@@ -341,6 +698,8 @@ class SortMergeAsOfJoinScannerSuite extends SparkFunSuite with LocalSparkContext
     sc.parallelize(Seq(0), 1)
       .mapPartitions { _ =>
         val count = new AtomicInteger()
+        // The sort key and the condition both read the counted right key.
+        val countedRightKey = CountedEvaluation(rightKey, count)
         val numAsOfCursorTasks = new SQLMetric("sum")
         val scanner = new SortMergeAsOfJoinScanner(
           leftIter = leftValues.iterator.map(value => InternalRow(value)),
@@ -350,8 +709,8 @@ class SortMergeAsOfJoinScannerSuite extends SparkFunSuite with LocalSparkContext
           leftKeys = Nil,
           rightKeys = Nil,
           leftSortExprs = Seq(leftKey),
-          rightSortExprs = Seq(rightKey),
-          asOfCondition = CountedEvaluation(asOfCondition, count),
+          rightSortExprs = Seq(countedRightKey),
+          asOfCondition = asOfCondition.transformUp { case `rightKey` => countedRightKey },
           joinType = Inner,
           residualCondition = None,
           numOutputRows = new SQLMetric("sum"),
@@ -405,7 +764,8 @@ class SortMergeAsOfJoinScannerSuite extends SparkFunSuite with LocalSparkContext
           rightSortExprs = Seq(rightKey),
           asOfCondition = direction match {
             case Backward => GreaterThanOrEqual(leftKey, rightKey)
-            case _ => LessThanOrEqual(leftKey, rightKey)
+            case Forward => LessThanOrEqual(leftKey, rightKey)
+            case Nearest => Literal.TrueLiteral
           },
           joinType = LeftOuter,
           residualCondition = None,
@@ -432,7 +792,7 @@ class SortMergeAsOfJoinScannerSuite extends SparkFunSuite with LocalSparkContext
 
 private object SortMergeAsOfJoinScannerSuite {
 
-  /** A buffered scanner over one INT column per side, with no equi-keys. */
+  /** A scanner over one INT column per side, with no equi-keys. */
   def newScanner(
       leftKey: Attribute,
       rightKey: Attribute,
@@ -442,7 +802,8 @@ private object SortMergeAsOfJoinScannerSuite {
       residualCondition: Option[Expression] = None,
       direction: AsOfJoinDirection = Backward,
       inMemoryThreshold: Int = 256,
-      spillThreshold: Int = 256): SortMergeAsOfJoinScanner = {
+      spillThreshold: Int = 256,
+      useCursorScan: Boolean = false): SortMergeAsOfJoinScanner = {
     new SortMergeAsOfJoinScanner(
       leftIter = leftKeys.iterator.map(k => InternalRow(k)),
       rightIter = rightKeys.iterator.map(k => InternalRow(k)),
@@ -461,7 +822,7 @@ private object SortMergeAsOfJoinScannerSuite {
       inMemoryThreshold = inMemoryThreshold,
       sizeInBytesSpillThreshold = Long.MaxValue,
       spillThreshold = spillThreshold,
-      useCursorScan = false,
+      useCursorScan = useCursorScan,
       numAsOfCursorTasks = new SQLMetric("sum"))
   }
 

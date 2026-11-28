@@ -1781,7 +1781,8 @@ trait SchemaValidationUtils extends Logging {
       session: SparkSession,
       operatorStateMetadataVersion: Int = 2,
       stateStoreEncodingFormat: String = StateStoreEncoding.UnsafeRow.toString,
-      isRealTimeMode: Boolean = false
+      isRealTimeMode: Boolean = false,
+      valueSchemaValidator: Option[StateSchemaCompatibilityChecker.ValueSchemaValidator] = None
   ): List[StateSchemaValidationResult] = {
     assert(stateSchemaVersion >= 3)
     val usingAvro = stateStoreEncodingFormat == StateStoreEncoding.Avro.toString
@@ -1819,7 +1820,8 @@ trait SchemaValidationUtils extends Logging {
         storeName = StateStoreId.DEFAULT_STORE_NAME,
         oldSchemaFilePaths = oldStateSchemaFilePaths,
         newSchemaFilePath = Some(newStateSchemaFilePath),
-        schemaEvolutionEnabled = usingAvro && schemaEvolutionEnabledForOperator))
+        schemaEvolutionEnabled = usingAvro && schemaEvolutionEnabledForOperator,
+        valueSchemaValidator = valueSchemaValidator))
   }
 }
 

@@ -248,6 +248,8 @@ object AgnosticEncoders {
   case object DayTimeIntervalEncoder extends LeafEncoder[Duration](DayTimeIntervalType())
   case object YearMonthIntervalEncoder extends LeafEncoder[Period](YearMonthIntervalType())
   case object VariantEncoder extends LeafEncoder[VariantVal](VariantType)
+  case class FileRefEncoder(mode: FileTypeMode = FileTypeMode.UNKNOWN)
+      extends LeafEncoder[FileRef](FileType(mode))
   case class GeographyEncoder(dt: GeographyType) extends LeafEncoder[Geography](dt)
   case class GeometryEncoder(dt: GeometryType) extends LeafEncoder[Geometry](dt)
   case class DateEncoder(override val lenientSerialization: Boolean)

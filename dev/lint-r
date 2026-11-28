@@ -30,6 +30,11 @@ if ! type "Rscript" > /dev/null; then
   exit 1
 fi
 
+# lint-r.R stops unless SparkR is installed in R/lib.
+if [ ! -f "$SPARK_ROOT_DIR/R/lib/SparkR/DESCRIPTION" ]; then
+  "$SPARK_ROOT_DIR/R/install-dev.sh"
+fi
+
 `which Rscript` --vanilla "$SPARK_ROOT_DIR/dev/lint-r.R" "$SPARK_ROOT_DIR" | tee "$LINT_R_REPORT_FILE_NAME"
 
 NUM_LINES=`wc -l < "$LINT_R_REPORT_FILE_NAME" | awk '{print $1}'`

@@ -751,7 +751,7 @@ class MetricViewV2CatalogSuite extends SharedSparkSession {
         select = metricViewColumns)
       val yaml = createMetricView(fullMetricViewName, mv)
 
-      // DESCRIBE TABLE EXTENDED resolves the ident through `Analyzer.lookupTableOrView`,
+      // DESCRIBE TABLE EXTENDED resolves the ident through `RelationResolution.lookupTableOrView`,
       // which calls `RelationCatalog.loadRelation` once and gets back a
       // `DelegatingTable(View)`. The analyzer wraps it as a `ResolvedPersistentView` and
       // `DataSourceV2Strategy` routes through SPARK-56655's `DescribeV2ViewExec`, which

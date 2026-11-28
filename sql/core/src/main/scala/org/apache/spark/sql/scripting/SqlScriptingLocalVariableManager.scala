@@ -91,6 +91,13 @@ class SqlScriptingLocalVariableManager(context: SqlScriptingExecutionContext)
     )
   }
 
+  override def isScopeLabel(label: String): Boolean = {
+    context.searchAcrossFrames(
+      searchInCurrentFrame = frame => frame.scopes.findLast(_.label == label),
+      searchInScopes = scopes => scopes.findLast(_.label == label)
+    ).isDefined
+  }
+
   override def qualify(name: String): ResolvedIdentifier =
     ResolvedIdentifier(FakeLocalCatalog, Identifier.of(Array(context.currentScope.label), name))
 

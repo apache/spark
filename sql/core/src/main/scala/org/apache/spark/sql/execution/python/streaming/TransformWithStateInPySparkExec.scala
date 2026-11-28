@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.plans.logical.TransformWithStateInPySpark
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.execution.python.ArrowPythonRunner
+import org.apache.spark.sql.execution.python.{ArrowPythonRunner, PythonPhaseMetrics}
 import org.apache.spark.sql.execution.python.PandasGroupUtils.{executePython, groupAndProject, resolveArgOffsets}
 import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, StatefulOperatorsUtils}
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.StateStoreAwareZipPartitionsHelper
@@ -93,7 +93,7 @@ case class TransformWithStateInPySparkExec(
     eventTimeWatermarkForEviction,
     child,
     initialStateGroupingAttrs,
-    initialState) {
+    initialState) with PythonPhaseMetrics {
 
   override def output: Seq[Attribute] =
     WidenStatefulOpNullability.widenOutputForStatefulOp(outputAttrs)

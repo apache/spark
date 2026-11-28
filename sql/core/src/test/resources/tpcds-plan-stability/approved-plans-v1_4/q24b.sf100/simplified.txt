@@ -122,7 +122,7 @@ WholeStageCodegen (14)
                                                                 Project [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ticket_number,ss_net_paid]
                                                                   Filter [ss_ticket_number,ss_item_sk,ss_store_sk,ss_customer_sk]
                                                                     Subquery #1
-                                                                      ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(s_store_sk, 42), 40, 1250, 0, 0),bloomFilter,buf]
+                                                                      ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(s_store_skL, 42), 40, 1250, 0, 0),bloomFilter,buf]
                                                                         Exchange #5
                                                                           ObjectHashAggregate [s_store_sk] [buf,buf]
                                                                             WholeStageCodegen (1)

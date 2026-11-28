@@ -28,7 +28,8 @@ public interface BlockFetchingListener extends BlockTransferListener {
   void onBlockFetchSuccess(String blockId, ManagedBuffer data);
 
   /**
-   * Called at least once per block upon failures.
+   * Called at least once per block upon failures. This can also follow an
+   * {@link #onBlockFetchSuccess} for the same block that threw.
    */
   void onBlockFetchFailure(String blockId, Throwable exception);
 

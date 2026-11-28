@@ -252,7 +252,7 @@ def _main(infile: IO, outfile: IO) -> None:
         # no-op that returns False, so calling it would needlessly drive the rejection path (and
         # an extra reader construction on the JVM) for readers that do not implement limit
         # pushdown.
-        if limit >= 0 and is_method_overridden(reader, "pushLimit"):
+        if limit >= 0 and is_method_overridden(reader, DataSourceReader, "pushLimit"):
             is_limit_pushed = reader.pushLimit(limit)
             if not isinstance(is_limit_pushed, bool):
                 raise PySparkValueError(

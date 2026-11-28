@@ -125,7 +125,7 @@ Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(ss_sold_date_sk#6), dynamicpruningexpression(ss_sold_date_sk#6 IN dynamicpruning#7)]
 PushedFilters: [IsNotNull(ss_customer_sk)]
-ReadSchema: struct<ss_customer_sk:int,ss_ext_discount_amt:decimal(7,2),ss_ext_sales_price:decimal(7,2),ss_ext_wholesale_cost:decimal(7,2),ss_ext_list_price:decimal(7,2)>
+ReadSchema: struct<ss_customer_sk:bigint,ss_ext_discount_amt:decimal(7,2),ss_ext_sales_price:decimal(7,2),ss_ext_wholesale_cost:decimal(7,2),ss_ext_list_price:decimal(7,2)>
 
 (2) ColumnarToRow [codegen id : 2]
 Input [6]: [ss_customer_sk#1, ss_ext_discount_amt#2, ss_ext_sales_price#3, ss_ext_wholesale_cost#4, ss_ext_list_price#5, ss_sold_date_sk#6]
@@ -160,7 +160,7 @@ Output [8]: [c_customer_sk#10, c_customer_id#11, c_first_name#12, c_last_name#13
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer]
 PushedFilters: [IsNotNull(c_customer_sk), IsNotNull(c_customer_id)]
-ReadSchema: struct<c_customer_sk:int,c_customer_id:string,c_first_name:string,c_last_name:string,c_preferred_cust_flag:string,c_birth_country:string,c_login:string,c_email_address:string>
+ReadSchema: struct<c_customer_sk:bigint,c_customer_id:string,c_first_name:string,c_last_name:string,c_preferred_cust_flag:string,c_birth_country:string,c_login:string,c_email_address:string>
 
 (10) ColumnarToRow [codegen id : 4]
 Input [8]: [c_customer_sk#10, c_customer_id#11, c_first_name#12, c_last_name#13, c_preferred_cust_flag#14, c_birth_country#15, c_login#16, c_email_address#17]
@@ -223,7 +223,7 @@ Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(ss_sold_date_sk#30), dynamicpruningexpression(ss_sold_date_sk#30 IN dynamicpruning#31)]
 PushedFilters: [IsNotNull(ss_customer_sk)]
-ReadSchema: struct<ss_customer_sk:int,ss_ext_discount_amt:decimal(7,2),ss_ext_sales_price:decimal(7,2),ss_ext_wholesale_cost:decimal(7,2),ss_ext_list_price:decimal(7,2)>
+ReadSchema: struct<ss_customer_sk:bigint,ss_ext_discount_amt:decimal(7,2),ss_ext_sales_price:decimal(7,2),ss_ext_wholesale_cost:decimal(7,2),ss_ext_list_price:decimal(7,2)>
 
 (23) ColumnarToRow [codegen id : 10]
 Input [6]: [ss_customer_sk#25, ss_ext_discount_amt#26, ss_ext_sales_price#27, ss_ext_wholesale_cost#28, ss_ext_list_price#29, ss_sold_date_sk#30]
@@ -308,7 +308,7 @@ Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(cs_sold_date_sk#59), dynamicpruningexpression(cs_sold_date_sk#59 IN dynamicpruning#7)]
 PushedFilters: [IsNotNull(cs_bill_customer_sk)]
-ReadSchema: struct<cs_bill_customer_sk:int,cs_ext_discount_amt:decimal(7,2),cs_ext_sales_price:decimal(7,2),cs_ext_wholesale_cost:decimal(7,2),cs_ext_list_price:decimal(7,2)>
+ReadSchema: struct<cs_bill_customer_sk:bigint,cs_ext_discount_amt:decimal(7,2),cs_ext_sales_price:decimal(7,2),cs_ext_wholesale_cost:decimal(7,2),cs_ext_list_price:decimal(7,2)>
 
 (41) ColumnarToRow [codegen id : 19]
 Input [6]: [cs_bill_customer_sk#54, cs_ext_discount_amt#55, cs_ext_sales_price#56, cs_ext_wholesale_cost#57, cs_ext_list_price#58, cs_sold_date_sk#59]
@@ -401,7 +401,7 @@ Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(cs_sold_date_sk#82), dynamicpruningexpression(cs_sold_date_sk#82 IN dynamicpruning#31)]
 PushedFilters: [IsNotNull(cs_bill_customer_sk)]
-ReadSchema: struct<cs_bill_customer_sk:int,cs_ext_discount_amt:decimal(7,2),cs_ext_sales_price:decimal(7,2),cs_ext_wholesale_cost:decimal(7,2),cs_ext_list_price:decimal(7,2)>
+ReadSchema: struct<cs_bill_customer_sk:bigint,cs_ext_discount_amt:decimal(7,2),cs_ext_sales_price:decimal(7,2),cs_ext_wholesale_cost:decimal(7,2),cs_ext_list_price:decimal(7,2)>
 
 (61) ColumnarToRow [codegen id : 28]
 Input [6]: [cs_bill_customer_sk#77, cs_ext_discount_amt#78, cs_ext_sales_price#79, cs_ext_wholesale_cost#80, cs_ext_list_price#81, cs_sold_date_sk#82]
@@ -490,7 +490,7 @@ Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(ws_sold_date_sk#104), dynamicpruningexpression(ws_sold_date_sk#104 IN dynamicpruning#7)]
 PushedFilters: [IsNotNull(ws_bill_customer_sk)]
-ReadSchema: struct<ws_bill_customer_sk:int,ws_ext_discount_amt:decimal(7,2),ws_ext_sales_price:decimal(7,2),ws_ext_wholesale_cost:decimal(7,2),ws_ext_list_price:decimal(7,2)>
+ReadSchema: struct<ws_bill_customer_sk:bigint,ws_ext_discount_amt:decimal(7,2),ws_ext_sales_price:decimal(7,2),ws_ext_wholesale_cost:decimal(7,2),ws_ext_list_price:decimal(7,2)>
 
 (80) ColumnarToRow [codegen id : 37]
 Input [6]: [ws_bill_customer_sk#99, ws_ext_discount_amt#100, ws_ext_sales_price#101, ws_ext_wholesale_cost#102, ws_ext_list_price#103, ws_sold_date_sk#104]
@@ -583,7 +583,7 @@ Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(ws_sold_date_sk#127), dynamicpruningexpression(ws_sold_date_sk#127 IN dynamicpruning#31)]
 PushedFilters: [IsNotNull(ws_bill_customer_sk)]
-ReadSchema: struct<ws_bill_customer_sk:int,ws_ext_discount_amt:decimal(7,2),ws_ext_sales_price:decimal(7,2),ws_ext_wholesale_cost:decimal(7,2),ws_ext_list_price:decimal(7,2)>
+ReadSchema: struct<ws_bill_customer_sk:bigint,ws_ext_discount_amt:decimal(7,2),ws_ext_sales_price:decimal(7,2),ws_ext_wholesale_cost:decimal(7,2),ws_ext_list_price:decimal(7,2)>
 
 (100) ColumnarToRow [codegen id : 46]
 Input [6]: [ws_bill_customer_sk#122, ws_ext_discount_amt#123, ws_ext_sales_price#124, ws_ext_wholesale_cost#125, ws_ext_list_price#126, ws_sold_date_sk#127]
@@ -684,7 +684,7 @@ Output [2]: [d_date_sk#8, d_year#9]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), EqualTo(d_year,2001), IsNotNull(d_date_sk)]
-ReadSchema: struct<d_date_sk:int,d_year:int>
+ReadSchema: struct<d_date_sk:bigint,d_year:int>
 
 (120) ColumnarToRow [codegen id : 1]
 Input [2]: [d_date_sk#8, d_year#9]
@@ -695,7 +695,7 @@ Condition : ((isnotnull(d_year#9) AND (d_year#9 = 2001)) AND isnotnull(d_date_sk
 
 (122) BroadcastExchange
 Input [2]: [d_date_sk#8, d_year#9]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=20]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=20]
 
 Subquery:2 Hosting operator id = 22 Hosting Expression = ss_sold_date_sk#30 IN dynamicpruning#31
 BroadcastExchange (126)
@@ -709,7 +709,7 @@ Output [2]: [d_date_sk#32, d_year#33]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), EqualTo(d_year,2002), IsNotNull(d_date_sk)]
-ReadSchema: struct<d_date_sk:int,d_year:int>
+ReadSchema: struct<d_date_sk:bigint,d_year:int>
 
 (124) ColumnarToRow [codegen id : 1]
 Input [2]: [d_date_sk#32, d_year#33]
@@ -720,7 +720,7 @@ Condition : ((isnotnull(d_year#33) AND (d_year#33 = 2002)) AND isnotnull(d_date_
 
 (126) BroadcastExchange
 Input [2]: [d_date_sk#32, d_year#33]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=21]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=21]
 
 Subquery:3 Hosting operator id = 40 Hosting Expression = cs_sold_date_sk#59 IN dynamicpruning#7
 

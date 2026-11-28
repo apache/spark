@@ -1245,6 +1245,10 @@ case class CollapseCodegenStages(
         // The children of SortMergeAsOfJoin should do codegen separately.
         j.withNewChildren(j.children.map(
           child => InputAdapter(insertWholeStageCodegen(child))))
+      case b: BinByExec =>
+        // The child of BinBy should do codegen separately.
+        b.withNewChildren(b.children.map(
+          child => InputAdapter(insertWholeStageCodegen(child))))
       case p => p.withNewChildren(p.children.map(insertInputAdapter))
     }
   }

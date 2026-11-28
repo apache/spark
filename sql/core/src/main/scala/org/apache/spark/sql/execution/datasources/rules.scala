@@ -652,7 +652,21 @@ object ViewSyncSchemaToMetaStore extends (LogicalPlan => Unit) {
           }
           SchemaUtils.checkColumnNameDuplication(fieldNames.toImmutableArraySeq,
             session.sessionState.conf.resolver)
-          val updatedViewMeta = metaData.copy(schema = newSchema)
+          // EVOLUTION views don't use stored query-output names, but a later ALTER VIEW ... WITH
+          // SCHEMA would copy them, so drop any left by older versions whenever the schema is
+          // rewritten.
+          // TODO: views that Spark 4.1.0+ synced before this fix keep stale names until their
+          // schema changes again or they are recreated, as their reads need no sync, and ALTER
+          // VIEW ... WITH SCHEMA still copies them. A view that such an ALTER has already switched
+          // returns swapped columns or fails until it is recreated, redefined with
+          // ALTER VIEW ... AS, or switched back to WITH SCHEMA EVOLUTION, because later syncs
+          // never remove the names.
+          val newProperties = if (viewSchemaMode == SchemaEvolution) {
+            metaData.properties.filterNot(_._1.startsWith(CatalogTable.VIEW_QUERY_OUTPUT_PREFIX))
+          } else {
+            metaData.properties
+          }
+          val updatedViewMeta = metaData.copy(schema = newSchema, properties = newProperties)
           try {
             session.sessionState.catalog.alterTable(updatedViewMeta)
           } catch {

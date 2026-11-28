@@ -176,17 +176,22 @@ object GeneratedColumn {
 
     def sql: String = modeledExpression.map(_.sql).getOrElse(genExpr.getSql)
 
-    /** Only SQL text may fall back to analysis under the writing session's settings. */
+    /**
+     * Only SQL text may fall back to analysis under the writing session's settings. The CHAR and
+     * VARCHAR types of the table are added to `input`, so that a string literal compared with a
+     * CHAR column is padded as the stored values are.
+     */
     def analyze[E <: Expression](
         expr: E,
         inSession: => E,
         input: Seq[Attribute],
         analyzer: LogicalPlan => LogicalPlan): E = {
+      val inputWithTypes = CharVarcharUtils.withCharVarcharTypes(input, relation.table.columns())
       if (modeledExpression.isEmpty) {
-        StoredExpressionText.analyze(expr, inSession, input, analyzer)
+        StoredExpressionText.analyze(expr, inSession, inputWithTypes, analyzer)
       } else {
         try {
-          StoredExpressionText.analyzeStrict(expr, input, analyzer)
+          StoredExpressionText.analyzeStrict(expr, inputWithTypes, analyzer)
         } catch {
           case error: AnalysisException =>
             val tableName = (relation.catalog, relation.identifier) match {

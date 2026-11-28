@@ -16,6 +16,7 @@
 #
 import json
 import os
+import shutil
 import tempfile
 import zipfile
 from pathlib import Path
@@ -84,6 +85,55 @@ class ArtifactTests(ArtifactTestsMixin, ReusedSQLTestCase):
         # Test multi sessions. Should be able to add the same
         # file from different session.
         self.check_add_file(self.spark.newSession())
+
+    def test_list_files_and_archives(self):
+        # A new session, as the sessions of a SparkContext list the same files and archives.
+        spark = self.spark.newSession()
+        self.check_list_files_and_archives(spark)
+
+        # As SparkContext.listFiles and SparkContext.listArchives, which also list what is added
+        # to the SparkContext directly.
+        with tempfile.TemporaryDirectory(prefix="test_list_files_and_archives") as d:
+            file_path = os.path.join(d, "my_context_file.txt")
+            with open(file_path, "w") as f:
+                f.write("listed")
+            self.sc.addFile(file_path)
+
+            for session in [spark, self.spark]:
+                self.assertEqual(sorted(session.listFiles()), sorted(self.sc.listFiles))
+                self.assertEqual(sorted(session.listArchives()), sorted(self.sc.listArchives))
+            self.assertTrue(any(p.endswith("/my_context_file.txt") for p in spark.listFiles()))
+            self.assertTrue(any("my_listed_archive" in p for p in self.spark.listArchives()))
+
+            # The SQL statements list the same files and archives.
+            self.assertEqual(
+                sorted(r[0] for r in spark.sql("LIST FILES").collect()), sorted(spark.listFiles())
+            )
+            self.assertEqual(
+                sorted(r[0] for r in spark.sql("LIST ARCHIVES").collect()),
+                sorted(spark.listArchives()),
+            )
+
+    def test_list_files_and_archives_added_with_sql(self):
+        with tempfile.TemporaryDirectory(prefix="test_list_files_added_with_sql") as d:
+            file_path = os.path.join(d, "my_sql_file.txt")
+            with open(file_path, "w") as f:
+                f.write("listed")
+            archive_dir = os.path.join(d, "my_sql_archive")
+            os.mkdir(archive_dir)
+            with open(os.path.join(archive_dir, "my_file.txt"), "w") as f:
+                f.write("listed")
+            archive_path = shutil.make_archive(archive_dir, "zip", d, "my_sql_archive")
+
+            self.spark.sql(f"ADD FILE '{file_path}'")
+            self.spark.sql(f"ADD ARCHIVE '{archive_path}'")
+
+            # Without Spark Connect, every session lists what any session added.
+            for session in [self.spark, self.spark.newSession()]:
+                self.assertTrue(any(p.endswith("/my_sql_file.txt") for p in session.listFiles()))
+                self.assertTrue(
+                    any(p.endswith("/my_sql_archive.zip") for p in session.listArchives())
+                )
 
     def test_artifacts_cannot_be_overwritten(self):
         with tempfile.TemporaryDirectory(prefix="test_artifacts_cannot_be_overwritten") as d:

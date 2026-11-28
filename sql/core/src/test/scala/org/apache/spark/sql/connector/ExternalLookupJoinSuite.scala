@@ -52,6 +52,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.LOOKUP_ONLY_RELATION
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.columnar.ColumnarUserDefinedFunction
+import org.apache.spark.sql.connector.ExternalLookupSelection.positionsWhere
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryBaseTable,
   InMemoryTableCatalog, MetadataColumn, SupportsMetadataColumns, SupportsRead, Table,
   TableCapability, TableCatalog, TableChange,
@@ -770,9 +771,14 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     Seq(
       ("nullKeySelection", "true", "NULL_RESULT",
         Map("method" -> "SupportsExternalLookup.selectLookupPredicates()")),
-      ("selectionMode", "nullElement", "UNOFFERED_SELECTED_PREDICATE", Map("predicate" -> "null")),
-      ("selectionMode", "duplicate", "DUPLICATE_SELECTED_PREDICATE", Map("predicate" -> "id = ?")),
-      ("selectionMode", "copy", "UNOFFERED_SELECTED_PREDICATE", Map("predicate" -> "id = ?")),
+      ("selectionMode", "negative", "INVALID_SELECTED_PREDICATE_POSITION",
+        Map("position" -> "-1", "maxPosition" -> "0")),
+      ("selectionMode", "outOfRange", "INVALID_SELECTED_PREDICATE_POSITION",
+        Map("position" -> "1", "maxPosition" -> "0")),
+      ("selectionMode", "duplicate", "DUPLICATE_SELECTED_PREDICATE",
+        Map("position" -> "0", "predicate" -> "id = ?")),
+      ("selectionMode", "modifyCandidates", "MODIFIED_CANDIDATES",
+        Map("position" -> "0", "predicate" -> "id = ?")),
       ("maxBatchSize", "0", "NON_POSITIVE_MAX_PARAMETER_ROWS", Map("value" -> "0"))).foreach {
       case (option, value, subClass, parameters) =>
         val lookup = spark.read
@@ -3439,6 +3445,27 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
           Seq(Row(1, "8", 1, "engineering"), Row(1, "8", 1, "research"),
             Row(99, "bad", null, null)),
           rows).foreach(fail(_))
+      }
+    }
+  }
+
+  test("SPARK-62137: a filter conjunct that can fail is not pushed below an inner, left semi or " +
+    "left anti lookup join ahead of a throwing conjunct of its condition") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+      val left = streamOf(Seq(1, 2, 3).toDF("id"))
+      // The CASE WHEN of the condition rejects id 2, so the inner and left semi joins drop it,
+      // and the left anti join drops id 1, which has a match. The filter divides by zero only on
+      // the stream row that the join drops.
+      val condition = left("id") === lookup("id") &&
+        when(left("id") < 0, raise_error(lit("neg"))).otherwise(left("id") =!= 2)
+      Seq(
+        ("inner", 2, Seq(Row(1, 1, "engineering"), Row(1, 1, "research"))),
+        ("left_semi", 2, Seq(Row(1))),
+        ("left_anti", 1, Seq(Row(2), Row(3)))).foreach { case (joinType, dropped, expected) =>
+        checkStream(
+          left.join(lookup, condition, joinType).where(lit(10) / (left("id") - dropped) > -100),
+          expected)
       }
     }
   }
@@ -6248,7 +6275,7 @@ object SimpleExternalLookupTable extends Table with SupportsRead {
       private var acceptedPredicates = Array.empty[Predicate]
       private var selectedLookupPredicates = Seq.empty[String]
 
-      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Predicate] = {
+      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Int] = {
         if (nullKeySelection) return null
         SimpleExternalLookupDataSource.lookupCandidates.set(candidates.map { candidate =>
           val field = candidate.children()(0).asInstanceOf[NamedReference]
@@ -6258,7 +6285,7 @@ object SimpleExternalLookupTable extends Table with SupportsRead {
         SimpleExternalLookupDataSource.lookupCandidateDescriptions.set(
           candidates.map(_.toString).toSeq)
         val supportedPredicates = Set("=", "<=>", "<", "<=", ">", ">=")
-        val supported = candidates.filter { candidate =>
+        val supported = positionsWhere(candidates) { candidate =>
           supportedPredicates.contains(candidate.name()) &&
             candidate.children()(0).asInstanceOf[NamedReference]
               .fieldNames().sameElements(Array("id"))
@@ -6268,14 +6295,18 @@ object SimpleExternalLookupTable extends Table with SupportsRead {
           case "last" => supported.takeRight(1)
           case "reversed" => supported.reverse
           case "duplicate" => supported.take(1) ++ supported.take(1)
-          // An equal-shaped predicate that is not one of the offered instances.
-          case "copy" => supported.take(1).map(p => new Predicate(p.name(), p.children()))
-          case "nullElement" => Array[Predicate](null)
+          case "negative" => Array(-1)
+          case "outOfRange" => Array(candidates.length)
+          case "modifyCandidates" => supported
         }
-        selectedLookupPredicates = selected.filter(_ != null).map(_.name()).map {
+        selectedLookupPredicates = selected.filter(candidates.indices.contains).map { index =>
+          candidates(index).name()
+        }.map {
           case "<" | "<=" | ">" | ">=" if ignoreSelectedRanges => "any"
           case name => name
         }.toSeq
+        // The input array is read-only; this mode writes into it.
+        if (selectionMode == "modifyCandidates") candidates(0) = null
         selected
       }
 
@@ -6534,14 +6565,15 @@ object CompositeExternalLookupTable extends Table with SupportsRead {
     private var requiredSchema = CompositeExternalLookupDataSource.outputSchema
     private var selectedLookupPredicates = Seq.empty[(String, String)]
 
-    override def selectLookupPredicates(candidates: Array[Predicate]): Array[Predicate] = {
-      val supported = candidates.filter { predicate =>
+    override def selectLookupPredicates(candidates: Array[Predicate]): Array[Int] = {
+      val supported = positionsWhere(candidates) { predicate =>
         val field = predicate.children()(0).asInstanceOf[NamedReference]
           .fieldNames().mkString(".")
         (field == "tenant" && predicate.name() == "=") ||
           (field == "id" && Set("=", "<", "<=", ">", ">=").contains(predicate.name()))
       }
-      val selected = supported.map { predicate =>
+      val selected = supported.map { index =>
+        val predicate = candidates(index)
         predicate.name() -> predicate.children()(0).asInstanceOf[NamedReference]
           .fieldNames().mkString(".")
       }.toSeq
@@ -6599,12 +6631,12 @@ object ValidityExternalLookupTable extends Table with SupportsRead {
     new SupportsExternalLookup {
       // With requireValidFrom, the source serves a lookup only with a predicate on validFrom.
       private val requireValidFrom = options.getBoolean("requireValidFrom", false)
-      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Predicate] = {
+      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Int] = {
         offered.set(candidates.map(_.toString).toSeq)
         if (requireValidFrom && !candidates.exists(_.toString.startsWith("validFrom"))) {
           Array.empty
         } else {
-          candidates
+          candidates.indices.toArray
         }
       }
       override def build(): Scan = new Scan {
@@ -6737,8 +6769,8 @@ case class SemanticKeyExternalLookupTable(keyType: String) extends Table with Su
     new SupportsExternalLookup with SupportsPushDownRequiredColumns {
       private var requiredSchema = schema()
 
-      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Predicate] =
-        candidates.filter { candidate =>
+      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Int] =
+        positionsWhere(candidates) { candidate =>
           candidate.name() == "=" &&
             candidate.children()(0).asInstanceOf[NamedReference]
               .fieldNames().sameElements(Array("key"))
@@ -6806,8 +6838,8 @@ object CaseInsensitiveExternalLookupTable extends Table with SupportsRead {
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     val maxBatchSize = options.getInt("maxBatchSize", 100)
     new SupportsExternalLookup {
-      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Predicate] =
-        candidates.filter(_.name() == "=").take(1)
+      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Int] =
+        positionsWhere(candidates)(_.name() == "=").take(1)
       override def build(): Scan = new Scan {
         override def readSchema(): StructType = schema()
         override def toExternalLookup(): ExternalLookup =
@@ -6904,8 +6936,8 @@ case class ReadSchemaExternalLookupTable(kind: String) extends Table with Suppor
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
     new SupportsExternalLookup {
-      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Predicate] =
-        candidates.filter(_.name() == "=").take(1)
+      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Int] =
+        positionsWhere(candidates)(_.name() == "=").take(1)
       override def build(): Scan = ReadSchemaExternalLookupScan(readSchema, kind)
     }
 }
@@ -6970,8 +7002,8 @@ object MetricsExternalLookupTable extends Table with SupportsRead {
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
     new SupportsExternalLookup {
-      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Predicate] =
-        candidates.filter(_.name() == "=").take(1)
+      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Int] =
+        positionsWhere(candidates)(_.name() == "=").take(1)
       override def build(): Scan = MetricsExternalLookupScan
     }
 }
@@ -7045,8 +7077,8 @@ case class MisconfiguredExternalLookupTable(kind: String) extends Table with Sup
       SimpleExternalLookupScan(100, 0, failAt = "none", mutateAfterRequest = false,
         nullCursor = false, schema(), excludeResearch = false, Seq("="))
     case _ => new SupportsExternalLookup {
-      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Predicate] =
-        candidates.take(1)
+      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Int] =
+        Array(0)
       override def build(): Scan = kind match {
         case "unknownField" => NoExternalLookupScan(new StructType().add("unknown", "int"))
         case "duplicateField" =>
@@ -7277,8 +7309,8 @@ case class UserTypeExternalLookupTable(container: String, value: String)
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
     new SupportsExternalLookup {
-      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Predicate] =
-        candidates.filter(_.name() == "=").take(1)
+      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Int] =
+        positionsWhere(candidates)(_.name() == "=").take(1)
       override def build(): Scan = UserTypeExternalLookupScan(schema(), container, value)
     }
 }
@@ -7378,8 +7410,8 @@ case class TypedKeyExternalLookupTable(keyType: String, ranges: Boolean = false)
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
     new SupportsExternalLookup {
-      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Predicate] =
-        candidates.filter(candidate => (candidate.name() == "=") != ranges).take(1)
+      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Int] =
+        positionsWhere(candidates)(candidate => (candidate.name() == "=") != ranges).take(1)
       override def build(): Scan = new Scan {
         override def readSchema(): StructType = schema()
         override def toExternalLookup(): ExternalLookup = TestExternalLookup(
@@ -7449,8 +7481,8 @@ object ReusedRowExternalLookupTable extends Table with SupportsRead {
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
     new SupportsExternalLookup {
-      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Predicate] =
-        candidates.filter(_.name() == "=").take(1)
+      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Int] =
+        positionsWhere(candidates)(_.name() == "=").take(1)
       override def build(): Scan = new Scan {
         override def readSchema(): StructType = schema()
         override def toExternalLookup(): ExternalLookup =
@@ -7540,8 +7572,8 @@ case class EvolvingExternalLookupTable(lookupOnly: Boolean) extends Table with S
     new SupportsExternalLookup with SupportsPushDownRequiredColumns {
       private var requiredSchema = schema()
       override def pruneColumns(required: StructType): Unit = requiredSchema = required
-      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Predicate] =
-        candidates.filter(_.name() == "=").take(1)
+      override def selectLookupPredicates(candidates: Array[Predicate]): Array[Int] =
+        positionsWhere(candidates)(_.name() == "=").take(1)
       override def build(): Scan = EvolvingExternalLookupScan(requiredSchema)
     }
 }

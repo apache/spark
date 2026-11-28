@@ -147,29 +147,33 @@ class SparkSqlParser extends AbstractSqlParser {
     val variableSubstituted = substitutor.substitute(command)
 
     // Step 2: Apply parameter substitution if a parameter context is provided.
-    val (paramSubstituted, positionMapper, hasParameters) = parameterContext match {
-      case Some(context) =>
-        // Check if the context actually contains parameters
-        val contextHasParams = context match {
-          case NamedParameterContext(params) => params.nonEmpty
-          case PositionalParameterContext(params) => params.nonEmpty
-          case HybridParameterContext(args, _) => args.nonEmpty
-        }
-        if (SQLConf.get.legacyParameterSubstitutionConstantsOnly) {
-          // Legacy mode: Parameters are detected but substitution is deferred to analysis phase.
-          // Only set hasParameters if the context actually contains parameters.
-          (variableSubstituted, PositionMapper.identity(variableSubstituted), contextHasParams)
-        } else {
-          // Modern mode: Perform parameter substitution during parsing.
-          val (substituted, mapper) =
-            ParameterHandler.substituteParameters(variableSubstituted, context)
-          // Only set hasParameters if the context actually contains parameters.
-          (substituted, mapper, contextHasParams)
-        }
-      case None =>
-        // No parameter context provided; skip parameter substitution.
-        (variableSubstituted, PositionMapper.identity(variableSubstituted), false)
-    }
+    val (paramSubstituted, positionMapper, hasParameters, withOptionalReferences) =
+      parameterContext match {
+        case Some(context) =>
+          // Check if the context actually contains parameters
+          val contextHasParams = context match {
+            case NamedParameterContext(params) => params.nonEmpty
+            case PositionalParameterContext(params) => params.nonEmpty
+            case HybridParameterContext(args, _) => args.nonEmpty
+          }
+          if (SQLConf.get.legacyParameterSubstitutionConstantsOnly) {
+            // Legacy mode: Parameters are detected but substitution is deferred to analysis phase.
+            // Only set hasParameters if the context actually contains parameters.
+            (variableSubstituted, PositionMapper.identity(variableSubstituted), contextHasParams,
+              false)
+          } else {
+            // Modern mode: Perform parameter substitution during parsing.
+            val substitution =
+              ParameterHandler.substituteParameters(variableSubstituted, context)
+            // Only set hasParameters if the context actually contains parameters. The substituted
+            // text is parsed with the optional references that the substitution parsed it with.
+            (substitution.sqlText, substitution.positionMapper, contextHasParams,
+              substitution.parsedWithOptionalReferences)
+          }
+        case None =>
+          // No parameter context provided; skip parameter substitution.
+          (variableSubstituted, PositionMapper.identity(variableSubstituted), false, false)
+      }
 
     // Step 3: Set up the origin with SQL text and position mapper to enable
     // parameter-aware error reporting.
@@ -191,7 +195,7 @@ class SparkSqlParser extends AbstractSqlParser {
     // Parse with the origin containing position mapper.
     // CurrentOrigin.withOrigin automatically restores the previous origin.
     CurrentOrigin.withOrigin(originToUse) {
-      super.parse(paramSubstituted)(toResult)
+      super.parse(paramSubstituted, withOptionalReferences)(toResult)
     }
   }
 }
@@ -856,7 +860,7 @@ class SparkSqlAstBuilder extends AstBuilder {
         throw QueryParsingErrors.defineTempViewWithIfNotExistsError(ctx)
       }
 
-      withIdentClause(ctx.identifierReference(), Seq(qPlan), (ident, otherPlans) => {
+      val plan = withIdentClause(ctx.identifierReference(), Seq(qPlan), (ident, otherPlans) => {
         val viewName = normalizeTempViewIdentifier(ident, ctx)
         val tableIdentifier = TableIdentifier(viewName)
 
@@ -872,6 +876,11 @@ class SparkSqlAstBuilder extends AstBuilder {
           ctx.REPLACE != null,
           viewType = viewType)
       })
+      // With an IDENTIFIER clause, the view command is built only after the analysis of the query.
+      if (!plan.isInstanceOf[DefinesView]) {
+        plan.setTagValue(DefinesView.BUILDER_TAG, ())
+      }
+      plan
     }
   }
 
@@ -1294,7 +1303,6 @@ class SparkSqlAstBuilder extends AstBuilder {
       recordReader: StringLitContext,
       schemaLess: Boolean): ScriptInputOutputSchema = {
     if (recordWriter != null || recordReader != null) {
-      // TODO: what does this message mean?
       throw QueryParsingErrors.useDefinedRecordReaderOrWriterClassesError(ctx)
     }
 
@@ -1388,8 +1396,11 @@ class SparkSqlAstBuilder extends AstBuilder {
 
     val path = Option(ctx.path).map(x => string(visitStringLit(x))).getOrElse("")
 
-    if (!(path.isEmpty ^ storage.locationUri.isEmpty)) {
+    if (path.nonEmpty && storage.locationUri.nonEmpty) {
       throw QueryParsingErrors.directoryPathAndOptionsPathBothSpecifiedError(ctx)
+    }
+    if (path.isEmpty && storage.locationUri.isEmpty) {
+      throw QueryParsingErrors.directoryPathMissingError(ctx)
     }
 
     if (!path.isEmpty) {

@@ -559,6 +559,8 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
           toDayTimeIntervalString(value.asInstanceOf[Long], ANSI_STYLE, startField, endField)
         case YearMonthIntervalType(startField, endField) =>
           toYearMonthIntervalString(value.asInstanceOf[Int], ANSI_STYLE, startField, endField)
+        case _: FileType =>
+          TypeOps(dataType).get.format(value)
         case _ =>
           other.toString
       }
@@ -742,6 +744,8 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
         }
       s"MAP(${keysAndValues.mkString(", ")})"
     case (v: VariantVal, variantType: VariantType) => s"PARSE_JSON('${v.toJson(timeZoneId)}')"
+    // FILE has no literal syntax; render the form of its SQL value, as for display.
+    case (_, ft: FileType) => TypeOps(ft).get.toSQLValue(value)
     case _ => value.toString
   }
 }

@@ -600,11 +600,13 @@ class IncrementalExecution(
         // and silently stop state eviction. Fall back to None (full scan) in that mode, as we
         // don't expect the legacy mode to be used by many users.
         //
-        // The prevOffsetSeqMetadata.isDefined check guards against the first batch, where
+        // The isFirstBatch check guards against the first batch of each run. In batch 0,
         // watermark propagation yields Some(0) for late events even though no state has been
-        // evicted yet, which would incorrectly skip entries at timestamp 0.
+        // evicted yet, which would incorrectly skip entries at timestamp 0. After a restart, the
+        // previous run, such as an older version, can have evicted less state than this run's
+        // cutoffs imply, so the rows it left would be skipped.
         val prevBatchLateEventsWm =
-          if (prevOffsetSeqMetadata.isDefined && allowMultipleStatefulOperators) {
+          if (!isFirstBatch && allowMultipleStatefulOperators) {
             iwLateEvents
           } else {
             None

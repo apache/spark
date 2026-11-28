@@ -171,6 +171,33 @@ class UDFSuite extends SharedSparkSession {
     )
   }
 
+  test("SPARK-62146: error reporting for named arguments - udf") {
+    val legacyUdaf = new UserDefinedAggregateFunction {
+      def inputSchema: StructType = new StructType().add("a", LongType)
+      def bufferSchema: StructType = new StructType().add("sum", LongType)
+      def dataType: DataType = LongType
+      def deterministic: Boolean = true
+      def initialize(buffer: MutableAggregationBuffer): Unit = {}
+      def update(buffer: MutableAggregationBuffer, input: Row): Unit = {}
+      def merge(buffer1: MutableAggregationBuffer, buffer2: Row): Unit = {}
+      def evaluate(buffer: Row): Any = buffer.getLong(0)
+    }
+    withUserDefinedFunction("f1" -> true, "f2" -> true, "f3" -> true, "f4" -> true) {
+      spark.udf.register("f1", (x: Long) => x + 1)
+      spark.udf.register("f2", udf((x: Long) => x + 1))
+      spark.udf.register("f3", udaf(KryoBufAggregator()))
+      spark.udf.register("f4", legacyUdaf)
+      Seq("f1", "f2", "f3", "f4").foreach { name =>
+        val call = s"$name(x => 1L)"
+        checkError(
+          exception = intercept[AnalysisException](sql(s"SELECT $call").collect()),
+          condition = "NAMED_PARAMETERS_NOT_SUPPORTED",
+          parameters = Map("functionName" -> toSQLId(name)),
+          context = ExpectedContext(fragment = call, start = 7, stop = 6 + call.length))
+      }
+    }
+  }
+
   test("error reporting for undefined functions") {
     val sqlText = "a_function_that_does_not_exist()"
     checkError(

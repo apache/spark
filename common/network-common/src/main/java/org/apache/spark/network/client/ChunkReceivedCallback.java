@@ -42,6 +42,10 @@ public interface ChunkReceivedCallback {
    *
    * After receiving a failure, the stream may or may not be valid. The client should not assume
    * that the server's side of the stream has been closed.
+   *
+   * This is also called, with the thrown error, after {@link #onSuccess} throws for this chunk.
+   * An implementation that commits its result before {@code onSuccess} can throw must tolerate
+   * this call.
    */
   void onFailure(int chunkIndex, Throwable e);
 }

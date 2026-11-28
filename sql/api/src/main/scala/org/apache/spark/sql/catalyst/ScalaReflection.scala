@@ -332,6 +332,7 @@ object ScalaReflection extends ScalaReflection {
       case t if isSubtype(t, localTypeOf[java.time.LocalDateTime]) => LocalDateTimeEncoder
       case t if isSubtype(t, localTypeOf[java.time.LocalTime]) => DEFAULT_LOCAL_TIME_ENCODER
       case t if isSubtype(t, localTypeOf[VariantVal]) => VariantEncoder
+      case t if isSubtype(t, localTypeOf[FileRef]) => FileRefEncoder()
       case t if isSubtype(t, localTypeOf[Geography]) =>
         DEFAULT_GEOGRAPHY_ENCODER
       case t if isSubtype(t, localTypeOf[Geometry]) =>

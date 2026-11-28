@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst
 
-import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, BindReferences, DirectShufflePartitionID, Expression, GetStructField, SortOrder, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
@@ -890,6 +890,32 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("SPARK-62319: what resolving the call over the other key throws is the error's cause") {
+    // `canEvaluatePartitioning` resolves the layout's own call first, so connector code that
+    // throws only on a later call gets here. The call is asked quietly, so the error carries it.
+    var broken = false
+    val function = new ScalarFunction[Int] {
+      override def inputTypes(): Array[DataType] =
+        if (broken) throw new IllegalStateException("connector bug")
+        else Array(IntegerType, IntegerType)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "bucket"
+      override def canonicalName(): String = "test.bucket"
+      override def produceResult(input: InternalRow): Int = 0
+    }
+    val a = $"a".int
+    val spec = KeyedShuffleSpec(KeyedPartitioning(
+      Seq(TransformExpression(function, Seq(a), Some(4))), Seq(InternalRow(1))),
+      ClusteredDistribution(Seq(a)))
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      assert(spec.canCreatePartitioning && spec.canEvaluatePartitioning)
+      broken = true
+      val e = intercept[SparkException](spec.createPartitioning(Seq($"b".int)))
+      assert(e.getCondition == "STORAGE_PARTITION_JOIN_KEY_TYPE_MISMATCH")
+      assert(e.getCause.getMessage == "connector bug")
+    }
+  }
+
   test("SPARK-60027: a layout over a nested column places the rows of a more nullable key") {
     // A join compares two keys that differ only in nullability without a cast, so the side
     // shuffled onto a layout can have a more nullable key than the column the layout's transform
@@ -1228,6 +1254,28 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
         .isCompatibleWith(spec(bucket4.reducedTogetherWith(bucket8))),
         "two sides reduced together share one key space")
     }
+  }
+
+  test("KeyLayout: the key list is asked in order, the layout state beside it") {
+    val a = $"a".long
+    def layout(keys: Long*): KeyLayout =
+      KeyedPartitioning(Seq(a), keys.map(InternalRow(_))).layout
+    val ascending = layout(1L, 2L)
+    val descending = layout(2L, 1L)
+    assert(!ascending.describesSameKeys(descending), "the lists differ in order")
+    assert(ascending.describesSameLayoutState(descending))
+    // Repeats change the layout state: a repeated key means the layout is ungrouped.
+    assert(!ascending.describesSameLayoutState(layout(1L, 1L, 2L)),
+      "a repeated key means the layout is not grouped")
+    val collapsed = ascending.copy(isCollapsed = true)
+    assert(!ascending.describesSameLayoutState(collapsed))
+    // The key types are part of the comparison: two empty key lists compare equal whatever they
+    // describe, so the type clause is the only thing that separates these.
+    val otherKey = $"b".int
+    def otherLayout(keys: Int*): KeyLayout =
+      KeyedPartitioning(Seq(otherKey), keys.map(InternalRow(_))).layout
+    assert(!ascending.describesSameKeys(otherLayout(1, 2)))
+    assert(!layout().describesSameKeys(otherLayout()))
   }
 
   test("SPARK-59887: a spec over a transform of an expression pairs only with the same shape") {

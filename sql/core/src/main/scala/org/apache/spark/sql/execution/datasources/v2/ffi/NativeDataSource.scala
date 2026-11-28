@@ -56,7 +56,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.{ArrowUtils, CaseInsensitiveStringMap}
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 import org.apache.spark.unsafe.Platform
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{TaskInputThreads, Utils}
 
 /**
  * A [[ColumnarDataSource]] implemented by a native library, through the C interface in
@@ -653,17 +653,22 @@ object NativeWriterCommitMessage {
  * Such a thread may also still read the batch that [[next]] returned last when another thread
  * closes the reader: script transformation gets its first batch on the task thread, and reads its
  * rows on a thread of its own. The column vectors read the buffers of the batch at their
- * addresses, so [[close]] frees these buffers at once only if [[next]] was called again since it
- * returned the batch, as at the end of the stream, after which consumers no longer read the
- * batch. Otherwise, it releases the stream, the dictionaries and the task at once, since the
- * arrays of a stream may outlive it, and their release does not use the task (see
+ * addresses, so [[close]] frees these buffers at once only if no thread still reads the batch:
+ * if [[next]] was called again since it returned the batch, as at the end of the stream, or if
+ * the task of the reader has no such thread, since its other consumers are done with the batch
+ * once its completion listeners close the reader, as for a query that stops before the end of
+ * the stream with a LIMIT. The operators that start such a thread tell so with
+ * `TaskInputThreads.registerUnawaited`. Otherwise, as for a reader created outside of a task,
+ * which does not know its consumers, it releases the stream, the dictionaries and the task at
+ * once, since the arrays of a stream may outlive it, and their release does not use the task (see
  * `SparkDsTaskContext` in the header). A Cleaner then frees the buffers of the batch and the
  * allocator once the reader is unreachable, which each of its column vectors keeps it from being,
  * or once a thread calls [[next]] again, which then fails: that thread no longer reads the batch.
- * So a reader closed before the end of its stream, as with a LIMIT, and not called again holds the
- * buffers of one batch until a garbage collection, which these buffers do not trigger: the JVM
- * does not count them. Under `DataSourceRDD`, only a garbage collection frees them: its
- * `PartitionIterator` drops the reader once it closes it, and never calls [[next]] on it again,
+ * So a reader closed before the end of its stream in a task with such a thread, and not called
+ * again, holds the buffers of one batch until a garbage collection, which these buffers do not
+ * trigger: the JVM does not count them. Under `DataSourceRDD`, only a garbage collection frees
+ * them: its `PartitionIterator` drops the reader once it closes it, and never calls [[next]] on
+ * it again,
  * even for a thread that then asks the iterator for the next batch. That is the only effect of
  * `DataSourceRDD` here: however the iterator then answers that thread, the thread does not get
  * the batch, and a [[next]] called on the reader would free the buffers at once and fail.
@@ -708,6 +713,12 @@ class NativePartitionReader(
   // read the batch.
   @GuardedBy("this")
   private var batchReturned = false
+  // Set once a thread that the task of the reader does not wait for reads the input of the task,
+  // and so may still read that batch once the completion listeners of the task closed the reader
+  // (see `TaskInputThreads`). None outside of a task, where the reader does not know its
+  // consumers.
+  private val unawaitedInputThread: Option[AtomicBoolean] =
+    Option(TaskContext.get()).map(TaskInputThreads.unawaitedFlag)
   // Frees the buffers of the batch that a consumer may still read once the reader is closed: the
   // Cleaner does when the reader is unreachable, and next does when it is called again.
   @GuardedBy("this")
@@ -1118,9 +1129,15 @@ class NativePartitionReader(
     if (!closed) {
       closed = true
       // A thread in next releases the reader once get_next returns, see stopReading. Otherwise, a
-      // consumer may still read the batch that next returned, unless next was called since.
+      // consumer may still read the batch that next returned, unless next was called since, or
+      // the reader is closed in a task without a thread that the task does not wait for.
       if (!reading) {
-        closeResources(freeBatch = !batchReturned)
+        // TODO(SPARK-61195): In a task that runs PipedRDD, script transformation or the R runner,
+        // the batch stays allocated until a garbage collection. Once these operators stop their
+        // threads and wait for them before the completion listeners close the readers of the
+        // task, a reader closed in a task can always free its batch here, and TaskInputThreads
+        // can be removed.
+        closeResources(freeBatch = !batchReturned || unawaitedInputThread.exists(!_.get()))
       }
     }
   }

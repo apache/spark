@@ -27,8 +27,9 @@ A golden test is a pair of files, laid out like the SQL golden tests under
 Everything a case needs in order to run -- the DataFrame program, its name, its
 tags -- lives in the Python class, so cases are ordinary code that can be read,
 imported and stepped through; the file under ``results`` is purely generated
-output, rewritten in place when golden files are regenerated
-(``SPARK_GENERATE_GOLDEN_FILES=1``).
+output. Each run prints a unified diff when the generated file differs, whether or not
+verification passes. Regeneration (``SPARK_GENERATE_GOLDEN_FILES=1``) also writes the
+new file in place.
 
 Test module::
 
@@ -128,9 +129,15 @@ wrapper script, which runs every ``inputs/test_*.py`` module::
     python/pyspark/sql/tests/df_golden/regenerate.sh [--verify]
 
 With ``--verify`` the wrapper re-runs the tests afterwards against the
-regenerated files.  Regeneration rewrites a whole file at once, so it has to
+regenerated files. Regeneration rewrites a whole file at once, so it has to
 run a whole test class: a filtered run refuses to write rather than drop the
 cases it skipped.
+
+A nonempty diff is printed between ``=== BEGIN GOLDEN DIFF ===`` and
+``=== END GOLDEN DIFF ===`` markers after the test class runs. A filtered verification
+run keeps the unrun cases from the existing golden file in the diff. Patches copied
+from ``python/run-tests`` logs have CRLF line endings; strip carriage returns before
+applying them: ``tr -d '\\r' < golden.patch | git apply``.
 
 Adding golden tests
 -------------------
@@ -145,11 +152,14 @@ the same module would share, and on regeneration overwrite, the first one's
 file; it is refused when it is set up.
 """
 
+import difflib
 import hashlib
 import inspect
+import io
 import math
 import os
 import re
+import sys
 from decimal import Decimal
 
 _CASE_END = "!-- end"
@@ -272,8 +282,8 @@ def parse_test_file(filepath):
     return {case["name"]: case for case in cases}
 
 
-def write_test_file(filepath, header, cases):
-    """Serialize *header* and *cases* back into golden file format."""
+def serialize_test_file(header, cases):
+    """Serialize *header* and *cases* into golden file format."""
     blocks = []
     if header:
         header_lines = [_SECTION_PREFIX + "name", _FILE_METADATA_NAME]
@@ -293,8 +303,46 @@ def write_test_file(filepath, header, cases):
         case_lines.append(_CASE_END)
         blocks.append("\n".join(case_lines))
 
+    return "\n\n\n".join(blocks) + "\n"
+
+
+def write_test_file(filepath, header, cases):
+    """Write *header* and *cases* back into golden file format."""
     with open(filepath, "w") as f:
-        f.write("\n\n\n".join(blocks) + "\n")
+        f.write(serialize_test_file(header, cases))
+
+
+_GOLDEN_DIFF_BEGIN = "=== BEGIN GOLDEN DIFF ==="
+_GOLDEN_DIFF_END = "=== END GOLDEN DIFF ==="
+_GOLDEN_REL_DIR = "python/pyspark/sql/tests/df_golden/results"
+
+
+def _golden_diff(test_file, new_content):
+    """Return a repo-relative unified diff for use with ``git apply``."""
+    try:
+        with open(test_file) as f:
+            old_content = f.read()
+        old_path = "a/{}/{}".format(_GOLDEN_REL_DIR, os.path.basename(test_file))
+    except FileNotFoundError:
+        old_content = ""
+        old_path = "/dev/null"
+    new_path = "b/{}/{}".format(_GOLDEN_REL_DIR, os.path.basename(test_file))
+    lines = difflib.unified_diff(
+        io.StringIO(old_content, newline="\n").readlines(),
+        io.StringIO(new_content, newline="\n").readlines(),
+        fromfile=old_path,
+        tofile=new_path,
+    )
+    return "".join(
+        line if line.endswith("\n") else line + "\n\\ No newline at end of file\n" for line in lines
+    )
+
+
+def _print_golden_diff(diff):
+    """Print patch markers for regeneration tools to extract from test logs."""
+    print(
+        "{}\n{}{}".format(_GOLDEN_DIFF_BEGIN, diff, _GOLDEN_DIFF_END), file=sys.stderr, flush=True
+    )
 
 
 def parse_tags(case):
@@ -685,9 +733,8 @@ def _validate_test_file(test_file, header, cases):
     that is silently ignored makes a case assert less than it appears to (or
     nothing at all), so unknown names are errors, not noise.
 
-    Only the golden files being checked go through here: regeneration writes a
-    file from scratch and never reads the old one, so a file this rejects can
-    always be repaired by regenerating it.
+    Only the golden files being checked go through here. Regeneration writes a
+    file from scratch, so a file this rejects can be repaired by regenerating it.
     """
     unknown_header = set(header) - _KNOWN_HEADER_SECTIONS
     assert not unknown_header, "{}: unknown header sections: {}".format(
@@ -921,20 +968,22 @@ class DFGoldenTestMixin:
         cls._golden_regenerating = is_generating_golden()
         cls._golden_actual = {}
         cls._golden_cases = {}
+        cls._golden_error = None
         cls._golden_session = None
         case_names = cls.case_names()
 
-        # Read the golden file before the session is started: a malformed or
-        # stale file is worth failing on right away, and failing here leaves
-        # nothing to clean up (unittest skips tearDownClass when setUpClass
-        # raises).  Regeneration writes the file from the class alone, so it
-        # neither reads nor requires an existing one.
+        # Regeneration derives the file from the class and need not read the old file.
+        # In verification, defer malformed or out-of-sync golden errors until the cases run
+        # so a complete diff can still be generated.
         if case_names:
             cls._golden_path = cls.golden_file_path()
             claim_golden_file(cls._golden_path, cls._golden_source())
             if not cls._golden_regenerating:
-                cls._golden_cases = parse_test_file(cls._golden_path)
-                assert_cases_in_sync(cls._golden_path, case_names, list(cls._golden_cases))
+                try:
+                    cls._golden_cases = parse_test_file(cls._golden_path)
+                    assert_cases_in_sync(cls._golden_path, case_names, list(cls._golden_cases))
+                except (AssertionError, FileNotFoundError) as error:
+                    cls._golden_error = error
 
         super().setUpClass()
 
@@ -966,8 +1015,10 @@ class DFGoldenTestMixin:
     @classmethod
     def tearDownClass(cls):
         try:
-            if cls._golden_regenerating and cls.case_names():
-                cls._write_golden_file()
+            if cls.case_names():
+                cls._print_golden_diff()
+                if cls._golden_regenerating:
+                    cls._write_golden_file()
         finally:
             super().tearDownClass()
 
@@ -1011,6 +1062,34 @@ class DFGoldenTestMixin:
             pass
 
     @classmethod
+    def _print_golden_diff(cls):
+        names = cls.case_names()
+        if not cls._golden_actual:
+            return
+        missing = [name for name in names if name not in cls._golden_actual]
+        if missing and (cls._golden_regenerating or cls._golden_error):
+            # Without a valid baseline, a partial run cannot produce a safe diff.
+            return
+        cases = [
+            dict(cls._golden_actual.get(name, cls._golden_cases.get(name, {})), name=name)
+            for name in names
+        ]
+        header = {"source": cls._golden_source()}
+        try:
+            diff = _golden_diff(cls._golden_path, serialize_test_file(header, cases))
+        except (OSError, UnicodeError) as error:
+            if not cls._golden_regenerating:
+                raise
+            # Regeneration can replace an unreadable old file even when no diff is possible.
+            print(
+                "{}: cannot generate golden diff: {}".format(cls._golden_path, error),
+                file=sys.stderr,
+            )
+            return
+        if diff:
+            _print_golden_diff(diff)
+
+    @classmethod
     def _write_golden_file(cls):
         names = cls.case_names()
         missing = [name for name in names if name not in cls._golden_actual]
@@ -1040,7 +1119,8 @@ class DFGoldenTestMixin:
         )
         build_df = getattr(self, _CASE_METHOD_PREFIX + name)
         actual = compute_case_outputs(cls._golden_session, build_df)
-        if cls._golden_regenerating:
-            cls._golden_actual[name] = actual
-        else:
+        cls._golden_actual[name] = actual
+        if not cls._golden_regenerating:
+            if cls._golden_error:
+                raise cls._golden_error
             compare_case(self, cls._golden_cases[name], actual)

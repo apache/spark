@@ -82,7 +82,9 @@ class StateSchemaCompatibilityChecker(
     hadoopConf: Configuration,
     oldSchemaFilePaths: List[Path] = List.empty,
     newSchemaFilePath: Option[Path] = None,
-    createSchemaDir: Boolean = true) extends Logging {
+    createSchemaDir: Boolean = true,
+    valueSchemaValidator: Option[StateSchemaCompatibilityChecker.ValueSchemaValidator] = None)
+  extends Logging {
 
   // For OperatorStateMetadataV1: Only one schema file present per operator
   // per query
@@ -246,6 +248,9 @@ class StateSchemaCompatibilityChecker(
       throw StateStoreErrors.stateStoreValueSchemaNotCompatible(storedValueSchema.toString,
         valueSchema.toString)
     } else {
+      if (!ignoreValueSchema) {
+        valueSchemaValidator.foreach(_(providerId.storeId, mostRecentSchema, newSchema))
+      }
       logInfo("Detected schema change which is compatible. Allowing to put rows.")
       (mostRecentSchema, true)
     }
@@ -313,6 +318,9 @@ class StateSchemaCompatibilityChecker(
 
 object StateSchemaCompatibilityChecker extends Logging {
 
+  type ValueSchemaValidator =
+    (StateStoreId, StateStoreColFamilySchema, StateStoreColFamilySchema) => Unit
+
   val SCHEMA_FORMAT_V3: Int = 3
 
   private def disallowBinaryInequalityColumn(schema: StructType): Unit = {
@@ -355,8 +363,10 @@ object StateSchemaCompatibilityChecker extends Logging {
    *                          to the schema file location
    * @param newSchemaFilePath - optional path to the destination schema file.
    *                          Needed for schema version 3
+   * @param valueSchemaValidator - additional check for otherwise compatible value schema changes
    * @return - StateSchemaValidationResult containing the result of the schema validation
    */
+  // scalastyle:off argcount
   def validateAndMaybeEvolveStateSchema(
       stateInfo: StatefulOperatorStateInfo,
       hadoopConf: Configuration,
@@ -367,7 +377,9 @@ object StateSchemaCompatibilityChecker extends Logging {
       storeName: String = StateStoreId.DEFAULT_STORE_NAME,
       oldSchemaFilePaths: List[Path] = List.empty,
       newSchemaFilePath: Option[Path] = None,
-      schemaEvolutionEnabled: Boolean = false): StateSchemaValidationResult = {
+      schemaEvolutionEnabled: Boolean = false,
+      valueSchemaValidator: Option[ValueSchemaValidator] = None): StateSchemaValidationResult = {
+    // scalastyle:on argcount
     // SPARK-47776: collation introduces the concept of binary (in)equality, which means
     // in some collation we no longer be able to just compare the binary format of two
     // UnsafeRows to determine equality. For example, 'aaa' and 'AAA' can be "semantically"
@@ -385,7 +397,8 @@ object StateSchemaCompatibilityChecker extends Logging {
     val providerId = StateStoreProviderId(StateStoreId(stateInfo.checkpointLocation,
       stateInfo.operatorId, 0, storeName), stateInfo.queryRunId)
     val checker = new StateSchemaCompatibilityChecker(providerId, hadoopConf,
-      oldSchemaFilePaths = oldSchemaFilePaths, newSchemaFilePath = newSchemaFilePath)
+      oldSchemaFilePaths = oldSchemaFilePaths, newSchemaFilePath = newSchemaFilePath,
+      valueSchemaValidator = valueSchemaValidator)
     // regardless of configuration, we check compatibility to at least write schema file
     // if necessary
     // if the format validation for value schema is disabled, we also disable the schema

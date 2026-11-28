@@ -4909,6 +4909,35 @@ abstract class JsonSuite
     }
   }
 
+  test("SPARK-59546: unusable timeFormat does not break JSON inference") {
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      for (multiLine <- Seq(false, true)) {
+        withTempDir { dir =>
+          val path = s"${dir.getCanonicalPath}/time_infer.json"
+          val json = if (multiLine) {
+            """[{"time":"plain"},{"time":"text"}]"""
+          } else {
+            "{\"time\":\"plain\"}\n{\"time\":\"text\"}"
+          }
+          Seq(json).toDF("value").coalesce(1).write.text(path)
+          val df = spark.read
+            .option("inferTimestamp", "true")
+            .option("multiLine", multiLine)
+            .option("timeFormat", "EEE HH:mm")
+            .json(path)
+          assert(df.schema("time").dataType === StringType)
+          assert(!df.schema.fieldNames.contains("_corrupt_record"))
+          checkAnswer(df, Seq(Row("plain"), Row("text")))
+        }
+      }
+      val schema = spark.sql(
+        """SELECT schema_of_json('{"time":"plain"}', """ +
+          "map('inferTimestamp', 'true', 'timeFormat', 'EEE HH:mm'))")
+        .head().getString(0)
+      assert(schema === "STRUCT<time: STRING>")
+    }
+  }
+
   // Writes `data` to `file` compressed with `codec` (a short name; "" means no compression), using
   // Spark's built-in Zstandard codec for zstd (which Hadoop may not be compiled with) and Hadoop's
   // CompressionCodecFactory otherwise. The file name intentionally does NOT carry the codec's

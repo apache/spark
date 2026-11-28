@@ -12,3 +12,5 @@ Keep source lines within 100 characters — the linters enforce this for Scala, 
           {print FILENAME":"FNR": "length" chars"}'
 
 This is only a hint: it approximates the linters' exemptions (imports, URLs) rather than matching them exactly, so it can over- or under-report. The linters remain the source of truth.
+
+Keep Scala and Java binary compatibility, including Scala `private[spark]` and other `private[...]` members of public classes, which compile to public bytecode. Two checks in CI enforce it: `dev/mima`, with exclusions in `project/MimaExcludes.scala`, and `dev/connect-jvm-client-mima-check`, which compares the Connect Scala client with the `sql` module in both directions and keeps its exclusions in `CheckConnectJvmClientCompatibility.scala`. When a check flags an intended change, add an exclusion with a `// [SPARK-xxxxx]` comment to that check's file.

@@ -2934,9 +2934,9 @@ class AstBuilder extends DataTypeAstBuilder
         }
         val bytesStr = ctx.bytes.getText
         if (bytesStr.matches("[0-9]+[bBkKmMgG]")) {
-          throw QueryParsingErrors.tableSampleByBytesUnsupportedError("byteLengthLiteral", ctx)
+          throw QueryParsingErrors.tableSampleByBytesUnsupportedError("BYTES", ctx)
         } else {
-          throw QueryParsingErrors.invalidByteLengthLiteralError(bytesStr, ctx)
+          throw QueryParsingErrors.invalidByteLengthLiteralError(source(ctx.bytes), ctx)
         }
 
       case ctx: SampleByBucketContext if ctx.ON() != null =>
@@ -2945,10 +2945,10 @@ class AstBuilder extends DataTypeAstBuilder
         }
         if (ctx.identifier != null) {
           throw QueryParsingErrors.tableSampleByBytesUnsupportedError(
-            "BUCKET x OUT OF y ON colname", ctx)
+            "BUCKET x OUT OF y ON column", ctx)
         } else {
           throw QueryParsingErrors.tableSampleByBytesUnsupportedError(
-            "BUCKET x OUT OF y ON function", ctx)
+            "BUCKET x OUT OF y ON function()", ctx)
         }
 
       case ctx: SampleByBucketContext =>
@@ -3095,8 +3095,7 @@ class AstBuilder extends DataTypeAstBuilder
     val version = visitVersion(ctx.version)
     val timestamp = Option(ctx.timestamp).map(expression)
     if (timestamp.exists(_.references.nonEmpty)) {
-      throw QueryParsingErrors.invalidTimeTravelSpec(
-        "timestamp expression cannot refer to any columns", ctx.timestamp)
+      throw QueryParsingErrors.timeTravelTimestampReferencesColumnsError(ctx.timestamp)
     }
     RelationTimeTravel(plan, timestamp, version)
   }
@@ -3137,16 +3136,14 @@ class AstBuilder extends DataTypeAstBuilder
       // Timestamp-based range
       val startTs = expression(ctx.startingTimestamp)
       if (startTs.references.nonEmpty) {
-        throw QueryParsingErrors.invalidTimeTravelSpec(
-          "timestamp expression cannot refer to any columns", ctx.startingTimestamp)
+        throw QueryParsingErrors.timeTravelTimestampReferencesColumnsError(ctx.startingTimestamp)
       }
       if (SubqueryExpression.hasSubquery(startTs)) {
         throw QueryCompilationErrors.invalidCdcOptionInvalidTimestampExpr()
       }
       val endTs = Option(ctx.endingTimestamp).map(expression)
       if (endTs.exists(_.references.nonEmpty)) {
-        throw QueryParsingErrors.invalidTimeTravelSpec(
-          "timestamp expression cannot refer to any columns", ctx.endingTimestamp)
+        throw QueryParsingErrors.timeTravelTimestampReferencesColumnsError(ctx.endingTimestamp)
       }
       if (endTs.exists(SubqueryExpression.hasSubquery)) {
         throw QueryCompilationErrors.invalidCdcOptionInvalidTimestampExpr()
@@ -3186,8 +3183,7 @@ class AstBuilder extends DataTypeAstBuilder
     } else if (ctx.startingTimestamp != null) {
       val startTs = expression(ctx.startingTimestamp)
       if (startTs.references.nonEmpty) {
-        throw QueryParsingErrors.invalidTimeTravelSpec(
-          "timestamp expression cannot refer to any columns", ctx.startingTimestamp)
+        throw QueryParsingErrors.timeTravelTimestampReferencesColumnsError(ctx.startingTimestamp)
       }
       if (SubqueryExpression.hasSubquery(startTs)) {
         throw QueryCompilationErrors.invalidCdcOptionInvalidTimestampExpr()
@@ -3460,59 +3456,27 @@ class AstBuilder extends DataTypeAstBuilder
     Option(ctx).map(c => c.sourceName.identifier.getText)
   }
 
-  override def visitStreamTableName(ctx: StreamTableNameContext): LogicalPlan = {
-    val ident = visitMultipartIdentifier(ctx.multipartIdentifier)
-    val relation = createUnresolvedRelation(
-      ctx = ctx,
-      ident = ident,
-      optionsClause = Option(ctx.optionsClause),
-      writePrivileges = Set.empty,
-      isStreaming = true)
-
-    Option(ctx.streamChangesClause) match {
-      case Some(changesCtx) =>
-        // Streaming CDC: wrap in RelationChanges and NamedStreamingRelation
-        val options = resolveOptions(Option(ctx.optionsClause))
-        val changelogContext = buildStreamChangelogContext(changesCtx, options)
-        val sourceNameOpt = extractSourceName(ctx.identifiedByClause)
-        val namedChanges = NamedStreamingRelation.withUserProvidedName(
-          RelationChanges(relation, changelogContext), sourceNameOpt)
-        val table = mayApplyAliasPlan(ctx.tableAlias, namedChanges)
-        table.optionalMap(ctx.watermarkClause)(withWatermark)
-      case None =>
-        // Regular streaming relation
-        val table = mayApplyAliasPlan(ctx.tableAlias, relation)
-        val tableWithWatermark = table.optionalMap(ctx.watermarkClause)(withWatermark)
-        val sourceNameOpt = extractSourceName(ctx.identifiedByClause)
-        tableWithWatermark.transformUp {
-          case r: UnresolvedRelation =>
-            NamedStreamingRelation.withUserProvidedName(
-              r.copy(isStreaming = true), sourceNameOpt)
-        }
-    }
-  }
-
-  /**
-   * Create a logical plan for a stream TVF.
-   * Handles two forms:
-   * 1. STREAM tableFunctionCallWithTrailingClauses - clauses are inside
-   * 2. STREAM(tableFunctionCall) clauses - clauses are outside STREAM() for consistency with
-   *    table names
-   */
-  override def visitStreamTableValuedFunction(ctx: StreamTableValuedFunctionContext): LogicalPlan =
+  override def visitStreamRelation(ctx: StreamRelationContext): LogicalPlan =
     withOrigin(ctx) {
-      Option(ctx.tableFunctionCallWithTrailingClauses).map { funcTable =>
-        // Form: STREAM tableFunctionCallWithTrailingClauses
-        val sourceName = extractSourceName(funcTable.identifiedByClause)
-        val tvfPlan = buildTvfFromTableFunctionCall(
-          funcTable.tableFunctionCall, funcTable.tableAlias, funcTable.watermarkClause)
-        tvfPlan.transformUp {
-          case tvf: UnresolvedTableValuedFunction =>
-            NamedStreamingRelation.withUserProvidedName(tvf.copy(isStreaming = true), sourceName)
+      val sourceName = extractSourceName(ctx.identifiedByClause)
+      Option(ctx.multipartIdentifier).map { multipartIdentifier =>
+        val ident = visitMultipartIdentifier(multipartIdentifier)
+        var relation: LogicalPlan = createUnresolvedRelation(
+          ctx = ctx,
+          ident = ident,
+          optionsClause = Option(ctx.optionsClause),
+          writePrivileges = Set.empty,
+          isStreaming = true)
+
+        Option(ctx.streamChangesClause).foreach { changesCtx =>
+          val options = resolveOptions(Option(ctx.optionsClause))
+          val changelogContext = buildStreamChangelogContext(changesCtx, options)
+          relation = RelationChanges(relation, changelogContext)
         }
+        relation = NamedStreamingRelation.withUserProvidedName(relation, sourceName)
+        relation = mayApplyAliasPlan(ctx.tableAlias, relation)
+        relation.optionalMap(ctx.watermarkClause)(withWatermark)
       }.getOrElse {
-        // Form: STREAM(tableFunctionCall) identifiedByClause? watermarkClause? tableAlias
-        val sourceName = extractSourceName(ctx.identifiedByClause)
         val tvfPlan = buildTvfFromTableFunctionCall(
           ctx.tableFunctionCall, ctx.tableAlias, ctx.watermarkClause)
         tvfPlan.transformUp {
@@ -4287,10 +4251,11 @@ class AstBuilder extends DataTypeAstBuilder
    * Create a Overlay expression.
    */
   override def visitOverlay(ctx: OverlayContext): Expression = withOrigin(ctx) {
-    val input = expression(ctx.input)
-    val replace = expression(ctx.replace)
-    val position = expression(ctx.position)
-    val lengthOpt = Option(ctx.length).map(expression)
+    val overlay = ctx.overlayExpression
+    val input = expression(overlay.input)
+    val replace = expression(overlay.replace)
+    val position = expression(overlay.position)
+    val lengthOpt = Option(overlay.length).map(expression)
     lengthOpt match {
       case Some(length) => Overlay(input, replace, position, length)
       case None => new Overlay(input, replace, position)
@@ -4807,6 +4772,7 @@ class AstBuilder extends DataTypeAstBuilder
    * it can be [[UnresolvedExtractValue]].
    */
   override def visitDereference(ctx: DereferenceContext): Expression = withOrigin(ctx) {
+    val optionalMarker = ctx.optionalMarker
     // Use getIdentifierText to handle both regular identifiers and IDENTIFIER('literal')
     val attr = getIdentifierText(ctx.fieldName)
     expression(ctx.base) match {
@@ -4816,13 +4782,24 @@ class AstBuilder extends DataTypeAstBuilder
           case escapedIdentifier(columnNameRegex)
             if conf.supportQuotedRegexColumnName &&
               isRegex(columnNameRegex) && canApplyRegex(ctx) =>
+            firstOptionalMarker(ctx).foreach { marker =>
+              throw QueryParsingErrors.unexpectedOptionalReferenceMarkerError(ctx, marker)
+            }
             UnresolvedRegex(columnNameRegex, Some(unresolved_attr.name),
               conf.caseSensitiveAnalysis)
           case _ =>
-            UnresolvedAttribute(nameParts :+ attr)
+            val dereference = UnresolvedAttribute(nameParts :+ attr)
+            OptionalReferences.markNamePartsOptional(
+              dereference, OptionalReferences.optionalNamePartIndices(unresolved_attr))
+            withOptionalNamePart(dereference, nameParts.length, optionalMarker, ctx)
         }
       case e =>
-        UnresolvedExtractValue(e, Literal(attr))
+        val extractValue = UnresolvedExtractValue(e, Literal(attr))
+        if (optionalMarker != null) {
+          OptionalReferenceValidation.validate(ctx)
+          OptionalReferences.markOptional(extractValue)
+        }
+        extractValue
     }
   }
 
@@ -4857,14 +4834,74 @@ class AstBuilder extends DataTypeAstBuilder
       case escapedIdentifier(columnNameRegex)
         if conf.supportQuotedRegexColumnName &&
           isRegex(columnNameRegex) && canApplyRegex(ctx) =>
+        firstOptionalMarker(ctx).foreach { marker =>
+          throw QueryParsingErrors.unexpectedOptionalReferenceMarkerError(ctx, marker)
+        }
         UnresolvedRegex(columnNameRegex, None, conf.caseSensitiveAnalysis)
       case _ =>
         // Use getIdentifierParts to handle IDENTIFIER('literal') correctly
         // This allows IDENTIFIER('t').c1 to work like t.c1
-        val parts = getIdentifierParts(ctx.identifier())
-        UnresolvedAttribute(parts)
+        val parts = getIdentifierParts(ctx.identifier)
+        withOptionalNamePart(UnresolvedAttribute(parts), parts.length - 1, ctx.optionalMarker, ctx)
     }
+  }
 
+  /**
+   * Create an [[ExpressionWithUnresolvedIdentifier]] for `IDENTIFIER(expression)?`, an optional
+   * reference to the column that the expression names.
+   */
+  override def visitOptionalIdentifierClause(
+      ctx: OptionalIdentifierClauseContext): Expression = withOrigin(ctx) {
+    OptionalReferenceValidation.validate(ctx)
+    val identifierExpr = withOrigin(ctx.expression) { expression(ctx.expression) }
+    val identifierClause = new ExpressionWithUnresolvedIdentifier(
+      identifierExpr,
+      nameParts => {
+        val attribute = UnresolvedAttribute(nameParts)
+        OptionalReferences.markNamePartsOptional(attribute, Set(nameParts.length - 1))
+        attribute
+      })
+    OptionalReferences.markOptional(identifierClause)
+    identifierClause
+  }
+
+  /**
+   * Returns the first `?` optional-reference marker of the multipart name `ctx`, if any. The name
+   * can be written in parentheses, e.g. `(t?).c`, which `expression` looks through as well.
+   */
+  private def firstOptionalMarker(ctx: PrimaryExpressionContext): Option[Token] = ctx match {
+    case columnReference: ColumnReferenceContext =>
+      Option(columnReference.optionalMarker)
+    case dereference: DereferenceContext =>
+      firstOptionalMarker(dereference.base).orElse(Option(dereference.optionalMarker))
+    case parenthesized: ParenthesizedExpressionContext =>
+      parenthesized.expression.booleanExpression match {
+        case predicated: PredicatedContext if predicated.predicate == null =>
+          predicated.valueExpression match {
+            case valueExpression: ValueExpressionDefaultContext =>
+              firstOptionalMarker(valueExpression.primaryExpression)
+            case _ => None
+          }
+        case _ => None
+      }
+    case _ =>
+      None
+  }
+
+  /**
+   * Marks the name part at `index` of the multipart name `expression` as optional if
+   * `optionalMarker` is defined, after checking that the optional reference is allowed.
+   */
+  private def withOptionalNamePart[T <: Expression](
+      expression: T,
+      index: Int,
+      optionalMarker: Token,
+      ctx: ParserRuleContext): T = {
+    if (optionalMarker != null) {
+      OptionalReferenceValidation.validate(ctx)
+      OptionalReferences.markNamePartsOptional(expression, Set(index))
+    }
+    expression
   }
 
   /**
@@ -5025,7 +5062,7 @@ class AstBuilder extends DataTypeAstBuilder
             .split("\\s")
             .map(_.toLowerCase(Locale.ROOT).stripSuffix("s"))
             .filter(s => s != "interval" && s.matches("[a-z]+"))
-          constructMultiUnitsIntervalLiteral(ctx, interval, units.toImmutableArraySeq)
+          constructMultiUnitsIntervalLiteral(ctx, interval, units.toImmutableArraySeq, value)
         } else {
           Literal(interval, CalendarIntervalType)
         }
@@ -5332,11 +5369,13 @@ class AstBuilder extends DataTypeAstBuilder
   /**
    * Construct an [[Literal]] from [[CalendarInterval]] and
    * units represented as a [[Seq]] of [[String]].
+   * `intervalString` is the interval text without the INTERVAL keyword, used in errors.
    */
   private def constructMultiUnitsIntervalLiteral(
       ctx: ParserRuleContext,
       calendarInterval: CalendarInterval,
-      units: Seq[String]): Literal = {
+      units: Seq[String],
+      intervalString: => String): Literal = {
     val yearMonthFields = mutable.Set.empty[Byte]
     val dayTimeFields = mutable.Set.empty[Byte]
     for (unit <- units) {
@@ -5353,8 +5392,7 @@ class AstBuilder extends DataTypeAstBuilder
     }
     if (yearMonthFields.nonEmpty) {
       if (dayTimeFields.nonEmpty) {
-        val literalStr = source(ctx)
-        throw QueryParsingErrors.mixedIntervalUnitsError(literalStr, ctx)
+        throw QueryParsingErrors.mixedIntervalUnitsError(intervalString, ctx)
       }
       Literal(
         calendarInterval.months,
@@ -5395,10 +5433,10 @@ class AstBuilder extends DataTypeAstBuilder
         Literal(micros, DayTimeIntervalType(start, end))
       }
     } else if (ctx.errorCapturingMultiUnitsInterval != null && !conf.legacyIntervalEnabled) {
-      val units =
-        ctx.errorCapturingMultiUnitsInterval.body.unit.asScala.map(
-          _.getText.toLowerCase(Locale.ROOT).stripSuffix("s")).toSeq
-      constructMultiUnitsIntervalLiteral(ctx, calendarInterval, units)
+      val body = ctx.errorCapturingMultiUnitsInterval.body
+      val units = body.unit.asScala.map(_.getText.toLowerCase(Locale.ROOT).stripSuffix("s")).toSeq
+      constructMultiUnitsIntervalLiteral(
+        ctx, calendarInterval, units, multiUnitsIntervalString(body).trim)
     } else {
       Literal(calendarInterval, CalendarIntervalType)
     }
@@ -5411,8 +5449,7 @@ class AstBuilder extends DataTypeAstBuilder
     if (ctx.errorCapturingMultiUnitsInterval != null) {
       val innerCtx = ctx.errorCapturingMultiUnitsInterval
       if (innerCtx.unitToUnitInterval != null) {
-        throw QueryParsingErrors.moreThanOneFromToUnitInIntervalLiteralError(
-          innerCtx.unitToUnitInterval)
+        throw QueryParsingErrors.fromToIntervalWithOtherUnitsError(innerCtx.unitToUnitInterval)
       }
       visitMultiUnitsInterval(innerCtx.multiUnitsInterval)
     } else {
@@ -5420,10 +5457,43 @@ class AstBuilder extends DataTypeAstBuilder
       val innerCtx = ctx.errorCapturingUnitToUnitInterval
       if (innerCtx.error1 != null || innerCtx.error2 != null) {
         val errorCtx = if (innerCtx.error1 != null) innerCtx.error1 else innerCtx.error2
-        throw QueryParsingErrors.moreThanOneFromToUnitInIntervalLiteralError(errorCtx)
+        throw QueryParsingErrors.fromToIntervalWithOtherUnitsError(errorCtx)
       }
       visitUnitToUnitInterval(innerCtx.body)
     }
+  }
+
+  /**
+   * Returns the interval string of multiple unit value pairs, e.g. " 1 YEAR -2 DAYS" for
+   * INTERVAL 1 YEAR '-2' DAYS.
+   */
+  private def multiUnitsIntervalString(ctx: MultiUnitsIntervalContext): String = {
+    val units = ctx.unit.asScala
+    val values = ctx.intervalValue().asScala
+    assert(units.length == values.length)
+    units.indices.map { i =>
+      val u = units(i).getText
+      val v = if (values(i).stringLit() != null) {
+        val value = string(visitStringLit(values(i).stringLit()))
+        // SPARK-32840: For invalid cases, e.g. INTERVAL '1 day 2' hour,
+        // INTERVAL 'interval 1' day, we need to check ahead before they are concatenated with
+        // units and become valid ones, e.g. '1 day 2 hour'.
+        // Ideally, we only ensure the value parts don't contain any units here.
+        if (value.exists(Character.isLetter)) {
+          throw QueryParsingErrors.invalidIntervalFormError(value, ctx)
+        }
+        if (values(i).MINUS() == null) {
+          value
+        } else if (value.startsWith("-")) {
+          value.replaceFirst("-", "")
+        } else {
+          s"-$value"
+        }
+      } else {
+        values(i).getText
+      }
+      " " + v + " " + u
+    }.mkString
   }
 
   /**
@@ -5431,34 +5501,8 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitMultiUnitsInterval(ctx: MultiUnitsIntervalContext): CalendarInterval = {
     withOrigin(ctx) {
-      val units = ctx.unit.asScala
-      val values = ctx.intervalValue().asScala
       try {
-        assert(units.length == values.length)
-        val kvs = units.indices.map { i =>
-          val u = units(i).getText
-          val v = if (values(i).stringLit() != null) {
-            val value = string(visitStringLit(values(i).stringLit()))
-            // SPARK-32840: For invalid cases, e.g. INTERVAL '1 day 2' hour,
-            // INTERVAL 'interval 1' day, we need to check ahead before they are concatenated with
-            // units and become valid ones, e.g. '1 day 2 hour'.
-            // Ideally, we only ensure the value parts don't contain any units here.
-            if (value.exists(Character.isLetter)) {
-              throw QueryParsingErrors.invalidIntervalFormError(value, ctx)
-            }
-            if (values(i).MINUS() == null) {
-              value
-            } else if (value.startsWith("-")) {
-              value.replaceFirst("-", "")
-            } else {
-              s"-$value"
-            }
-          } else {
-            values(i).getText
-          }
-          UTF8String.fromString(" " + v + " " + u)
-        }
-        IntervalUtils.stringToInterval(UTF8String.concat(kvs: _*))
+        IntervalUtils.stringToInterval(UTF8String.fromString(multiUnitsIntervalString(ctx)))
       } catch {
         case st: SparkThrowable => throw st
         case i: IllegalArgumentException =>
@@ -7109,13 +7153,10 @@ class AstBuilder extends DataTypeAstBuilder
     val columnNameParts = typedVisit[Seq[String]](ctx.colName)
     if (!conf.resolver(columnNameParts.last,
         getIdentifierText(ctx.colType().colName))) {
-      throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError("Renaming column",
-        "ALTER COLUMN", ctx, Some("please run RENAME COLUMN instead"))
+      throw QueryParsingErrors.changeColumnRenameUnsupportedError(ctx)
     }
     if (ctx.colType.NULL != null) {
-      throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError(
-        "NOT NULL", "ALTER COLUMN", ctx,
-        Some("please run ALTER COLUMN ... SET/DROP NOT NULL instead"))
+      throw QueryParsingErrors.changeColumnNotNullUnsupportedError(ctx)
     }
 
     AlterColumns(
@@ -7140,20 +7181,17 @@ class AstBuilder extends DataTypeAstBuilder
       ctx.columns.qualifiedColTypeWithPosition.asScala.map { colType =>
         val name = typedVisit[Seq[String]](colType.name)
         if (name.length > 1) {
-          throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError(
-            "Replacing with a nested column", "REPLACE COLUMNS", ctx)
+          throw QueryParsingErrors.replaceColumnsNestedColumnUnsupportedError(name, ctx)
         }
         var commentSpec: Option[CommentSpecContext] = None
         colType.colDefinitionDescriptorWithPosition.asScala.foreach { opt =>
           blockBang(opt.errorCapturingNot)
 
           if (opt.NULL != null) {
-            throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError(
-              "NOT NULL", "REPLACE COLUMNS", ctx)
+            throw QueryParsingErrors.replaceColumnsNotNullUnsupportedError(ctx)
           }
           if (opt.colPosition != null) {
-            throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError(
-              "Column position", "REPLACE COLUMNS", ctx)
+            throw QueryParsingErrors.replaceColumnsColumnPositionUnsupportedError(ctx)
           }
           if (Option(opt.defaultExpression()).map(visitDefaultExpression).isDefined) {
             throw QueryParsingErrors.defaultColumnNotImplementedYetError(ctx)
@@ -7644,7 +7682,7 @@ class AstBuilder extends DataTypeAstBuilder
     def singlePart(parts: Seq[String]): String = {
       if (parts.length > 1) {
         throw QueryParsingErrors.addCatalogInCacheTableAsSelectNotAllowedError(
-          parts.init.quoted, parentCtx)
+          parts, parentCtx)
       }
       parts.head
     }
@@ -8209,7 +8247,12 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitNamedParameterLiteral(
       ctx: NamedParameterLiteralContext): Expression = withOrigin(ctx) {
     // Named parameters use simpleIdentifier, so .getText() is correct.
-    NamedParameter(ctx.namedParameterMarker().simpleIdentifier().getText)
+    val namedParameter = NamedParameter(ctx.namedParameterMarker().simpleIdentifier().getText)
+    if (ctx.optionalMarker != null) {
+      OptionalReferenceValidation.validate(ctx)
+      OptionalReferences.markOptional(namedParameter)
+    }
+    namedParameter
   }
 
   /**
@@ -8218,7 +8261,7 @@ class AstBuilder extends DataTypeAstBuilder
    * */
   override def visitPosParameterLiteral(
       ctx: PosParameterLiteralContext): Expression = withOrigin(ctx) {
-    PosParameter(ctx.QUESTION().getSymbol.getStartIndex)
+    PosParameter(ctx.getStart.getStartIndex)
   }
 
   /**
@@ -8464,6 +8507,11 @@ class AstBuilder extends DataTypeAstBuilder
               a.copy(
                 child = PipeExpression(a.child, isAggregate = false, PipeOperators.extendClause))(
                 a.exprId, a.qualifier, a.explicitMetadata, a.nonInheritableMetadataKeys)
+            case (m: MultiAlias, _) =>
+              CurrentOrigin.withOrigin(m.origin) {
+                m.copy(
+                  child = PipeExpression(m.child, isAggregate = false, PipeOperators.extendClause))
+              }
             case (e: Expression, aliasFunc) =>
               UnresolvedAlias(
                 PipeExpression(e, isAggregate = false, PipeOperators.extendClause), aliasFunc)
@@ -8471,8 +8519,8 @@ class AstBuilder extends DataTypeAstBuilder
         }.get
       val projectList: Seq[NamedExpression] = Seq(UnresolvedStar(None)) ++ extendExpressions
       Project(projectList, left)
-    }.getOrElse(Option(ctx.SET).map { _ =>
-      visitOperatorPipeSet(ctx, left)
+    }.getOrElse(Option(ctx.SET).orElse(Option(ctx.EVAL)).map { _ =>
+      visitOperatorPipeSetOrEval(ctx, left, appendMissingColumns = ctx.EVAL != null)
     }.getOrElse(Option(ctx.DROP).map { _ =>
       val ids: Seq[Seq[String]] = ctx.multipartIdentifierList().multipartIdentifier.asScala
         .toSeq.map(visitMultipartIdentifier)
@@ -8515,27 +8563,40 @@ class AstBuilder extends DataTypeAstBuilder
     ))))))))))))))
   }
 
-  private def visitOperatorPipeSet(
-      ctx: OperatorPipeRightSideContext, left: LogicalPlan): LogicalPlan = {
+  /**
+   * Builds the pipe operator SET, or EVAL if `appendMissingColumns`. Both replace an assigned
+   * column that exists in place. EVAL appends a column that does not exist, as EXTEND would, where
+   * SET fails.
+   */
+  private def visitOperatorPipeSetOrEval(
+      ctx: OperatorPipeRightSideContext,
+      left: LogicalPlan,
+      appendMissingColumns: Boolean): LogicalPlan = {
+    val clause = if (appendMissingColumns) PipeOperators.evalClause else PipeOperators.setClause
+    val assignments = ctx.operatorPipeSetAssignmentSeq()
+    withOrigin(assignments) {
+      if (!assignments.DOT.isEmpty) {
+        operationNotAllowed(
+          s"SQL pipe syntax |> $clause operator with multi-part assignment key " +
+            s"(only single-part keys are allowed)", assignments)
+      }
+    }
     val (setIdentifiers: Seq[String], setTargets: Seq[Expression]) =
-      visitOperatorPipeSetAssignmentSeq(ctx.operatorPipeSetAssignmentSeq())
+      visitOperatorPipeSetAssignmentSeq(assignments)
     var plan = left
     setIdentifiers.zip(setTargets).foreach {
-      case (_, _: Alias) =>
-        operationNotAllowed(
-          "SQL pipe syntax |> SET operator with an alias assigned with [AS] aliasName", ctx)
       case (ident, target) =>
-        // Add an UnresolvedStarExceptOrReplace to exclude the SET expression name from the relation
-        // and add the new SET expression to the projection list.
-        // Use a PipeSelect expression to make sure it does not contain any aggregate functions.
-        val replacement =
-          Alias(PipeExpression(target, isAggregate = false, PipeOperators.setClause), ident)()
+        // Add an UnresolvedStarExceptOrReplace to exclude the assigned column from the relation
+        // and add the new expression to the projection list.
+        // Use a PipeExpression to make sure it does not contain any aggregate functions.
+        val replacement = Alias(PipeExpression(target, isAggregate = false, clause), ident)()
         val projectList: Seq[NamedExpression] =
           Seq(UnresolvedStarExceptOrReplace(
-            target = None, excepts = Seq(Seq(ident)), replacements = Some(Seq(replacement))))
-        // Add a projection to implement the SET operator using the UnresolvedStarExceptOrReplace
-        // expression. We do this once per SET assignment to allow for multiple SET assignments with
-        // optional lateral references to previous ones.
+            target = None, excepts = Seq(Seq(ident)), replacements = Some(Seq(replacement)),
+            appendMissingReplacements = appendMissingColumns))
+        // Add a projection using the UnresolvedStarExceptOrReplace expression. We do this once per
+        // assignment to allow for multiple assignments with optional lateral references to
+        // previous ones.
         plan = Project(projectList, plan)
     }
     plan
@@ -8544,12 +8605,8 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitOperatorPipeSetAssignmentSeq(
       ctx: OperatorPipeSetAssignmentSeqContext): (Seq[String], Seq[Expression]) = {
     withOrigin(ctx) {
-      if (!ctx.DOT.isEmpty) {
-        operationNotAllowed(
-          s"SQL pipe syntax |> SET operator with multi-part assignment key " +
-            s"(only single-part keys are allowed)", ctx)
-      }
-      val setIdentifiers: Seq[String] = ctx.errorCapturingIdentifier().asScala.map(_.getText).toSeq
+      val setIdentifiers: Seq[String] =
+        ctx.errorCapturingIdentifier().asScala.map(getIdentifierText).toSeq
       val setTargets: Seq[Expression] = ctx.expression().asScala.map(typedVisit[Expression]).toSeq
       (setIdentifiers, setTargets)
     }
@@ -8572,6 +8629,11 @@ class AstBuilder extends DataTypeAstBuilder
             a.copy(child =
               PipeExpression(a.child, isAggregate = true, PipeOperators.aggregateClause))(
               a.exprId, a.qualifier, a.explicitMetadata, a.nonInheritableMetadataKeys)
+          case (m: MultiAlias, _) =>
+            CurrentOrigin.withOrigin(m.origin) {
+              m.copy(
+                child = PipeExpression(m.child, isAggregate = true, PipeOperators.aggregateClause))
+            }
           case (e: Expression, aliasFunc) =>
             UnresolvedAlias(
               PipeExpression(e, isAggregate = true, PipeOperators.aggregateClause), aliasFunc)

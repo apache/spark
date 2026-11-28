@@ -33,8 +33,8 @@ class _WorkerTimer:
     clock twice and updates the duration dictionary. In a hot batch loop, accumulate
     locally and call add_duration_ns once instead of entering this context per batch.
 
-    Pipelined reads can overlap UDF work on another thread. An additive phase breakdown
-    for that mode would require tracking those overlapping intervals.
+    Detailed phase timing is disabled in pipelined mode. The worker's overall processing
+    duration is still collected.
     """
 
     def __init__(self, shared_duration_totals_ns: dict[str, int], metric_name: str) -> None:
@@ -127,7 +127,6 @@ class WorkerMetrics:
         Counters, bytes, and epoch timestamps already have their reporting units. Only the
         accumulated duration totals require conversion from nanoseconds to milliseconds.
         """
-        # Round once per task, preserving sub-millisecond contributions from individual batches.
         return {
             **self._values_in_report_units,
             **{name: duration // 1_000_000 for name, duration in self._duration_totals_ns.items()},

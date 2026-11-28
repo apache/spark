@@ -39,6 +39,7 @@ case class JDBCWriteBuilder(schema: StructType, options: JdbcOptionsInWrite) ext
       // TODO (SPARK-32595): do truncate and append atomically.
       if (isTruncate) {
         val dialect = JdbcDialects.get(options.url)
+        // TODO (SPARK-60754): Classify truncate errors on the Spark driver separately.
         val conn = dialect.createConnectionFactory(options)(-1)
         try {
           JdbcUtils.truncateTable(conn, options)

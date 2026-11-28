@@ -259,6 +259,13 @@ object ExternalLookupRelations {
  *                             false: a pushed limit, offset, top-N, sample, aggregate or join
  *                             decides which rows the scan returns, and a build site that does not
  *                             set it keeps storage filters away from its scan.
+ * @param repeatableRead whether a second read of a scan that is not `onlyRowWisePushdowns`
+ *                       returns the same rows, as for a pushed aggregate or join and the target
+ *                       read of a copy-on-write operation. For a pushed aggregate, this relies
+ *                       on the source computing it, including its groups, the same way on each
+ *                       read, for example adding floating point values in the same order. See
+ *                       [[isRepeatableRead]]. Default false: a build site that does not set it
+ *                       keeps such a scan from being a runtime bloom filter's creation side.
  */
 case class DataSourceV2ScanRelation(
     relation: DataSourceV2Relation,
@@ -269,7 +276,8 @@ case class DataSourceV2ScanRelation(
     pushedFilters: Seq[Expression] = Seq.empty,
     inferredFilters: Seq[Expression] = Seq.empty,
     mergeableScan: Boolean = false,
-    onlyRowWisePushdowns: Boolean = false) extends LeafNode with NamedRelation {
+    onlyRowWisePushdowns: Boolean = false,
+    repeatableRead: Boolean = false) extends LeafNode with NamedRelation {
 
   // TODO: Override validConstraints to return ExpressionSet(pushedFilters) so that pushed
   // filters participate in constraint propagation (InferFiltersFromConstraints, PruneFilters).
@@ -278,6 +286,12 @@ case class DataSourceV2ScanRelation(
   // This changes which filters InferFiltersFromConstraints adds or removes (e.g., it may
   // skip adding IsNotNull when the scan already implies it, or infer new filters across
   // joins), so plan stability testing is needed first.
+
+  /**
+   * Whether a second read of the scan, such as a runtime bloom filter's subquery, returns the same
+   * rows. A scan whose pushed operations all work on each row by itself does.
+   */
+  def isRepeatableRead: Boolean = repeatableRead || onlyRowWisePushdowns
 
   /**
    * Resolved attributes that the scan declares for runtime filtering via

@@ -649,6 +649,18 @@ SELECT * FROM t1 JOIN t2 ON foo3_1b(t1.c1 + rand(0) * 0) > 1;
 SELECT * FROM t1 JOIN t2 ON foo3_1c(t1.c1) = 2;
 -- expect error: correlated scalar subquery cannot be used in Join
 SELECT * FROM t1 JOIN t2 ON foo3_1g(t1.c1) = 2;
+-- in join: temporary SQL UDF
+CREATE TEMPORARY FUNCTION foo3_1h(x INT) RETURNS INT RETURN x + 1;
+SELECT * FROM t1 JOIN t2 ON foo3_1h(t1.c1) = t2.c2;
+DROP TEMPORARY FUNCTION foo3_1h;
+-- in left outer join
+SELECT * FROM t1 LEFT OUTER JOIN t2 ON foo3_1b(t1.c2) = t2.c2;
+-- in left semi join
+SELECT * FROM t1 LEFT SEMI JOIN t2 ON foo3_1a(t1.c1, t2.c2) >= 2;
+-- in join with a parameter default
+CREATE FUNCTION foo3_1i(x INT, y INT DEFAULT 1) RETURNS INT RETURN x + y;
+SELECT * FROM t1 JOIN t2 ON foo3_1i(t1.c2) = t2.c2;
+DROP FUNCTION foo3_1i;
 
 -- in sort: unsupported
 SELECT * FROM t1 ORDER BY foo3_1b(c1);

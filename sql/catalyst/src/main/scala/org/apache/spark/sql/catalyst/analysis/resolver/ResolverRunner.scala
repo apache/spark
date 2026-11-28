@@ -21,7 +21,8 @@ import org.apache.spark.sql.catalyst.{QueryPlanningTracker, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.{
   AnalysisContext,
   MaterializedCTECheck,
-  NanosTimestampSubtractionCheck
+  NanosTimestampSubtractionCheck,
+  OptionalReferences
 }
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
@@ -86,6 +87,7 @@ class ResolverRunner(
       plan: LogicalPlan,
       analyzerBridgeState: Option[AnalyzerBridgeState] = None): LogicalPlan = {
     val resolvedPlan = resolver.lookupMetadataAndResolve(plan, analyzerBridgeState)
+    OptionalReferences.markResolvedNullReference(plan, resolvedPlan)
 
     runValidator(resolvedPlan)
 

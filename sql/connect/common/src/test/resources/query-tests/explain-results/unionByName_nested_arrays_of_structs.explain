@@ -1,0 +1,4 @@
+'Union false, false
+:- LocalRelation <empty>, [id#0L, arr#0]
++- Project [id#0L, transform(arr#0, lambdafunction(if (isnull(lambda x_0#0)) null else named_struct(s, transform(lambda x_0#0.s, lambdafunction(if (isnull(lambda x_1#0)) null else named_struct(a, lambda x_1#0.a, b, lambda x_1#0.b), lambda x_1#0, false))), lambda x_0#0, false)) AS arr#0]
+   +- LocalRelation <empty>, [arr#0, id#0L]

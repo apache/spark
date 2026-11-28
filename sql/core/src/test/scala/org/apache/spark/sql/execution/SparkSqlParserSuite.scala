@@ -950,6 +950,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     checkPipeSelect("TABLE t |> EXTEND X + 1 AS Y")
     checkPipeSelect("TABLE t |> EXTEND X + 1 AS Y, X + 2 Z")
     checkPipeSelect("TABLE t |> EXTEND 1 AS z, 2 AS Z |> SET z = 1, Z = 2")
+    checkPipeSelect("TABLE t |> EVAL z = 1, x = z + 1")
     // FROM operators.
     def checkPipeSelectFrom(query: String): Unit = check(query, Seq(PROJECT))
     checkPipeSelectFrom("FROM t |> SELECT 1 AS X")

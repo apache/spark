@@ -23,6 +23,7 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -287,7 +288,10 @@ public class YarnShuffleService extends AuxiliaryService {
       }
       // Constrain registered localDirs to the NodeManager's configured local directories
       // (yarn.nodemanager.local-dirs) and to the registering application's own directory.
-      String[] nmLocalDirs = _conf.getTrimmedStrings("yarn.nodemanager.local-dirs");
+      // The NM accepts file: URIs there, so strip the scheme as initRecoveryDb does.
+      String[] nmLocalDirs = Arrays.stream(_conf.getTrimmedStrings("yarn.nodemanager.local-dirs"))
+        .map(dir -> new Path(dir).toUri().getPath())
+        .toArray(String[]::new);
       blockHandler = new ExternalBlockHandler(
         transportConf, registeredExecutorFile, shuffleMergeManager, nmLocalDirs, true);
 

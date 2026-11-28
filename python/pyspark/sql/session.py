@@ -18,14 +18,13 @@ import filecmp
 import os
 import sys
 import warnings
-from collections.abc import Sized
+from collections.abc import Callable, Sized
 from functools import cached_property, reduce
 from threading import RLock
 from types import TracebackType
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
     ClassVar,
     Dict,
     Generic,
@@ -1990,6 +1989,49 @@ class SparkSession(SparkConversionMixin):
 
         return DataFrame(self._jsparkSession.table(tableName), self)
 
+    def getOrCreateDataFrame(self, path: str, create: Callable[[], DataFrame]) -> DataFrame:
+        """Returns the :class:`DataFrame` stored at ``path``, computing and storing it first if
+        it is not already there. The dataset is stored as Parquet.
+
+        .. versionadded:: 4.5.0
+
+        Parameters
+        ----------
+        path : str
+            Directory holding the dataset. The caller supplies it, so a scheduled pipeline can
+            keep its runs apart by including a run identifier in it.
+        create : function
+            Zero-argument function returning the :class:`DataFrame` to store. It is called only
+            when ``path`` does not already hold a complete dataset.
+
+        Returns
+        -------
+        :class:`DataFrame`
+
+        Notes
+        -----
+        Supports Spark Classic only.
+
+        This API is experimental.
+
+        Completeness is tracked with a marker file written under ``path`` once the data is
+        stored, so a path left behind by an interrupted write is recomputed rather than read
+        back as if it were finished.
+
+        Examples
+        --------
+        >>> import tempfile
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     path = os.path.join(d, "ids")
+        ...     spark.getOrCreateDataFrame(path, lambda: spark.range(3)).count()
+        ...     spark.getOrCreateDataFrame(path, lambda: spark.range(100)).count()
+        3
+        3
+        """
+        if not self._jsparkSession.isDataFrameMaterialized(path):
+            self._jsparkSession.materializeDataFrame(create()._jdf, path)
+        return self.read.parquet(path)
+
     @property
     def read(self) -> DataFrameReader:
         """
@@ -2344,6 +2386,93 @@ class SparkSession(SparkConversionMixin):
                 self._sc.addFile(p)
 
     addArtifact = addArtifacts
+
+    def listFiles(self) -> List[str]:
+        """
+        Returns the paths of the files added to resources, as :attr:`SparkContext.listFiles`.
+
+        These are the files added with :meth:`SparkSession.addArtifacts` with ``file`` or
+        ``pyfile`` set, or with the ``ADD FILE`` SQL statement, and those added to the
+        :class:`SparkContext`, such as with ``--files``. Without Spark Connect, these are all the
+        files added to the :class:`SparkContext`, also by other sessions. With Spark Connect, these
+        are the files added to this session and those added to the server outside of any session,
+        but not those of the other sessions, which servers before Spark 4.5 also list. A file
+        uploaded with :meth:`SparkSession.addArtifacts` is listed as the URI of its copy on the
+        server, and one added with ``ADD FILE`` as :attr:`SparkContext.listFiles` lists it, such as
+        by the path it was added with when the server runs in local mode.
+
+        .. versionadded:: 4.5.0
+
+        Returns
+        -------
+        list of str
+            The paths of the files, in no particular order.
+
+        See Also
+        --------
+        :meth:`SparkSession.addArtifacts`
+        :meth:`SparkSession.listArchives`
+
+        Examples
+        --------
+        With Spark Classic in local mode, a file is listed by the path it was added with.
+
+        >>> spark.addArtifacts("/tmp/my_file.txt", file=True)  # doctest: +SKIP
+        >>> spark.listFiles()  # doctest: +SKIP
+        ['file:/tmp/my_file.txt']
+
+        With Spark Connect, the file is uploaded, and listed as the URI of its copy on the server.
+
+        >>> spark.addArtifacts("/tmp/my_file.txt", file=True)  # doctest: +SKIP
+        >>> spark.listFiles()  # doctest: +SKIP
+        ['spark://<host>:<port>/artifacts/<uuid>/files/my_file.txt']
+        """
+        return self._sc.listFiles
+
+    def listArchives(self) -> List[str]:
+        """
+        Returns the paths of the archives added to resources, as
+        :attr:`SparkContext.listArchives`.
+
+        These are the archives added with :meth:`SparkSession.addArtifacts` with ``archive`` set,
+        or with the ``ADD ARCHIVE`` SQL statement, and those added to the :class:`SparkContext`,
+        such as with ``--archives``. A path keeps the fragment, such as ``#name``, that it was
+        added with. Without Spark Connect, these are all the archives added to the
+        :class:`SparkContext`, also by other sessions. With Spark Connect, these are the archives
+        added to this session and those added to the server outside of any session, but not those
+        of the other sessions, which servers before Spark 4.5 also list. An archive uploaded with
+        :meth:`SparkSession.addArtifacts` is listed as the URI of its copy on the server, and one
+        added with ``ADD ARCHIVE`` as :attr:`SparkContext.listArchives` lists it, such as by the
+        path it was added with when the server runs in local mode.
+
+        .. versionadded:: 4.5.0
+
+        Returns
+        -------
+        list of str
+            The paths of the archives, in no particular order.
+
+        See Also
+        --------
+        :meth:`SparkSession.addArtifacts`
+        :meth:`SparkSession.listFiles`
+
+        Examples
+        --------
+        With Spark Classic in local mode, an archive is listed by the path it was added with.
+
+        >>> spark.addArtifacts("/tmp/my_archive.zip#my_files", archive=True)  # doctest: +SKIP
+        >>> spark.listArchives()  # doctest: +SKIP
+        ['file:/tmp/my_archive.zip#my_files']
+
+        With Spark Connect, the archive is uploaded, and listed as the URI of its copy on the
+        server.
+
+        >>> spark.addArtifacts("/tmp/my_archive.zip#my_files", archive=True)  # doctest: +SKIP
+        >>> spark.listArchives()  # doctest: +SKIP
+        ['spark://<host>:<port>/artifacts/<uuid>/archives/my_archive.zip#my_files']
+        """
+        return self._sc.listArchives
 
     @remote_only
     def registerProgressHandler(self, handler: "ProgressHandler") -> None:

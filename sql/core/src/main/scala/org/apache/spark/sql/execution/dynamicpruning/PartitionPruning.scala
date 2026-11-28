@@ -357,10 +357,14 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
         var newLeft = left
         var newRight = right
 
-        // extract the left and right keys of the join condition
-        val (leftKeys, rightKeys) = j match {
-          case ExtractEquiJoinKeys(_, lkeys, rkeys, _, _, _, _, _) => (lkeys, rkeys)
-          case _ => (Nil, Nil)
+        // extract the left and right keys of the join condition, and the conjuncts they come
+        // from. Only those are used for pruning: `ExtractEquiJoinKeys` leaves an equality that
+        // may not be evaluated ahead of the rest of the condition, e.g. one that can fail after a
+        // throwable conjunct, out of the keys, and a pruning filter would evaluate it ahead too.
+        val (leftKeys, rightKeys, keyPredicates) = j match {
+          case ExtractEquiJoinKeys(_, lkeys, rkeys, _, keyCondition, _, _, _) =>
+            (lkeys, rkeys, keyCondition.toSeq.flatMap(splitConjunctivePredicates))
+          case _ => (Nil, Nil, Nil)
         }
 
         // checks if two expressions are on opposite sides of the join
@@ -371,7 +375,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
           fromLeftRight(x, y) || fromLeftRight(y, x)
         }
 
-        splitConjunctivePredicates(condition).foreach {
+        keyPredicates.foreach {
           case EqualTo(a: Expression, b: Expression)
               if fromDifferentSides(a, b) =>
             val (l, r) = if (a.references.subsetOf(left.outputSet) &&

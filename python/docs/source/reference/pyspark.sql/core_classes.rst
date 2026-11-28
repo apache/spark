@@ -49,6 +49,13 @@ Core Classes
     datasource.DataSourceRegistration
     datasource.InputPartition
     datasource.WriterCommitMessage
+    datasource.Distribution
+    datasource.UnspecifiedDistribution
+    datasource.ClusteredDistribution
+    datasource.OrderedDistribution
+    datasource.SortOrder
+    datasource.SortDirection
+    datasource.NullOrdering
     tvf.TableValuedFunction
     VariantVal
     table_arg.TableArg

@@ -144,19 +144,27 @@ class ClusteringTestsMixin:
             .select("weight", "features")
         )
 
+        self.assertEqual(BisectingKMeans().getIntermediateStorageLevel(), "MEMORY_AND_DISK")
         bkm = BisectingKMeans(
             k=2,
             maxIter=2,
             minDivisibleClusterSize=1.0,
             weightCol="weight",
+            intermediateStorageLevel="DISK_ONLY",
         )
         self.assertEqual(bkm.getK(), 2)
         self.assertEqual(bkm.getMaxIter(), 2)
         self.assertEqual(bkm.getMinDivisibleClusterSize(), 1.0)
         self.assertEqual(bkm.getWeightCol(), "weight")
+        self.assertEqual(bkm.getIntermediateStorageLevel(), "DISK_ONLY")
+        bkm.setParams(intermediateStorageLevel="MEMORY_ONLY")
+        self.assertEqual(bkm.getIntermediateStorageLevel(), "MEMORY_ONLY")
+        bkm.setIntermediateStorageLevel("DISK_ONLY")
+        self.assertEqual(bkm.getIntermediateStorageLevel(), "DISK_ONLY")
 
         model = bkm.fit(df)
         self.assertEqual(bkm.uid, model.uid)
+        self.assertEqual(model.getIntermediateStorageLevel(), "DISK_ONLY")
 
         centers = model.clusterCenters()
         self.assertEqual(len(centers), 2)
@@ -196,10 +204,12 @@ class ClusteringTestsMixin:
         with tempfile.TemporaryDirectory(prefix="bisecting_kmeans") as d:
             bkm.write().overwrite().save(d)
             bkm2 = BisectingKMeans.load(d)
+            self.assertEqual(bkm2.getIntermediateStorageLevel(), "DISK_ONLY")
             self.assertEqual(str(bkm), str(bkm2))
 
             model.write().overwrite().save(d)
             model2 = BisectingKMeansModel.load(d)
+            self.assertEqual(model2.getIntermediateStorageLevel(), "DISK_ONLY")
             self.assertEqual(str(model), str(model2))
 
     def test_gaussian_mixture(self):

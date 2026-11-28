@@ -1,0 +1,27 @@
+{
+  "common": {
+    "planId": "2"
+  },
+  "setOp": {
+    "leftInput": {
+      "common": {
+        "planId": "0"
+      },
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,arr:array\u003cstruct\u003cs:array\u003cstruct\u003ca:int,b:string\u003e\u003e\u003e\u003e\u003e"
+      }
+    },
+    "rightInput": {
+      "common": {
+        "planId": "1"
+      },
+      "localRelation": {
+        "schema": "struct\u003carr:array\u003cstruct\u003cs:array\u003cstruct\u003cb:string,a:int\u003e\u003e\u003e\u003e,id:bigint\u003e"
+      }
+    },
+    "setOpType": "SET_OP_TYPE_UNION",
+    "isAll": true,
+    "byName": true,
+    "allowMissingColumns": false
+  }
+}

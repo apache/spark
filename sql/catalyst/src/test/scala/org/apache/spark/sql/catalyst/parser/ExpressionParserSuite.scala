@@ -783,8 +783,9 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("-interval '1 day 2 hour 3 minute 4.005006 second'", UnaryMinus(dtIntervalLiteral))
     checkError(
       exception = parseException("INTERVAL '1 year 2 second'"),
-      condition = "_LEGACY_ERROR_TEMP_0029",
-      parameters = Map("literal" -> "INTERVAL '1 year 2 second'"),
+      condition = "INVALID_INTERVAL_FORMAT.MIXED_YEAR_MONTH_AND_DAY_TIME_FIELDS",
+      sqlState = "22006",
+      parameters = Map("input" -> "1 year 2 second"),
       context = ExpectedContext(
         fragment = "INTERVAL '1 year 2 second'",
         start = 0,
@@ -1236,8 +1237,9 @@ class ExpressionParserSuite extends AnalysisTest {
         } else {
           checkError(
             exception = parseException(s"interval $intervalStr"),
-            condition = "_LEGACY_ERROR_TEMP_0029",
-            parameters = Map("literal" -> "interval 3 monThs 4 dayS 22 sEcond 1 millisecond"),
+            condition = "INVALID_INTERVAL_FORMAT.MIXED_YEAR_MONTH_AND_DAY_TIME_FIELDS",
+            sqlState = "22006",
+            parameters = Map("input" -> "3 monThs 4 dayS 22 sEcond 1 millisecond"),
             context = ExpectedContext(
               fragment = s"interval $intervalStr",
               start = 0,

@@ -59,14 +59,9 @@ class ErrorsTest(unittest.TestCase):
         # the placeholders of the message template. Otherwise building the exception fails and
         # the intended error message is lost.
 
-        # Known issues tracked separately. Remove the entry when the linked issue is fixed.
-        known_issues = {
-            # SPARK-57965
-            (
-                os.path.join("pipelines", "spark_connect_graph_element_registry.py"),
-                "UNSUPPORTED_PIPELINES_DATASET_TYPE",
-            ),
-        }
+        # Known issues tracked separately, as (relative path, error class) pairs. Remove an
+        # entry when the linked issue is fixed.
+        known_issues = set()
 
         error_reader = ErrorClassesReader()
         root = os.path.dirname(pyspark.__file__)

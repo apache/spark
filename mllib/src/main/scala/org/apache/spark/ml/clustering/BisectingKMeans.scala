@@ -43,7 +43,7 @@ import org.apache.spark.util.SizeEstimator
  */
 private[clustering] trait BisectingKMeansParams extends Params with HasMaxIter
   with HasFeaturesCol with HasSeed with HasPredictionCol with HasDistanceMeasure
-  with HasWeightCol {
+  with HasWeightCol with HasIntermediateStorageLevel {
 
   /**
    * The desired number of leaf clusters. Must be &gt; 1. Default: 4.
@@ -295,6 +295,11 @@ class BisectingKMeans @Since("2.0.0") (
   @Since("3.0.0")
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
+  /** @group expertSetParam */
+  @Since("4.5.0")
+  def setIntermediateStorageLevel(value: String): this.type =
+    set(intermediateStorageLevel, value)
+
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): BisectingKMeansModel = instrumented { instr =>
     transformSchema(dataset.schema, logging = true)
@@ -302,7 +307,7 @@ class BisectingKMeans @Since("2.0.0") (
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
     instr.logParams(this, featuresCol, predictionCol, k, maxIter, seed,
-      minDivisibleClusterSize, distanceMeasure, weightCol)
+      minDivisibleClusterSize, distanceMeasure, weightCol, intermediateStorageLevel)
 
     val bkm = new MLlibBisectingKMeans()
       .setK($(k))
@@ -318,7 +323,8 @@ class BisectingKMeans @Since("2.0.0") (
     }.setName("training instances")
 
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
-    val parentModel = bkm.runWithWeight(instances, handlePersistence, Some(instr))
+    val parentModel = bkm.runWithWeight(instances, handlePersistence, Some(instr),
+      StorageLevel.fromString($(intermediateStorageLevel)))
     val model = copyValues(new BisectingKMeansModel(uid, parentModel).setParent(this))
 
     val summary = new BisectingKMeansSummary(

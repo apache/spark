@@ -41,6 +41,9 @@ import org.apache.spark.sql.catalyst.expressions.Expression
  *  the view that we are currently resolving.
  * @param extractValueExtractionKey Extraction expression for [[UnresolvedExtractValue]] if one is
  * currently being resolved, None otherwise.
+ * @param optionalNamePartIndices Indices of the name parts of the multipart name that are optional
+ *  references (followed by `?`). Empty for a name without optional references.
+ * @param resolvingSortOrder Whether the name is in the ordering of a [[Sort]].
  */
 case class NameResolutionParameters(
     canLaterallyReferenceColumn: Boolean = false,
@@ -52,4 +55,6 @@ case class NameResolutionParameters(
     resolvingView: Boolean = false,
     resolvingExecuteImmediate: Boolean = false,
     referredTempVariableNames: Seq[Seq[String]] = Seq.empty,
-    extractValueExtractionKey: Option[Expression] = None) {}
+    extractValueExtractionKey: Option[Expression] = None,
+    optionalNamePartIndices: Set[Int] = Set.empty,
+    resolvingSortOrder: Boolean = false) {}

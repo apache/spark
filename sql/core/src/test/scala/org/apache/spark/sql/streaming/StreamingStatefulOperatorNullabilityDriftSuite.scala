@@ -32,10 +32,13 @@ import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType}
 /**
  * Regression suite for stateful-operator nullability drift.
  *
- * Driver: `PropagateEmptyRelation` drops empty `Union` branches without a streaming
- * guard, so the surviving branch's per-column nullability becomes the Union's
- * nullability and propagates into a stateful operator above -- across microbatches or
- * restarts.
+ * Driver: `PropagateEmptyRelation` drops empty `Union` branches when
+ * `spark.sql.optimizer.propagateEmptyRelationCanPruneStreamingUnionChildren` is true, so the
+ * surviving branch's per-column nullability becomes the Union's nullability and propagates into
+ * a stateful operator above -- across microbatches or restarts. Checkpoints written before
+ * SPARK-62057 have no entry for the conf and are restored with it set to true. The scenarios
+ * that run through `runUnionBranchDropRestart`, the Complete-mode scenario and the existing-query
+ * scenario write their checkpoints with it set to true; the others keep the Union branches.
  *
  * Coverage:
  *   - New-query (default conf): originally-failing scenarios now complete cleanly.
@@ -78,11 +81,16 @@ class StreamingStatefulOperatorNullabilityDriftSuite extends StreamTest {
     (inputA, inputB, dfA, dfB)
   }
 
+  // Checkpoints written before SPARK-62057 have no entry for the conf and are restored with
+  // pruning on, so PropagateEmptyRelation drops their empty Union branches.
+  private def withUnionBranchDrop(f: => Unit): Unit = withSQLConf(
+    SQLConf.PROPAGATE_EMPTY_RELATION_CAN_PRUNE_STREAMING_UNION_CHILDREN.key -> "true")(f)
+
   private def runUnionBranchDropRestart(
       buildSources: () => (MemoryStream[Int], MemoryStream[Int], DataFrame, DataFrame),
       buildQuery: (DataFrame, DataFrame) => DataFrame,
       outputMode: OutputMode,
-      nullableToNonNullable: Boolean): Unit = {
+      nullableToNonNullable: Boolean): Unit = withUnionBranchDrop {
     withTempDir { checkpointDir =>
       val checkpointPath = checkpointDir.getAbsolutePath
 
@@ -254,6 +262,7 @@ class StreamingStatefulOperatorNullabilityDriftSuite extends StreamTest {
 
     withTempDir { checkpointDir =>
       withSQLConf(
+        SQLConf.PROPAGATE_EMPTY_RELATION_CAN_PRUNE_STREAMING_UNION_CHILDREN.key -> "true",
         SQLConf.STATE_SCHEMA_CHECK_ENABLED.key -> "false",
         SQLConf.STATE_STORE_FORMAT_VALIDATION_ENABLED.key -> "false",
         SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
@@ -280,6 +289,7 @@ class StreamingStatefulOperatorNullabilityDriftSuite extends StreamTest {
     "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE still triggers on restart") {
     withTempDir { checkpointDir =>
       withSQLConf(
+        SQLConf.PROPAGATE_EMPTY_RELATION_CAN_PRUNE_STREAMING_UNION_CHILDREN.key -> "true",
         SQLConf.STATEFUL_OPERATOR_ALWAYS_NULLABLE_OUTPUT.key -> "false") {
         val (inputA, inputB, dfA, dfB) = buildTwoSources()
         val aggregated = dfA.union(dfB).groupBy($"key").count()

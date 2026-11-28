@@ -74,14 +74,18 @@ public class RocksDB implements KVStore {
     .setFormatVersion(5);
 
   /**
-   * - Use ZSTD at the bottom most level to reduce the disk space
-   * - Use LZ4 at the other levels because it's better than Snappy in general.
+   * - Use LZ4 everywhere, including the bottom most level.
+   *
+   * ZSTD at the bottom level trades CPU for disk space, which fits an archival store (e.g.
+   * the History Server) but not this one: the live UI store's data is short-lived by eviction,
+   * disk space isn't the bottleneck, and profiling showed RocksDB compaction consuming ~29% of
+   * driver CPU, much of it ZSTD's own compression work. Use the cheaper LZ4 uniformly instead.
    *
    * https://github.com/facebook/rocksdb/wiki/Compression#configuration
    */
   private static final Options dbOptions = new Options()
     .setCreateIfMissing(true)
-    .setBottommostCompressionType(CompressionType.ZSTD_COMPRESSION)
+    .setBottommostCompressionType(CompressionType.LZ4_COMPRESSION)
     .setCompressionType(CompressionType.LZ4_COMPRESSION)
     .setTableFormatConfig(tableFormatConfig);
 

@@ -35,7 +35,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.{Partition, TaskContext}
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.LogKeys.{COMMAND, ERROR, PATH}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{TaskInputThreads, Utils}
 
 
 /**
@@ -161,6 +161,9 @@ private[spark] class PipedRDD[T: ClassTag](
         }
       }
     }
+    // The task does not wait for the thread, which may still read the parent's iterator once the
+    // task completes: the readers that free what they returned when they are closed must know.
+    TaskInputThreads.registerUnawaited(context)
     stdinWriterThread.start()
 
     // interrupts stdin writer and stderr reader threads when the corresponding task is finished.

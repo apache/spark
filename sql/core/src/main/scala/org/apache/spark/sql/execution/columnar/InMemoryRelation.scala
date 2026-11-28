@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.plans.{logical, QueryPlan}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.catalyst.util.{truncatedString, CaseInsensitiveMap}
 import org.apache.spark.sql.columnar.{CachedBatch, CachedBatchSerializer, SimpleMetricsCachedBatch, SimpleMetricsCachedBatchSerializer}
 import org.apache.spark.sql.execution._
@@ -240,9 +241,11 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
     // Find the ordinals and data types of the requested columns.
     val requestedColumnIndices = CachedColumnIndices(cacheAttributes, selectedAttributes)
 
+    // The columns are read as the types they are cached as: a UDT as its SQL type, and a
+    // framework type stored as a struct, such as FileType, as its representation.
     val columnTypes = selectedAttributes.map(_.dataType match {
       case udt: UserDefinedType[_] => udt.sqlType
-      case other => other
+      case other => TypeOps.rowRepresentationOrSelf(other)
     }).toArray
 
     input.mapPartitionsInternal { cachedBatchIterator =>

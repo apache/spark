@@ -243,7 +243,7 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
         # Fetch the input data stream
         input_data_stream = message_receiver.get_data_stream()
 
-        is_pipelined = os.environ.get("SPARK_PIPELINED_UDF") == "1"
+        is_pipelined = runner_conf.is_pipelined
         # Pipelined reads can overlap UDF work, so mark these task reports for filtering.
         metrics.set("pythonNumPipelinedTasks", int(is_pipelined))
 
@@ -280,6 +280,7 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
 
                 with WorkerSamplingProfiler(
                     sampling_interval=runner_conf.udf_profiler_sampling_interval,
+                    aggregation=runner_conf.udf_profiler_sampling_aggregation,
                     task_context=task_context,
                 ) as profiler:
                     run_process()

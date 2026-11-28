@@ -21,6 +21,7 @@ import java.time.LocalTime
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.types.ops.FileTypeOps
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal}
@@ -213,6 +214,16 @@ class ColumnVectorUtilsSuite extends SparkFunSuite {
     (0 until 10).foreach { i =>
       assert(vector.getChild(0).isNullAt(i))
       assert(vector.getChild(1).getInt(i) == 27)
+    }
+  }
+
+  testConstantColumnVector("fill file", 10, FileType.external) { vector =>
+    val file = InternalRow(UTF8String.fromString("s3://bucket/a.pdf"), null, 10L,
+      UTF8String.fromString("application/pdf"), null, Array[Byte](1, 2))
+    ColumnVectorUtils.populate(vector, InternalRow(file), 0)
+    (0 until 10).foreach { i =>
+      assert(FileTypeOps.toFileRef(vector.getStruct(i)) === FileTypeOps.toFileRef(file))
+      assert(vector.getChild(FileType.OFFSET_INDEX).isNullAt(i))
     }
   }
 

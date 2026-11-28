@@ -91,7 +91,7 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
     >>> [x.name for x in determine_modules_to_test([modules.core])]
     ['root']
     >>> [x.name for x in determine_modules_to_test([modules.graphx])]
-    ['graphx', 'examples']
+    ['graphx', 'examples', 'graph']
     """
     modules_to_test = set()
     for module in changed_modules:

@@ -59,7 +59,7 @@ Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(cs_sold_date_sk#4), dynamicpruningexpression(cs_sold_date_sk#4 IN dynamicpruning#5)]
 PushedFilters: [IsNotNull(cs_item_sk), IsNotNull(cs_call_center_sk)]
-ReadSchema: struct<cs_call_center_sk:int,cs_item_sk:int,cs_sales_price:decimal(7,2)>
+ReadSchema: struct<cs_call_center_sk:bigint,cs_item_sk:bigint,cs_sales_price:decimal(7,2)>
 
 (2) ColumnarToRow [codegen id : 3]
 Input [4]: [cs_call_center_sk#1, cs_item_sk#2, cs_sales_price#3, cs_sold_date_sk#4]
@@ -86,7 +86,7 @@ Output [2]: [cc_call_center_sk#9, cc_name#10]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/call_center]
 PushedFilters: [IsNotNull(cc_call_center_sk), IsNotNull(cc_name)]
-ReadSchema: struct<cc_call_center_sk:int,cc_name:string>
+ReadSchema: struct<cc_call_center_sk:bigint,cc_name:string>
 
 (8) ColumnarToRow [codegen id : 2]
 Input [2]: [cc_call_center_sk#9, cc_name#10]
@@ -97,7 +97,7 @@ Condition : (isnotnull(cc_call_center_sk#9) AND isnotnull(cc_name#10))
 
 (10) BroadcastExchange
 Input [2]: [cc_call_center_sk#9, cc_name#10]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=1]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=1]
 
 (11) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [cs_call_center_sk#1]
@@ -122,7 +122,7 @@ Output [3]: [i_item_sk#11, i_brand#12, i_category#13]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [IsNotNull(i_item_sk), IsNotNull(i_category), IsNotNull(i_brand)]
-ReadSchema: struct<i_item_sk:int,i_brand:string,i_category:string>
+ReadSchema: struct<i_item_sk:bigint,i_brand:string,i_category:string>
 
 (16) ColumnarToRow [codegen id : 5]
 Input [3]: [i_item_sk#11, i_brand#12, i_category#13]
@@ -298,7 +298,7 @@ Output [3]: [d_date_sk#6, d_year#7, d_moy#8]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [Or(Or(EqualTo(d_year,1999),And(EqualTo(d_year,1998),EqualTo(d_moy,12))),And(EqualTo(d_year,2000),EqualTo(d_moy,1))), IsNotNull(d_date_sk)]
-ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
+ReadSchema: struct<d_date_sk:bigint,d_year:int,d_moy:int>
 
 (54) ColumnarToRow [codegen id : 1]
 Input [3]: [d_date_sk#6, d_year#7, d_moy#8]
@@ -309,6 +309,6 @@ Condition : ((((d_year#7 = 1999) OR ((d_year#7 = 1998) AND (d_moy#8 = 12))) OR (
 
 (56) BroadcastExchange
 Input [3]: [d_date_sk#6, d_year#7, d_moy#8]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=10]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=10]
 
 

@@ -83,6 +83,10 @@ class VariableResolution(
    *   When true, only variables explicitly referred to in the view definition are accessible.
    * @param referredTempVariableNames When resolving within a view, this contains the list of
    *   variable names that the view explicitly references and should have access to.
+   * @param optionalNamePartIndices The indices of the optional name parts of `nameParts`. A
+   *   missing nested field whose name part is optional resolves to a static NULL. A name with
+   *   an optional part resolves to no variable in the body of a persistent SQL function, see
+   *   `AnalysisContext.isPersistentSQLFunctionBody`.
    *
    * @return Some(Expression) if a variable is successfully resolved, potentially wrapped in
    *   [[ExtractValue]] expressions for nested field access. None if no variable can be resolved
@@ -91,13 +95,17 @@ class VariableResolution(
   def resolveMultipartName(
       nameParts: Seq[String],
       resolvingView: Boolean,
-      referredTempVariableNames: Seq[Seq[String]]): Option[Expression] = {
+      referredTempVariableNames: Seq[Seq[String]],
+      optionalNamePartIndices: Set[Int] = Set.empty): Option[Expression] = {
+    val canResolveToVariable =
+      optionalNamePartIndices.isEmpty || !AnalysisContext.get.isPersistentSQLFunctionBody
     var resolvedVariable: Option[Expression] = None
     // We only support temp variables for now, so the variable name can at most have 3 parts.
     var numInnerFields: Int = math.max(0, nameParts.length - 3)
     // Follow the column resolution and prefer the longest match. This makes sure that users
     // can always use fully qualified variable name to avoid name conflicts.
-    while (resolvedVariable.isEmpty && numInnerFields < nameParts.length) {
+    while (canResolveToVariable && resolvedVariable.isEmpty &&
+        numInnerFields < nameParts.length) {
       resolvedVariable = resolveVariable(
         nameParts = nameParts.dropRight(numInnerFields),
         resolvingView = resolvingView,
@@ -112,8 +120,28 @@ class VariableResolution(
     resolvedVariable.map { variable =>
       if (numInnerFields != 0) {
         val nestedFields = nameParts.takeRight(numInnerFields)
-        nestedFields.foldLeft(variable: Expression) { (e, name) =>
-          ExtractValue(e, Literal(name), conf.resolver)
+        if (optionalNamePartIndices.nonEmpty) {
+          val extracted = OptionalReferences.extractNestedFields(
+            base = variable,
+            nestedFields = nestedFields,
+            firstNestedFieldIndex = nameParts.length - numInnerFields,
+            optionalNamePartIndices = optionalNamePartIndices,
+            resolver = conf.resolver,
+            voidBaseIsNull = false)
+          // The NULL of a missing optional field no longer mentions the variable, which a view or
+          // a SQL function that is being created still depends on, like a variable that an
+          // IDENTIFIER clause reads.
+          variable match {
+            case reference: VariableReference if OptionalReferences.isNullReference(extracted) =>
+              AnalysisContext.get.referredTempVariableNamesUnderIdentifier +=
+                reference.originalNameParts
+            case _ =>
+          }
+          extracted
+        } else {
+          nestedFields.foldLeft(variable: Expression) { (e, name) =>
+            ExtractValue(e, Literal(name), conf.resolver)
+          }
         }
       } else {
         variable
@@ -129,11 +157,7 @@ class VariableResolution(
    * @return Reference to the variable.
    */
   def lookupVariable(nameParts: Seq[String]): Option[VariableReference] = {
-    val namePartsCaseAdjusted = if (conf.caseSensitiveAnalysis) {
-      nameParts
-    } else {
-      nameParts.map(_.toLowerCase(Locale.ROOT))
-    }
+    val namePartsCaseAdjusted = normalizeNameParts(nameParts)
 
     SqlScriptingContextManager
       .get()
@@ -187,18 +211,44 @@ class VariableResolution(
     }
   }
 
+  /**
+   * Returns true if a variable that [[lookupVariable]] resolves can have the qualifier
+   * `qualifier`: `session` or `system.session` for a session variable, or, if
+   * `includeScopeLabels`, the label of an active SQL scripting scope for the variables of the
+   * scope, i.e. of a compound statement or a FOR statement.
+   */
+  def isVariableQualifier(qualifier: Seq[String], includeScopeLabels: Boolean): Boolean = {
+    isSessionVariableQualifier(qualifier) ||
+    includeScopeLabels && qualifier.length == 1 &&
+    !isForbiddenLabelOrForVariableName(qualifier.head) &&
+    SqlScriptingContextManager
+      .get()
+      .flatMap(_.getVariableManager)
+      .exists(_.isScopeLabel(normalizeNameParts(qualifier).head))
+  }
+
+  // Variable names and scope labels are case insensitive unless the analysis is case sensitive.
+  private def normalizeNameParts(nameParts: Seq[String]): Seq[String] = {
+    if (conf.caseSensitiveAnalysis) {
+      nameParts
+    } else {
+      nameParts.map(_.toLowerCase(Locale.ROOT))
+    }
+  }
+
   // The temp variables live in `SYSTEM.SESSION`, and the name can be qualified or not.
   private def maybeTempVariableName(nameParts: Seq[String]): Boolean = {
-    nameParts.length == 1 || {
-      if (nameParts.length == 2) {
-        nameParts.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)
-      } else if (nameParts.length == 3) {
-        nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
-        nameParts(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)
-      } else {
-        false
-      }
-    }
+    nameParts.length == 1 || isSessionVariableQualifier(nameParts.init)
+  }
+
+  private def isSessionVariableQualifier(qualifier: Seq[String]): Boolean = qualifier match {
+    case Seq(namespace) =>
+      namespace.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)
+    case Seq(catalog, namespace) =>
+      catalog.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+      namespace.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)
+    case _ =>
+      false
   }
 
 }

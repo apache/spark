@@ -132,7 +132,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0051",
+  "errorClass" : "UNSUPPORTED_FEATURE.EMPTY_GROUPING_SET_IN_CUBE_OR_ROLLUP",
+  "sqlState" : "0A000",
   "messageParameters" : {
     "element" : "ROLLUP"
   },
@@ -201,7 +202,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0051",
+  "errorClass" : "UNSUPPORTED_FEATURE.EMPTY_GROUPING_SET_IN_CUBE_OR_ROLLUP",
+  "sqlState" : "0A000",
   "messageParameters" : {
     "element" : "CUBE"
   },

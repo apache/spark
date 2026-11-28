@@ -24,6 +24,7 @@ import scala.annotation.tailrec
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{UnsafeArrayData, UnsafeMapData, UnsafeRow}
 import org.apache.spark.sql.catalyst.types.{PhysicalArrayType, PhysicalDataType, PhysicalMapType, PhysicalStructType}
+import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.columnar.compression.CompressibleColumnAccessor
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector
@@ -170,7 +171,11 @@ private[sql] object ColumnAccessor {
       case array: ArrayType => new ArrayColumnAccessor(buf, array)
       case map: MapType => new MapColumnAccessor(buf, map)
       case udt: UserDefinedType[_] => ColumnAccessor(udt.sqlType, buffer)
-      case other => throw QueryExecutionErrors.notSupportTypeError(other)
+      // A framework type stored as a struct, such as FileType, is cached as its representation.
+      case other => TypeOps.rowRepresentation(other) match {
+        case Some(representation) => ColumnAccessor(representation, buffer)
+        case None => throw QueryExecutionErrors.notSupportTypeError(other)
+      }
     }
   }
 

@@ -23,6 +23,31 @@ from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
 class MergeAsOfMixin:
+    def test_merge_asof_tolerance_bound_with_exact_matches_disabled(self):
+        # A right key exactly `tolerance` away from the left key is kept.
+        pdf_left = pd.DataFrame({"a": [5, 10, 20, 30], "left_val": ["p", "q", "r", "s"]})
+        pdf_right = pd.DataFrame({"a": [3, 8, 13, 22, 30], "right_val": [3, 8, 13, 22, 30]})
+        psdf_left = ps.from_pandas(pdf_left)
+        psdf_right = ps.from_pandas(pdf_right)
+
+        for direction in ["backward", "forward", "nearest"]:
+            for allow_exact_matches in [False, True]:
+                with self.subTest(direction=direction, allow_exact_matches=allow_exact_matches):
+                    kwargs = dict(
+                        on="a",
+                        tolerance=2,
+                        direction=direction,
+                        allow_exact_matches=allow_exact_matches,
+                    )
+                    self.assert_eq(
+                        pd.merge_asof(pdf_left, pdf_right, **kwargs)
+                        .sort_values("a")
+                        .reset_index(drop=True),
+                        ps.merge_asof(psdf_left, psdf_right, **kwargs)
+                        .sort_values("a")
+                        .reset_index(drop=True),
+                    )
+
     def test_merge_asof(self):
         pdf_left = pd.DataFrame(
             {"a": [1, 5, 10], "b": ["x", "y", "z"], "left_val": ["a", "b", "c"]}, index=[10, 20, 30]

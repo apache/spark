@@ -138,7 +138,7 @@ class RewriteAsOfJoinSuite extends PlanTest {
 
     val correctAnswer = expectedRewrite(
       filter = OuterReference(left.output(0)) > right.output(0) &&
-        right.output(0) > OuterReference(left.output(0)) - 1,
+        right.output(0) >= OuterReference(left.output(0)) - 1,
       orderExpression = OuterReference(left.output(0)) - right.output(0),
       joinType = Inner)
 
@@ -197,7 +197,7 @@ class RewriteAsOfJoinSuite extends PlanTest {
 
     val correctAnswer = expectedRewrite(
       filter = OuterReference(left.output(0)) < right.output(0) &&
-        right.output(0) < OuterReference(left.output(0)) + 1,
+        right.output(0) <= OuterReference(left.output(0)) + 1,
       orderExpression = right.output(0) - OuterReference(left.output(0)),
       joinType = Inner)
 
@@ -248,8 +248,8 @@ class RewriteAsOfJoinSuite extends PlanTest {
 
     val correctAnswer = expectedRewrite(
       filter = (!(OuterReference(left.output(0)) === right.output(0))) &&
-        ((right.output(0) > OuterReference(left.output(0)) - 1) &&
-          (right.output(0) < OuterReference(left.output(0)) + 1)),
+        ((right.output(0) >= OuterReference(left.output(0)) - 1) &&
+          (right.output(0) <= OuterReference(left.output(0)) + 1)),
       orderExpression = If(OuterReference(left.output(0)) > right.output(0),
         OuterReference(left.output(0)) - right.output(0),
         right.output(0) - OuterReference(left.output(0))),
@@ -265,7 +265,7 @@ class RewriteAsOfJoinSuite extends PlanTest {
     val rewritten = RewriteAsOfJoin(query.analyze)
 
     // nearest + allowExactMatches + tolerance intentionally drops the `true` base condition and
-    // keeps only the two-sided tolerance band (AsOfJoin.makeAsOfCond `case (true, Nearest)`).
+    // keeps only the two-sided tolerance band.
     val correctAnswer = expectedRewrite(
       filter = right.output(0) >= OuterReference(left.output(0)) - 1 &&
         right.output(0) <= OuterReference(left.output(0)) + 1,

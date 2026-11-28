@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.types.{DataType, NumericType}
+import org.apache.spark.sql.types.{AnsiIntervalType, CalendarIntervalType, DataType, DoubleType, IntegralType, NumericType, StringType}
 
 case class TryEval(child: Expression) extends UnaryExpression {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -52,6 +52,83 @@ case class TryEval(child: Expression) extends UnaryExpression {
 
   override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild)
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns the absolute value of `expr`, and NULL on overflow or " +
+    "when a string argument cannot be cast to a number. The acceptable input types are the " +
+    "same as for `abs`.",
+  arguments = """
+    Arguments:
+      * expr - The numeric or interval value to take the absolute value of.
+        An expression that evaluates to a numeric or interval.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(-1);
+       1
+      > SELECT _FUNC_(-2147483648);
+       NULL
+      > SELECT _FUNC_(INTERVAL -'1-1' YEAR TO MONTH);
+       1-1
+  """,
+  since = "4.5.0",
+  group = "math_funcs")
+case class TryAbs(expr: Expression, replacement: Expression)
+  extends RuntimeReplaceable with InheritAnalysisRules {
+  def this(expr: Expression) = this(expr, expr.dataType match {
+    case _: IntegralType | _: AnsiIntervalType => AbsOrNull(expr)
+    // A string is cast to DOUBLE as for `abs`, but by `try_cast`, so that a string that is not a
+    // number gives NULL, as for `try_add`, while an error of the argument itself still surfaces.
+    case _: StringType => Abs(Cast(expr, DoubleType, evalMode = EvalMode.TRY))
+    // The other types that `abs` accepts cannot overflow.
+    case _ => Abs(expr)
+  })
+
+  override def prettyName: String = "try_abs"
+
+  override def parameters: Seq[Expression] = Seq(expr)
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    this.copy(replacement = newChild)
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns the negated value of `expr`, and NULL on overflow or " +
+    "when a string argument cannot be cast to a number. The acceptable input types are the " +
+    "same as for `negative`.",
+  arguments = """
+    Arguments:
+      * expr - The expression to negate.
+        An expression that evaluates to a numeric or interval.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(1);
+       -1
+      > SELECT _FUNC_(-2147483648);
+       NULL
+      > SELECT _FUNC_(INTERVAL '1-1' YEAR TO MONTH);
+       -1-1
+  """,
+  since = "4.5.0",
+  group = "math_funcs")
+case class TryNegative(expr: Expression, replacement: Expression)
+  extends RuntimeReplaceable with InheritAnalysisRules {
+  def this(expr: Expression) = this(expr, expr.dataType match {
+    case _: IntegralType | _: AnsiIntervalType | CalendarIntervalType => NegateOrNull(expr)
+    // A string is cast to DOUBLE by `try_cast`, as in `TryAbs`.
+    case _: StringType => UnaryMinus(Cast(expr, DoubleType, evalMode = EvalMode.TRY))
+    // The other types that `negative` accepts cannot overflow.
+    case _ => UnaryMinus(expr)
+  })
+
+  override def prettyName: String = "try_negative"
+
+  override def parameters: Seq[Expression] = Seq(expr)
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    this.copy(replacement = newChild)
 }
 
 // scalastyle:off line.size.limit

@@ -20,12 +20,12 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Coalesce, If, IsNotNull, Literal, RaiseError}
+import org.apache.spark.sql.catalyst.expressions.{Add, AttributeReference, Cast, Coalesce, EvalMode, If, IsNotNull, IsNull, Literal, NumericEvalContext, RaiseError}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{CharType, StringType, VarcharType}
 import org.apache.spark.unsafe.types.UTF8String
 
 class OuterJoinEliminationSuite extends PlanTest {
@@ -314,5 +314,50 @@ class OuterJoinEliminationSuite extends PlanTest {
     val p3 = x.join(y.groupBy($"d")($"d"), LeftOuter, Some($"a" === $"d"))
       .select($"a", $"d").analyze
     comparePlans(Optimize.execute(p3), p3)
+  }
+
+  test("SPARK-60830: Remove a left/right outer join on a CHAR/VARCHAR key cast to STRING") {
+    withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      // A comparison of a first-class CHAR or VARCHAR column with a STRING casts it to STRING,
+      // which keeps the value, so a side unique on the column stays unique on the cast.
+      val x = LocalRelation($"s".string).subquery("x")
+      Seq(CharType(5), VarcharType(5)).foreach { dt =>
+        val k = AttributeReference("k", dt)()
+        val y = LocalRelation(k).subquery("y")
+        comparePlans(Optimize.execute(
+          x.join(y.groupBy(k)(k), LeftOuter, Some($"s" === Cast(k, StringType)))
+            .select($"s").analyze),
+          x.select($"s").analyze)
+        comparePlans(Optimize.execute(
+          y.groupBy(k)(k).join(x, RightOuter, Some(Cast(k, StringType) === $"s"))
+            .select($"s").analyze),
+          x.select($"s").analyze)
+        // A cast to another collation can make different values equal, so the join stays.
+        val lcase = x.join(y.groupBy(k)(k), LeftOuter,
+          Some(Cast($"s", StringType("UTF8_LCASE")) === Cast(k, StringType("UTF8_LCASE"))))
+          .select($"s").analyze
+        comparePlans(Optimize.execute(lcase), lcase)
+        // A side that projects the cast is unique on it as well.
+        comparePlans(Optimize.execute(
+          x.join(y.groupBy(k)(Cast(k, StringType).as("ks")), LeftOuter, Some($"s" === $"ks"))
+            .select($"s").analyze),
+          x.select($"s").analyze)
+      }
+    }
+  }
+
+  test("SPARK-62241: remove a left outer join whose right side is unique on its equalities, " +
+    "also on one that is not a join key") {
+    // The ANSI addition can fail, so after the throwable conjunct the equality on it is not a
+    // join key (see `ExtractEquiJoinKeys`). Every row that the join outputs satisfies it, though.
+    val x = testRelation.subquery("x")
+    val y = testRelation1.subquery("y")
+    val throwing = If($"a" < 0, IsNull(RaiseError(Literal("neg"))), Literal(true))
+    val addOne = Add($"b", Literal(1), NumericEvalContext(EvalMode.ANSI))
+    comparePlans(Optimize.execute(
+      x.join(y.groupBy($"d", $"e")($"d", $"e"), LeftOuter,
+        Some(throwing && $"a" === $"d" && addOne === $"e"))
+        .select($"a", $"b", $"c").analyze),
+      x.select($"a", $"b", $"c").analyze)
   }
 }

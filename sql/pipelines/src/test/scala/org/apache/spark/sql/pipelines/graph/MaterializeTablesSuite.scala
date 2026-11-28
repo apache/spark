@@ -1215,6 +1215,88 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
     }
   }
 
+  /** A schema with two top-level column comments and a comment on the nested field `s.a`. */
+  private def commentedSchema(
+      xComment: String,
+      yComment: String,
+      nestedComment: String): StructType =
+    new StructType()
+      .add("x", IntegerType, nullable = true, xComment)
+      .add("y", IntegerType, nullable = true, yComment)
+      .add("s", new StructType().add("a", IntegerType, nullable = true, nestedComment))
+
+  /** A schema with a comment on the struct field `arr.element.element.a`. */
+  private def nestedArrayCommentSchema(nestedComment: String): StructType =
+    new StructType()
+      .add("id", IntegerType)
+      .add("arr", ArrayType(ArrayType(
+        new StructType().add("a", IntegerType, nullable = true, nestedComment))))
+
+  private def assertPersistedColumns(name: String, expected: StructType): Unit = {
+    assert(
+      loadTableFromRecordingCatalog(name).columns() sameElements
+        CatalogV2Util.structTypeToV2Columns(expected)
+    )
+  }
+
+  private def withKeepExistingColumnMetadata(enabled: Boolean)(body: => Unit): Unit =
+    withSQLConf(
+      SQLConf.LEGACY_PIPELINES_KEEP_STREAMING_TABLE_COLUMN_METADATA.key -> enabled.toString)(body)
+
+  Seq(false, true).foreach { keepExisting =>
+    test("SPARK-59268: re-materializing a streaming table with column comment changes " +
+      s"(keepExistingColumnMetadata=$keepExisting)") {
+      withKeepExistingColumnMetadata(keepExisting) {
+        withRecordingCatalog {
+          materializeStreamingTable("t", commentedSchema("x1", "y1", "a1"), Map.empty)
+          assert(recordingCatalog.recordedAlters.isEmpty)
+
+          // Change one comment, remove another, and change a nested one.
+          materializeStreamingTable("t", commentedSchema("x2", null, "a2"), Map.empty)
+          if (keepExisting) {
+            assert(recordingCatalog.recordedAlters.isEmpty)
+            assertPersistedColumns("t", commentedSchema("x1", "y1", "a1"))
+          } else {
+            assert(recordingCatalog.recordedAlters.size == 1)
+            val comments = recordingCatalog.recordedAlters.flatten.collect {
+              case c: TableChange.UpdateColumnComment =>
+                c.fieldNames().mkString(".") -> Option(c.newComment())
+            }.toMap
+            assert(comments == Map("x" -> Some("x2"), "y" -> None, "s.a" -> Some("a2")))
+            assertPersistedColumns("t", commentedSchema("x2", null, "a2"))
+          }
+        }
+      }
+    }
+
+    test("SPARK-59268: a comment change under consecutive arrays in a streaming table update " +
+      s"(keepExistingColumnMetadata=$keepExisting)") {
+      withKeepExistingColumnMetadata(keepExisting) {
+        withRecordingCatalog {
+          materializeStreamingTable("t", nestedArrayCommentSchema("c1"), Map.empty)
+          assert(recordingCatalog.recordedAlters.isEmpty)
+
+          if (keepExisting) {
+            // The table's comment is kept, so there is nothing to apply.
+            materializeStreamingTable("t", nestedArrayCommentSchema("c2"), Map.empty)
+          } else {
+            // The comment change on `arr.element.element.a` cannot be applied in place
+            // (SPARK-59188). The update fails naming the field, before any alter.
+            val ex = intercept[TableMaterializationException] {
+              materializeStreamingTable("t", nestedArrayCommentSchema("c2"), Map.empty)
+            }
+            checkError(
+              exception = ex.cause.asInstanceOf[SparkThrowable],
+              condition = "PIPELINE_NESTED_COMPLEX_TYPE_COMMENT_CHANGE_UNSUPPORTED",
+              parameters = Map("columnPath" -> "arr.element.element.a"))
+          }
+          assert(recordingCatalog.recordedAlters.isEmpty)
+          assertPersistedColumns("t", nestedArrayCommentSchema("c1"))
+        }
+      }
+    }
+  }
+
   test("SPARK-58517: re-materializing with a case-only column difference is a no-op under " +
     "case-insensitive resolution") {
     withRecordingCatalog {

@@ -40,7 +40,8 @@ SET TIME ZONE
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0045",
+  "errorClass" : "INVALID_SQL_SYNTAX.SET_TIME_ZONE_INVALID_VALUE",
+  "sqlState" : "42000",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -130,7 +131,8 @@ SET TIME ZONE INTERVAL 10 HOURS 'GMT+1'
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0045",
+  "errorClass" : "INVALID_SQL_SYNTAX.SET_TIME_ZONE_INVALID_VALUE",
+  "sqlState" : "42000",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",

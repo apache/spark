@@ -63,7 +63,7 @@ case class KnownNotContainsNull(child: Expression) extends TaggingExpression {
     copy(child = newChild)
 }
 
-case class KnownFloatingPointNormalized(child: Expression) extends TaggingExpression {
+case class KnownFloatingPointNormalized(child: Expression) extends TaggingExpression with NoThrow {
   override protected def withNewChildInternal(newChild: Expression): KnownFloatingPointNormalized =
     copy(child = newChild)
 }

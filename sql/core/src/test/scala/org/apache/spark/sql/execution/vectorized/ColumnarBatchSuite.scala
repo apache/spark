@@ -36,9 +36,9 @@ import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection}
 import org.apache.spark.sql.catalyst.types.ops.TestStructBackedType
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapBuilder, DateTimeUtils, GenericArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapBuilder, ArrayBasedMapData, DateTimeUtils, GenericArrayData, MapData}
 import org.apache.spark.sql.execution.RowToColumnConverter
 import org.apache.spark.sql.execution.datasources.parquet.VectorizedPlainValuesReader
 import org.apache.spark.sql.types._
@@ -2506,6 +2506,40 @@ class ColumnarBatchSuite extends SparkFunSuite {
         assert(row.getLong(1) === 15L)
       } finally {
         col.close()
+      }
+    }
+  }
+
+  test("SPARK-62034: appendObjects appends each row of a value by the vector's data type") {
+    val wide = Decimal(BigDecimal("99999999999999999999999999999999999999"), 38, 0)
+    val struct = new StructType().add("x", IntegerType).add("y", StringType)
+    Seq[(DataType, Any)](
+      IntegerType -> 7,
+      DecimalType(38, 0) -> wide,
+      BinaryType -> Array[Byte](1, 2),
+      struct -> InternalRow(1, null),
+      ArrayType(IntegerType) -> new GenericArrayData(Array[Any](1, null, 3)),
+      ArrayType(struct) -> new GenericArrayData(Array[Any](InternalRow(1, null), null)),
+      MapType(StringType, IntegerType) -> ArrayBasedMapData(
+        Array[Any](UTF8String.fromString("a"), UTF8String.fromString("b")), Array[Any](null, 2)),
+      MapType(StringType, DecimalType(38, 0)) -> ArrayBasedMapData(
+        Array[Any](UTF8String.fromString("a")), Array[Any](wide))
+    ).foreach { case (dt, value) =>
+      val toUnsafe = UnsafeProjection.create(Array(dt))
+      val expected = toUnsafe(InternalRow(value)).copy()
+      Seq(MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP).foreach { mode =>
+        val vector = allocate(4, dt, mode)
+        try {
+          vector.appendObjects(3, value)
+          assert(vector.getElementsAppended == 3, s"$dt, $mode")
+          val row = new ColumnarBatchRow(Array(vector))
+          (0 until 3).foreach { i =>
+            row.rowId = i
+            assert(toUnsafe(row) == expected, s"$dt, $mode, row $i")
+          }
+        } finally {
+          vector.close()
+        }
       }
     }
   }

@@ -891,31 +891,50 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
    * `SupportsPushDownRequiredColumns`) and `pushedPredicates` / `pushedFilterExpressions`
    * (deterministic filters, re-pushed via `SupportsPushDownV2Filters`). A pushed aggregate, join or
    * variant never reaches here -- their build rules run first. When a new pushdown capability adds
-   * plain-scan state to [[ScanBuilderHolder]], list it in [[hasRowSelectingPushdown]] when it
-   * decides which rows the scan returns, which keeps the scan not-mergeable too. List it here when
-   * a merge cannot reproduce it but it works on each row by itself.
+   * plain-scan state to [[ScanBuilderHolder]], record it in `getPushedDownOperators` and list it
+   * in [[hasRowSelectingOperators]] when it decides which rows the scan returns, which keeps the
+   * scan not-mergeable too. List it here when a merge cannot reproduce it but it works on each row
+   * by itself.
    */
   private def hasBlockingPushdown(holder: ScanBuilderHolder): Boolean =
     hasRowSelectingPushdown(holder)
 
   /**
    * Whether the scan took a pushed operation that decides which rows it returns, rather than one
-   * that works on each row by itself:
-   *   - `pushedLimit`            -- pushed LIMIT
-   *   - `pushedOffset`           -- pushed OFFSET
-   *   - `pushedSample`           -- pushed table sample
-   *   - `sortOrders`             -- pushed sort order (top-N / ordering)
+   * that works on each row by itself: a pushed LIMIT, OFFSET, table sample or sort order (top-N),
+   * also in a side of a pushed join. It reads the operators that `getPushedDownOperators` records.
    *
    * It decides the `onlyRowWisePushdowns` flag of the plain and the variant-extraction scans, see
    * [[DataSourceV2ScanRelation.onlyRowWisePushdowns]], and blocks merging, see
    * [[hasBlockingPushdown]]. A pushed aggregate or join never reaches those builds, and their scans
-   * keep the flag's default.
+   * keep the flag's default. The aggregate and the join builds set `repeatableRead` from it
+   * instead, the aggregate build together with [[isDeterministicAggregation]], see
+   * [[DataSourceV2ScanRelation.repeatableRead]]. Limit, offset and top-N pushdowns run before the
+   * aggregate and the join builds, so those builds see a limit, offset or top-N pushed above an
+   * aggregate or join. An operation pushed into a side of a pushed join is kept with that side's
+   * pushed operators, whichever pushdowns run before `pushDownJoin`.
    */
   private def hasRowSelectingPushdown(holder: ScanBuilderHolder): Boolean =
-    holder.pushedLimit.isDefined ||
-      holder.pushedOffset.isDefined ||
-      holder.pushedSample.isDefined ||
-      holder.sortOrders.nonEmpty
+    hasRowSelectingOperators(getPushedDownOperators(holder))
+
+  private def hasRowSelectingOperators(operators: PushedDownOperators): Boolean =
+    operators.limit.isDefined ||
+      operators.offset.isDefined ||
+      operators.sample.isDefined ||
+      operators.sortValues.nonEmpty ||
+      operators.joinedRelationPushedDownOperators.exists(hasRowSelectingOperators)
+
+  // Whether every pushed group-by expression and aggregate function is deterministic.
+  // `V2Aggregator` does not take `BoundFunction.isDeterministic` into its `deterministic`, so it is
+  // checked here.
+  // TODO(SPARK-62133): check only `deterministic` once `V2Aggregator` takes `isDeterministic`.
+  private def isDeterministicAggregation(holder: ScanBuilderHolder): Boolean =
+    holder.pushedAggOutputMap.values.forall { e =>
+      e.deterministic && !e.exists {
+        case v: aggregate.V2Aggregator[_, _] => !v.aggrFunc.isDeterministic
+        case _ => false
+      }
+    }
 
   def buildScanWithPushedAggregate(plan: LogicalPlan): LogicalPlan = plan.transform {
     case holder: ScanBuilderHolder if holder.pushedAggregate.isDefined =>
@@ -931,7 +950,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       // changes to aggregate columns. When validConstraints is wired up, this needs revisiting.
       // A pushed aggregate cannot be reproduced by rebuilding the scan, so this scan stays
       // not-mergeable (the default `mergeableScan = false`).
-      val scanRelation = DataSourceV2ScanRelation(holder.relation, wrappedScan, realOutput)
+      val scanRelation = DataSourceV2ScanRelation(holder.relation, wrappedScan, realOutput,
+        repeatableRead = !hasRowSelectingPushdown(holder) && isDeterministicAggregation(holder))
       val projectList = realOutput.zip(holder.output).map { case (a1, a2) =>
         // The data source may return columns with arbitrary data types and it's safer to cast them
         // to the expected data type.
@@ -952,7 +972,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       // changes with pushed join. When validConstraints is wired up, this needs revisiting.
       // A pushed join cannot be reproduced by rebuilding the scan, so this scan stays not-mergeable
       // (the default `mergeableScan = false`).
-      val scanRelation = DataSourceV2ScanRelation(holder.relation, wrappedScan, realOutput)
+      val scanRelation = DataSourceV2ScanRelation(holder.relation, wrappedScan, realOutput,
+        repeatableRead = !hasRowSelectingPushdown(holder))
 
       // When join is pushed down, the real output is going to be, for example,
       // SALARY_01234#0, NAME_ab123#1, DEPT_cd123#2.

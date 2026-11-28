@@ -323,13 +323,16 @@ object SpecialDatetimeValues extends Rule[LogicalPlan] {
   /** Whether this rule may replace a cast to `dt`. */
   private[sql] def rewrites(dt: DataType): Boolean = conv.isDefinedAt(dt)
 
+  /** Whether this rule replaces a cast of `s` to `dt` with the value of a special value. */
+  private def replaces(s: UTF8String, dt: DataType): Boolean =
+    conv.lift(dt).exists(_(s.toString, java.time.ZoneOffset.UTC).isDefined)
+
   /**
    * Whether this rule replaces a cast of `s` to `dt` with a value that reads the current date, that
    * is, the value of a special value other than 'epoch'.
    */
   private[sql] def readsCurrentDate(s: UTF8String, dt: DataType): Boolean =
-    conv.lift(dt).exists(_(s.toString, java.time.ZoneOffset.UTC).isDefined) &&
-      !DateTimeUtils.isEpochSpecialValue(s.toString)
+    replaces(s, dt) && !DateTimeUtils.isEpochSpecialValue(s.toString)
 
   /**
    * The constant string that `cast` casts, or None if it casts something else or evaluating the
@@ -344,6 +347,38 @@ object SpecialDatetimeValues extends Rule[LogicalPlan] {
         case NonFatal(_) => None
       }
     case _ => None
+  }
+
+  /**
+   * The special value that `cast` casts, such as 'today' or 'epoch', which this rule replaces with
+   * its value, or None if it casts something else.
+   */
+  private[sql] def specialValueOf(cast: Cast): Option[UTF8String] =
+    if (rewrites(cast.dataType)) constantString(cast).filter(replaces(_, cast.dataType)) else None
+
+  /**
+   * The value of `s` cast to `dt` if `s` is 'epoch', whose value depends neither on the time zone
+   * nor on the current date, or None otherwise.
+   */
+  private def epochValue(s: UTF8String, dt: DataType): Option[Literal] =
+    if (DateTimeUtils.isEpochSpecialValue(s.toString)) {
+      conv.lift(dt).flatMap(_(s.toString, java.time.ZoneOffset.UTC)).map(Literal(_, dt))
+    } else {
+      None
+    }
+
+  /**
+   * Replaces a cast of 'epoch' in `expression` with its value, as this rule does, unless Spark
+   * cannot tell that its string does not depend on the context, such as the current date. It
+   * keeps the other casts that this rule may replace, and does not look into them. An expression
+   * that the optimizer failed to fold is kept as it is, as Spark evaluates it.
+   */
+  private[sql] def withEpochValues(expression: Expression): Expression = expression match {
+    case e if !e.containsPattern(CAST) || e.containsTag(ConstantFolding.FAILED_TO_EVALUATE) => e
+    case cast @ Cast(e, dt, _, _) if rewrites(dt) && isConstantString(e) =>
+      val special = if (e.contextIndependentFoldable) cast.specialDatetimeValue else None
+      special.flatMap(epochValue(_, dt)).getOrElse(cast)
+    case other => other.mapChildren(withEpochValues)
   }
 
   private val specialDatetimeRewrite: PartialFunction[Expression, Expression] = {

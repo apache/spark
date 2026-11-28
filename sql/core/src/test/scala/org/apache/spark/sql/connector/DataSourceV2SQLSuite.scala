@@ -1729,7 +1729,8 @@ class DataSourceV2SQLSuiteV1Filter
               exception = intercept[ParseException] {
                 sql(sql1)
               },
-              condition = "_LEGACY_ERROR_TEMP_0032",
+              condition = "DUPLICATE_TABLE_PATH",
+              sqlState = "42613",
               parameters = Map("pathOne" -> "foo", "pathTwo" -> "bar"),
               context = ExpectedContext(
                 fragment = sql1,
@@ -1742,7 +1743,8 @@ class DataSourceV2SQLSuiteV1Filter
               exception = intercept[ParseException] {
                 sql(sql2)
               },
-              condition = "_LEGACY_ERROR_TEMP_0032",
+              condition = "DUPLICATE_TABLE_PATH",
+              sqlState = "42613",
               parameters = Map("pathOne" -> "foo", "pathTwo" -> "bar"),
               context = ExpectedContext(
                 fragment = sql2,

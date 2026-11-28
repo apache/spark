@@ -18,7 +18,7 @@
 package org.apache.spark.sql.metricview.util
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.analysis.{OptionalReferences, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
@@ -36,6 +36,7 @@ object MetricViewPlanner {
       sqlParser: ParserInterface): (MetricViewPlaceholder, MetricView) = {
     val (metricView, dataModelPlan) = parseYAML(yaml, sqlParser)
     val inputColumns = buildInputColumns(metricView, sqlParser)
+    rejectOptionalReferences(dataModelPlan, inputColumns)
     val placeholder = MetricViewPlaceholder(
       metadata,
       inputColumns,
@@ -44,6 +45,29 @@ object MetricViewPlanner {
       isCreate = true
     )
     (placeholder, metricView)
+  }
+
+  /**
+   * Rejects the optional references (`x?`) of a metric view definition. Unlike the query of a
+   * view, which is analyzed on its own, the definition is resolved as a part of each query that
+   * reads the metric view. A `?` that matched nothing when the metric view was created could then
+   * resolve against the session of a reader, e.g. to one of its variables, and would count as an
+   * optional reference of the reading query, e.g. in the source of a DataFrame MERGE.
+   */
+  private def rejectOptionalReferences(
+      dataModelPlan: LogicalPlan,
+      inputColumns: Seq[InputColumn]): Unit = {
+    OptionalReferences
+      .unresolvedOptionalReference(dataModelPlan)
+      .orElse {
+        inputColumns.iterator
+          .flatMap(column => OptionalReferences.unresolvedOptionalReference(column.expr))
+          .nextOption()
+      }
+      .foreach { reference =>
+        throw QueryCompilationErrors.optionalReferenceInDdlNotSupportedError(
+          "METRIC VIEW", reference.origin)
+      }
   }
 
   def planRead(

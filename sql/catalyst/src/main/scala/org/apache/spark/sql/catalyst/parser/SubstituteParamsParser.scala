@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
-import org.antlr.v4.runtime.{CharStreams, CommonTokenStream}
+import org.antlr.v4.runtime.{CharStreams, CommonTokenStream, ParserRuleContext}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
@@ -33,6 +33,23 @@ object ParameterExpectation extends Enumeration {
 }
 
 /**
+ * The result of a parameter substitution.
+ *
+ * @param sqlText The SQL text with the values of the parameter markers.
+ * @param consumedPositionalParams The number of positional values that were substituted.
+ * @param positionMapper Maps the positions in `sqlText` back to the original SQL text.
+ * @param parsedWithOptionalReferences Whether the original SQL text was parsed with optional
+ *   references (`x?`), see `AbstractParser.restartWithOptionalReferences`. The parser must parse
+ *   `sqlText` with them too: the substitution of an optional named parameter marker (`:x?`) can
+ *   remove the syntax that selected them, and every other `?` must keep its meaning.
+ */
+case class ParameterSubstitution(
+    sqlText: String,
+    consumedPositionalParams: Int,
+    positionMapper: PositionMapper,
+    parsedWithOptionalReferences: Boolean)
+
+/**
  * A parameter substitution parser that replaces parameter markers in SQL text with their values.
  * This parser finds parameter markers and substitutes them with provided values to produce
  * a modified SQL string ready for execution.
@@ -46,8 +63,9 @@ class SubstituteParamsParser extends Logging {
    * @param sqlText          The original SQL text containing parameter markers
    * @param namedParams      Map of named parameter values (paramName -> value)
    * @param positionalParams List of positional parameter values in order
-   * @return A tuple of (modified SQL string with parameters substituted,
-   *                   number of consumed positional parameters)
+   * @return The SQL text with the parameters substituted, the number of consumed positional
+   *   parameters, the position mapper, and whether the statement was parsed with optional
+   *   references, see [[ParameterSubstitution]]
    */
   def substitute(
       sqlText: String,
@@ -56,11 +74,12 @@ class SubstituteParamsParser extends Logging {
       expectationType: ParameterExpectation.Value = ParameterExpectation.Unknown,
       allParametersAreNamed: Boolean = true,
       originalArgs: Seq[Any] = Seq.empty,
-      originalParamNames: Seq[String] = Seq.empty): (String, Int, PositionMapper) = {
+      originalParamNames: Seq[String] = Seq.empty): ParameterSubstitution = {
 
     // Quick pre-check: if there are no parameter markers in the text, skip parsing entirely
     if (!sqlText.contains("?") && !sqlText.contains(":")) {
-      return (sqlText, 0, PositionMapper.identity(sqlText))
+      return ParameterSubstitution(sqlText, 0, PositionMapper.identity(sqlText),
+        parsedWithOptionalReferences = false)
     }
 
     val lexer = new SqlBaseLexer(new UpperCaseCharStream(CharStreams.fromString(sqlText)))
@@ -73,12 +92,44 @@ class SubstituteParamsParser extends Logging {
     // Use shared parser configuration to ensure consistency with main parser.
     AbstractParser.configureParser(parser, sqlText, tokenStream, SQLConf.get)
 
-    val astBuilder = new SubstituteParmsAstBuilder()
-
     // Use shared two-stage parsing strategy for consistent error handling.
-    val ctx = AbstractParser.executeWithTwoStageStrategy(parser, tokenStream,
-      _.compoundOrSingleStatement())
-    val parameterLocations = astBuilder.extractParameterLocations(ctx)
+    def parseParameterLocations(): (ParserRuleContext, ParameterLocationInfo) = {
+      val ctx = AbstractParser.executeWithTwoStageStrategy(parser, tokenStream,
+        _.compoundOrSingleStatement())
+      (ctx, new SubstituteParmsAstBuilder().extractParameterLocations(ctx))
+    }
+    val (ctx, parameterLocations) = parseParameterLocations() match {
+      // A rule that accepts any tokens, such as `SET .*?`, parses a statement such as
+      // `SET VAR v = :p?`, which is not valid without optional references. Only the parser that
+      // builds the plan can tell, so parse a statement with a `?` that the grammar did not parse
+      // as a parameter marker again with optional references. The markers of a DECLARE CURSOR
+      // query are bound when the cursor is opened, so they have no locations here, but they are
+      // parameter markers too.
+      case _
+          if parser.optional_references_enabled &&
+            AbstractParser.questions(tokenStream).length >
+            AbstractParser.positionalParameterMarkerCount(parser) &&
+            AbstractParser.restartWithOptionalReferences(parser, tokenStream) =>
+        parseParameterLocations()
+      case parsed =>
+        parsed
+    }
+    // In a statement with optional references, a `?` after an identifier or a non-reserved keyword
+    // is an optional reference where the syntax allows a reference. The remaining markers must
+    // not take the values of such a `?` silently, so a value without a marker is an error. With
+    // named markers, every value binds by name instead: EXECUTE IMMEDIATE passes its named USING
+    // values as positional values too, and a value or a marker that cannot bind is an error below.
+    val numPositionalMarkers = parameterLocations.positionalParameterLocations.length
+    if (parameterLocations.hasOptionalReferences &&
+        parameterLocations.namedParameterLocations.isEmpty &&
+        positionalParams.length > numPositionalMarkers) {
+      throw QueryCompilationErrors.unusedSqlParameterValuesError(
+        numPositionalMarkers, positionalParams.length)
+    }
+    // Optional named parameter markers are substituted before the AstBuilder sees them.
+    if (parameterLocations.namedParameterLocations.values.exists(_.exists(_.optional))) {
+      OptionalReferenceValidation.validateNamedParameterMarkers(ctx, sqlText)
+    }
 
     // Simple mixed parameter detection based on expectation type
     val hasNamed = parameterLocations.namedParameterLocations.nonEmpty
@@ -113,7 +164,8 @@ class SubstituteParamsParser extends Logging {
     // Create position mapper for error context translation.
     val positionMapper = PositionMapper(sqlText, substitutedSql, appliedSubstitutions)
 
-    (substitutedSql, consumedPositionalParams, positionMapper)
+    ParameterSubstitution(substitutedSql, consumedPositionalParams, positionMapper,
+      parsedWithOptionalReferences = AbstractParser.parsedWithOptionalReferences(tokenStream))
   }
 
   /**
@@ -134,11 +186,16 @@ class SubstituteParamsParser extends Logging {
         case Some(value) =>
           // Substitute all occurrences of this parameter
           locationList.foreach { location =>
-            substitutions += Substitution(location, value)
+            substitutions += Substitution(location, namedReplacement(sqlText, location, value))
           }
+        case None if locationList.forall(_.optional) =>
+          // An optional named parameter marker (`:name?`) without a value stays in the text, so
+          // that the analysis resolves it to the NULL of a missing reference, as it does without
+          // parameter values. A text `NULL` would be a NULL value: a VARIANT path of it would fail,
+          // and the DML check could not reject it in a source that is analyzed before a MERGE.
         case None =>
-          // Use the first location for error reporting
-          val location = locationList.head
+          // Use the first location that is not optional for error reporting
+          val location = locationList.find(!_.optional).getOrElse(locationList.head)
           val queryContext = SQLQueryContext(
             line = None,
             startPosition = None,
@@ -185,6 +242,25 @@ class SubstituteParamsParser extends Logging {
   }
 
   /**
+   * Returns the text that replaces the named parameter marker at `location` with `value`. Unlike
+   * a parameter name, the `?` of an optional marker can be directly followed by a keyword or an
+   * identifier, as in `:x?AND`, which must not become a part of the value.
+   */
+  private def namedReplacement(
+      sqlText: String,
+      location: ParameterLocation,
+      value: String): String = {
+    val isFollowedByWord = location.optional && {
+      val nextIndex = sqlText.offsetByCodePoints(0, location.end)
+      nextIndex < sqlText.length && {
+        val nextCodePoint = sqlText.codePointAt(nextIndex)
+        Character.isLetterOrDigit(nextCodePoint) || nextCodePoint == '_'
+      }
+    }
+    if (isFollowedByWord) s"$value " else value
+  }
+
+  /**
    * Apply a list of substitutions to the SQL text.
    * Inserts a space separator when a parameter is immediately preceded by a quote
    * to avoid back-to-back quotes after substitution.
@@ -222,6 +298,6 @@ object SubstituteParamsParser {
   def substitute(
       sqlText: String,
       namedParams: Map[String, String] = Map.empty,
-      positionalParams: List[String] = List.empty): (String, Int, PositionMapper) =
+      positionalParams: List[String] = List.empty): ParameterSubstitution =
     instance.substitute(sqlText, namedParams, positionalParams)
 }

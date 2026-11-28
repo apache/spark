@@ -116,7 +116,12 @@ class ResolveReferencesInAggregate(val catalogManager: CatalogManager) extends S
       groupExprs.map { g =>
         g.transformWithPruning(_.containsPattern(UNRESOLVED_ATTRIBUTE)) {
           case u: UnresolvedAttribute =>
-            selectList.find(ne => conf.resolver(ne.name, u.name)).getOrElse(u)
+            // The name of an optional reference that is not found is not a GROUP BY alias.
+            selectList
+              .find { ne =>
+                conf.resolver(ne.name, u.name) && !OptionalReferences.isNullReferenceAlias(ne)
+              }
+              .getOrElse(u)
         }
       }
     } else {

@@ -39,6 +39,10 @@ private case class TeradataDialect() extends JdbcDialect with NoLegacyJDBCError 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
 
+  // Teradata's casts to integral types already truncate.
+  override def truncateFractionalValue(expr: String, from: NumericType): Option[String] =
+    Some(expr)
+
   override def isObjectNotFoundException(e: SQLException): Boolean = {
     e.getErrorCode == 3807
   }

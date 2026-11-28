@@ -19,7 +19,8 @@ package org.apache.spark.sql.streaming
 
 import java.sql.Timestamp
 
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.{classic, AnalysisException, Row}
+import org.apache.spark.sql.catalyst.plans.logical.AsOfJoin
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.SQLConf
 
@@ -98,6 +99,63 @@ class StreamingAsOfJoinSuite extends StreamTest {
           Row(timestamp("2026-06-29 10:00:09"), "GOOG", 40, null),
           Row(timestamp("2026-06-29 10:00:11"), "AAPL", 200, 18015)))
     }
+  }
+
+  Seq("inner", "left").foreach { joinType =>
+    test(s"SPARK-62248: stream-static DataFrame $joinType as-of join") {
+      withTradeQuoteViews { input =>
+        val trades = spark.table("streaming_trades")
+        val quotes = spark.table("static_quotes")
+        val joined = trades.joinAsOf(
+          quotes, trades("trade_time"), quotes("quote_time"),
+          joinExprs = trades("symbol") === quotes("symbol"), joinType = joinType,
+          tolerance = null, allowExactMatches = true, direction = "backward"
+        ).select(trades("trade_time"), trades("symbol"), trades("quantity"), quotes("bid_price"))
+        val unmatched = Row(timestamp("2026-06-29 09:59:59"), "AAPL", 30, null)
+
+        testStream(joined)(
+          AddData(input,
+            (timestamp("2026-06-29 10:00:05"), "AAPL", 100),
+            (timestamp("2026-06-29 10:00:09"), "MSFT", 50),
+            (timestamp("2026-06-29 09:59:59"), "AAPL", 30)),
+          CheckNewAnswer(Seq(
+            Row(timestamp("2026-06-29 10:00:05"), "AAPL", 100, 18010),
+            Row(timestamp("2026-06-29 10:00:09"), "MSFT", 50, 42050)) ++
+            (if (joinType == "left") Seq(unmatched) else Nil): _*))
+      }
+    }
+  }
+
+  test("SPARK-62248: legacy conf rewrites a stream-static DataFrame as-of join to a subquery") {
+    withTradeQuoteViews { _ =>
+      Seq(false, true).foreach { legacy =>
+        withSQLConf(
+            SQLConf.LEGACY_AS_OF_JOIN_REWRITE_STREAMING_LEFT_TO_SUBQUERY.key -> legacy.toString) {
+          val trades = spark.table("streaming_trades")
+          val quotes = spark.table("static_quotes")
+          val joined = trades.joinAsOf(
+            quotes, trades("trade_time"), quotes("quote_time"),
+            joinExprs = trades("symbol") === quotes("symbol"), joinType = "inner",
+            tolerance = null, allowExactMatches = true, direction = "backward")
+          val asOfJoin = joined.queryExecution.analyzed.collectFirst { case j: AsOfJoin => j }
+          assert(asOfJoin.get.requiresSortMergeAsOfJoin == !legacy)
+        }
+      }
+    }
+  }
+
+  test("stream-static DataFrame LEFT ASOF join with using columns returns one key column") {
+    val input = MemoryStream[(Int, String, Int)]
+    val trades = input.toDF().toDF("ts", "sym", "qty").asInstanceOf[classic.DataFrame]
+    val quotes = Seq((2, "A", 100), (4, "A", 200)).toDF("ts", "sym", "bid")
+      .asInstanceOf[classic.DataFrame]
+    val joined = trades.joinAsOf(
+      quotes, trades.col("ts"), quotes.col("ts"), usingColumns = Seq("sym"),
+      joinType = "left", tolerance = null, allowExactMatches = true, direction = "backward")
+    assert(joined.columns.toSeq == Seq("sym", "ts", "qty", "ts", "bid"))
+    testStream(joined)(
+      AddData(input, (5, "A", 1), (5, "B", 2)),
+      CheckNewAnswer(Row("A", 5, 1, 4, 200), Row("B", 5, 2, null, null)))
   }
 
   Seq("INNER", "LEFT").foreach { joinType =>

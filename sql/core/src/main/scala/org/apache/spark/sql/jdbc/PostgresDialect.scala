@@ -55,6 +55,11 @@ private case class PostgresDialect()
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
 
+  // Postgres rounds when casting to an integral type (float8 half to even, numeric half away from
+  // zero).
+  override def truncateFractionalValue(expr: String, from: NumericType): Option[String] =
+    Some(s"TRUNC($expr)")
+
   override def isObjectNotFoundException(e: SQLException): Boolean = {
     e.getSQLState == "42P01" ||
       e.getSQLState == "3F000" ||
@@ -270,6 +275,10 @@ private case class PostgresDialect()
     // SQLSTATE 42000 covers both syntax errors and access-rule violations, so preserve the
     // original exception for that ambiguous state.
     exception.getSQLState == "42601"
+  }
+
+  override def isPermissionDeniedException(e: SQLException): Boolean = {
+    e.getSQLState == "42501"
   }
 
   // SHOW INDEX syntax

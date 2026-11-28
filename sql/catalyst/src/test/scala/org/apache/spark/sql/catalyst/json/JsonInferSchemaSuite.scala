@@ -163,4 +163,30 @@ class JsonInferSchemaSuite extends SparkFunSuite with SQLHelper {
       assert(JsonInferSchema.compatibleType(timeType, NullType) === timeType)
     }
   }
+
+  test("SPARK-59546: TimeType inference handles custom and unusable formats") {
+    Seq("true", "false").foreach { enabled =>
+      withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> enabled) {
+        checkType(
+          Map("inferTimestamp" -> "true", "timeFormat" -> "EEE HH:mm"),
+          """{"a": "plain"}""",
+          StringType)
+        // An unusable format skips TIME rather than falling back to the default formatter.
+        checkType(
+          Map("inferTimestamp" -> "true", "timeFormat" -> "EEE HH:mm"),
+          """{"a": "12:13:14"}""",
+          TimestampType)
+      }
+    }
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      checkType(
+        Map("inferTimestamp" -> "true", "timeFormat" -> "hh:mm:ss"),
+        """{"a": "11:30:01"}""",
+        TimeType(TimeType.DEFAULT_PRECISION))
+      checkType(
+        Map("inferTimestamp" -> "true", "timeFormat" -> "hh:mm:ss"),
+        """{"a": "17:30:01"}""",
+        TimestampType)
+    }
+  }
 }
