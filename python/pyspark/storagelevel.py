@@ -55,6 +55,62 @@ class StorageLevel:
         self.deserialized = deserialized
         self.replication = replication
 
+    @staticmethod
+    def fromString(name: str) -> "StorageLevel":
+        """
+        Create a storage level from its Scala name, including ``NONE``.
+
+        .. versionadded:: 4.5.0
+
+        Parameters
+        ----------
+        name : str
+            Case-sensitive storage level name accepted by Scala's ``StorageLevel.fromString``.
+
+        Returns
+        -------
+        :class:`StorageLevel`
+            Storage level with the corresponding memory, disk, serialization, and replication flags.
+
+        Notes
+        -----
+        Memory-based Scala levels without ``_SER`` use deserialized storage. ``MEMORY_AND_DISK``
+        corresponds to :attr:`StorageLevel.MEMORY_AND_DISK_DESER`, while ``MEMORY_AND_DISK_SER``
+        corresponds to :attr:`StorageLevel.MEMORY_AND_DISK`.
+
+        Examples
+        --------
+        >>> StorageLevel.fromString("DISK_ONLY") == StorageLevel.DISK_ONLY
+        True
+        >>> StorageLevel.fromString("MEMORY_AND_DISK") == StorageLevel.MEMORY_AND_DISK_DESER
+        True
+        >>> StorageLevel.fromString("NONE") == StorageLevel.NONE
+        True
+        """
+        from pyspark.errors import PySparkValueError
+
+        levels = {
+            "NONE": StorageLevel.NONE,
+            "DISK_ONLY": StorageLevel.DISK_ONLY,
+            "DISK_ONLY_2": StorageLevel.DISK_ONLY_2,
+            "DISK_ONLY_3": StorageLevel.DISK_ONLY_3,
+            "MEMORY_ONLY": StorageLevel(False, True, False, True),
+            "MEMORY_ONLY_2": StorageLevel(False, True, False, True, 2),
+            "MEMORY_ONLY_SER": StorageLevel.MEMORY_ONLY,
+            "MEMORY_ONLY_SER_2": StorageLevel.MEMORY_ONLY_2,
+            "MEMORY_AND_DISK": StorageLevel.MEMORY_AND_DISK_DESER,
+            "MEMORY_AND_DISK_2": StorageLevel(True, True, False, True, 2),
+            "MEMORY_AND_DISK_SER": StorageLevel.MEMORY_AND_DISK,
+            "MEMORY_AND_DISK_SER_2": StorageLevel.MEMORY_AND_DISK_2,
+            "OFF_HEAP": StorageLevel.OFF_HEAP,
+        }
+        if name not in levels:
+            raise PySparkValueError(
+                errorClass="VALUE_NOT_ALLOWED",
+                messageParameters={"arg_name": "name", "allowed_values": str(list(levels))},
+            )
+        return levels[name]
+
     def __repr__(self) -> str:
         return "StorageLevel(%s, %s, %s, %s, %s)" % (
             self.useDisk,
