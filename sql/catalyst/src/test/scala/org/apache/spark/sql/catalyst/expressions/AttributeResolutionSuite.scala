@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StructField, StructType}
 
 class AttributeResolutionSuite extends SparkFunSuite {
   val resolver = caseInsensitiveResolution
@@ -182,6 +182,23 @@ class AttributeResolutionSuite extends SparkFunSuite {
     attrs.resolve(Seq("a", "b"), resolver) match {
       case Some(attr) => assert(attr.semanticEquals(attrs(1)))
       case _ => fail()
+    }
+  }
+
+  test("getAllCandidatesForResolution keeps the candidates with the __is_duplicate tag") {
+    val tag = new MetadataBuilder().putNull("__is_duplicate").build()
+    // A qualifier with more than three parts takes the other way of matching names.
+    Seq(Seq("t"), Seq("cat", "db1", "db2", "t")).foreach { qualifier =>
+      val a = AttributeReference("a", IntegerType)(qualifier = qualifier)
+      val duplicate = AttributeReference("a", IntegerType, metadata = tag)(qualifier = qualifier)
+      val attrs = Seq(a, duplicate)
+      Seq(Seq("a"), Seq("t", "a")).foreach { nameParts =>
+        assert(attrs.getCandidatesForResolution(nameParts, resolver) == (Seq(a), Nil))
+        assert(attrs.getAllCandidatesForResolution(nameParts, resolver) ==
+          (Seq(a, duplicate), Nil))
+      }
+      assert(attrs.getAllCandidatesForResolution(Seq("t", "a", "f"), resolver) ==
+        (Seq(a, duplicate), Seq("f")))
     }
   }
 }

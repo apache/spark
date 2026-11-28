@@ -341,7 +341,7 @@ VALUES (0), (1) tab(col)
 ```
 
 Drops columns of the input table by name. Each such column reference must appear in the input table
-exactly once.
+at least once. If more than one column of the input table matches it, `DROP` drops all of them.
 
 This is similar to `SELECT * EXCEPT (column)` in regular Spark SQL.
 

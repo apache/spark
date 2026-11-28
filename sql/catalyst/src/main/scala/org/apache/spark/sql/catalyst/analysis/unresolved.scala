@@ -654,7 +654,8 @@ trait UnresolvedStarBase extends Star with Unevaluable {
  *              targets' columns are produced. This can only be a table name. This
  *              is a list of identifiers that is the path of the expansion.
  *
- * @param excepts a list of names that should be excluded from the expansion.
+ * @param excepts a list of names that should be excluded from the expansion. Without
+ *                replacements, each name excludes every column that it matches.
  *
  * @param replacements an optional list of expressions that should be used to replace the
  *                     expressions removed by EXCEPT. If present, the length of this list must
@@ -690,10 +691,19 @@ case class UnresolvedStarExceptOrReplace(
     val expandedCols = super.expandStar(parameters)
     val expandedAttributes = AttributeSeq(expandedCols.map(_.toAttribute))
 
+    // Returns every column that `exceptParts` matches, and the nested fields to except from them.
+    // Unlike name resolution, this keeps the columns with the `__is_duplicate` tag when the name
+    // matches others too. [[DeduplicateUnionChildOutput]] gives that tag and a new ExprId to the
+    // second copy of a column that a UNION branch outputs twice.
+    def matchingColumns(exceptParts: Seq[String]): (Seq[Attribute], Seq[String]) =
+      expandedAttributes.getAllCandidatesForResolution(exceptParts, parameters.resolver)
+
     // A name with a replacement that matches two copies of one column is ambiguous, as it is for
-    // two different columns with the name. `column` is the column that it resolves to, if any.
-    def failIfNameMatchesCopies(exceptParts: Seq[String], column: Option[Attribute]): Unit = {
-      val copies = columnCopies(exceptParts, column, expandedAttributes.attrs, parameters.resolver)
+    // two different columns with the name. A copy is either the same attribute again, as in
+    // `SELECT x, x`, or a tagged copy from a UNION branch.
+    def failIfNameMatchesCopies(exceptParts: Seq[String]): Unit = {
+      val matches = AttributeSet(matchingColumns(exceptParts)._1)
+      val copies = expandedAttributes.attrs.filter(matches.contains)
       if (copies.size > 1) {
         throw QueryCompilationErrors.ambiguousReferenceError(
           UnresolvedAttribute(exceptParts).name, copies)
@@ -712,7 +722,7 @@ case class UnresolvedStarExceptOrReplace(
         val (present, missing) = excepts.zip(replacementList).partition { case (exceptParts, _) =>
           val column = expandedAttributes.resolve(exceptParts, parameters.resolver)
           // A name that matches only tagged copies of a column resolves to none of them.
-          if (column.isEmpty) failIfNameMatchesCopies(exceptParts, None)
+          if (column.isEmpty) failIfNameMatchesCopies(exceptParts)
           column.isDefined
         }
         (present.map(_._1), Some(present.map(_._2)), missing.map(_._2))
@@ -720,21 +730,31 @@ case class UnresolvedStarExceptOrReplace(
         (excepts, replacements, Nil)
       }
 
-    // resolve except list with respect to the expandedCols
-    val resolvedExcepts = presentExcepts.map { exceptParts =>
-      expandedAttributes
-        .resolve(exceptParts, parameters.resolver)
-        .getOrElse {
-          val orderedCandidates = StringUtils.orderSuggestedIdentifiersBySimilarity(
-            UnresolvedAttribute(exceptParts).name,
-            expandedCols.map(a => a.qualifier :+ a.name)
-          )
-          // if target is defined and expandedCols does not include any Attributes,
-          // it must be struct expansion;
-          // give message suggesting to use unqualified names of nested fields.
-          throw QueryCompilationErrors
-            .unresolvedColumnError(UnresolvedAttribute(exceptParts).name, orderedCandidates)
+    // Resolve the except list with respect to the expandedCols. A name with a replacement resolves
+    // to the one column that the replacement takes the place of. A name without one excludes every
+    // column that it matches, such as both columns of `SELECT 1 AS a, 2 AS a`.
+    val resolvedExcepts = presentExcepts.flatMap { exceptParts =>
+      val columns = if (presentReplacements.isDefined) {
+        expandedAttributes.resolve(exceptParts, parameters.resolver).toSeq
+      } else {
+        val (matches, nestedFields) = matchingColumns(exceptParts)
+        matches.flatMap { column =>
+          expandedAttributes.resolveCandidates(
+            exceptParts, parameters.resolver, Seq(column), nestedFields)
         }
+      }
+      if (columns.isEmpty) {
+        val orderedCandidates = StringUtils.orderSuggestedIdentifiersBySimilarity(
+          UnresolvedAttribute(exceptParts).name,
+          expandedCols.map(a => a.qualifier :+ a.name)
+        )
+        // if target is defined and expandedCols does not include any Attributes,
+        // it must be struct expansion;
+        // give message suggesting to use unqualified names of nested fields.
+        throw QueryCompilationErrors
+          .unresolvedColumnError(UnresolvedAttribute(exceptParts).name, orderedCandidates)
+      }
+      columns
     }
 
     // Convert each resolved except into a pair of (col: Attribute, nestedColumn) representing the
@@ -783,9 +803,7 @@ case class UnresolvedStarExceptOrReplace(
           throw SparkException.internalError(
             "An EXCEPT name with a replacement must resolve to a top-level column")
         }
-        presentExcepts.zip(exceptPairs).foreach { case (exceptParts, (column, _)) =>
-          failIfNameMatchesCopies(exceptParts, Some(column.toAttribute))
-        }
+        presentExcepts.foreach(failIfNameMatchesCopies)
         AttributeMap(exceptPairs.map(_._1.toAttribute).zip(replacementList))
       case None => AttributeMap.empty
     }
@@ -853,25 +871,6 @@ case class UnresolvedStarExceptOrReplace(
     }
 
     filterColumns(expandedCols, exceptPairs) ++ appendedReplacements
-  }
-
-  /**
-   * Returns the columns in `columns` that `exceptParts` names, counting each copy of a column.
-   * Name resolution finds one `column` for all the copies, and none when the name matches only
-   * tagged copies. A copy is either the same attribute, as in `SELECT x, x`, or a column that the
-   * name matches and that has the `__is_duplicate` tag, which name resolution skips when the name
-   * matches other columns. [[DeduplicateUnionChildOutput]] tags the second copy of a column that
-   * a UNION branch outputs twice, after giving it a new ExprId.
-   */
-  private def columnCopies(
-      exceptParts: Seq[String],
-      column: Option[Attribute],
-      columns: Seq[Attribute],
-      resolver: Resolver): Seq[Attribute] = {
-    columns.filter { c =>
-      column.exists(c.semanticEquals) || (c.metadata.contains("__is_duplicate") &&
-        AttributeSeq(Seq(c)).resolve(exceptParts, resolver).isDefined)
-    }
   }
 }
 

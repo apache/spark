@@ -379,11 +379,7 @@ package object expressions  {
     def getCandidatesForResolution(
         nameParts: Seq[String],
         resolver: Resolver): (Seq[Attribute], Seq[String]) = {
-      val (candidates, nestedFields) = if (hasThreeOrLessQualifierParts) {
-        matchWithThreeOrLessQualifierParts(nameParts, resolver)
-      } else {
-        matchWithFourOrMoreQualifierParts(nameParts, resolver)
-      }
+      val (candidates, nestedFields) = getAllCandidatesForResolution(nameParts, resolver)
 
       val prunedCandidates = if (candidates.size > 1) {
         candidates.filter(c => !c.metadata.contains("__is_duplicate"))
@@ -392,6 +388,20 @@ package object expressions  {
       }
 
       (prunedCandidates, nestedFields)
+    }
+
+    /**
+     * Same as [[getCandidatesForResolution]], but keeps the candidates with the `__is_duplicate`
+     * tag, which [[getCandidatesForResolution]] drops when more than one attribute matches.
+     */
+    def getAllCandidatesForResolution(
+        nameParts: Seq[String],
+        resolver: Resolver): (Seq[Attribute], Seq[String]) = {
+      if (hasThreeOrLessQualifierParts) {
+        matchWithThreeOrLessQualifierParts(nameParts, resolver)
+      } else {
+        matchWithFourOrMoreQualifierParts(nameParts, resolver)
+      }
     }
 
     /**

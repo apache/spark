@@ -36,6 +36,14 @@ SELECT * EXCEPT (ids.id) FROM ids;
 SELECT data.* EXCEPT (s2) FROM tbl_view;
 SELECT data.* EXCEPT (s2.f2) FROM tbl_view;
 SELECT data.s2.* EXCEPT (f2) FROM tbl_view;
+-- EXCEPT a name that matches more than one column
+SELECT * EXCEPT (id) FROM (SELECT id, name, id FROM tbl_view WHERE id = 10);
+SELECT * EXCEPT (id) FROM (SELECT id, name, id + 1 AS id FROM tbl_view WHERE id = 10);
+SELECT * EXCEPT (id) FROM (
+  SELECT id, name, id FROM tbl_view WHERE id = 10
+  UNION ALL
+  SELECT id, name, id FROM tbl_view WHERE id = 20);
+SELECT * EXCEPT (data.f1) FROM (SELECT data, id, data AS data FROM tbl_view WHERE id = 10);
 
 -- Errors
 -- EXCEPT missing brackets

@@ -522,12 +522,6 @@ select x, * from t
 select * from (select x, x from t union all select x, x from t)
 |> eval x = 1;
 
--- After DROP, only the copies that the UNION tagged as duplicates are left, and name resolution
--- finds neither of them.
-select * from (select x, x, x from t union all select x, x, x from t)
-|> drop x
-|> eval x = 1;
-
 -- EVAL appends z to the columns of t, so this scalar subquery returns more than one column.
 select (table t |> eval z = 1 |> limit 1) from values (0) as o(z);
 
@@ -594,6 +588,46 @@ select 1 as x, named_struct('x', 2, 'y', 3) as col
 -- Multi-level nested struct field drop.
 select 1 as x, named_struct('middle', named_struct('inner', 2)) as outer
 |> drop outer.middle.inner;
+
+-- Dropping a name that matches more than one column drops all of them.
+select 1 as x, 2 as y, 3 as x
+|> drop x;
+
+select x, y, x from t
+|> drop x;
+
+-- A UNION branch that outputs a column twice gives the second copy its own ExprId. DROP drops both
+-- copies, with an unqualified or a qualified name.
+select * from (select x, y, x from t union all select x, y, x from t)
+|> drop x;
+
+select * from (select x, y, x from t union all select x, y, x from t) as u
+|> drop u.x;
+
+-- No column named x is left after DROP, so EVAL appends one.
+select * from (select x, x, x from t union all select x, x, x from t)
+|> drop x
+|> eval x = 1;
+
+-- Dropping a name that matches a column on both sides of a join drops both columns. A qualified
+-- name drops only the column from its side.
+table t
+|> as l
+|> cross join t as r
+|> drop x;
+
+table t
+|> as l
+|> cross join t as r
+|> drop l.x;
+
+-- Dropping a struct field from every struct column with the name.
+select named_struct('i1', 1, 'i2', 2) as col, named_struct('i1', 3, 'i2', 4) as col
+|> drop col.i1;
+
+-- SELECT * EXCEPT excludes every column that the name matches, as DROP does.
+select * from (select x, y, x from t union all select x, y, x from t)
+|> select * except (x);
 
 -- DROP operators: negative tests.
 ----------------------------------

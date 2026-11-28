@@ -47,6 +47,7 @@ except_clause
   * **column_name**
 
     A column that is part of the set of columns that you can reference.
+    If more than one column matches the name, all of them are excluded.
 
   * **field_name**
 
