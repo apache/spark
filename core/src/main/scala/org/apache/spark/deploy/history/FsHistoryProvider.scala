@@ -188,6 +188,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   private val storePath = conf.get(LOCAL_STORE_DIR).map(new File(_))
   private val fastInProgressParsing = conf.get(FAST_IN_PROGRESS_PARSING)
+  private val skipCompletedRollingLogListing = conf.get(SKIP_COMPLETED_ROLLING_LOG_LISTING)
 
   private val hybridStoreEnabled = conf.get(History.HYBRID_STORE_ENABLED)
   private val hybridStoreDiskBackend =
@@ -658,6 +659,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             true
           }
         }
+        .filterNot { entry => skipUnchangedCompletedLog(entry, newLastScanTime) }
         .flatMap { entry => EventLogFileReader(dirFs, entry) }
         .filter { reader =>
           try {
@@ -684,7 +686,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
               listing.write(info.copy(lastProcessed = newLastScanTime,
                 fileSize = reader.fileSizeForLastIndex,
                 lastIndex = reader.lastIndex,
-                isComplete = reader.completed))
+                isComplete = reader.completed,
+                rootModificationTime = reader.rootModificationTime))
             }
 
             if (shouldReloadLog(info, reader)) {
@@ -780,6 +783,34 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
     } catch {
       case e: Exception => logError("Exception in checking for event log updates", e)
+    }
+  }
+
+  /**
+   * Returns whether a rolling event log directory can be left out of the scan without listing it.
+   * Listing the directory of every known application on each scan is costly when there are many
+   * of them, and a completed application doesn't write to its directory anymore. That can only
+   * be relied on while the directory itself is unchanged though: the event log can be overwritten
+   * if the application is run again with the same ID. File systems which don't track the
+   * modification time of directories report 0, so their directories are always listed.
+   *
+   * The time the log was last seen is still updated, otherwise the log would be seen as stale.
+   */
+  private def skipUnchangedCompletedLog(entry: FileStatus, scanTime: Long): Boolean = {
+    val candidate = skipCompletedRollingLogListing &&
+      RollingEventLogFilesWriter.isEventLogDir(entry) && entry.getModificationTime > 0
+    candidate && {
+      try {
+        val info = listing.read(classOf[LogInfo], entry.getPath.toString)
+        val unchanged = info.appId.isDefined && info.isComplete &&
+          info.rootModificationTime.contains(entry.getModificationTime)
+        if (unchanged) {
+          listing.write(info.copy(lastProcessed = scanTime))
+        }
+        unchanged
+      } catch {
+        case _: NoSuchElementException => false
+      }
     }
   }
 
@@ -1145,7 +1176,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         addListing(app)
         listing.write(LogInfo(logPath.toString(), scanTime, LogType.EventLogs, Some(app.info.id),
           app.attempts.head.info.attemptId, reader.fileSizeForLastIndex, reader.lastIndex,
-          lastEvaluatedForCompaction, reader.completed))
+          lastEvaluatedForCompaction, reader.completed, reader.rootModificationTime))
 
         // For a finished log, remove the corresponding "in progress" entry from the listing DB if
         // the file is really gone.
@@ -1875,7 +1906,11 @@ private[history] case class LogInfo(
     lastIndex: Option[Long],
     @JsonDeserialize(contentAs = classOf[JLong])
     lastEvaluatedForCompaction: Option[Long],
-    isComplete: Boolean)
+    isComplete: Boolean,
+    // The modification time of a rolling event log directory when it was last listed. None for
+    // single event log files, and for entries written before SPARK-48575.
+    @JsonDeserialize(contentAs = classOf[JLong])
+    rootModificationTime: Option[Long] = None)
 
 private[history] class AttemptInfoWrapper(
     val info: ApplicationAttemptInfo,

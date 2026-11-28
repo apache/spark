@@ -95,6 +95,12 @@ abstract class EventLogFileReader(
 
   /** Returns the size of all event log files. */
   def totalSize: Long
+
+  /**
+   * Returns the modification time of the rolling event log directory, as observed no later than
+   * the listing this reader uses. None if unknown, or for single event log file.
+   */
+  def rootModificationTime: Option[Long] = None
 }
 
 object EventLogFileReader extends Logging {
@@ -119,10 +125,11 @@ object EventLogFileReader extends Logging {
     if (isSingleEventLog(status)) {
       Some(new SingleFileEventLogFileReader(fs, status.getPath, Option(status)))
     } else if (isRollingEventLogs(status)) {
-      val files = fs.listStatus(status.getPath)
+      val files = fs.listStatus(status.getPath).toImmutableArraySeq
       if (files.exists(RollingEventLogFilesWriter.isEventLogFile) &&
           files.exists(RollingEventLogFilesWriter.isAppStatusFile)) {
-        Some(new RollingEventLogFilesFileReader(fs, status.getPath))
+        // Hand over the listing so that the reader doesn't need to list the directory again.
+        Some(new RollingEventLogFilesFileReader(fs, status.getPath, Some(status), Some(files)))
       } else {
         logDebug(s"Rolling event log directory have no event log file at ${status.getPath}")
         None
@@ -211,16 +218,21 @@ private[history] class SingleFileEventLogFileReader(
 /**
  * The reader which will read the information of rolled multiple event log files.
  *
- * This reader lists the files only once; if caller would like to play with updated list,
- * it needs to create another reader instance.
+ * This reader lists the files only once, or not at all if the caller already provides the
+ * listing; if caller would like to play with updated list, it needs to create another reader
+ * instance.
  */
 private[history] class RollingEventLogFilesFileReader(
     fs: FileSystem,
-    path: Path) extends EventLogFileReader(fs, path) {
+    path: Path,
+    maybeStatus: Option[FileStatus],
+    maybeFiles: Option[Seq[FileStatus]]) extends EventLogFileReader(fs, path) {
   import RollingEventLogFilesWriter._
 
+  def this(fs: FileSystem, path: Path) = this(fs, path, None, None)
+
   private lazy val files: Seq[FileStatus] = {
-    val ret = fs.listStatus(rootPath).toImmutableArraySeq
+    val ret = maybeFiles.getOrElse(fs.listStatus(rootPath).toImmutableArraySeq)
     require(ret.exists(isEventLogFile), "Log directory must contain at least one event log file!")
     require(ret.exists(isAppStatusFile), "Log directory must contain an appstatus file!")
     ret
@@ -279,6 +291,8 @@ private[history] class RollingEventLogFilesFileReader(
   }
 
   override def totalSize: Long = eventLogFiles.map(_.getLen).sum
+
+  override def rootModificationTime: Option[Long] = maybeStatus.map(_.getModificationTime)
 
   private def lastEventLogFile: FileStatus = eventLogFiles.last
 
