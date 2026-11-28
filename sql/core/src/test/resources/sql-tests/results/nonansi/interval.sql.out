@@ -58,8 +58,21 @@ select interval 2147483647 month * 2
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
-integer overflow
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
+  "sqlState" : "22015",
+  "messageParameters" : {
+    "functionName" : "`try_multiply`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 36,
+    "fragment" : "interval 2147483647 month * 2"
+  } ]
+}
 
 
 -- !query
@@ -2423,8 +2436,21 @@ select a * 1.1 from values (interval '-2147483648 months', interval '2147483647 
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
-Overflow
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
+  "sqlState" : "22015",
+  "messageParameters" : {
+    "functionName" : "`try_multiply`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 14,
+    "fragment" : "a * 1.1"
+  } ]
+}
 
 
 -- !query
