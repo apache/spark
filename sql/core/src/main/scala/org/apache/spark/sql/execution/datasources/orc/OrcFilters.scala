@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.orc
 
 import java.sql.Timestamp
 import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
+import java.util.TimeZone
 
 import org.apache.hadoop.hive.common.`type`.HiveDecimal
 import org.apache.hadoop.hive.ql.io.sarg.{PredicateLeaf, SearchArgument}
@@ -26,6 +27,7 @@ import org.apache.hadoop.hive.ql.io.sarg.SearchArgument.Builder
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgumentFactory.newBuilder
 import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable
 
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_DAY
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localDateTimeToMicros, localDateToDays, toJavaDate, toJavaTimestamp}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -33,6 +35,7 @@ import org.apache.spark.sql.execution.datasources.orc.types.ops.OrcTypeOps
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Helper object for building ORC `SearchArgument`s, which are used for ORC predicate push-down.
@@ -181,6 +184,12 @@ private[sql] object OrcFilters extends OrcFiltersBase {
       .getOrElse(throw QueryExecutionErrors.unsupportedOperationForDataTypeError(dt))
   }
 
+  // 1582-10-17 00:00:00 in milliseconds, two days after ORC's `DateUtils.SWITCHOVER_MILLIS`. A
+  // TIMESTAMP value whose wall clock is before it is not pushed down, see
+  // `hasValueBeforeCalendarSwitch`.
+  private val MinPushedTimestampWallClockMillis: Long =
+    LocalDate.of(1582, 10, 17).toEpochDay * MILLIS_PER_DAY
+
   /**
    * Cast literal values for filters.
    *
@@ -285,10 +294,57 @@ private[sql] object OrcFilters extends OrcFiltersBase {
 
     import org.apache.spark.sql.sources._
 
+    // Spark writes TimestampType values to ORC in the hybrid Julian/Gregorian calendar, and
+    // `castLiteralValue` converts a pushed down value the same way. But ORC compares the value
+    // with the statistics after converting the ones whose wall clock is before 1582-10-15 to the
+    // proleptic Gregorian calendar (see `DateUtils.convertTimeToProleptic`), which moves them by
+    // up to 10 days. So a predicate with a value whose wall clock is before 1582-10-15 is not
+    // pushed down. A later value compares the same with a converted statistic as with the stored
+    // one, as both are earlier than it.
+    // The dates from 1582-10-05 to 1582-10-14 don't exist in the hybrid calendar, so the
+    // conversion to it moves them to 1582-10-15 at the same time of day, and the pushed down
+    // value would be later than the value that Spark compares. With the Java 8 API off, a filter
+    // already holds the moved `java.sql.Timestamp`, so such a value can't be told apart from a
+    // value on 1582-10-15. Also, the conversion uses rebasing tables built with older time zone
+    // rules (see `RebaseDateTime.gregJulianRebaseMap`). With the current rules of the JVM, the
+    // wall clock of a moved value can be up to an hour later, e.g. 1582-10-16 00:59 for
+    // 1582-10-05 23:59 in America/Asuncion. So a predicate with a value whose wall clock is
+    // before 1582-10-17 is not pushed down either.
+    // ORC compares wall clocks in the JVM default time zone, and the wall clock is computed here
+    // as in `SerializationUtils.convertToUtc`.
+    def hasValueBeforeCalendarSwitch(attribute: String, values: Seq[Any]): Boolean =
+      dataTypeMap.get(attribute).exists(_.fieldType == TimestampType) && {
+        val timeZone = TimeZone.getDefault
+        values.exists { v =>
+          castLiteralValue(v, TimestampType) match {
+            case ts: Timestamp =>
+              val millis = ts.getTime
+              millis + timeZone.getOffset(millis) < MinPushedTimestampWallClockMillis
+            case _ => false
+          }
+        }
+      }
+
+    // The attribute and the values of a leaf predicate with values.
+    val attributeAndValues: Option[(String, Seq[Any])] = expression match {
+      case EqualTo(name, value) => Some((name, Seq(value)))
+      case EqualNullSafe(name, value) => Some((name, Seq(value)))
+      case LessThan(name, value) => Some((name, Seq(value)))
+      case LessThanOrEqual(name, value) => Some((name, Seq(value)))
+      case GreaterThan(name, value) => Some((name, Seq(value)))
+      case GreaterThanOrEqual(name, value) => Some((name, Seq(value)))
+      case In(name, values) => Some((name, values.toImmutableArraySeq))
+      case _ => None
+    }
+
     // NOTE: For all case branches dealing with leaf predicates below, the additional `startAnd()`
     // call is mandatory. ORC `SearchArgument` builder requires that all leaf predicates must be
     // wrapped by a "parent" predicate (`And`, `Or`, or `Not`).
     expression match {
+      case _ if attributeAndValues.exists { case (name, values) =>
+          hasValueBeforeCalendarSwitch(name, values) } =>
+        None
+
       case EqualTo(name, value) if isTimestamp(name) =>
         val (lower, upper) = timestampRange(value)
         Some(builder.startAnd()
