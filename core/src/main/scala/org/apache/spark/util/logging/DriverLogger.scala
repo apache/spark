@@ -58,19 +58,19 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
   private def addLogAppender(): Unit = {
     val logger = LogManager.getRootLogger().asInstanceOf[Logger]
     val layout = if (conf.contains(DRIVER_LOG_LAYOUT)) {
-      PatternLayout.newBuilder().withPattern(conf.get(DRIVER_LOG_LAYOUT).get).build()
+      PatternLayout.newBuilder().setPattern(conf.get(DRIVER_LOG_LAYOUT).get).build()
     } else {
-      PatternLayout.newBuilder().withPattern(DEFAULT_LAYOUT).build()
+      PatternLayout.newBuilder().setPattern(DEFAULT_LAYOUT).build()
     }
     val config = logger.getContext.getConfiguration()
     def log4jFileAppender() = {
       // SPARK-37853: We can't use the chained API invocation mode because
       // `AbstractFilterable.Builder.asBuilder()` method will return `Any` in Scala.
       val builder: Log4jFileAppender.Builder[_] = Log4jFileAppender.newBuilder()
-      builder.withAppend(false)
+      builder.setAppend(false)
       builder.setBufferedIo(false)
       builder.setConfiguration(config)
-      builder.withFileName(localLogFile)
+      builder.setFileName(localLogFile)
       // SPARK-57774: Set to true to avoid propagating log4j internal exception
       // (e.g., due to log4j bugs) to the caller.
       builder.setIgnoreExceptions(true)

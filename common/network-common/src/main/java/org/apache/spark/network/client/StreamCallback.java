@@ -35,6 +35,9 @@ public interface StreamCallback {
   /** Called when all data from the stream has been received. */
   void onComplete(String streamId) throws IOException;
 
-  /** Called if there's an error reading data from the stream. */
+  /**
+   * Called if there's an error reading data from the stream. This is also called, with the thrown
+   * error, after {@link #onComplete} throws.
+   */
   void onFailure(String streamId, Throwable cause) throws IOException;
 }

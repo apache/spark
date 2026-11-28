@@ -47,6 +47,10 @@ private case class DB2Dialect() extends JdbcDialect with SQLConfHelper with NoLe
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
 
+  // DB2's casts to integral types already truncate.
+  override def truncateFractionalValue(expr: String, from: NumericType): Option[String] =
+    Some(expr)
+
   override def isObjectNotFoundException(e: SQLException): Boolean = {
     e.getErrorCode == -204
   }

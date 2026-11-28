@@ -1281,9 +1281,10 @@ object SQLConf {
         "the whole residual join condition, such as r >= l - 10 for a backward join. The " +
         "bound has the right sort key first, which must be a column, then >= or > for a " +
         "backward join or <= or < for a forward join, then the left sort key, alone or plus " +
-        "or minus a constant. Other joins, and joins on STRUCT, ARRAY, TIME, nanosecond " +
-        "timestamp or user-defined type keys, buffer each right-side group and scan the " +
-        "buffer again for every left row.")
+        "or minus a constant. A nearest join reads the right side once if it allows exact " +
+        "matches and has no tolerance and no residual join condition. Other joins, and joins " +
+        "on STRUCT, ARRAY, TIME, nanosecond timestamp or user-defined type keys, buffer each " +
+        "right-side group and scan the buffer again for every left row.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
@@ -7961,6 +7962,21 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_JDBC_ROUND_INTEGRAL_CAST_PUSHDOWN =
+    buildConf("spark.sql.legacy.jdbc.roundIntegralCastPushdown.enabled")
+      .internal()
+      .doc("When true, casts pushed down to a JDBC data source compile to the SQL that Spark 4.4 " +
+        "sent. A cast from a fractional type to an integral type then follows the database's own " +
+        "semantics, so databases that round it return different results than Spark, which " +
+        "truncates toward zero. Such casts are pushed down again to dialects that can't " +
+        "truncate, and so are casts from datetime types to numeric types, although databases " +
+        "convert them differently than Spark. Casts that the database rejects fail again, or, " +
+        "in an aggregate, are evaluated by Spark.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_JDBC_TIME_MAPPING_ENABLED =
     buildConf("spark.sql.legacy.jdbc.timeMapping.enabled")
       .internal()
@@ -7993,6 +8009,18 @@ object SQLConf {
     .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
     .booleanConf
     .createWithDefault(false)
+
+  val PYTHON_WRITE_DISTRIBUTION_AND_ORDERING_ENABLED =
+    buildConf("spark.sql.python.writeDistributionAndOrdering.enabled")
+      .internal()
+      .doc("When true, honor the distribution and ordering required by a Python datasource " +
+        "writer, at the cost of running the Python worker one additional time during planning. " +
+        "Applies to batch writes only. When false, a batch write fails if its writer overrides " +
+        "any of the requirement methods.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
 
   val NATIVE_DATA_SOURCE_PATHS = buildConf("spark.sql.dataSource.native.paths")
     .doc("Comma-separated list of native data source packages (.sparkpkg files), and of " +
@@ -10609,6 +10637,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyJdbcTimeMappingEnabled: Boolean =
     getConf(LEGACY_JDBC_TIME_MAPPING_ENABLED)
 
+  def legacyJdbcRoundIntegralCastPushdown: Boolean =
+    getConf(LEGACY_JDBC_ROUND_INTEGRAL_CAST_PUSHDOWN)
+
   override def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value =
     getConf(SQLConf.LEGACY_TIME_PARSER_POLICY)
 
@@ -11210,6 +11241,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def pythonFilterPushDown: Boolean = getConf(PYTHON_FILTER_PUSHDOWN_ENABLED)
 
   def pythonLimitPushDown: Boolean = getConf(PYTHON_LIMIT_PUSHDOWN_ENABLED)
+
+  def pythonWriteDistributionAndOrdering: Boolean =
+    getConf(PYTHON_WRITE_DISTRIBUTION_AND_ORDERING_ENABLED)
 
   def nativeDataSourceFilterPushdownEnabled: Boolean =
     getConf(NATIVE_DATA_SOURCE_FILTER_PUSHDOWN_ENABLED)

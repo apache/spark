@@ -136,6 +136,49 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
     streamCallbacks.clear();
   }
 
+  /**
+   * Fails a fetch whose success callback threw. Its request was removed from the outstanding
+   * requests before the callback ran, so neither a connection close nor the idle timeout can fail
+   * it later; without this its caller would wait forever for a response that never arrives.
+   *
+   * The caller rethrows {@code cause}, so anything {@code onFailure} throws is added to it as
+   * suppressed rather than replacing it.
+   */
+  private void failAfterSuccessCallbackError(
+      ChunkReceivedCallback listener, int chunkIndex, Throwable cause) {
+    try {
+      listener.onFailure(chunkIndex, cause);
+    } catch (Throwable t) {
+      addSuppressedIfDistinct(cause, t);
+    }
+  }
+
+  /** Same as above for an RPC or merged block meta request whose success callback threw. */
+  private void failAfterSuccessCallbackError(BaseResponseCallback listener, Throwable cause) {
+    try {
+      listener.onFailure(cause);
+    } catch (Throwable t) {
+      addSuppressedIfDistinct(cause, t);
+    }
+  }
+
+  /** Same as above for an empty stream whose completion callback threw. */
+  private void failAfterSuccessCallbackError(
+      StreamCallback callback, String streamId, Throwable cause) {
+    try {
+      callback.onFailure(streamId, cause);
+    } catch (Throwable t) {
+      addSuppressedIfDistinct(cause, t);
+    }
+  }
+
+  /** {@link Throwable#addSuppressed} throws if a throwable would suppress itself. */
+  private static void addSuppressedIfDistinct(Throwable cause, Throwable suppressed) {
+    if (suppressed != cause) {
+      cause.addSuppressed(suppressed);
+    }
+  }
+
   @Override
   public void channelActive() {
   }
@@ -173,8 +216,14 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
         resp.body().release();
       } else {
         outstandingFetches.remove(resp.streamChunkId);
-        listener.onSuccess(resp.streamChunkId.chunkIndex(), resp.body());
-        resp.body().release();
+        try {
+          listener.onSuccess(resp.streamChunkId.chunkIndex(), resp.body());
+        } catch (Throwable t) {
+          failAfterSuccessCallbackError(listener, resp.streamChunkId.chunkIndex(), t);
+          throw t;
+        } finally {
+          resp.body().release();
+        }
       }
     } else if (message instanceof ChunkFetchFailure resp) {
       ChunkReceivedCallback listener = outstandingFetches.get(resp.streamChunkId);
@@ -200,6 +249,9 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
         outstandingRpcs.remove(resp.requestId);
         try {
           listener.onSuccess(resp.body().nioByteBuffer());
+        } catch (Throwable t) {
+          failAfterSuccessCallbackError(listener, t);
+          throw t;
         } finally {
           resp.body().release();
         }
@@ -227,7 +279,12 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
             MDC.of(LogKeys.RESPONSE_BODY_SIZE, resp.body().size()));
         } else {
           outstandingRpcs.remove(resp.requestId);
-          listener.onSuccess(resp.getNumChunks(), resp.body());
+          try {
+            listener.onSuccess(resp.getNumChunks(), resp.body());
+          } catch (Throwable t) {
+            failAfterSuccessCallbackError(listener, t);
+            throw t;
+          }
         }
       } finally {
         resp.body().release();
@@ -259,8 +316,9 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
         } else {
           try {
             callback.onComplete(resp.streamId);
-          } catch (Exception e) {
-            logger.warn("Error in stream handler onComplete().", e);
+          } catch (Throwable t) {
+            failAfterSuccessCallbackError(callback, resp.streamId, t);
+            throw t;
           }
         }
       } else {

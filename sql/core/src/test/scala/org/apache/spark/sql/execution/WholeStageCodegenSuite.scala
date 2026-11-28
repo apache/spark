@@ -1170,11 +1170,14 @@ class WholeStageCodegenSuite extends SharedSparkSession
         assert(cursorTasks(buffered) == 0, "Expected the buffered scan")
       }
 
-      // Nearest joins keep the interpreted scan.
-      val nearest = asOfJoin("inner", "nearest", None)
-      assert(hasAsOfJoin(nearest) && !isGenerated(nearest))
-      checkAnswer(nearest, Seq(Row(1, 5, 7, "b"), Row(1, 11, 10, "c"),
-        Row(2, 12, 8, "d"), Row(3, 3, 9, "e")))
+      // Nearest joins keep the interpreted scan, and take its cursor scan when it is on.
+      withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> "true") {
+        val nearest = asOfJoin("inner", "nearest", None)
+        assert(hasAsOfJoin(nearest) && !isGenerated(nearest))
+        checkAnswer(nearest, Seq(Row(1, 5, 7, "b"), Row(1, 11, 10, "c"),
+          Row(2, 12, 8, "d"), Row(3, 3, 9, "e")))
+        assert(cursorTasks(nearest) > 0, "Expected the cursor scan")
+      }
 
       // With the codegen off, the interpreted scan gives the same rows.
       withSQLConf(SQLConf.ENABLE_SORT_MERGE_AS_OF_JOIN_CODEGEN.key -> "false") {

@@ -21,7 +21,7 @@ import java.nio.ByteBuffer;
 
 /**
  * Callback for the result of a single RPC. This will be invoked once with either success or
- * failure.
+ * failure, except that {@link #onFailure} also follows an {@link #onSuccess} that threw.
  */
 public interface RpcResponseCallback extends BaseResponseCallback {
   /**

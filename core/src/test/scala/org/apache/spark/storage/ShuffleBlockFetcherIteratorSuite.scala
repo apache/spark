@@ -31,8 +31,8 @@ import scala.concurrent.Future
 
 import io.netty.util.internal.OutOfDirectMemoryError
 import org.apache.logging.log4j.Level
-import org.mockito.ArgumentMatchers.{any, eq => meq}
-import org.mockito.Mockito.{doThrow, mock, times, verify, when}
+import org.mockito.ArgumentMatchers.{any, anyLong, eq => meq}
+import org.mockito.Mockito.{doThrow, mock, never, times, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.roaringbitmap.RoaringBitmap
@@ -2156,5 +2156,202 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
     assert(id5.isInstanceOf[ShuffleBlockChunkId])
     assert(!iterator2.hasNext)
     assert(shuffleMetrics2.mergedFetchFallbackCount === 0)
+  }
+
+  test("SPARK-61894: a failure for a block whose result was already delivered is ignored") {
+    val remoteBmId = BlockManagerId("test-remote-1", "test-remote-1", 2)
+    val blocks = Map[BlockId, ManagedBuffer](
+      ShuffleBlockId(0, 0, 0) -> createMockManagedBuffer(),
+      ShuffleBlockId(0, 1, 0) -> createMockManagedBuffer()
+    )
+    answerFetchBlocks { invocation =>
+      val blockIds = invocation.getArguments()(3).asInstanceOf[Array[String]]
+      val listener = invocation.getArgument[BlockFetchingListener](4)
+      // The network layer reports a failure for a block whose success callback threw after the
+      // iterator had already queued its result.
+      listener.onBlockFetchSuccess(blockIds(0), blocks(BlockId(blockIds(0))))
+      listener.onBlockFetchFailure(blockIds(0), new OutOfMemoryError("Java heap space"))
+      listener.onBlockFetchSuccess(blockIds(1), blocks(BlockId(blockIds(1))))
+    }
+    val iterator = createShuffleBlockIteratorWithDefaults(
+      Map(remoteBmId -> toBlockList(blocks.keys, 1L, 0)))
+    val fetched = iterator.map(_._1).toList
+    assert(fetched.size == 2)
+    assert(fetched.toSet == blocks.keySet)
+    verifyFetchBlocksInvocationCount(1)
+  }
+
+  test("SPARK-61894: a Netty OOM failure for an already delivered block does not fetch it " +
+      "again") {
+    val remoteBmId = BlockManagerId("test-remote-1", "test-remote-1", 2)
+    val blocks = Map[BlockId, ManagedBuffer](
+      ShuffleBlockId(0, 0, 0) -> createMockManagedBuffer(),
+      ShuffleBlockId(0, 1, 0) -> createMockManagedBuffer()
+    )
+    var failedAfterSuccess = false
+    answerFetchBlocks { invocation =>
+      val blockIds = invocation.getArguments()(3).asInstanceOf[Array[String]]
+      val listener = invocation.getArgument[BlockFetchingListener](4)
+      blockIds.foreach { blockId =>
+        listener.onBlockFetchSuccess(blockId, blocks(BlockId(blockId)))
+        if (!failedAfterSuccess) {
+          // The success callback of the first block threw after queuing its result.
+          failedAfterSuccess = true
+          val ctor = classOf[OutOfDirectMemoryError]
+            .getDeclaredConstructor(classOf[java.lang.String])
+          ctor.setAccessible(true)
+          listener.onBlockFetchFailure(blockId, ctor.newInstance("failed to allocate memory"))
+        }
+      }
+    }
+    try {
+      // One block per request, so the iterator keeps reading after the first block. Without the
+      // guard, the failure defers the delivered block and fetches it again, and the reader gets
+      // its rows twice.
+      val iterator = createShuffleBlockIteratorWithDefaults(
+        Map(remoteBmId -> toBlockList(blocks.keys, 1L, 0)),
+        maxBlocksInFlightPerAddress = 1)
+      val fetched = iterator.map(_._1).toList
+      assert(fetched.sortBy(_.name) == blocks.keys.toSeq.sortBy(_.name))
+      verifyFetchBlocksInvocationCount(2)
+      assert(!ShuffleBlockFetcherIterator.isNettyOOMOnShuffle.get())
+    } finally {
+      ShuffleBlockFetcherIterator.isNettyOOMOnShuffle.set(false)
+    }
+  }
+
+  test("SPARK-61894: a failure after a success callback that threw before queuing the result " +
+      "fails the fetch") {
+    val remoteBmId = BlockManagerId("test-remote-1", "test-remote-1", 2)
+    val blockId = ShuffleBlockId(0, 0, 0)
+    val buf = createMockManagedBuffer()
+    // retain() runs before the success callback queues the result.
+    when(buf.retain()).thenThrow(new OutOfMemoryError("Java heap space"))
+    answerFetchBlocks { invocation =>
+      val blockIds = invocation.getArguments()(3).asInstanceOf[Array[String]]
+      val listener = invocation.getArgument[BlockFetchingListener](4)
+      // What RetryingBlockTransferor and TransportResponseHandler do after the callback throws.
+      try {
+        listener.onBlockFetchSuccess(blockIds.head, buf)
+      } catch {
+        case e: OutOfMemoryError => listener.onBlockFetchFailure(blockIds.head, e)
+      }
+    }
+    val iterator = createShuffleBlockIteratorWithDefaults(
+      Map(remoteBmId -> toBlockList(Seq(blockId), 1L, 0)))
+    intercept[FetchFailedException] { iterator.toList }
+  }
+
+  test("SPARK-61894: a success callback that throws before queuing the result does not leak " +
+      "the buffer reference") {
+    val remoteBmId = BlockManagerId("test-remote-1", "test-remote-1", 2)
+    val blockId = ShuffleBlockId(0, 0, 0)
+    val buf = createMockManagedBuffer()
+    // The request-duration metric is updated after the last block of the request arrives and
+    // before its result is queued.
+    val metrics = mock(classOf[ShuffleReadMetricsReporter])
+    doThrow(new OutOfMemoryError("Java heap space")).when(metrics).incRemoteReqsDuration(anyLong())
+    answerFetchBlocks { invocation =>
+      val blockIds = invocation.getArguments()(3).asInstanceOf[Array[String]]
+      val listener = invocation.getArgument[BlockFetchingListener](4)
+      try {
+        listener.onBlockFetchSuccess(blockIds.head, buf)
+      } catch {
+        case e: OutOfMemoryError => listener.onBlockFetchFailure(blockIds.head, e)
+      }
+    }
+    val iterator = createShuffleBlockIteratorWithDefaults(
+      Map(remoteBmId -> toBlockList(Seq(blockId), 1L, 0)), shuffleMetrics = Some(metrics))
+    intercept[FetchFailedException] { iterator.toList }
+    // The result was never queued, so the iterator must not hold a reference to the buffer.
+    verify(buf, never()).retain()
+    verify(buf, never()).release()
+  }
+
+  /**
+   * Fails every block of the request from each chunk onwards, the way OneForOneBlockFetcher does
+   * when the connection fails with all chunks outstanding and no RetryingBlockTransferor drops the
+   * repeats (spark.shuffle.io.maxRetries=0): block i is failed i + 1 times.
+   */
+  private def failRemainingBlocksPerChunk(
+      listener: BlockFetchingListener,
+      blockIds: Array[String],
+      error: Throwable): Unit = {
+    blockIds.indices.foreach { chunkIndex =>
+      blockIds.drop(chunkIndex).foreach(listener.onBlockFetchFailure(_, error))
+    }
+  }
+
+  test("SPARK-61894: a repeated Netty OOM failure for a block does not fetch it again") {
+    val remoteBmId = BlockManagerId("test-remote-1", "test-remote-1", 2)
+    val blocks = Map[BlockId, ManagedBuffer](
+      ShuffleBlockId(0, 0, 0) -> createMockManagedBuffer(),
+      ShuffleBlockId(0, 1, 0) -> createMockManagedBuffer(),
+      ShuffleBlockId(0, 2, 0) -> createMockManagedBuffer()
+    )
+    var failed = false
+    answerFetchBlocks { invocation =>
+      val blockIds = invocation.getArguments()(3).asInstanceOf[Array[String]]
+      val listener = invocation.getArgument[BlockFetchingListener](4)
+      if (!failed) {
+        failed = true
+        val ctor = classOf[OutOfDirectMemoryError]
+          .getDeclaredConstructor(classOf[java.lang.String])
+        ctor.setAccessible(true)
+        failRemainingBlocksPerChunk(listener, blockIds, ctor.newInstance("failed to allocate"))
+      } else {
+        blockIds.foreach(blockId => listener.onBlockFetchSuccess(blockId, blocks(BlockId(blockId))))
+      }
+    }
+    try {
+      // Without the guard, every repeated failure defers its block again, so the later blocks are
+      // fetched again in extra requests.
+      val iterator = createShuffleBlockIteratorWithDefaults(
+        Map(remoteBmId -> toBlockList(blocks.keys, 1L, 0)))
+      val fetched = iterator.map(_._1).toList
+      assert(fetched.sortBy(_.name) == blocks.keys.toSeq.sortBy(_.name))
+      verifyFetchBlocksInvocationCount(2)
+    } finally {
+      ShuffleBlockFetcherIterator.isNettyOOMOnShuffle.set(false)
+    }
+  }
+
+  test("SPARK-61894: a repeated failure for a remote shuffle chunk falls back only once") {
+    val remoteBmId = BlockManagerId("remote-client", "remote-host-2", 1)
+    val blocks = Map[BlockId, ManagedBuffer](
+      ShuffleBlockId(0, 3, 2) -> createMockManagedBuffer(),
+      ShuffleBlockId(0, 4, 2) -> createMockManagedBuffer()
+    )
+    answerFetchBlocks { invocation =>
+      val blockIds = invocation.getArguments()(3).asInstanceOf[Array[String]]
+      val listener = invocation.getArgument[BlockFetchingListener](4)
+      if (BlockId(blockIds.head).isShuffleChunk) {
+        failRemainingBlocksPerChunk(listener, blockIds, new IOException("connection reset"))
+      } else {
+        blockIds.foreach(blockId => listener.onBlockFetchSuccess(blockId, blocks(BlockId(blockId))))
+      }
+    }
+    val bitmaps = Array(new RoaringBitmap, new RoaringBitmap)
+    bitmaps(0).add(3)
+    bitmaps(1).add(4)
+    val pushMergedBlockMeta = createMockPushMergedBlockMeta(2, bitmaps)
+    when(transfer.getMergedBlockMeta(any(), any(), any(), any(), any(), any()))
+      .thenAnswer((invocation: InvocationOnMock) => {
+        val metaListener = invocation.getArguments()(5).asInstanceOf[MergedBlocksMetaListener]
+        metaListener.onSuccess(0, 0, 2, pushMergedBlockMeta)
+      })
+    when(mapOutputTracker.getMapSizesForMergeResult(any(), any(), any()))
+      .thenAnswer((invocation: InvocationOnMock) => {
+        val bitmap = invocation.getArgument[RoaringBitmap](2)
+        val fallbackBlocks = bitmap.toArray.toSeq.map(mapId => ShuffleBlockId(0, mapId, 2))
+        Iterator((remoteBmId, toBlockList(fallbackBlocks, 1L, 1)))
+      })
+    // Both chunks are in one request. Without the guard, the second failure of chunk 1 falls back
+    // for it again, after its chunk meta was already removed by the first fallback.
+    val iterator = createShuffleBlockIteratorWithDefaults(Map(
+      BlockManagerId(SHUFFLE_MERGER_IDENTIFIER, "remote-client-1", 1) ->
+        toBlockList(Seq(ShuffleMergedBlockId(0, 0, 2)), 2L, SHUFFLE_PUSH_MAP_ID)))
+    val fetched = iterator.map(_._1).toList
+    assert(fetched.sortBy(_.name) == blocks.keys.toSeq.sortBy(_.name))
   }
 }

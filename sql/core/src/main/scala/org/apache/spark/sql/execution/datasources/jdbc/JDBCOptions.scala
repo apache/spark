@@ -283,6 +283,9 @@ class JDBCOptions(
       .map(_.toBoolean)
       .getOrElse(dialectTimestampNTZAsWallClock)
 
+  // Resolved once, so tasks compile pushed predicates under the value pushdown used.
+  val legacyIntegralCastPushdown: Boolean = SQLConf.get.legacyJdbcRoundIntegralCastPushdown
+
   val hint = parameters.get(JDBC_HINT_STRING).map(value => {
     require(value.matches("(?s)^/\\*\\+ .* \\*/$"),
       s"Invalid value `$value` for option `$JDBC_HINT_STRING`." +
