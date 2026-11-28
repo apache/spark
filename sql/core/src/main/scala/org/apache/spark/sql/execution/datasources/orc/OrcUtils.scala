@@ -447,6 +447,7 @@ object OrcUtils extends Logging {
       s"array<${getOrcSchemaString(a.elementType)}>"
     case m: MapType =>
       s"map<${getOrcSchemaString(m.keyType)},${getOrcSchemaString(m.valueType)}>"
+    case s: StringType => StringHelper.removeCollation(s).catalogString
     case _: DayTimeIntervalType | _: TimestampNTZType => LongType.catalogString
     case _: YearMonthIntervalType => IntegerType.catalogString
     // Framework types (TimeType, nanosecond timestamps) supply their own ORC schema string.
