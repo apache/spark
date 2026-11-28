@@ -559,33 +559,84 @@ abstract class KafkaRelationSuiteBase extends SharedSparkSession with KafkaTest 
       }
     }
 
+    def testInvalidBatchOffset(options: (String, String)*)(
+        condition: String,
+        parameters: Map[String, String],
+        expectedMessage: String): Unit = {
+      val ex = intercept[KafkaIllegalArgumentException] {
+        val reader = spark
+          .read
+          .format("kafka")
+        options.foreach { case (k, v) => reader.option(k, v) }
+        reader.load().collect()
+      }
+      checkError(
+        exception = ex,
+        condition = condition,
+        sqlState = "22023",
+        parameters = parameters)
+      assert(ex.getMessage === expectedMessage)
+    }
+
     // Specifying an ending offset as the starting point
-    testBadOptions("startingOffsets" -> "latest")("starting offset can't be latest " +
-      "for batch queries on Kafka")
+    testInvalidBatchOffset("startingOffsets" -> "latest")(
+      condition = "KAFKA_INVALID_BATCH_OFFSET.GLOBAL",
+      parameters = Map("offsetName" -> "startingOffsets", "offsetValue" -> "latest"),
+      expectedMessage = "startingOffsets can't be latest for batch queries on Kafka")
 
     // Now do it with an explicit json start offset indicating latest
     val startPartitionOffsets = Map( new TopicPartition("t", 0) -> -1L)
     val startingOffsets = JsonUtils.partitionOffsets(startPartitionOffsets)
-    testBadOptions("subscribe" -> "t", "startingOffsets" -> startingOffsets)(
-      "startingOffsets for t-0 can't be latest for batch queries on Kafka")
+    testInvalidBatchOffset(
+      "subscribe" -> "t",
+      "startingOffsets" -> startingOffsets)(
+      condition = "KAFKA_INVALID_BATCH_OFFSET.TOPIC_OR_PARTITION",
+      parameters = Map(
+        "offsetName" -> "startingOffsets",
+        "offsetValue" -> "latest",
+        "topicOrPartition" -> "t-0"),
+      expectedMessage = "startingOffsets for t-0 can't be latest for batch queries on Kafka")
 
     // Now do it with a topic-level start offset indicating latest
-    testBadOptions("subscribe" -> "t", "startingOffsets" -> """{"t":"latest"}""")(
-      "startingOffsets for t can't be latest for batch queries on Kafka")
+    testInvalidBatchOffset(
+      "subscribe" -> "t",
+      "startingOffsets" -> """{"t":"latest"}""")(
+      condition = "KAFKA_INVALID_BATCH_OFFSET.TOPIC_OR_PARTITION",
+      parameters = Map(
+        "offsetName" -> "startingOffsets",
+        "offsetValue" -> "latest",
+        "topicOrPartition" -> "t"),
+      expectedMessage = "startingOffsets for t can't be latest for batch queries on Kafka")
 
     // Make sure we catch ending offsets that indicate earliest
-    testBadOptions("endingOffsets" -> "earliest")("ending offset can't be earliest " +
-      "for batch queries on Kafka")
+    testInvalidBatchOffset("endingOffsets" -> "earliest")(
+      condition = "KAFKA_INVALID_BATCH_OFFSET.GLOBAL",
+      parameters = Map("offsetName" -> "endingOffsets", "offsetValue" -> "earliest"),
+      expectedMessage = "endingOffsets can't be earliest for batch queries on Kafka")
 
     // Make sure we catch ending offsets that indicating earliest
     val endPartitionOffsets = Map(new TopicPartition("t", 0) -> -2L)
     val endingOffsets = JsonUtils.partitionOffsets(endPartitionOffsets)
-    testBadOptions("subscribe" -> "t", "endingOffsets" -> endingOffsets)(
-      "ending offset for t-0 can't be earliest for batch queries on Kafka")
+    testInvalidBatchOffset(
+      "subscribe" -> "t",
+      "endingOffsets" -> endingOffsets)(
+      condition = "KAFKA_INVALID_BATCH_OFFSET.TOPIC_OR_PARTITION",
+      parameters = Map(
+        "offsetName" -> "endingOffsets",
+        "offsetValue" -> "earliest",
+        "topicOrPartition" -> "t-0"),
+      expectedMessage = "endingOffsets for t-0 can't be earliest for batch queries on Kafka")
 
     // Make sure we catch a topic-level ending offset indicating earliest
-    testBadOptions("subscribe" -> "t", "endingOffsets" -> """{"t":"earliest"}""")(
-      "ending offset for t can't be earliest for batch queries on Kafka")
+    testInvalidBatchOffset(
+      "subscribe" -> "t",
+      "endingOffsets" -> """{"t":"earliest"}""")(
+      condition = "KAFKA_INVALID_BATCH_OFFSET.TOPIC_OR_PARTITION",
+      parameters = Map(
+        "offsetName" -> "endingOffsets",
+        "offsetValue" -> "earliest",
+        "topicOrPartition" -> "t"),
+      expectedMessage = "endingOffsets for t can't be earliest for batch queries on Kafka")
 
     // No strategy specified
     testBadOptions()("options must be specified", "subscribe", "subscribePattern")
