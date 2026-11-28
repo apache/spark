@@ -1095,11 +1095,13 @@ class CatalystTranspiler(AbstractTranspiler):
         function_body = function_ast.body
         # Normalize `if <test>: return y\nreturn body` (2-stmt early-return)
         # into a single if/else so null narrowing can apply to the main body.
+        # Only a test that proves a parameter non-null qualifies; other
+        # early returns keep falling back to interpreted Python.
         match function_body:
             case [
                 ast.If(test=test, body=[ast.Return() as early_ret], orelse=[]) as if_node,
                 ast.Return() as main_ret,
-            ]:
+            ] if any(_null_narrowed(params, test)):
                 synthesized = ast.If(test=test, body=[early_ret], orelse=[main_ret])
                 ast.fix_missing_locations(ast.copy_location(synthesized, if_node))
                 function_body = [synthesized]
@@ -1155,15 +1157,6 @@ class CatalystTranspiler(AbstractTranspiler):
                     "interpreted Python"
                 )
         converted = self._convert_chunk(params, function_body[0])
-        if self._null_guard_emitted:
-            warnings.warn(
-                "Python UDF transpiler: the transpiled UDF includes a NULL guard "
-                "that raises at runtime when a NULL input is encountered. Add an "
-                "`if x is not None` guard around comparisons, or filter NULLs "
-                "upstream, to avoid this.",
-                UserWarning,
-                stacklevel=2,
-            )
         # Cast to the declared return type so the rewritten plan reports a
         # known data type to the optimizer's plan validator (otherwise it
         # sees an UnresolvedFunction tree and reports VOID, which fails
@@ -1472,7 +1465,7 @@ def _transpile_func(
     session: "SparkSession",
     func: Callable[..., Any],
     returnType: "DataTypeOrString",
-) -> Tuple[List[Column], List[str], List[str], List[List[str]], List[str]]:
+) -> Tuple[List[Column], List[str], List[str], List[List[str]], List[str], bool]:
     """
     An experimental internal function that attempts to transpile a callable function.
 
@@ -1490,6 +1483,7 @@ def _transpile_func(
     list of the public parameter names Python forbids calling by keyword
     (positional-only) -- the caller must NOT resolve a kwarg matching one of these
     to a position, since Python itself rejects that call.
+    whether any returned option keeps a NULL guard that raises at runtime.
     """
     try:
         # The transpiler lowers to atomic (numeric/string/boolean/binary)
@@ -1518,6 +1512,7 @@ def _transpile_func(
                 [],
                 [],
                 [],
+                False,
             )
         # A functools.wraps-style decorator makes ``inspect.getsource`` return
         # the WRAPPED function's source (getsource follows ``__wrapped__``),
@@ -1540,15 +1535,16 @@ def _transpile_func(
                 [],
                 [],
                 [],
+                False,
             )
         # Not ``ast``: that name would shadow the module for this whole function.
         src, ast_info = _get_src_ast_from_func(func)
         if ast_info is None:
-            return ([], ["Error getting ast for function, cannot transpile"], [], [], [])
+            return ([], ["Error getting ast for function, cannot transpile"], [], [], [], False)
         # Get the lambda body and parameters
         function_ast, extraction_error = _get_function_from_ast(ast_info, _held_code(func))
         if function_ast is None:
-            return ([], [extraction_error], [], [], [])
+            return ([], [extraction_error], [], [], [], False)
         # Default, variadic (``*args`` / ``**kwargs``) and keyword-only params
         # can't be represented by the positional ``_udf_param_N`` placeholder
         # scheme: a call site may omit a defaulted argument, leaving the
@@ -1573,6 +1569,7 @@ def _transpile_func(
                 [],
                 [],
                 [],
+                False,
             )
         params = _get_parameter_list(function_ast)
         # Drop a receiver that is already bound, so what is left is what the call
@@ -1611,6 +1608,7 @@ def _transpile_func(
                     [],
                     [],
                     [],
+                    False,
                 )
             spoken_for = int(
                 inspect.isfunction(call_entry) or isinstance(call_entry, classmethod)
@@ -1620,7 +1618,14 @@ def _transpile_func(
             # prepends the class ON TOP of the method's own ``__self__`` -- or one with
             # no parameter to hold it. Python raises for whatever the call site passes,
             # so there is nothing correct to lower.
-            return ([], ["callable leaves no parameter for the call site to bind"], [], [], [])
+            return (
+                [],
+                ["callable leaves no parameter for the call site to bind"],
+                [],
+                [],
+                [],
+                False,
+            )
         # Caller-facing params: callers match user-supplied kwargs against this,
         # and the receiver is not named at the call site. Everything downstream
         # indexes off THIS list, so the placeholder numbering needs no offset.
@@ -1633,6 +1638,7 @@ def _transpile_func(
         transpiled: list[Column] = []
         input_categories: list[list[str]] = []
         errors = []
+        null_guarded = False
         # One transpiled option per (backend x input-type variant). Untyped
         # params are tried as both numeric and string so the JVM can pick the
         # option matching the actual column types (or fall back if none match).
@@ -1650,6 +1656,7 @@ def _transpile_func(
                         input_categories.append(
                             [combo.get(i, "numeric") for i in range(len(public_params))]
                         )
+                        null_guarded |= getattr(transpiler, "_null_guard_emitted", False)
                 except Exception as e:
                     errors.append(str(e))
         return (
@@ -1658,9 +1665,10 @@ def _transpile_func(
             public_params,
             input_categories,
             positional_only_public_params,
+            null_guarded,
         )
     except Exception as e:
         # Don't re-raise: an inability to transpile must never break a
         # working UDF. The caller treats an empty ``transpiled`` list as a
         # silent fall-back to interpreted Python.
-        return ([], [str(e)], [], [], [])
+        return ([], [str(e)], [], [], [], False)
