@@ -135,9 +135,9 @@ case class UnionLoopExec(
         // reference any external tables, we are able to calculate everything in the optimizer,
         // using the ConvertToLocalRelation rule, which significantly improves runtime.
         if (count <= localRelationLimit) {
-          val local = LocalRelation.fromExternalRows(df.logicalPlan.output,
-            df.collect().toIndexedSeq)
-         (Dataset.ofRows(session, local), count)
+          // Keep the internal values to avoid lossy conversions through external rows.
+          val local = LocalRelation(df.logicalPlan.output, df.collectInternalRows().toIndexedSeq)
+          (Dataset.ofRows(session, local), count)
         } else {
           (materializedDF, count)
         }
