@@ -30,11 +30,11 @@ import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, Spark
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{InternalRow, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchNamespaceException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchNamespaceException, RelationTimeTravel, TableAlreadyExistsException, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
-import org.apache.spark.sql.catalyst.expressions.{DynamicPruning, GetStructField}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, DynamicPruning, Exists, GetStructField, ScalarSubquery}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.ColumnStat
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, CTERelationRef, Filter, OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.statsEstimation.StatsEstimationTestBase
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.{Column => ColumnV2, _}
@@ -51,7 +51,7 @@ import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
 import org.apache.spark.sql.sources.SimpleScanSource
-import org.apache.spark.sql.types.{ArrayType, CharType, IntegerType, LongType, StringType, StructField, StructType, VarcharType}
+import org.apache.spark.sql.types.{ArrayType, CharType, IntegerType, LongType, StringType, StructField, StructType, TimestampType, VarcharType}
 import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -4553,6 +4553,222 @@ class DataSourceV2SQLSuiteV1Filter
           fragment = "(SELECT * FROM VALUES (1), (2))",
           start = 40,
           stop = 70))
+    }
+  }
+
+  test("time travel with a subquery that reads a CTE of the enclosing query") {
+    sql("use testcat")
+    // The testing in-memory table simply appends the timestamp to the table name when looking up
+    // tables.
+    val ts1 = DateTimeUtils.stringToTimestampAnsi(
+      UTF8String.fromString("2019-01-29 00:37:58"),
+      DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
+    val ts2 = DateTimeUtils.stringToTimestampAnsi(
+      UTF8String.fromString("2021-01-29 00:00:00"),
+      DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
+    val t1 = s"testcat.t$ts1"
+    val t2 = s"testcat.t$ts2"
+    withTable(t1, t2) {
+      sql(s"CREATE TABLE $t1 (id int) USING foo")
+      sql(s"CREATE TABLE $t2 (id int) USING foo")
+      sql(s"INSERT INTO $t1 VALUES (5), (6)")
+      sql(s"INSERT INTO $t2 VALUES (7), (8)")
+      val rowsAsOfTs1 = Seq(Row(5), Row(6))
+      val rowsAsOfTs2 = Seq(Row(7), Row(8))
+      val ts1Literal = "TIMESTAMP '2019-01-29 00:37:58'"
+      val ts2Literal = "TIMESTAMP '2021-01-29 00:00:00'"
+      val cutoff = s"cutoff AS (SELECT $ts2Literal AS ts)"
+      val asOfCutoff = "TIMESTAMP AS OF (SELECT ts FROM cutoff)"
+
+      checkAnswer(sql(s"WITH $cutoff SELECT * FROM t $asOfCutoff"), rowsAsOfTs2)
+      // The subquery reads the CTE in a subquery of its own.
+      checkAnswer(
+        sql(s"WITH $cutoff SELECT * FROM t TIMESTAMP AS OF (SELECT (SELECT ts FROM cutoff))"),
+        rowsAsOfTs2)
+      // The CTE reads another CTE, also in a subquery.
+      checkAnswer(
+        sql(s"WITH base AS (SELECT $ts2Literal AS ts), cutoff AS (SELECT ts FROM base) " +
+          s"SELECT * FROM t $asOfCutoff"),
+        rowsAsOfTs2)
+      checkAnswer(
+        sql(s"WITH base AS (SELECT $ts2Literal AS ts), " +
+          "cutoff AS (SELECT (SELECT ts FROM base) AS ts) " +
+          s"SELECT * FROM t $asOfCutoff"),
+        rowsAsOfTs2)
+      // A CTE of the subquery reads a CTE of the enclosing query.
+      checkAnswer(
+        sql(s"WITH base AS (SELECT $ts2Literal AS ts) SELECT * FROM t " +
+          "TIMESTAMP AS OF (WITH cutoff AS (SELECT ts FROM base) SELECT ts FROM cutoff)"),
+        rowsAsOfTs2)
+      // The subquery reads the innermost CTE of the name.
+      checkAnswer(
+        sql(s"WITH cutoff AS (SELECT $ts1Literal AS ts) SELECT * FROM t " +
+          s"TIMESTAMP AS OF (WITH $cutoff SELECT ts FROM cutoff)"),
+        rowsAsOfTs2)
+      checkAnswer(
+        sql(s"WITH cutoff AS (SELECT $ts1Literal AS ts) SELECT * FROM " +
+          s"(WITH $cutoff SELECT * FROM t $asOfCutoff)"),
+        rowsAsOfTs2)
+      // The query also defines a CTE that the subquery does not read. Its error cannot show
+      // that the subquery is evaluated without it, as a CTE that nothing reads is dropped before
+      // it is planned. The case with such a CTE in a subquery expression, below, shows that.
+      checkAnswer(
+        sql(s"WITH unused AS (SELECT raise_error('unused') AS ts), $cutoff " +
+          s"SELECT * FROM t $asOfCutoff"),
+        rowsAsOfTs2)
+      // The rest of the query can read the CTE too.
+      checkAnswer(
+        sql(s"WITH cutoff AS (SELECT $ts2Literal AS ts, 42 AS n) " +
+          s"SELECT tt.id, cutoff.n FROM t $asOfCutoff AS tt, cutoff"),
+        Seq(Row(7, 42), Row(8, 42)))
+      checkAnswer(
+        sql(s"WITH c1 AS (SELECT $ts1Literal AS ts), c2 AS (SELECT $ts2Literal AS ts) " +
+          "SELECT * FROM t TIMESTAMP AS OF (SELECT ts FROM c1) UNION ALL " +
+          "SELECT * FROM t TIMESTAMP AS OF (SELECT ts FROM c2)"),
+        rowsAsOfTs1 ++ rowsAsOfTs2)
+      checkAnswer(
+        sql("WITH cutoff AS (SELECT TIMESTAMP '2021-01-30 00:00:00' AS ts) " +
+          "SELECT * FROM t TIMESTAMP AS OF (SELECT ts FROM cutoff) - INTERVAL 1 DAY"),
+        rowsAsOfTs2)
+      checkAnswer(
+        sql(s"WITH cutoff AS MATERIALIZED (SELECT $ts2Literal AS ts) " +
+          s"SELECT * FROM t $asOfCutoff"),
+        rowsAsOfTs2)
+      checkAnswer(
+        sql(s"WITH cutoff AS MATERIALIZED (SELECT $ts2Literal AS ts, 42 AS n) " +
+          s"SELECT tt.id, cutoff.n FROM t $asOfCutoff AS tt, cutoff"),
+        Seq(Row(7, 42), Row(8, 42)))
+      // A MATERIALIZED CTE that the subquery reads is evaluated for the subquery, and once more
+      // for all the references of the rest of the query.
+      withUserDefinedFunction("countEvaluations" -> true) {
+        // Identity udf that tracks the number of times it is called.
+        val countAcc = sparkContext.longAccumulator("CallCount")
+        spark.udf.register("countEvaluations", (x: Int) => {
+          countAcc.add(1)
+          x
+        })
+        val countedCutoff = "cutoff AS MATERIALIZED (SELECT CASE WHEN " +
+          s"countEvaluations(max(id)) > 0 THEN $ts2Literal END AS ts FROM $t1)"
+        Seq(
+          s"WITH $countedCutoff SELECT * FROM t $asOfCutoff" -> 1,
+          (s"WITH $countedCutoff SELECT tt.id FROM t $asOfCutoff AS tt, cutoff AS c1, " +
+            "cutoff AS c2 WHERE c1.ts = c2.ts") -> 2
+        ).foreach { case (query, evaluations) =>
+          countAcc.setValue(0)
+          // Run the query only once, as each run evaluates the CTE again.
+          QueryTest.checkAnswer(sql(query), rowsAsOfTs2, checkToRDD = false)
+          assert(countAcc.value == evaluations)
+        }
+      }
+      checkAnswer(
+        sql("WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM r WHERE n < 3) " +
+          s"SELECT * FROM t TIMESTAMP AS OF (SELECT CASE WHEN max(n) = 3 THEN $ts2Literal " +
+          s"ELSE $ts1Literal END FROM r)"),
+        rowsAsOfTs2)
+      // The time travel is in the body of another CTE.
+      checkAnswer(
+        sql(s"WITH $cutoff, tt AS (SELECT * FROM t $asOfCutoff) SELECT * FROM tt"),
+        rowsAsOfTs2)
+      withTempView("v") {
+        sql(s"CREATE TEMPORARY VIEW v AS WITH $cutoff SELECT * FROM t $asOfCutoff")
+        checkAnswer(sql("SELECT * FROM v"), rowsAsOfTs2)
+      }
+
+      // The time travel is in a subquery expression, whose plan is analyzed on its own, without
+      // the CTE definitions of the query around it.
+      checkAnswer(
+        sql(s"WITH $cutoff SELECT id FROM VALUES (6), (7) AS v(id) WHERE EXISTS " +
+          s"(SELECT 1 FROM t $asOfCutoff AS tt WHERE tt.id = v.id)"),
+        Row(7))
+      checkAnswer(
+        sql(s"WITH $cutoff SELECT id FROM VALUES (6), (7) AS v(id) WHERE id IN " +
+          s"(SELECT id FROM t $asOfCutoff)"),
+        Row(7))
+      checkAnswer(sql(s"WITH $cutoff SELECT (SELECT max(id) FROM t $asOfCutoff)"), Row(8))
+      checkAnswer(
+        sql(s"WITH $cutoff SELECT v.x, l.id FROM VALUES (1) AS v(x), " +
+          s"LATERAL (SELECT id FROM t $asOfCutoff) AS l"),
+        Seq(Row(1, 7), Row(1, 8)))
+      // The timestamp has two subqueries, and only one of them reads the CTE.
+      checkAnswer(
+        sql(s"WITH $cutoff SELECT id FROM VALUES (6), (7) AS v(id) WHERE EXISTS " +
+          "(SELECT 1 FROM t TIMESTAMP AS OF greatest((SELECT ts FROM cutoff), " +
+          s"(SELECT $ts1Literal)) AS tt WHERE tt.id = v.id)"),
+        Row(7))
+      // The CTE is defined in the subquery expression, and can read a CTE of the query around it.
+      checkAnswer(
+        sql("SELECT id FROM VALUES (6), (7) AS v(id) WHERE EXISTS " +
+          s"(WITH $cutoff SELECT 1 FROM t $asOfCutoff AS tt WHERE tt.id = v.id)"),
+        Row(7))
+      checkAnswer(
+        sql(s"WITH base AS (SELECT $ts2Literal AS ts) SELECT id FROM VALUES (6), (7) AS v(id) " +
+          "WHERE EXISTS (WITH cutoff AS (SELECT ts FROM base) " +
+          s"SELECT 1 FROM t $asOfCutoff AS tt WHERE tt.id = v.id)"),
+        Row(7))
+      // A CTE of the subquery expression that the timestamp does not read is not evaluated with
+      // it, even if it reads a CTE of the query around it.
+      checkAnswer(
+        sql(s"WITH base AS (SELECT $ts1Literal AS ts) SELECT id FROM VALUES (6), (7) AS v(id) " +
+          s"WHERE EXISTS (WITH $cutoff, unread AS (SELECT ts FROM base) " +
+          s"SELECT 1 FROM t $asOfCutoff AS tt WHERE tt.id = v.id)"),
+        Row(7))
+      // The CTE is defined in the query around nested subquery expressions.
+      val existsAsOfCutoff = "SELECT count(*) FROM VALUES (6), (7), (8) AS v(id) WHERE EXISTS " +
+        s"(SELECT 1 FROM t $asOfCutoff AS tt WHERE tt.id = v.id)"
+      checkAnswer(sql(s"WITH $cutoff SELECT ($existsAsOfCutoff)"), Row(2))
+      checkAnswer(sql(s"SELECT (WITH $cutoff $existsAsOfCutoff)"), Row(2))
+      checkAnswer(
+        sql(s"WITH cutoff AS (SELECT $ts1Literal AS ts) SELECT (WITH $cutoff $existsAsOfCutoff)"),
+        Row(2))
+
+      // The scalar subquery returns one row, or NULL for no row, also when the time travel is in
+      // a subquery expression, which the analysis of the query around it evaluates.
+      Seq(s"SELECT * FROM t $asOfCutoff", existsAsOfCutoff).foreach { query =>
+        val tooManyRows =
+          s"WITH cutoff AS (SELECT $ts1Literal AS ts UNION ALL SELECT $ts2Literal) $query"
+        checkError(
+          exception = intercept[SparkException] {
+            sql(tooManyRows).collect()
+          },
+          condition = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
+          parameters = Map.empty,
+          ExpectedContext(
+            fragment = "(SELECT ts FROM cutoff)",
+            start = tooManyRows.indexOf("(SELECT ts FROM cutoff)"),
+            stop = tooManyRows.indexOf("(SELECT ts FROM cutoff)") + 22))
+        Seq(
+          s"WITH cutoff AS (SELECT $ts2Literal AS ts WHERE false) $query",
+          s"WITH cutoff AS (SELECT CAST(NULL AS TIMESTAMP) AS ts) $query"
+        ).foreach { nullTimestamp =>
+          checkError(
+            exception = analysisException(nullTimestamp),
+            condition = "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.INPUT",
+            parameters = Map("expr" -> "\"NULL\""))
+        }
+      }
+    }
+  }
+
+  test("time travel with a subquery that reads a CTE without its definition") {
+    sql("use testcat")
+    // A CTE reference whose definition is not in the query is still an internal error, also when
+    // the time travel is in a subquery expression, whose plan is analyzed on its own.
+    val ref = CTERelationRef(
+      Long.MaxValue, _resolved = true, Seq(AttributeReference("ts", TimestampType)()),
+      isStreaming = false)
+    val timeTravel = RelationTimeTravel(
+      UnresolvedRelation(Seq("t")), Some(ScalarSubquery(Project(ref.output, ref))), None)
+    Seq(
+      Project(Seq(UnresolvedStar(None)), timeTravel),
+      Filter(Exists(Project(Seq(UnresolvedStar(None)), timeTravel)), OneRowRelation())
+    ).foreach { plan =>
+      checkError(
+        exception = intercept[SparkException] {
+          classic.Dataset.ofRows(spark, plan)
+        },
+        condition = "INTERNAL_ERROR",
+        parameters = Map("message" -> (s"No CTERelationDef found for CTERelationRef with id " +
+          s"${Long.MaxValue} while building the CTE map.")))
     }
   }
 
