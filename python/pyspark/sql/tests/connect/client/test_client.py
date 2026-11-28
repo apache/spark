@@ -15,13 +15,33 @@
 # limitations under the License.
 #
 
+import contextlib
+import functools
+import importlib
+import inspect
+import logging
+import os
+import sys
+import sysconfig
+import textwrap
+import threading
+import time
+import types
 import unittest
 import uuid
 from collections.abc import Generator
 from typing import Any, Optional, Union
+from unittest import mock
 
 from pyspark.testing.connectutils import connect_requirement_message, should_test_connect
 from pyspark.testing.utils import eventually
+
+try:
+    import IPython  # noqa: F401
+
+    have_ipython = True
+except ImportError:
+    have_ipython = False
 
 if should_test_connect:
     import google.protobuf.any_pb2 as any_pb2
@@ -32,6 +52,9 @@ if should_test_connect:
     from google.rpc import status_pb2
     from google.rpc.error_details_pb2 import ErrorInfo
 
+    import pyspark
+    import pyspark.sql.connect
+    import pyspark.sql.connect.client.core as core
     import pyspark.sql.connect.proto as proto
     from pyspark.errors import PySparkRuntimeError
     from pyspark.errors.exceptions.connect import SparkConnectGrpcException
@@ -42,8 +65,10 @@ if should_test_connect:
         DefaultPolicy,
         Retrying,
     )
+    from pyspark.sql.connect.logging import logger as connect_logger
     from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
     from pyspark.sql.metrics import PlanMetrics
+    from pyspark.traceback_utils import CallSite
 
     class TestPolicy(DefaultPolicy):
         def __init__(self):
@@ -948,6 +973,460 @@ class SparkConnectClientTestCase(unittest.TestCase):
         client_disabled._stub = mock_disabled
         client_disabled._analyze("schema", plan=proto.Plan())
         self.assertIsNone(mock_disabled.captured_timeout)
+
+    def _analyze_client(self, stub_cls=None, retry_policy=None):
+        client = SparkConnectClient(
+            "sc://foo/",
+            use_reattachable_execute=False,
+            retry_policy=retry_policy or dict(max_retries=0),
+        )
+        client._stub = (stub_cls or MockService)(session_id=client._session_id)
+        return client
+
+    @contextlib.contextmanager
+    def _info_logging(self):
+        """Enable the Spark Connect logger at INFO and capture its AnalyzePlan records."""
+        records = []
+        with (
+            # The Spark Connect logger is disabled unless SPARK_CONNECT_LOG_LEVEL is set.
+            mock.patch.object(connect_logger, "disabled", False),
+            self.assertLogs(connect_logger, level="INFO") as logs,
+        ):
+            yield records
+        records.extend(r for r in logs.records if r.getMessage().startswith("AnalyzePlan("))
+
+    @contextlib.contextmanager
+    def _fake_clock(self):
+        """
+        Replace the clock used to time AnalyzePlan calls with one that starts at a non-zero
+        reading and that only moves when `advance` is called. `Retrying` binds its own clock
+        at import time, so its backoff is not affected.
+        """
+        clock = dict(now=1000.0)
+
+        def advance(seconds):
+            clock["now"] += seconds
+
+        # Only `monotonic` is faked; any other use of `time` in core.py goes to the real module.
+        fake_time = mock.Mock(wraps=time, monotonic=lambda: clock["now"])
+        with mock.patch.object(core, "time", fake_time):
+            yield advance
+
+    @contextlib.contextmanager
+    def _user_code_in_this_file(self):
+        """
+        Narrow PYSPARK_ROOT to the pyspark.sql.connect package so that frames in this test
+        file count as user code for the real `_retrieve_stack_frames` helper.
+        """
+        with mock.patch.object(core, "PYSPARK_ROOT", os.path.dirname(pyspark.sql.connect.__file__)):
+            yield
+
+    @staticmethod
+    def _define_as_pyspark_source(source, name):
+        """
+        Compile `source` as if it lived in the pyspark.sql.connect package and return the
+        object called `name`, so that the real stack helper treats its frames as PySpark code.
+        """
+        filename = os.path.join(os.path.dirname(pyspark.sql.connect.__file__), "_fake_api.py")
+        return SparkConnectClientTestCase._define_in_file(source, name, filename)
+
+    @staticmethod
+    def _define_in_file(source, name, filename):
+        """
+        Compile `source` under `filename` and return the object called `name`, so that stack
+        frames of its code carry that filename.
+        """
+        namespace = {"functools": functools}
+        exec(compile(textwrap.dedent(source), filename, "exec"), namespace)
+        return namespace[name]
+
+    @contextlib.contextmanager
+    def _fake_python_layout(self, site_packages_in_stdlib):
+        """
+        Make `_is_non_user_source` see a fake standard library directory, with fake IPython (a
+        package) and decorator (a single module) installed in a site-packages directory that
+        is either inside it, as in conda, pyenv or Docker images, or outside it, as in a venv.
+        The function only compares path strings, so the files do not need to exist.
+        """
+        root = os.path.join(os.sep, "fake-python")
+        stdlib = os.path.join(root, "lib", "python3")
+        if site_packages_in_stdlib:
+            site_packages = os.path.join(stdlib, "site-packages")
+        else:
+            site_packages = os.path.join(root, "venv", "site-packages")
+        fake_ipython = types.ModuleType("IPython")
+        fake_ipython.__file__ = os.path.join(site_packages, "IPython", "__init__.py")
+        fake_decorator = types.ModuleType("decorator")
+        fake_decorator.__file__ = os.path.join(site_packages, "decorator.py")
+        with (
+            # Replace the real standard library directories with the fake one. No package
+            # directory is configured, so a site-packages inside it is recognized by name alone.
+            mock.patch.object(
+                core, "_python_install_dirs", return_value=((os.path.join(stdlib, ""),), ())
+            ),
+            # `_is_non_user_source` finds the notebook packages through `sys.modules`.
+            mock.patch.dict(sys.modules, {"IPython": fake_ipython, "decorator": fake_decorator}),
+        ):
+            yield types.SimpleNamespace(stdlib=stdlib, site_packages=site_packages)
+
+    def test_analyze_logs_duration_and_call_site(self):
+        test = self
+
+        # Stub server whose AnalyzePlan takes exactly 0.25 s on the fake clock.
+        class StepMock(MockService):
+            def AnalyzePlan(self, req, metadata, timeout=None):
+                test.advance(0.25)
+                return super().AnalyzePlan(req, metadata, timeout=timeout)
+
+        client = self._analyze_client(StepMock)
+        call_sites = [
+            CallSite(function="main", file="/app/job.py", linenum=10),
+            CallSite(function="columns", file="/app/job.py", linenum=57),
+        ]
+        with (
+            self._fake_clock() as self.advance,
+            # A fixed stack, so the expected call site does not depend on how the test runs.
+            mock.patch.object(
+                SparkConnectClient, "_retrieve_stack_frames", return_value=call_sites
+            ),
+            self._info_logging() as records,
+        ):
+            client._analyze("schema", plan=proto.Plan())
+        self.assertEqual(
+            [r.getMessage() for r in records],
+            ["AnalyzePlan(schema) took 250 ms, triggered by columns at /app/job.py:57"],
+        )
+
+    def test_analyze_logs_retried_call_once_with_total_duration(self):
+        test = self
+
+        # Stub server whose first AnalyzePlan attempt fails with a retryable error. Each
+        # attempt takes 0.25 s on the fake clock.
+        class FlakyMock(MockService):
+            attempts = 0
+
+            def AnalyzePlan(self, req, metadata, timeout=None):
+                test.advance(0.25)
+                FlakyMock.attempts += 1
+                if FlakyMock.attempts == 1:
+                    raise TestException("unavailable", grpc.StatusCode.UNAVAILABLE)
+                return super().AnalyzePlan(req, metadata, timeout=timeout)
+
+        client = self._analyze_client(
+            FlakyMock,
+            retry_policy=dict(max_retries=1, initial_backoff=1, jitter=0, max_backoff=1),
+        )
+        with (
+            self._fake_clock() as self.advance,
+            # No user frames, so the expected message does not depend on how the test runs.
+            mock.patch.object(SparkConnectClient, "_retrieve_stack_frames", return_value=[]),
+            self._info_logging() as records,
+        ):
+            client._analyze("schema", plan=proto.Plan())
+        self.assertEqual(FlakyMock.attempts, 2)
+        self.assertEqual(
+            [r.getMessage() for r in records],
+            ["AnalyzePlan(schema) took 500 ms, triggered by unknown call site"],
+        )
+
+    def test_analyze_logs_unknown_call_site(self):
+        client = self._analyze_client()
+        with (
+            # Simulate a stack with no user frames.
+            mock.patch.object(SparkConnectClient, "_retrieve_stack_frames", return_value=[]),
+            self._info_logging() as records,
+        ):
+            client._analyze("semantic_hash", plan=proto.Plan())
+        self.assertEqual(len(records), 1)
+        self.assertIn("triggered by unknown call site", records[0].getMessage())
+
+    def test_analyze_logs_failed_call(self):
+        # Stub server whose AnalyzePlan fails with a non-retryable error.
+        class FailingMock(MockService):
+            def AnalyzePlan(self, req, metadata, timeout=None):
+                raise TestException("boom", grpc.StatusCode.INVALID_ARGUMENT)
+
+        client = self._analyze_client(FailingMock)
+        with (
+            # No user frames; this test is only about logging the failed call.
+            mock.patch.object(SparkConnectClient, "_retrieve_stack_frames", return_value=[]),
+            self._info_logging() as records,
+        ):
+            with self.assertRaises(SparkConnectGrpcException):
+                client._analyze("schema", plan=proto.Plan())
+        self.assertEqual(len(records), 1)
+        self.assertTrue(records[0].getMessage().startswith("AnalyzePlan(schema) took "))
+
+    def test_analyze_succeeds_when_logging_the_call_fails(self):
+        client = self._analyze_client()
+        with (
+            # The debug call stack extension calls `_retrieve_stack_frames` on its own.
+            mock.patch.dict(os.environ, {"SPARK_CONNECT_DEBUG_CLIENT_CALL_STACK": "false"}),
+            # Make building the record fail, as a broken module `__file__` or a failing source
+            # line lookup could.
+            mock.patch.object(
+                SparkConnectClient, "_retrieve_stack_frames", side_effect=RuntimeError("boom")
+            ) as retrieve,
+            # The Spark Connect logger is disabled unless SPARK_CONNECT_LOG_LEVEL is set.
+            mock.patch.object(connect_logger, "disabled", False),
+            # Sets the level to INFO for the block, so the record is attempted.
+            self.assertNoLogs(connect_logger, level="INFO"),
+        ):
+            result = client._analyze("schema", plan=proto.Plan())
+        retrieve.assert_called_once()
+        self.assertIsNotNone(result)
+
+    def test_analyze_logs_real_call_site(self):
+        client = self._analyze_client()
+        with self._user_code_in_this_file(), self._info_logging() as records:
+            expected_line = inspect.currentframe().f_lineno + 1
+            client._analyze("schema", plan=proto.Plan())
+        self.assertEqual(len(records), 1)
+        self.assertTrue(
+            records[0]
+            .getMessage()
+            .endswith(f"triggered by _analyze at {__file__}:{expected_line}"),
+            records[0].getMessage(),
+        )
+
+    def test_analyze_call_site_skips_cached_property_frames(self):
+        # A PySpark `functools.cached_property` such as `SparkSession.version` is reached
+        # through functools.py, which must not be reported as the call site.
+        FakeSession = self._define_as_pyspark_source(
+            """
+            class FakeSession:
+                def __init__(self, client):
+                    self._client = client
+
+                @functools.cached_property
+                def version(self):
+                    return self._client._analyze(method="spark_version")
+            """,
+            "FakeSession",
+        )
+        session = FakeSession(self._analyze_client())
+        with self._user_code_in_this_file(), self._info_logging() as records:
+            expected_line = inspect.currentframe().f_lineno + 1
+            session.version
+        self.assertEqual(len(records), 1)
+        self.assertTrue(
+            records[0].getMessage().endswith(f"triggered by version at {__file__}:{expected_line}"),
+            records[0].getMessage(),
+        )
+
+    def test_analyze_call_site_unknown_on_standard_library_thread(self):
+        # When every frame before PySpark is standard-library code, e.g. on a thread started
+        # by the client, no user code triggered the call.
+        client = self._analyze_client()
+        with self._user_code_in_this_file(), self._info_logging() as records:
+            thread = threading.Thread(
+                target=client._analyze, args=("schema",), kwargs=dict(plan=proto.Plan())
+            )
+            thread.start()
+            thread.join()
+        self.assertEqual(len(records), 1)
+        self.assertTrue(
+            records[0].getMessage().endswith("triggered by unknown call site"),
+            records[0].getMessage(),
+        )
+
+    def test_analyze_call_site_skips_frozen_standard_library_frames(self):
+        # CPython 3.11+ runs frozen standard library modules such as runpy under a synthetic
+        # `<frozen ...>` filename, e.g. when a process starts with `python -m`.
+        call = self._define_in_file(
+            """
+            def call(client, plan):
+                client._analyze(method="schema", plan=plan)
+            """,
+            "call",
+            "<frozen runpy>",
+        )
+        client = self._analyze_client()
+        with self._user_code_in_this_file(), self._info_logging() as records:
+            expected_line = inspect.currentframe().f_lineno + 1
+            call(client, proto.Plan())
+            # On a thread, every frame before PySpark is standard library code.
+            thread = threading.Thread(target=call, args=(client, proto.Plan()))
+            thread.start()
+            thread.join()
+        self.assertEqual(len(records), 2)
+        self.assertTrue(
+            records[0]
+            .getMessage()
+            .endswith(f"triggered by _analyze at {__file__}:{expected_line}"),
+            records[0].getMessage(),
+        )
+        self.assertTrue(
+            records[1].getMessage().endswith("triggered by unknown call site"),
+            records[1].getMessage(),
+        )
+
+    @unittest.skipIf(not have_ipython, "IPython is not installed")
+    def test_analyze_call_site_skips_notebook_display_frames(self):
+        # A notebook cell that ends in a DataFrame is displayed through IPython's formatters
+        # (wrapped by the decorator package on IPython 8), which must not be reported as the
+        # call site.
+        from IPython.core.formatters import DisplayFormatter
+
+        FakeDataFrame = self._define_as_pyspark_source(
+            """
+            class FakeDataFrame:
+                def __init__(self, client):
+                    self._client = client
+
+                def __repr__(self):
+                    self._client._analyze(method="spark_version")
+                    return "FakeDataFrame"
+            """,
+            "FakeDataFrame",
+        )
+        client = self._analyze_client()
+        df = FakeDataFrame(client)
+        with (
+            self._user_code_in_this_file(),
+            self._info_logging() as records,
+        ):
+            expected_line = inspect.currentframe().f_lineno + 1
+            DisplayFormatter().format(df)
+        self.assertEqual(len(records), 1)
+        self.assertTrue(
+            records[0].getMessage().endswith(f"at {__file__}:{expected_line}"),
+            records[0].getMessage(),
+        )
+
+    def test_notebook_display_sources_are_not_user_code(self):
+        for site_packages_in_stdlib in (True, False):
+            with (
+                self.subTest(site_packages_in_stdlib=site_packages_in_stdlib),
+                self._fake_python_layout(site_packages_in_stdlib) as layout,
+            ):
+                is_non_user = core._is_non_user_source
+                site = layout.site_packages
+                self.assertTrue(is_non_user(os.path.join(site, "IPython", "lib", "pretty.py")))
+                self.assertTrue(is_non_user(os.path.join(site, "decorator.py")))
+                self.assertTrue(is_non_user(os.path.join(layout.stdlib, "functools.py")))
+                self.assertFalse(is_non_user(os.path.join(site, "mylib", "helpers.py")))
+                self.assertFalse(is_non_user(os.path.join(site, "decorator_extras.py")))
+                self.assertFalse(is_non_user(os.path.join(os.sep, "app", "my_job.py")))
+        # decorator releases before 5.0 compile wrappers under synthetic filenames, and frozen
+        # standard library modules run under one too.
+        self.assertTrue(core._is_non_user_source("<decorator-gen-17>"))
+        self.assertTrue(core._is_non_user_source("<frozen runpy>"))
+        self.assertFalse(core._is_non_user_source("<stdin>"))
+
+    def test_package_dir_with_other_name_in_stdlib_is_user_code(self):
+        # Some layouts configure a package directory inside the standard library directory
+        # under a name other than site-packages, e.g. vendor-packages.
+        stdlib = os.path.join(os.sep, "fake-python", "lib", "python3")
+        vendor = os.path.join(stdlib, "vendor-packages")
+        with mock.patch.object(
+            core,
+            "_python_install_dirs",
+            # Replace the real directories with a fake layout; only path strings are compared.
+            return_value=((os.path.join(stdlib, ""),), (os.path.join(vendor, ""),)),
+        ):
+            self.assertFalse(core._is_non_user_source(os.path.join(vendor, "mylib", "a.py")))
+            self.assertTrue(core._is_non_user_source(os.path.join(stdlib, "functools.py")))
+
+    def test_python_install_dirs(self):
+        stdlib_dirs, package_dirs = core._python_install_dirs()
+        self.assertIn(os.path.join(os.path.normcase(os.path.dirname(os.__file__)), ""), stdlib_dirs)
+        self.assertIn(os.path.join(os.path.normcase(sysconfig.get_path("stdlib")), ""), stdlib_dirs)
+        self.assertIn(
+            os.path.join(os.path.normcase(sysconfig.get_path("purelib")), ""), package_dirs
+        )
+        self.assertTrue(core._is_non_user_source(functools.__file__))
+
+    def test_installed_notebook_display_sources_are_not_user_code(self):
+        # IPython versions that wrap their display formatters with the decorator package, such as
+        # IPython 8 and 9.2, put its frames between the notebook cell and PySpark, so check each
+        # of these packages that is installed.
+        checked = 0
+        for name in ("IPython", "ipykernel", "decorator"):
+            try:
+                module = importlib.import_module(name)
+            except ImportError:
+                continue
+            self.assertTrue(core._is_non_user_source(module.__file__), name)
+            checked += 1
+        if checked == 0:
+            self.skipTest("No notebook display package is installed")
+
+    def test_analyze_call_site_skips_fake_notebook_display_frames(self):
+        # Runs without IPython installed: a display function compiled under a notebook package
+        # path or a generated decorator filename calls a PySpark API, as IPython does when a
+        # notebook cell ends in a DataFrame.
+        FakeDataFrame = self._define_as_pyspark_source(
+            """
+            class FakeDataFrame:
+                def __init__(self, client):
+                    self._client = client
+
+                def __repr__(self):
+                    self._client._analyze(method="spark_version")
+                    return "FakeDataFrame"
+            """,
+            "FakeDataFrame",
+        )
+        display_source = """
+            def display(obj):
+                return repr(obj)
+            """
+        for site_packages_in_stdlib in (True, False):
+            with self._fake_python_layout(site_packages_in_stdlib) as layout:
+                display_files = [
+                    os.path.join(layout.site_packages, "IPython", "core", "formatters.py"),
+                    "<decorator-gen-1>",
+                ]
+                for display_file in display_files:
+                    display = self._define_in_file(display_source, "display", display_file)
+                    df = FakeDataFrame(self._analyze_client())
+                    with (
+                        self.subTest(layout=layout.site_packages, display_file=display_file),
+                        self._user_code_in_this_file(),
+                        self._info_logging() as records,
+                    ):
+                        expected_line = inspect.currentframe().f_lineno + 1
+                        display(df)
+                    self.assertEqual(len(records), 1)
+                    self.assertTrue(
+                        records[0]
+                        .getMessage()
+                        .endswith(f"triggered by __repr__ at {__file__}:{expected_line}"),
+                        records[0].getMessage(),
+                    )
+
+    def test_analyze_does_not_capture_call_site_when_logging_disabled(self):
+        client = self._analyze_client()
+        with (
+            # The debug call stack extension calls `_retrieve_stack_frames` on its own.
+            mock.patch.dict(os.environ, {"SPARK_CONNECT_DEBUG_CLIENT_CALL_STACK": "false"}),
+            mock.patch.object(connect_logger, "disabled", True),
+            # Spy on the stack helper to check that it is never called.
+            mock.patch.object(SparkConnectClient, "_retrieve_stack_frames") as retrieve,
+            self.assertNoLogs(connect_logger, level="INFO"),
+        ):
+            client._analyze("schema", plan=proto.Plan())
+        retrieve.assert_not_called()
+
+    def test_analyze_does_not_capture_call_site_when_logger_above_info(self):
+        # SPARK_CONNECT_LOG_LEVEL=WARN enables the logger, but not at INFO. Pin the level, since
+        # the suite may run with SPARK_CONNECT_LOG_LEVEL set to another level.
+        self.addCleanup(connect_logger.setLevel, connect_logger.level)
+        connect_logger.setLevel(logging.WARNING)
+        client = self._analyze_client()
+        with (
+            # The debug call stack extension calls `_retrieve_stack_frames` on its own.
+            mock.patch.dict(os.environ, {"SPARK_CONNECT_DEBUG_CLIENT_CALL_STACK": "false"}),
+            mock.patch.object(connect_logger, "disabled", False),
+            # Spy on the stack helper and the log call to check that neither is called.
+            mock.patch.object(SparkConnectClient, "_retrieve_stack_frames") as retrieve,
+            mock.patch.object(SparkConnectClient, "_log_analyze_call") as log_call,
+            self.assertNoLogs(connect_logger, level="WARNING"),
+        ):
+            client._analyze("schema", plan=proto.Plan())
+        retrieve.assert_not_called()
+        log_call.assert_not_called()
 
     def test_each_rpc_receives_configured_deadline(self):
         """Every RPC that accepts a deadline should forward it as timeout to the stub."""
