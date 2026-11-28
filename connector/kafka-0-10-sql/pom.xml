@@ -104,7 +104,7 @@
     </dependency>
     <dependency>
       <groupId>org.apache.kafka</groupId>
-      <artifactId>kafka_${scala.binary.version}</artifactId>
+      <artifactId>kafka_${kafka.scala.binary.version}</artifactId>
       <version>${kafka.version}</version>
       <scope>test</scope>
       <exclusions>
@@ -119,6 +119,10 @@
         <exclusion>
           <groupId>com.fasterxml.jackson.core</groupId>
           <artifactId>jackson-annotations</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.fasterxml.jackson.module</groupId>
+          <artifactId>jackson-module-scala_${kafka.scala.binary.version}</artifactId>
         </exclusion>
         <exclusion>
           <groupId>commons-logging</groupId>

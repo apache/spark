@@ -56,7 +56,7 @@ private object ConfigHelpers {
 
   def toEnum[E <: Enum[E]](s: String, enumClass: Class[E], key: String): E = {
     enumClass.getEnumConstants.find(_.name().equalsIgnoreCase(s.trim)) match {
-      case Some(enum) => enum
+      case Some(e) => e
       case None => throw configOutOfRangeOfOptionsError(key, s, enumClass.getEnumConstants)
     }
   }
@@ -155,7 +155,7 @@ private[spark] class TypedConfigBuilder[T](
   import ConfigHelpers._
 
   def this(parent: ConfigBuilder, converter: String => T) = {
-    this(parent, converter, { v: T => v.toString })
+    this(parent, converter, { (v: T) => v.toString })
   }
 
   /** Apply a transformation to the user-provided values of the config entry. */
@@ -361,7 +361,7 @@ private[spark] case class ConfigBuilder(key: String) {
       // use toPlainString to avoid scientific notation. For extreme exponents (e.g. 1e100000000,
       // as can be rendered in a checkValue rejection message) toPlainString would materialize
       // one character per zero, so fall back to scientific notation there.
-      { v: BigDecimal =>
+      { (v: BigDecimal) =>
         val stripped = v.bigDecimal.stripTrailingZeros()
         if (stripped.scale > 100 || stripped.scale < -100) {
           stripped.toString

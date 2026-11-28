@@ -173,10 +173,62 @@ object SparkBuild extends PomBuild {
   lazy val MavenCompile = config("m2r") extend(Compile)
   lazy val SbtCompile = config("sbt") extend(Compile)
 
+  // genjavadoc is a Scala 2 compiler plugin with no Scala 3 build. Under Scala 3 it is
+  // disabled (below); regenerating the Java API docs there is deferred (SPARK-54150).
   lazy val sparkGenjavadocSettings: Seq[sbt.Def.Setting[_]] = GenJavadocPlugin.projectSettings ++ Seq(
     scalacOptions ++= Seq(
       "-P:genjavadoc:strictVisibility=true" // hide package private types
-    )
+    ),
+    // Disable genjavadoc under Scala 3 (no _3 build). Both the plugin jar and its
+    // -P:genjavadoc options must go: dropping only the jar leaves the options, and the
+    // Scala 3 compiler then rejects them with "bad option".
+    libraryDependencies := {
+      val deps = libraryDependencies.value
+      if (scalaBinaryVersion.value.startsWith("3")) {
+        deps.filterNot(_.name.startsWith("genjavadoc"))
+      } else {
+        deps
+      }
+    },
+    scalacOptions := {
+      val opts = scalacOptions.value
+      if (scalaBinaryVersion.value.startsWith("3")) {
+        opts.filterNot(_.startsWith("-P:genjavadoc"))
+      } else {
+        opts
+      }
+    }
+  )
+
+  // Scala 3 settings that the scala-3 Maven profile cannot supply. The compiler flags do
+  // come from that profile: sbt-pom-reader imports its scala-maven-plugin <args> as
+  // scalacOptions, as it imports the default <args> under 2.13.
+  lazy val scala3Settings: Seq[sbt.Def.Setting[_]] = Seq(
+    // sbt names the output directory after the full Scala 3 version (scala-3.3.8), while
+    // Maven, the docs build and the assembly paths in this file use scala-<binary version>.
+    // Use the binary version, as sbt already does for 2.13. (bin/load-spark-env.sh and the
+    // launcher still assume scala-2.13; running Spark on Scala 3 is not supported yet.)
+    crossTarget := {
+      if (scalaBinaryVersion.value.startsWith("3")) {
+        target.value / s"scala-${scalaBinaryVersion.value}"
+      } else {
+        crossTarget.value
+      }
+    },
+    // sbt-pom-reader appends the POM's <args> twice. Scala 2 ignores a repeated flag, but
+    // Scala 3 warns about each one, so keep a single copy. Must follow the genjavadoc
+    // settings, which append and then strip their own options.
+    scalacOptions := {
+      val opts = scalacOptions.value
+      val (first, second) = opts.splitAt(opts.length / 2)
+      if (scalaBinaryVersion.value.startsWith("3") && first == second) first else opts
+    },
+    // Skip API docs on Scala 3, as the scala-3 Maven profile does: the doc options below
+    // (-groups, -skip-packages, -doc-title) are Scala 2 scaladoc flags. sbt runs no doc tool
+    // when the doc task has no sources.
+    (Compile / doc / sources) := {
+      if (scalaBinaryVersion.value.startsWith("3")) Nil else (Compile / doc / sources).value
+    }
   )
 
   lazy val scalaStyleRules = Project("scalaStyleRules", file("scalastyle"))
@@ -265,7 +317,10 @@ object SparkBuild extends PomBuild {
 
   lazy val compilerWarningSettings: Seq[sbt.Def.Setting[_]] = Seq(
     (Compile / scalacOptions) ++= {
-      Seq(
+      // Scala 2 rules only. Scala 3 rejects the whole -Wconf set if any filter is unknown to
+      // it (cat=other, site=, the wv action) and then ignores it, so leave it out there: the
+      // scala-3 profile's <args> carry the Scala 3 flags.
+      if (scalaBinaryVersion.value.startsWith("3")) Nil else Seq(
         // replace -Xfatal-warnings with fine-grained configuration, since 2.13.2
         // verbose warning on deprecation, error on all others
         // see `scalac -Wconf:help` for details
@@ -298,6 +353,7 @@ object SparkBuild extends PomBuild {
 
   lazy val sharedSettings = checkJavaVersionSettings ++
                             sparkGenjavadocSettings ++
+                            scala3Settings ++
                             compilerWarningSettings ++
                             enableScalaStyle ++ Seq(
     (Compile / exportJars) := true,
@@ -363,10 +419,15 @@ object SparkBuild extends PomBuild {
       "-Xlint:unchecked"
     ),
 
-    (Compile / scalacOptions) ++= Seq(
-      "-release", javaVersion.value,
-      "-sourcepath", (ThisBuild / baseDirectory).value.getAbsolutePath  // Required for relative source links in scaladoc
-    ),
+    (Compile / scalacOptions) ++= {
+      // Under Scala 3, -release already comes from the scala-3 profile's <args>, and the
+      // compiler warns when it is given twice.
+      (if (scalaBinaryVersion.value.startsWith("3")) Nil else Seq("-release", javaVersion.value)) ++
+      Seq(
+        // Required for relative source links in scaladoc
+        "-sourcepath", (ThisBuild / baseDirectory).value.getAbsolutePath
+      )
+    },
 
     SbtPomKeys.profiles := profiles,
 
