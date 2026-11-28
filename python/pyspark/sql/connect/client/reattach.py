@@ -220,7 +220,8 @@ class ExecutePlanResponseReattachableIterator(Generator):
         def target() -> None:
             try:
                 for attempt in self._retrying():
-                    with attempt:
+                    # Finalizers may close a channel while gRPC holds internal locks.
+                    with attempt, disable_gc():
                         self._stub.ReleaseExecute(request, metadata=self._metadata)
             except Exception as e:
                 logger.warning(f"ReleaseExecute failed with exception: {e}.")
@@ -243,7 +244,8 @@ class ExecutePlanResponseReattachableIterator(Generator):
         def target() -> None:
             try:
                 for attempt in self._retrying():
-                    with attempt:
+                    # Finalizers may close a channel while gRPC holds internal locks.
+                    with attempt, disable_gc():
                         self._stub.ReleaseExecute(request, metadata=self._metadata)
             except Exception as e:
                 logger.warning(f"ReleaseExecute failed with exception: {e}.")
