@@ -17,15 +17,21 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import java.time.LocalDate
+
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.FalseLiteral
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_COMPARISON, IN, INSET}
 import org.apache.spark.sql.catalyst.types.{DataTypeUtils, PhysicalDataType}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.internal.LegacyBehaviorPolicy
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Unwrap casts in binary comparison or `In/InSet` operations with patterns like following:
@@ -99,7 +105,12 @@ import org.apache.spark.sql.types._
  * )`
  * and using the same rule with `BinaryComparison` show as before to optimize each `EqualTo`.
  */
-object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
+object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] with SQLConfHelper {
+
+  private val minDateDays: Int = DateTimeUtils.localDateToDays(LocalDate.of(1, 1, 1))
+  private val maxDateDays: Int = DateTimeUtils.localDateToDays(LocalDate.of(9999, 12, 31))
+  private val maxDateLit: Literal = Literal(maxDateDays, DateType)
+
   override def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsAnyPattern(BINARY_COMPARISON, IN, INSET), ruleId) {
     case l: LogicalPlan =>
@@ -144,6 +155,12 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         if fromExp.dataType == DateType && AnyTimestampType.acceptsType(ts.dataType) &&
           value != null =>
       Some(unwrapTimestampToDate(be, fromExp, ts, timeZoneId, evalMode))
+
+    case exp @ BinaryComparison(
+      Cast(fromExp, StringType, _, _), Literal(value: UTF8String, StringType))
+        if fromExp.dataType == DateType &&
+          conf.legacyTimeParserPolicy != LegacyBehaviorPolicy.LEGACY =>
+      unwrapStringToDate(exp, fromExp, value)
 
     // Timestamp/Timestamp_NTZ -> Timestamp_NTZ/Timestamp
     case be @ BinaryComparison(
@@ -405,6 +422,38 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
           FalseLiteral
         }
       case _ => exp
+    }
+  }
+
+  private def unwrapStringToDate(
+      exp: BinaryComparison,
+      fromExp: Expression,
+      literal: UTF8String): Option[Expression] = {
+    val dateValue = Cast(Literal(literal, StringType), DateType, ansiEnabled = false).eval()
+    // A non-canonical literal (e.g. missing zero-padding) can still parse to a valid date, but
+    // string-ordering it against other canonical date strings is not equivalent to date-ordering
+    // it, so only rewrite when the literal round-trips back to itself exactly: re-cast to DateType
+    // and back to StringType.
+    val roundTrips = dateValue != null &&
+      Cast(Literal(dateValue, DateType), StringType, ansiEnabled = false).eval() == literal
+    if (!roundTrips) {
+      None
+    } else {
+      val rewritten = exp.withNewChildren(Seq(fromExp, Literal(dateValue, DateType)))
+      // Needed only by the range-predicate cases below -- the Equality case doesn't check
+      // fromExp or the range at all -- but it's always safe to compute: `dateValue` is already
+      // known non-null and of DateType here, so it's always an `Int`.
+      val dateDays = dateValue.asInstanceOf[Int]
+      val canRewriteRangePredicate = fromExp.isInstanceOf[Attribute] &&
+        dateDays >= minDateDays && dateDays <= maxDateDays
+      exp match {
+        case Equality(_, _) => Some(rewritten)
+        case _: LessThan | _: LessThanOrEqual if canRewriteRangePredicate =>
+          Some(Or(GreaterThan(fromExp, maxDateLit), rewritten))
+        case _: GreaterThan | _: GreaterThanOrEqual if canRewriteRangePredicate =>
+          Some(And(LessThanOrEqual(fromExp, maxDateLit), rewritten))
+        case _ => None
+      }
     }
   }
 

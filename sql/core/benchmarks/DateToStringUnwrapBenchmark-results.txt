@@ -1,0 +1,12 @@
+================================================================================================
+Date to String cast unwrap in binary comparison
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Mac OS X 26.4.1
+Apple M2 Max
+CAST(date AS STRING) < 'literal':                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------------
+cast unwrap disabled (Cast(Date,String) evaluated per row)           1162           1205         101          8.6         116.2       1.0X
+cast unwrap enabled (rewritten to a Date range comparison)            177            179           2         56.5          17.7       6.6X
+
+
