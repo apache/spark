@@ -89,7 +89,7 @@ class SparkEnvUDFDispatcherSuite extends SparkFunSuite {
       }
     }
     assert(e.getMessage.contains("DIRECT"))
-    assert(e.getMessage.contains("spark-udf-worker-grpc"))
+    assert(e.getMessage.contains("spark-udf-worker-runtime"))
     assert(e.getMessage.contains(SparkEnv.DIRECT_DISPATCHER_FACTORY_CLASS))
   }
 

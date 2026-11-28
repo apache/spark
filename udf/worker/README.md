@@ -58,12 +58,16 @@ udf/worker/
 │           DirectWorkerSession.scala     -- session backed by a direct process
 │           UnixDomainSocketEndpointDirectory.scala -- private UDS path lifecycle
 │
-└── grpc/                         -- gRPC transport (gRPC runtime confined here)
-      DirectGrpcDispatcher.scala  -- launches direct workers over gRPC on UDS
-      GrpcWorkerChannel.scala     -- owns a Netty gRPC channel and event loop
-      GrpcWorkerSession.scala     -- one UDF execution over an Execute stream
-      UnixDomainSocketTransport.scala -- selects native epoll/kqueue transport
-      (generated)                 -- UdfWorkerGrpc stubs from the UDF worker service proto
+├── grpc/                         -- unshaded gRPC transport for development and tests
+│     DirectGrpcDispatcher.scala  -- launches direct workers over gRPC on UDS
+│     GrpcWorkerChannel.scala     -- owns a Netty gRPC channel and event loop
+│     GrpcWorkerSession.scala     -- one UDF execution over an Execute stream
+│     UnixDomainSocketTransport.scala -- selects native epoll/kqueue transport
+│     (generated)                 -- UdfWorkerGrpc stubs from the UDF worker service proto
+│
+└── runtime/                      -- shaded distribution artifact, no sources
+      proto + core + grpc         -- one packaged worker runtime
+      relocated gRPC + protobuf   -- isolated from Spark Connect
 ```
 
 The `core/` package defines abstract interfaces that are independent of how
@@ -77,6 +81,14 @@ implementations, native Unix-domain-socket transport selection, gRPC service-stu
 generation (from the UDF worker service proto above), and the gRPC runtime dependencies.
 Keeping gRPC here means `proto/`, `core/`, and their consumers (`core`, `catalyst`,
 `sql/core`) carry no gRPC dependency on their classpath.
+
+The packaging-only `runtime/` module combines the worker modules for Spark
+distributions. It relocates gRPC and protobuf into a UDF-worker namespace while
+leaving Netty unrelocated for Spark's existing native transports. Both builds
+compile the generated gRPC stubs against `com.google.common`. Maven's inherited
+module shading relocates those references to `org.sparkproject.guava` in the
+packaged jars and SBT does not, so the runtime relocates both names and bundles
+its own Guava.
 
 ## Wire protocol
 
@@ -181,12 +193,14 @@ dispatcher.close()
 
 SBT:
 ```
-build/sbt "udf-worker-proto/compile" "udf-worker-core/compile" "udf-worker-grpc/compile"
+build/sbt "udf-worker-proto/compile" "udf-worker-core/compile" \
+  "udf-worker-grpc/compile" "udf-worker-runtime/assembly"
 ```
 
 Maven:
 ```
-build/mvn compile -pl udf/worker/proto,udf/worker/core,udf/worker/grpc -am
+build/mvn package -DskipTests \
+  -pl udf/worker/proto,udf/worker/core,udf/worker/grpc,udf/worker/runtime -am
 ```
 
 ## Test
