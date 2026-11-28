@@ -106,6 +106,8 @@ class CoGroupedArrowPythonRunner(
 
     new Writer(env, worker, inputIterator, partitionIndex, context) {
 
+      private val arrowInput = new ArrowWriterWrapper.InputWriter(context)
+
       private var nextBatchInLeftGroup: Iterator[InternalRow] = null
       private var nextBatchInRightGroup: Iterator[InternalRow] = null
       private var leftGroupArrowWriter: ArrowWriterWrapper = null
@@ -120,6 +122,12 @@ class CoGroupedArrowPythonRunner(
        * small batches contain at most `arrowMaxRecordsPerBatch` records.
        */
       override def writeNextInputToStream(dataOut: DataOutputStream): Boolean = {
+        arrowInput.withInputWrite {
+          writeNextBatch(dataOut)
+        }
+      }
+
+      private def writeNextBatch(dataOut: DataOutputStream): Boolean = {
         val startData = dataOut.size()
         // We use null checks for nextBatchInLeftGroup and nextBatchInRightGroup as a way
         // to indicate that the iterator has been consumed.
@@ -145,9 +153,9 @@ class CoGroupedArrowPythonRunner(
         var numRowsInBatch: Int = 0
         if (nextBatchInLeftGroup != null) {
           if (leftGroupArrowWriter == null) {
-            leftGroupArrowWriter = ArrowWriterWrapper.createAndStartArrowWriter(leftSchema,
+            leftGroupArrowWriter = arrowInput.createAndStartArrowWriter(leftSchema,
               timeZoneId, pythonExec + " (left)",
-              largeVarTypes, dataOut, context)
+              largeVarTypes, dataOut)
             // Set the unloader with compression after creating the writer
             leftGroupArrowWriter.unloader = createUnloader(leftGroupArrowWriter.root)
           }
@@ -168,9 +176,9 @@ class CoGroupedArrowPythonRunner(
           }
         } else if (nextBatchInRightGroup != null) {
           if (rightGroupArrowWriter == null) {
-            rightGroupArrowWriter = ArrowWriterWrapper.createAndStartArrowWriter(rightSchema,
+            rightGroupArrowWriter = arrowInput.createAndStartArrowWriter(rightSchema,
               timeZoneId, pythonExec + " (right)",
-              largeVarTypes, dataOut, context)
+              largeVarTypes, dataOut)
             // Set the unloader with compression after creating the writer
             rightGroupArrowWriter.unloader = createUnloader(rightGroupArrowWriter.root)
           }

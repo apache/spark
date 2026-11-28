@@ -282,18 +282,25 @@ private[python] trait GroupedPythonArrowInput { self: RowInputArrowPythonRunner 
         writeUDF(dataOut)
       }
 
+      private val arrowInput = new ArrowWriterWrapper.InputWriter(context)
       var writer: ArrowWriterWrapper = null
       // Marker inside the input iterator to indicate the start of the next batch.
       private var nextBatchStart: Iterator[InternalRow] = Iterator.empty
 
       override def writeNextInputToStream(dataOut: DataOutputStream): Boolean = {
+        arrowInput.withInputWrite {
+          writeNextBatch(dataOut)
+        }
+      }
+
+      private def writeNextBatch(dataOut: DataOutputStream): Boolean = {
         if (!nextBatchStart.hasNext) {
           if (inputIterator.hasNext) {
             dataOut.writeInt(1) // Notify that there is a group to read.
             assert(writer == null || writer.isClosed)
-            writer = ArrowWriterWrapper.createAndStartArrowWriter(
+            writer = arrowInput.createAndStartArrowWriter(
               schema, timeZoneId, pythonExec,
-              largeVarTypes, dataOut, context)
+              largeVarTypes, dataOut)
             // Set the unloader with compression after creating the writer
             writer.unloader = ArrowCompressionUtils.createVectorUnloader(writer.root, self.codec)
             nextBatchStart = inputIterator.next()
@@ -306,8 +313,7 @@ private[python] trait GroupedPythonArrowInput { self: RowInputArrowPythonRunner 
             writer.unloader, dataOut)
           if (!nextBatchStart.hasNext) {
             writer.streamWriter.end()
-            // We don't need a try catch block here as the close() method is registered with
-            // the TaskCompletionListener.
+            // The input writer retains the wrapper for task cleanup if end() fails.
             writer.close()
           }
           assert(0 < numRowsInBatch && numRowsInBatch <= maxRecordsPerBatch, numRowsInBatch)
