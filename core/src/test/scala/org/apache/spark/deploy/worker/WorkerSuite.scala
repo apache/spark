@@ -443,4 +443,111 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter with P
     assert(getHeartbeatTask(worker) == heartbeatTask)
     assert(getWorkDirCleanupTask(worker) == workDirCleanupTask)
   }
+
+  test("failed app leaf creation removes the executor directory") {
+    val supplier = new Supplier[ExternalShuffleService] {
+      override def get: ExternalShuffleService = shuffleService
+    }
+    val sparkConf = new SparkConf()
+    val worker = makeWorker(sparkConf, supplier)
+    val roots = Utils.getOrCreateLocalRootDirs(sparkConf).map(new File(_))
+    val before = roots.flatMap(_.listFiles()).map(_.getAbsolutePath).toSet
+    intercept[IOException] {
+      worker.createExecutorLocalDirs("x" * 300)
+    }
+    assert(roots.flatMap(_.listFiles()).map(_.getAbsolutePath).toSet === before)
+  }
+
+  test("dot app IDs use distinct leaves on every local root") {
+    withTempDir { dir =>
+      val roots = Seq(new File(dir, "root-1"), new File(dir, "root-2"))
+      val sparkConf = new SparkConf() {
+        override def getenv(name: String): String = {
+          if (name == "SPARK_LOCAL_DIRS") {
+            roots.map(_.getAbsolutePath).mkString(",")
+          } else {
+            super.getenv(name)
+          }
+        }
+      }
+      val supplier = new Supplier[ExternalShuffleService] {
+        override def get: ExternalShuffleService = shuffleService
+      }
+      Utils.clearLocalRootDirs()
+      try {
+        val worker = makeWorker(sparkConf, supplier)
+        for ((appId, expectedLeaf) <- Seq("." -> "%2E", ".." -> "%2E%2E")) {
+          val appDirs = worker.createExecutorLocalDirs(appId).map(new File(_))
+          assert(appDirs.size == 2)
+          val siblings = appDirs.map { appDir =>
+            assert(appDir.getName == expectedLeaf)
+            assert(appDir.getCanonicalFile ==
+              new File(appDir.getParentFile.getCanonicalFile, expectedLeaf))
+            val sibling = new File(appDir.getParentFile, "sibling")
+            assert(sibling.mkdir())
+            sibling
+          }
+          worker.appDirectories(appId) = appDirs.map(_.getAbsolutePath)
+          worker.finishedApps += appId
+          worker.handleExecutorStateChanged(
+            ExecutorStateChanged(appId, 0, ExecutorState.EXITED, None, None))
+          val emptyDirs = worker.createExecutorLocalDirs(appId).map(new File(_))
+          assert(emptyDirs.size == 2)
+          worker.appDirectories(appId) = emptyDirs.map(_.getAbsolutePath)
+          worker.finishedApps += appId
+          worker.handleExecutorStateChanged(
+            ExecutorStateChanged(appId, 0, ExecutorState.EXITED, None, None))
+          // Cleanup is serial; removing these parents also waits for the prior cleanup.
+          eventually(timeout(3.seconds), interval(10.milliseconds)) {
+            assert(emptyDirs.forall(d => !d.getParentFile.exists()))
+          }
+          assert(appDirs.forall(!_.exists()))
+          assert(siblings.forall(_.exists()))
+        }
+      } finally {
+        Utils.clearLocalRootDirs()
+      }
+    }
+  }
+
+  test("app cleanup uses the LaunchExecutor local dir layout") {
+    val externalShuffleServiceSupplier = new Supplier[ExternalShuffleService] {
+      override def get: ExternalShuffleService = shuffleService
+    }
+    val worker = makeWorker(new SparkConf(), externalShuffleServiceSupplier)
+    val appId = "app:20260922000000/0001"
+    val appDir = new File(worker.createExecutorLocalDirs(appId).head)
+    val executorDir = appDir.getParentFile
+    val secondAppId = "app-empty-parent"
+    val secondAppDir = new File(worker.createExecutorLocalDirs(secondAppId).head)
+    val secondExecutorDir = secondAppDir.getParentFile
+    try {
+      // Exercise the production helper rather than hand-building the directory layout.
+      assert(appDir.getName === "app%3A20260922000000%2F0001")
+      assert(executorDir.getName.startsWith("executor-"))
+      assert(executorDir.getParentFile.getName.startsWith("spark-"))
+      val sibling = new File(executorDir, "sibling")
+      assert(sibling.mkdir())
+      worker.appDirectories(appId) = Seq(appDir.getAbsolutePath)
+      worker.finishedApps += appId
+      worker.handleExecutorStateChanged(
+        ExecutorStateChanged(appId, 0, ExecutorState.EXITED, None, None))
+      eventually(timeout(1.second), interval(10.milliseconds)) {
+        assert(!appDir.exists())
+      }
+      assert(sibling.exists())
+
+      worker.appDirectories(secondAppId) = Seq(secondAppDir.getAbsolutePath)
+      worker.finishedApps += secondAppId
+      worker.handleExecutorStateChanged(
+        ExecutorStateChanged(secondAppId, 0, ExecutorState.EXITED, None, None))
+      eventually(timeout(1.second), interval(10.milliseconds)) {
+        assert(!secondExecutorDir.exists())
+      }
+      assert(sibling.exists())
+    } finally {
+      Utils.deleteRecursively(executorDir)
+      Utils.deleteRecursively(secondExecutorDir)
+    }
+  }
 }
