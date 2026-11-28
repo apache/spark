@@ -1,0 +1,9 @@
+<settings>
+  <mirrors>
+    <mirror>
+      <id>internal-mirror</id>
+      <mirrorOf>*</mirrorOf>
+      <url>${env.MAVEN_MIRROR_URL}</url>
+    </mirror>
+  </mirrors>
+</settings>
