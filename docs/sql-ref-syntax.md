@@ -32,6 +32,7 @@ Data Definition Statements are used to create or modify the structure of databas
  * [CREATE DATABASE](sql-ref-syntax-ddl-create-database.html)
  * [CREATE FUNCTION (External)](sql-ref-syntax-ddl-create-function.html)
  * [CREATE FUNCTION (SQL)](sql-ref-syntax-ddl-create-sql-function.html)
+ * [CREATE METRIC VIEW](sql-ref-syntax-ddl-create-metric-view.html)
  * [CREATE TABLE](sql-ref-syntax-ddl-create-table.html)
  * [CREATE VIEW](sql-ref-syntax-ddl-create-view.html)
  * [DECLARE VARIABLE](sql-ref-syntax-ddl-declare-variable.html)
