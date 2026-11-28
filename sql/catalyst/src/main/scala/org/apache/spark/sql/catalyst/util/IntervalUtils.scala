@@ -583,7 +583,7 @@ object IntervalUtils extends SparkIntervalUtils {
       case Array("", nanosStr) => parseNanos(nanosStr, false)
       case Array(secondsStr, nanosStr) =>
         val seconds = parseSeconds(secondsStr)
-        Math.addExact(seconds, parseNanos(nanosStr, seconds < 0))
+        Math.addExact(seconds, parseNanos(nanosStr, secondsStr.startsWith("-")))
       case _ => throw new SparkIllegalArgumentException(
         errorClass = "INVALID_INTERVAL_FORMAT.SECOND_NANO_FORMAT",
         messageParameters = Map("input" -> secondNano))
