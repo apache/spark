@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
+import org.apache.spark.sql.pipelines.autocdc.AutoCdcReservedNames
 import org.apache.spark.sql.pipelines.common.DatasetType
 import org.apache.spark.sql.pipelines.util.SchemaInferenceUtils
 import org.apache.spark.sql.types.StructType
@@ -183,10 +184,30 @@ case class VirtualTableInput(
    */
   def load(asStreaming: Boolean): DataFrame = {
     val deducedSchema = specifiedSchema match {
-      // If the user specified a schema, use it directly.
+      // For a declared AUTO CDC target, materialization reconciles the user's reserved column(s)
+      // in place and appends any the declaration omitted (see DatasetManager.materializeTable).
+      // Produce that same schema here so a same-graph downstream consumer plans against the columns
+      // the target is actually created with, rather than the declaration verbatim.
+      case Some(ss) if availableFlows.exists(GraphElementTypeUtils.isAutoCdcFlow) =>
+        val flowInferredSchema = SchemaInferenceUtils.inferSchemaFromFlows(
+          tableIdentifier = identifier,
+          flows = availableFlows,
+          userSpecifiedSchema = None,
+          sessionCaseSensitive = sessionCaseSensitive)
+        val resolver = SchemaInferenceUtils.resolverFor(
+          SchemaInferenceUtils.effectiveCaseSensitivity(
+            identifier, availableFlows, sessionCaseSensitive))
+        // This read path runs during flow analysis, before GraphValidations
+        // .validateUserSpecifiedSchemas. Validate the declared reserved column(s) here too so a
+        // malformed declaration (e.g. a case-duplicate reserved column) surfaces as the user-facing
+        // AUTOCDC_INVALID_RESERVED_SCHEMA error rather than an opaque internal error from
+        // appendEngineOwnedReservedFields's defense-in-depth guard.
+        AutoCdcReservedNames.validateDeclaredReservedFields(
+          identifier.unquotedString, ss, flowInferredSchema, resolver)
+        AutoCdcReservedNames.appendEngineOwnedReservedFields(ss, flowInferredSchema, resolver)
+      // Otherwise a declared schema is used directly.
       case Some(ss) => ss
-      // Otherwise infer the schema from a combination of the incoming flows and the
-      // user-specified schema, if provided.
+      // With no declared schema, infer it from the incoming flows.
       case _ =>
         SchemaInferenceUtils.inferSchemaFromFlows(
           tableIdentifier = identifier,
