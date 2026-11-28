@@ -33,6 +33,7 @@ import org.apache.spark.api.python.PythonFunction.PythonAccumulator
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connect.IllegalStateErrors
@@ -452,7 +453,19 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   def withSession[T](f: SparkSession => T): T = {
     artifactManager.withResources {
       session.withActive {
-        f(session)
+        val previousUser = CURRENT_USER.get()
+        if (userId.nonEmpty) {
+          CURRENT_USER.set(userId)
+        }
+        try {
+          f(session)
+        } finally {
+          if (previousUser == null) {
+            CURRENT_USER.remove()
+          } else {
+            CURRENT_USER.set(previousUser)
+          }
+        }
       }
     }
   }
