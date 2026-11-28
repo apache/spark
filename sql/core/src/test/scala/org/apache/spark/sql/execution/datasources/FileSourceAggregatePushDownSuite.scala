@@ -22,8 +22,12 @@ import java.time.LocalTime
 
 import org.apache.spark.{SparkConf, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{DataFrame, ExplainSuiteHelper, Row}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection}
 import org.apache.spark.sql.catalyst.optimizer.CollapseGroupedSumOfCount
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
+import org.apache.spark.sql.connector.expressions.FieldReference
+import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
@@ -33,6 +37,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BinaryType, BooleanType, ByteType, DateType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType, StructField, StructType, TimestampType, TimeType}
 import org.apache.spark.tags.DataSourceV2Test
 import org.apache.spark.tags.SlowSQLTest
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A test suite that tests aggregate push down for Parquet and ORC.
@@ -260,6 +265,165 @@ trait FileSourceAggregatePushDownSuite
                 " PushedFilters: [], PushedGroupBy: [p1, p2, p3, p4]"
             checkPushedInfo(df, expected_plan_fragment)
             checkAnswer(df, expected)
+          }
+        }
+      }
+    }
+  }
+
+  test("reorder a subset of partition values for aggregate push down") {
+    val schema = new StructType().add("p1", IntegerType).add("p2", StringType)
+      .add("p3", LongType)
+    val values = new GenericInternalRow(Array[Any](1, UTF8String.fromString("us"), null))
+    val unsafe = UnsafeProjection.create(schema)(values).copy()
+    for (row <- Seq[InternalRow](values, unsafe);
+         names <- Seq(Seq("p1"), Seq("p2"), Seq("p3"), Seq("p3", "p1"),
+           Seq("p2", "p1"), Seq("p3", "p2", "p1"), Seq("p1", "p2", "p3"), Seq.empty)) {
+      val aggregation = new Aggregation(Array.empty, names.map(FieldReference(_)).toArray)
+      val result = AggregatePushDownUtils.reOrderPartitionCol(schema, aggregation, row)
+      assert(result.numFields == names.length)
+      names.zipWithIndex.foreach { case (name, i) =>
+        val index = schema.fieldIndex(name)
+        assert(result.get(i, schema(index).dataType) == row.get(index, schema(index).dataType))
+      }
+    }
+  }
+
+  test("aggregate with a subset of partition group by columns can be pushed down") {
+    withTempPath { dir =>
+      Seq((10, Some(1), Some("us"), "a", Some(10)),
+        (2, Some(1), Some("us"), "a", None),
+        (30, Some(2), Some("us"), "b", Some(30)),
+        (-4, Some(1), Some("uk"), "a", Some(-4)),
+        (6, Some(2), Some("uk"), "b", None),
+        (8, None, Some("us"), "c", Some(8)),
+        (12, None, None, "d", None))
+        .toDF("value", "p1", "p2", "p3", "n")
+        .coalesce(1).write.partitionBy("p1", "p2", "p3")
+        .option("maxRecordsPerFile", "1").format(format).save(dir.getCanonicalPath)
+      spark.range(0).selectExpr("CAST(id AS INT) AS value", "CAST(id AS INT) AS n")
+        .coalesce(1).write.format(format)
+        .save(s"${dir.getCanonicalPath}/p1=99/p2=empty/p3=z")
+
+      withTempView("tmp") {
+        spark.read.format(format).load(dir.getCanonicalPath).createOrReplaceTempView("tmp")
+        val queries = Seq(
+          ("SELECT p2, min(value), max(value), count(*), count(n) FROM tmp GROUP BY p2",
+            "[p2]"),
+          ("SELECT p2, p1, min(value), max(value), count(*), count(n) " +
+            "FROM tmp GROUP BY p2, p1", "[p2, p1]"),
+          ("SELECT min(value), max(value), count(*), count(n) FROM tmp GROUP BY p3",
+            "[p3]"),
+          ("SELECT p2, min(value), max(value), count(*), count(n) " +
+            "FROM tmp WHERE p1 = 1 GROUP BY p2", "[p2]"),
+          ("SELECT p2, min(value), max(value), count(*), count(n) " +
+            "FROM tmp WHERE p1 IS NULL GROUP BY p2", "[p2]"),
+          ("SELECT p2, min(value), max(value), count(*), count(n) " +
+            "FROM tmp WHERE p1 = 99 GROUP BY p2", "[p2]"),
+          ("SELECT k, min(v), max(v), count(*), count(n) " +
+            "FROM (SELECT p2 AS k, value AS v, n FROM tmp) GROUP BY k", "[p2]"),
+          ("SELECT p2, min(value), max(value), count(*), count(n), max(value) " +
+            "FROM tmp GROUP BY p2 HAVING count(*) > 1", "[p2]"))
+        for ((query, groupBy) <- queries; vectorized <- Seq("false", "true")) {
+          val expected = withSQLConf(aggPushDownEnabledKey -> "false",
+            vectorizedReaderEnabledKey -> vectorized) {
+            val df = sql(query)
+            checkPushedInfo(df, "PushedAggregation: []")
+            df.collect()
+          }
+          withSQLConf(aggPushDownEnabledKey -> "true",
+            vectorizedReaderEnabledKey -> vectorized) {
+            val df = sql(query)
+            checkPushedInfo(df,
+              "PushedAggregation: [MIN(value), MAX(value), COUNT(*), COUNT(n)], " +
+                s"PushedFilters: [], PushedGroupBy: $groupBy")
+            checkAnswer(df, expected)
+          }
+        }
+        withSQLConf(aggPushDownEnabledKey -> "true") {
+          val df = sql("SELECT p2, min(value), max(value), count(*), count(n) " +
+            "FROM tmp GROUP BY p2")
+          checkAnswer(df, Seq(Row("us", 2, 30, 4L, 3L), Row("uk", -4, 6, 2L, 1L),
+            Row(null, 12, 12, 1L, 0L)))
+        }
+      }
+    }
+  }
+
+  test("aggregate with a subset of partition group by columns rejects unsupported queries") {
+    withTempPath { dir =>
+      Seq((10, 1, 2, 3), (2, 1, 3, 4), (30, 2, 2, 3))
+        .toDF("value", "p1", "p2", "p3")
+        .coalesce(1).write.partitionBy("p1", "p2", "p3")
+        .format(format).save(dir.getCanonicalPath)
+      withTempView("tmp") {
+        spark.read.format(format).load(dir.getCanonicalPath).createOrReplaceTempView("tmp")
+        val queries = Seq(
+          "SELECT p2, min(value) FROM tmp WHERE value > 5 GROUP BY p2",
+          "SELECT value, min(value) FROM tmp GROUP BY value",
+          "SELECT p2, value, min(value) FROM tmp GROUP BY p2, value",
+          "SELECT p2 + 1, min(value) FROM tmp GROUP BY p2 + 1",
+          "SELECT p2, sum(value), min(value) FROM tmp GROUP BY p2",
+          "SELECT p2, avg(value) FROM tmp GROUP BY p2",
+          "SELECT p2, count(DISTINCT value) FROM tmp GROUP BY p2",
+          "SELECT p2, max(p1) FROM tmp GROUP BY p2",
+          "SELECT p2, count(DISTINCT p1) FROM tmp GROUP BY p2")
+        for (query <- queries; vectorized <- Seq("false", "true")) {
+          val expected = withSQLConf(aggPushDownEnabledKey -> "false",
+            vectorizedReaderEnabledKey -> vectorized) {
+            sql(query).collect()
+          }
+          withSQLConf(aggPushDownEnabledKey -> "true",
+            vectorizedReaderEnabledKey -> vectorized) {
+            val df = sql(query)
+            checkPushedInfo(df, "PushedAggregation: []")
+            checkAnswer(df, expected)
+          }
+        }
+      }
+    }
+  }
+
+  test("aggregate with a subset of partition group by columns preserves partition counts") {
+    withTempPath { dir =>
+      Seq((10, Some(1), Some("a")), (2, Some(1), Some("b")),
+        (30, Some(2), Some("a")), (8, None, Some("a")), (12, Some(2), None))
+        .toDF("value", "p1", "p2")
+        .coalesce(1).write.partitionBy("p1", "p2")
+        .format(format).save(dir.getCanonicalPath)
+      withTempView("tmp") {
+        spark.read.format(format).load(dir.getCanonicalPath).createOrReplaceTempView("tmp")
+        for (caseSensitive <- Seq("false", "true"); vectorized <- Seq("false", "true")) {
+          withSQLConf(aggPushDownEnabledKey -> "true",
+            SQLConf.CASE_SENSITIVE.key -> caseSensitive,
+            vectorizedReaderEnabledKey -> vectorized,
+            SQLConf.OPTIMIZER_METADATA_ONLY.key -> "false") {
+            val p1 = if (caseSensitive == "true") "p1" else "P1"
+            val p2 = if (caseSensitive == "true") "p2" else "P2"
+            val df = sql(s"SELECT $p2, count($p1), count($p2), count(*) " +
+              s"FROM tmp GROUP BY $p2")
+            checkPushedInfo(df, "PushedAggregation: [COUNT(p1), COUNT(p2), COUNT(*)], " +
+              "PushedFilters: [], PushedGroupBy: [p2]")
+            checkAnswer(df, Seq(Row("a", 2L, 3L, 3L), Row("b", 1L, 1L, 1L),
+              Row(null, 1L, 0L, 1L)))
+            val distinct = sql(s"SELECT DISTINCT $p2 FROM tmp")
+            checkPushedInfo(distinct,
+              "PushedAggregation: [], PushedFilters: [], PushedGroupBy: [p2]")
+            checkAnswer(distinct, Seq(Row("a"), Row("b"), Row(null)))
+            for ((keys, groupBy) <- Seq((s"$p1, $p2", "[p1, p2]"), (s"$p2, $p1", "[p2, p1]"))) {
+              val full = sql(s"SELECT $keys, count($p1), count($p2), count(*) " +
+                s"FROM tmp GROUP BY $keys")
+              checkPushedInfo(full, "PushedAggregation: [COUNT(p1), COUNT(p2), COUNT(*)], " +
+                s"PushedFilters: [], PushedGroupBy: $groupBy")
+              val expected = if (keys.startsWith(p1)) {
+                Seq(Row(1, "a", 1L, 1L, 1L), Row(1, "b", 1L, 1L, 1L), Row(2, "a", 1L, 1L, 1L),
+                  Row(null, "a", 0L, 1L, 1L), Row(2, null, 1L, 0L, 1L))
+              } else {
+                Seq(Row("a", 1, 1L, 1L, 1L), Row("b", 1, 1L, 1L, 1L), Row("a", 2, 1L, 1L, 1L),
+                  Row("a", null, 0L, 1L, 1L), Row(null, 2, 1L, 0L, 1L))
+              }
+              checkAnswer(full, expected)
+            }
           }
         }
       }

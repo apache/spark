@@ -185,13 +185,17 @@ case class OrcPartitionReaderFactory(
       private var hasNext = true
       private lazy val row: InternalRow = {
         Utils.tryWithResource(createORCReader(filePath, conf)._1) { reader =>
-          OrcUtils.createAggInternalRowFromFooter(
-            reader, filePath.toString, dataSchema, partitionSchema, aggregation.get,
-            readDataSchema, file.partitionValues)
+          if (aggregation.get.groupByExpressions.nonEmpty && reader.getNumberOfRows == 0) {
+            null
+          } else {
+            OrcUtils.createAggInternalRowFromFooter(
+              reader, filePath.toString, dataSchema, partitionSchema, aggregation.get,
+              readDataSchema, file.partitionValues)
+          }
         }
       }
 
-      override def next(): Boolean = hasNext
+      override def next(): Boolean = hasNext && row != null
 
       override def get(): InternalRow = {
         hasNext = false
@@ -213,14 +217,18 @@ case class OrcPartitionReaderFactory(
       private var hasNext = true
       private lazy val batch: ColumnarBatch = {
         Utils.tryWithResource(createORCReader(filePath, conf)._1) { reader =>
-          val row = OrcUtils.createAggInternalRowFromFooter(
-            reader, filePath.toString, dataSchema, partitionSchema, aggregation.get,
-            readDataSchema, file.partitionValues)
-          AggregatePushDownUtils.convertAggregatesRowToBatch(row, readDataSchema, offHeap = false)
+          if (aggregation.get.groupByExpressions.nonEmpty && reader.getNumberOfRows == 0) {
+            null
+          } else {
+            val row = OrcUtils.createAggInternalRowFromFooter(
+              reader, filePath.toString, dataSchema, partitionSchema, aggregation.get,
+              readDataSchema, file.partitionValues)
+            AggregatePushDownUtils.convertAggregatesRowToBatch(row, readDataSchema, offHeap = false)
+          }
         }
       }
 
-      override def next(): Boolean = hasNext
+      override def next(): Boolean = hasNext && batch != null
 
       override def get(): ColumnarBatch = {
         hasNext = false

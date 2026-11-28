@@ -257,6 +257,14 @@ object ParquetUtils extends Logging {
       datetimeRebaseSpec: RebaseSpec): InternalRow = {
     val (primitiveTypes, values) = getPushedDownAggResult(
       footer, filePath, dataSchema, partitionSchema, aggregation)
+    aggregation.aggregateExpressions.zipWithIndex.foreach {
+      case (count: Count, i) =>
+        V2ColumnUtils.extractV2Column(count.column).flatMap(partitionSchema.getFieldIndex)
+          .foreach { index =>
+            if (partitionValues.isNullAt(index)) values(i) = 0L
+          }
+      case _ =>
+    }
 
     val builder = Types.buildMessage
     primitiveTypes.foreach(t => builder.addField(t))
