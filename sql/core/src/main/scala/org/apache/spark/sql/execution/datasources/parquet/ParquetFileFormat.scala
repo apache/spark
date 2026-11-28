@@ -284,6 +284,13 @@ class ParquetFileFormat
       } else {
         None
       }
+    // A field-id read of a schema with field ids resolves pushed filters by id as well.
+    val fieldIdReadSchema =
+      if (sqlConf.parquetFieldIdReadEnabled && ParquetUtils.hasFieldIds(dataSchema)) {
+        Some(dataSchema)
+      } else {
+        None
+      }
     val parquetOptions = new ParquetOptions(options, sqlConf)
     val datetimeRebaseModeInRead = parquetOptions.datetimeRebaseModeInRead
     val int96RebaseModeInRead = parquetOptions.int96RebaseModeInRead
@@ -356,6 +363,7 @@ class ParquetFileFormat
             isCaseSensitive,
             datetimeRebaseSpec,
             variantExtractionSchema = variantExtractionSchema,
+            fieldIdReadSchema = fieldIdReadSchema,
             readSchema = Some(requiredSchema))
           filters
             // Collects all converted Parquet filter predicates. Notice that not all predicates
