@@ -169,6 +169,10 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
       assert(analyzed.expressions.exists(_.exists(cls.isInstance)), query)
       checkResolverGuard(Project(analyzed.output, analyzed), unsupportedReason = None)
     }
+    // The parser-built IS [NOT] JSON predicate must pass the guard like its siblings above.
+    checkResolverGuard("""SELECT '{}' IS JSON""")
+    checkResolverGuard("""SELECT '{}' IS NOT JSON OBJECT""")
+    checkResolverGuard("""SELECT NULL IS JSON""")
   }
 
   test("Conditional expressions") {
