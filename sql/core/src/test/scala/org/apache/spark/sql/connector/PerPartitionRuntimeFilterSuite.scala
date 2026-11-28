@@ -23,7 +23,7 @@ import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{BloomFilterMightContain, DynamicPruningExpression, DynamicPruningSubquery, Expression, GetStructField, Literal, PlanExpression, ScalarSubquery, TransformExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
-import org.apache.spark.sql.catalyst.optimizer.{InsertPerPartitionRuntimeFilterJoins, PerPartitionRuntimeFilterSubquery}
+import org.apache.spark.sql.catalyst.optimizer.{InjectRuntimeFilter, InsertPerPartitionRuntimeFilterJoins, PerPartitionRuntimeFilterSubquery}
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, Inner}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, LogicalPlan, Union}
 import org.apache.spark.sql.catalyst.plans.physical.RangePartitioning
@@ -1088,6 +1088,31 @@ class PerPartitionRuntimeFilterSuite extends KeyGroupedPartitioningSuiteBase {
         "LEFT JOIN testcat.ns.nf f ON d.id = f.id")
       assert(perPartitionSemiJoins(df).isEmpty, df.queryExecution.optimizedPlan)
       assert(df.collect().head.getLong(1) == 0L, "a row of `d` lost its match")
+    }
+  }
+
+  test("a per-partition bloom filter from a V2 scan only if reading it again gives the same rows") {
+    // The aggregate of the semi join reads the creation side again. A scan with a pushed limit can
+    // return other rows then. A scan with a pushed aggregate or join can be `isRepeatableRead`
+    // though it is not row-wise. The flags of the scan of `dim` are set on the plan that
+    // `InjectRuntimeFilter` gets, and `dim` is too big for a bloom filter of all its keys.
+    createTables()
+    withoutGlobalBloomFilter("dim") {
+      val plan = withSQLConf(RUNTIME_BLOOM_FILTER_ENABLED.key -> "false") {
+        join().queryExecution.optimizedPlan
+      }
+      // (onlyRowWisePushdowns, repeatableRead) of the scan of `dim`, first as built.
+      Seq((true, false), (false, true), (false, false)).foreach { case (rowWise, repeatable) =>
+        val rewritten = plan.transform {
+          case r: DataSourceV2ScanRelation if r.output.exists(_.name == "flag") =>
+            assert(r.onlyRowWisePushdowns && !r.repeatableRead, plan)
+            r.copy(onlyRowWisePushdowns = rowWise, repeatableRead = repeatable)
+        }
+        val injected = InjectRuntimeFilter(rewritten)
+        assert(injected.containsPattern(PER_PARTITION_RUNTIME_FILTER_SUBQUERY) ==
+          (rowWise || repeatable),
+          s"onlyRowWisePushdowns = $rowWise, repeatableRead = $repeatable:\n$injected")
+      }
     }
   }
 

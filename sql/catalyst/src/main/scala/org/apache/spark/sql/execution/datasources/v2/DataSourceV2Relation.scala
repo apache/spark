@@ -22,7 +22,7 @@ import java.util.{Collections, Optional, OptionalLong}
 import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation, TimeTravelSpec}
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics}
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, AttributeReference, AttributeSeq, AttributeSet, Expression, ExpressionSet, Literal, ProjectionOverSchema, SortOrder, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, AttributeReference, AttributeSeq, AttributeSet, Expression, ExpressionSet, Literal, PredicateHelper, ProjectionOverSchema, SortOrder, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.{EstimationUtils, FilterEstimation}
@@ -277,7 +277,8 @@ case class DataSourceV2ScanRelation(
     inferredFilters: Seq[Expression] = Seq.empty,
     mergeableScan: Boolean = false,
     onlyRowWisePushdowns: Boolean = false,
-    repeatableRead: Boolean = false) extends LeafNode with NamedRelation {
+    repeatableRead: Boolean = false)
+  extends LeafNode with NamedRelation with PredicateHelper {
 
   // TODO: Override validConstraints to return ExpressionSet(pushedFilters) so that pushed
   // filters participate in constraint propagation (InferFiltersFromConstraints, PruneFilters).
@@ -292,6 +293,17 @@ case class DataSourceV2ScanRelation(
    * rows. A scan whose pushed operations all work on each row by itself does.
    */
   def isRepeatableRead: Boolean = repeatableRead || onlyRowWisePushdowns
+
+  /**
+   * Whether a rule that reads this scan again in a subquery, as DPP and a runtime bloom filter
+   * do, can count its pushed filters as a selective `Filter` above it: one of them is likely
+   * selective, and every operation pushed into the scan works on each row by itself. A filter
+   * the scan took in fully leaves no `Filter` above it, where V1 keeps one, unless the scan's
+   * `reflectsFullyPushedDownFilters` is false: then `V2ScanRelationPushDown` can put the filter
+   * back above it to adjust its statistics.
+   */
+  def hasSelectivePushedFilters: Boolean =
+    onlyRowWisePushdowns && pushedFilters.exists(isLikelySelective)
 
   /**
    * Resolved attributes that the scan declares for runtime filtering via
