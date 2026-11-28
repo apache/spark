@@ -1758,7 +1758,7 @@ class DataFrameWindowFunctionsSuite extends SharedSparkSession
 
   test("SPARK-61729: top-1 row_number dedup over FLOAT/DOUBLE partition keys normalizes " +
       "0.0/-0.0/NaN") {
-    val df = Seq(
+    val data = Seq(
       (0.0, 1, "p1"),
       (-0.0, 2, "p2"),
       (Double.NaN, 1, "n1"),
@@ -1766,15 +1766,27 @@ class DataFrameWindowFunctionsSuite extends SharedSparkSession
       (1.0, 1, "q1")
     ).toDF("k", "ts", "tag")
 
-    val w = Window.partitionBy($"k").orderBy($"ts")
-    val dedup = df.withColumn("rn", row_number().over(w)).where($"rn" === 1)
+    def checkDedup(df: DataFrame, expected: Seq[Row]): Unit = {
+      val w = Window.partitionBy($"k").orderBy($"ts")
+      val dedup = df.withColumn("rn", row_number().over(w)).where($"rn" === 1)
+      checkAnswer(dedup, expected)
+      assert(!stripAQEPlan(dedup.queryExecution.executedPlan).exists(_.isInstanceOf[WindowExec]))
+    }
 
-    checkAnswer(dedup,
+    // DOUBLE partition key.
+    checkDedup(data,
       Seq(
         Row(0.0, 1, "p1", 1), // 0.0 and -0.0 are one SQL-equal group; ts=1 wins
         Row(Double.NaN, 1, "n1", 1), // both NaN bit patterns are one SQL-equal group
         Row(1.0, 1, "q1", 1)))
-    assert(!stripAQEPlan(dedup.queryExecution.executedPlan).exists(_.isInstanceOf[WindowExec]))
+
+    // FLOAT partition key: NormalizeFloatingNumbers normalizes FLOAT through a branch separate
+    // from DOUBLE's, so the DOUBLE check above alone wouldn't catch a FLOAT-only regression.
+    checkDedup(data.select($"k".cast(FloatType), $"ts", $"tag"),
+      Seq(
+        Row(0.0f, 1, "p1", 1),
+        Row(Float.NaN, 1, "n1", 1),
+        Row(1.0f, 1, "q1", 1)))
   }
 
   test("SPARK-61729: top-1 row_number dedup keeps a deterministic extra conjunct correct " +
@@ -1798,7 +1810,10 @@ class DataFrameWindowFunctionsSuite extends SharedSparkSession
           |""".stripMargin)
 
       checkAnswer(df, Seq(Row(2), Row(3)))
-      assert(!stripAQEPlan(df.queryExecution.executedPlan).exists(_.isInstanceOf[WindowExec]))
+      // The IN subquery becomes a left semi join whose deduplicated side can be broadcast, so
+      // the WindowExec check must descend into query stages (stripAQEPlan's plain `exists`
+      // stops at the top AdaptiveSparkPlanExec/ResultQueryStageExec and would never see it).
+      assert(!exists(df.queryExecution.executedPlan)(_.isInstanceOf[WindowExec]))
     }
   }
 

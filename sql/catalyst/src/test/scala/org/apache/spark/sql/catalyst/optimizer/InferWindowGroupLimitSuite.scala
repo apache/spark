@@ -556,6 +556,35 @@ class InferWindowGroupLimitSuite extends PlanTest {
       WithoutOptimize.execute(correctAnswer.analyze))
   }
 
+  test("Not eliminated when a multi-column partition key has a non-binary-stable key " +
+      "after a binary-stable one") {
+    val id = AttributeReference("id", IntegerType)()
+    val k = AttributeReference("k", StringType(CollationFactory.UTF8_LCASE_COLLATION_ID))()
+    val v = AttributeReference("v", IntegerType)()
+    val collatedRelation = LocalRelation(Seq(id, k, v), data = Seq(
+      InternalRow(1, UTF8String.fromString("a"), 1),
+      InternalRow(1, UTF8String.fromString("A"), 2)))
+
+    val originalQuery =
+      collatedRelation
+        .select(id, k, v,
+          windowExpr(RowNumber(),
+            windowSpec(Seq(id, k), v.desc :: Nil, windowFrame)).as("rn"))
+        .where($"rn" === 1)
+
+    val correctAnswer =
+      collatedRelation
+        .windowGroupLimit(Seq(id, k), v.desc :: Nil, RowNumber(), 1)
+        .select(id, k, v,
+          windowExpr(RowNumber(),
+            windowSpec(Seq(id, k), v.desc :: Nil, windowFrame)).as("rn"))
+        .where($"rn" === 1)
+
+    comparePlans(
+      Optimize.execute(originalQuery.analyze),
+      WithoutOptimize.execute(correctAnswer.analyze))
+  }
+
   test("Eliminate the Window/Filter and keep a deterministic extra conjunct as a Filter " +
       "over the new Project") {
     val originalQuery =

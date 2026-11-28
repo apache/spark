@@ -84,6 +84,11 @@ import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
  * byte equality, so collation-equal keys with different bytes land in separate groups and each
  * keeps its own row. The `Window`/`Filter` being eliminated here is what re-merges those rows
  * back into one group today, so dropping them would let the extras leak through as `rn = 1`.
+ * FLOAT/DOUBLE partition keys are safe under this same byte-equality grouping only because
+ * `NormalizeFloatingNumbers` runs earlier in the optimizer and rewrites `-0.0` to `0.0` and every
+ * NaN bit pattern to one canonical NaN before this rule ever sees the plan; `WindowGroupLimit`
+ * copies that already-normalized `partitionSpec`, so SQL-equal float keys are also byte-equal by
+ * the time grouping happens.
  */
 object InferWindowGroupLimit extends Rule[LogicalPlan] with PredicateHelper {
 
