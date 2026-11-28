@@ -22,16 +22,17 @@ from unittest import mock
 
 from sparktestsupport import SPARK_HOME, modules
 from sparktestsupport.shellutils import is_exe
-from sparktestsupport.utils import determine_modules_for_files, determine_modules_to_test
+from sparktestsupport.utils import (
+    determine_modules_for_files,
+    determine_modules_to_test,
+    determine_shell_script_test_goals,
+)
 
 
 class IsIgnoredFileTests(unittest.TestCase):
     def test_dots_in_patterns_are_literal(self):
         self.assertTrue(modules.is_ignored_file(".asf.yaml"))
         self.assertFalse(modules.is_ignored_file("xasfZyaml"))
-
-    def test_sparktestsupport_tests_are_ignored(self):
-        self.assertTrue(modules.is_ignored_file("dev/sparktestsupport/tests/test_modules.py"))
 
     def test_sparktestsupport_source_is_not_ignored(self):
         self.assertFalse(modules.is_ignored_file("dev/sparktestsupport/modules.py"))
@@ -42,7 +43,6 @@ class IsIgnoredFileTests(unittest.TestCase):
             "sql/core/.agents/x.md",
             ".ignore",
             "python/.ignore",
-            "dev/agent_docs_lint.py",
         ]:
             self.assertTrue(modules.is_ignored_file(path), path)
         self.assertFalse(modules.is_ignored_file("x.agents/y.md"))
@@ -227,3 +227,62 @@ class ModuleDefinitionsTests(unittest.TestCase):
 
     def test_sql_changes_do_not_select_rust_sdk_tests(self):
         self.assertNotIn(modules.rust_sdk, determine_modules_to_test([modules.sql]))
+
+    def test_root_runs_python_linter(self):
+        self.assertIn(
+            modules.ShellScriptTestGoal("dev/lint-python"),
+            determine_shell_script_test_goals([modules.root], modules.TestStage.PRE_BUILD),
+        )
+
+    def test_lint_python_inputs_select_lint_python_module(self):
+        for filename in (
+            "python/pyspark/core/context.py",
+            "python/pyspark/_typing.pyi",
+            "python/pyspark/tests/typing/test_core.yml",
+            "pyproject.toml",
+            "python/mypy.ini",
+            "dev/lint-python",
+            "dev/spark-test-image/lint/Dockerfile",
+            # A Python file that used to be ignored.
+            "dev/merge_spark_pr.py",
+        ):
+            with self.subTest(filename=filename):
+                changed_modules = determine_modules_for_files([filename])
+                self.assertIn(modules.lint_python, changed_modules)
+                self.assertNotIn(modules.root, changed_modules)
+
+    def test_scala_changes_do_not_select_lint_python_module(self):
+        changed_modules = determine_modules_for_files(
+            ["core/src/main/scala/org/apache/spark/SparkContext.scala"]
+        )
+        self.assertNotIn(modules.lint_python, changed_modules)
+
+    def test_test_infrastructure_python_files_select_build(self):
+        for filename in (
+            "dev/run-tests.py",
+            "dev/is-changed.py",
+            "dev/sparktestsupport/modules.py",
+        ):
+            with self.subTest(filename=filename):
+                changed_modules = determine_modules_for_files([filename])
+                self.assertIn(modules.build, changed_modules)
+                self.assertIn(modules.lint_python, changed_modules)
+                # build escalates to the full run.
+                self.assertIn(modules.root, determine_modules_to_test(changed_modules))
+        # These unit tests run in every `precondition` job, so they do not need build.
+        changed_modules = determine_modules_for_files(
+            ["dev/sparktestsupport/tests/test_modules.py"]
+        )
+        self.assertIn(modules.lint_python, changed_modules)
+        self.assertNotIn(modules.build, changed_modules)
+        self.assertNotIn(modules.root, changed_modules)
+
+    def test_python_files_without_an_owning_module_select_root(self):
+        for filename in (
+            "dev/pip-sanity-check.py",
+            "sql/gen-sql-api-docs.py",
+            "sql/gen-sql-config-docs.py",
+            "sql/gen-sql-functions-docs.py",
+        ):
+            with self.subTest(filename=filename):
+                self.assertIn(modules.root, determine_modules_for_files([filename]))

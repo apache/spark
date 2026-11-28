@@ -117,7 +117,6 @@ jobs:
           pandas=`./dev/is-changed.py -m $pyspark_pandas_modules`
           pyspark_periodic=`./dev/is-changed.py -m pyspark-periodic`
           pyspark_connect_old_client="$pyspark"
-          lint_python=true
           if [[ "${{ github.repository }}" != 'apache/spark' ]]; then
             yarn=`./dev/is-changed.py -m yarn`
             kubernetes=`./dev/is-changed.py -m kubernetes`
@@ -157,17 +156,6 @@ jobs:
                   core/src/main/scala/org/apache/spark/api/r/*) sparkr=true; break ;;
                   sql/core/src/main/scala/org/apache/spark/sql/api/r/*) sparkr=true; break ;;
                   mllib/src/main/scala/org/apache/spark/ml/r/*) sparkr=true; break ;;
-                esac
-              done
-              # Run the Python linter only when the files it checks, its configurations, its
-              # tools, or its steps in this workflow change.
-              lint_python=false
-              for f in $changed_files; do
-                case "$f" in
-                  *.py|*.pyi|*/tests/typing/*) lint_python=true; break ;;
-                  pyproject.toml|python/mypy.ini) lint_python=true; break ;;
-                  dev/lint-python|dev/spark-test-image/lint/*) lint_python=true; break ;;
-                  .github/workflows/build_and_test.yml) lint_python=true; break ;;
                 esac
               done
             fi
@@ -214,7 +202,6 @@ jobs:
               \"tpcds-1g\": \"$tpcds\",
               \"docker-integration-tests\": \"$docker\",
               \"lint\" : \"true\",
-              \"lint-python\" : \"$lint_python\",
               \"java25\" : \"$java25\",
               \"docs\" : \"$docs\",
               \"yarn\" : \"$yarn\",
@@ -962,19 +949,18 @@ jobs:
       run: ./dev/lint-java
     - name: Spark connect jvm client mima check
       run: ./dev/connect-jvm-client-mima-check
-    # The callers that pass `jobs` without `lint-python`, e.g. scheduled builds, run these steps.
     - name: List Python packages
-      if: fromJson(needs.precondition.outputs.required).lint-python != 'false'
       shell: 'script -q -e -c "bash {0}"'
       run: |
         lsb_release -a
         python3.12 --version
         python3.12 -m pip list
     - name: Python linter
-      if: fromJson(needs.precondition.outputs.required).lint-python != 'false'
-      shell: 'script -q -e -c "bash {0}"'
-      run: |
-        PYTHON_EXECUTABLE=python3.12 ./dev/lint-python
+      env:
+        SKIP_SCALA_BUILD: true
+        SKIP_MIMA: true
+        PYTHON_EXECUTABLE: python3.12
+      run: ./dev/run-tests --modules lint-python
     - name: JS linter
       env:
         SKIP_SCALA_BUILD: true

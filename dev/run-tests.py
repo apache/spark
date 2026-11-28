@@ -111,10 +111,6 @@ def run_java_style_checks(build_profiles):
     run_cmd([os.path.join(SPARK_HOME, "dev", "sbt-checkstyle"), profiles])
 
 
-def run_python_style_checks():
-    run_cmd([os.path.join(SPARK_HOME, "dev", "lint-python")])
-
-
 def exec_maven(mvn_args=()):
     """Will call Maven in the current directory with the list of mvn_args passed
     in and returns the subprocess for any further processing"""
@@ -589,12 +585,6 @@ def main():
         ):
             # Run SBT Checkstyle after the build to prevent a side-effect to the build.
             should_run_java_style_checks = True
-        if not changed_files or any(
-            f.endswith("lint-python") or f.endswith("pyproject.toml") or f.endswith(".py")
-            for f in changed_files
-        ):
-            with titled_block("Running Python style checks"):
-                run_python_style_checks()
 
     run_shell_script_tests(
         test_modules,

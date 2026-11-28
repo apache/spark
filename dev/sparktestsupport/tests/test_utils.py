@@ -41,7 +41,11 @@ class DetermineModulesForFilesTests(unittest.TestCase):
         cases = {
             "docs/js/main.js": {modules.docs, modules.lint_js},
             "dev/lint-js": {modules.lint_js},
-            "dev/spark-test-image/lint/Dockerfile": {modules.lint_js, modules.lint_r},
+            "dev/spark-test-image/lint/Dockerfile": {
+                modules.lint_js,
+                modules.lint_python,
+                modules.lint_r,
+            },
             "ui-test/tests/__snapshots__/utils.test.js.snap": {modules.lint_js},
             "ui-test/package.json": set(),
         }
