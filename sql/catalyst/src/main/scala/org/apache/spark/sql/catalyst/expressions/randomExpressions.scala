@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, TernaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXPRESSION_WITH_RANDOM_SEED, RUNTIME_REPLACEABLE, TreePattern}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.random.XORShiftRandom
 
@@ -211,9 +212,10 @@ object Randn {
     _FUNC_(min, max[, seed]) - Returns a random value with independent and identically
       distributed (i.i.d.) values with the specified range of numbers. The random seed is optional.
       The provided numbers specifying the minimum and maximum values of the range must be constant.
-      If both of these numbers are integers, then the result will also be an integer. Otherwise if
-      one or both of these are floating-point numbers, then the result will also be a floating-point
-      number.
+      If both of these numbers have integral types, then the result will be an integer drawn from
+      the closed range between them, given in either order, with each integer equally likely.
+      Otherwise the result lies between them and, after floating-point or decimal rounding, can
+      equal max; a DOUBLE result is not finite when the difference of the bounds overflows.
   """,
   arguments = """
     Arguments:
@@ -236,7 +238,9 @@ case class Uniform(
     max: Expression,
     seedExpression: Expression,
     hideSeed: Boolean,
-    timeZoneId: Option[String] = None)
+    timeZoneId: Option[String] = None,
+    legacyIntegralTruncate: Boolean =
+      SQLConf.get.getConf(SQLConf.LEGACY_UNIFORM_INTEGRAL_TRUNCATE))
   extends RuntimeReplaceable
     with TernaryLike[Expression]
     with RDG
@@ -301,10 +305,10 @@ case class Uniform(
   override def third: Expression = seedExpression
 
   override def withNewSeed(newSeed: Long): Expression =
-    Uniform(min, max, Literal(newSeed, LongType), hideSeed, timeZoneId)
+    copy(seedExpression = Literal(newSeed, LongType))
 
   override def withShiftedSeed(shift: Long): Expression =
-    Uniform(min, max, Literal(seed + shift, LongType), hideSeed, timeZoneId)
+    copy(seedExpression = Literal(seed + shift, LongType))
 
   override def withNewChildrenInternal(
       newFirst: Expression, newSecond: Expression, newThird: Expression): Expression =
@@ -317,15 +321,34 @@ case class Uniform(
       def cast(e: Expression, to: DataType): Expression = {
         if (e.dataType == to) e else Cast(e, to, timeZoneId)
       }
-      cast(Add(
-        cast(min, DoubleType),
-        Multiply(
-          Subtract(
-            cast(max, DoubleType),
-            cast(min, DoubleType)),
-          Rand(seed))),
-        dataType)
+      dataType match {
+        case _: IntegralType if !legacyIntegralTruncate =>
+          integralReplacement(cast)
+        case _ =>
+          cast(Add(
+            cast(min, DoubleType),
+            Multiply(
+              Subtract(
+                cast(max, DoubleType),
+                cast(min, DoubleType)),
+              Rand(seed))),
+            dataType)
+      }
     }
+  }
+
+  /**
+   * Draws each integer in the closed range [min, max] with equal probability. Truncating a double
+   * drawn from [min, max) toward zero would never return a positive `max` or a negative `min`, and
+   * would return zero twice as often as any other value when the range spans it.
+   *
+   * The bounds stay children of the draw instead of being evaluated here, so that the optimizer
+   * gives current-time and special datetime bounds their query values and folds each bound once.
+   */
+  private def integralReplacement(cast: (Expression, DataType) => Expression): Expression = {
+    cast(
+      UniformIntegralDraw(cast(min, LongType), cast(max, LongType), Literal(seed, LongType)),
+      dataType)
   }
 
   /** Returns a copy of this expression with the specified timeZoneId. */
@@ -339,6 +362,128 @@ object Uniform {
     Uniform(min, max, UnresolvedSeed, hideSeed = true)
   def apply(min: Expression, max: Expression, seedExpression: Expression): Uniform =
     Uniform(min, max, seedExpression, hideSeed = false)
+}
+
+/**
+ * Draws a LONG uniformly from the closed range between `lower` and `upper`, given in either order,
+ * for [[Uniform]] with integral bounds. Returns NULL when either bound is NULL.
+ *
+ * The bounds are constant, so they are read on the first row of each partition rather than when
+ * the partition is initialized, so that a draw in a branch that never runs cannot fail the query.
+ * A range of n values takes `floor(n * nextDouble())` when n is at most
+ * [[UniformIntegralDraw.MaxDoubleDrawRangeSize]], which keeps every offset's share within about
+ * 2^-21 of the others, and otherwise the unsigned remainder by n of a 64-bit word, redrawing words
+ * below 2^64 mod n so that every remainder is equally likely. The offset is added to the lower
+ * bound with wrapping LONG arithmetic, which stays in range at the BIGINT limits.
+ */
+case class UniformIntegralDraw(lower: Expression, upper: Expression, seedExpression: Expression)
+  extends RDG with TernaryLike[Expression] with Nondeterministic with ExpectsInputTypes {
+
+  override def first: Expression = lower
+  override def second: Expression = upper
+  override def third: Expression = seedExpression
+
+  override def dataType: DataType = LongType
+  override def nullable: Boolean = lower.nullable || upper.nullable
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(LongType, LongType, TypeCollection(IntegerType, LongType))
+
+  @transient private var boundsRead: Boolean = _
+  @transient private var nullRange: Boolean = _
+  @transient private var lo: Long = _
+  // The number of values in the range, read as unsigned; zero stands for 2^64.
+  @transient private var rangeSize: Long = _
+  @transient private var rejectBelow: Long = _
+
+  override protected def initializeInternal(partitionIndex: Int): Unit = {
+    rng = new XORShiftRandom(seed + partitionIndex)
+    boundsRead = false
+  }
+
+  override protected def evalInternal(input: InternalRow): Any = {
+    if (!boundsRead) {
+      val a = lower.eval(input)
+      val b = upper.eval(input)
+      nullRange = a == null || b == null
+      if (!nullRange) {
+        val (x, y) = (a.asInstanceOf[Long], b.asInstanceOf[Long])
+        lo = math.min(x, y)
+        rangeSize = math.max(x, y) - lo + 1L
+        rejectBelow = UniformIntegralDraw.rejectionThreshold(rangeSize)
+      }
+      boundsRead = true
+    }
+    if (nullRange) null else lo + UniformIntegralDraw.drawOffset(rng, rangeSize, rejectBelow)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val rngClass = classOf[XORShiftRandom].getName
+    val drawClass = classOf[UniformIntegralDraw].getName
+    val rngTerm = ctx.addMutableState(rngClass, "rng")
+    val boundsReadTerm = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "boundsRead")
+    val nullRangeTerm = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "nullRange")
+    val loTerm = ctx.addMutableState(CodeGenerator.JAVA_LONG, "lo")
+    val rangeSizeTerm = ctx.addMutableState(CodeGenerator.JAVA_LONG, "rangeSize")
+    val rejectBelowTerm = ctx.addMutableState(CodeGenerator.JAVA_LONG, "rejectBelow")
+    ctx.addPartitionInitializationStatement(
+      s"$rngTerm = new $rngClass(${seed}L + partitionIndex); $boundsReadTerm = false;")
+    val lowerGen = lower.genCode(ctx)
+    val upperGen = upper.genCode(ctx)
+    ev.copy(code = code"""
+      if (!$boundsReadTerm) {
+        ${lowerGen.code}
+        ${upperGen.code}
+        $nullRangeTerm = ${lowerGen.isNull} || ${upperGen.isNull};
+        if (!$nullRangeTerm) {
+          $loTerm = java.lang.Math.min(${lowerGen.value}, ${upperGen.value});
+          $rangeSizeTerm = java.lang.Math.max(${lowerGen.value}, ${upperGen.value}) - $loTerm + 1L;
+          $rejectBelowTerm = $drawClass.rejectionThreshold($rangeSizeTerm);
+        }
+        $boundsReadTerm = true;
+      }
+      boolean ${ev.isNull} = $nullRangeTerm;
+      long ${ev.value} = -1L;
+      if (!${ev.isNull}) {
+        ${ev.value} = $loTerm + $drawClass.drawOffset($rngTerm, $rangeSizeTerm, $rejectBelowTerm);
+      }""")
+  }
+
+  override def withNewSeed(newSeed: Long): UniformIntegralDraw =
+    copy(seedExpression = Literal(newSeed, LongType))
+
+  override def withShiftedSeed(shift: Long): UniformIntegralDraw =
+    copy(seedExpression = Add(seedExpression, Literal(shift), evalMode = EvalMode.LEGACY))
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): UniformIntegralDraw =
+    copy(lower = newFirst, upper = newSecond, seedExpression = newThird)
+}
+
+object UniformIntegralDraw {
+  /** The largest range, in values, that takes one DOUBLE draw instead of a 64-bit draw. */
+  val MaxDoubleDrawRangeSize: Long = 1L << 32
+
+  /** Unsigned 2^64 mod `rangeSize`: words below it would bias the unsigned remainder. */
+  def rejectionThreshold(rangeSize: Long): Long =
+    if (rangeSize == 0L) 0L else java.lang.Long.remainderUnsigned(-rangeSize, rangeSize)
+
+  /** Draws an offset in [0, rangeSize), reading `rangeSize` as unsigned with zero for 2^64. */
+  def drawOffset(rng: XORShiftRandom, rangeSize: Long, rejectBelow: Long): Long = {
+    if (rangeSize != 0L && java.lang.Long.compareUnsigned(rangeSize, MaxDoubleDrawRangeSize) <= 0) {
+      (rangeSize.toDouble * rng.nextDouble()).toLong
+    } else {
+      var word = rng.nextLong()
+      if (rangeSize == 0L) {
+        word
+      } else {
+        while (java.lang.Long.compareUnsigned(word, rejectBelow) < 0) {
+          word = rng.nextLong()
+        }
+        java.lang.Long.remainderUnsigned(word, rangeSize)
+      }
+    }
+  }
 }
 
 @ExpressionDescription(

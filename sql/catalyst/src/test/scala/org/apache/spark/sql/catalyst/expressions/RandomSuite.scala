@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, LongType}
 
 class RandomSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -58,11 +59,110 @@ class RandomSuite extends SparkFunSuite with ExpressionEvalHelper {
         Uniform(Literal(first), Literal(second), Literal(0)).replacement,
         CatalystTypeConverters.convertToCatalyst(result))
     }
-    testUniform(0, 1, 0)
-    testUniform(0, 10, 7)
-    testUniform(0L, 10L, 7L)
+    testUniform(0, 1, 1)
+    testUniform(0, 10, 8)
+    testUniform(0L, 10L, 8L)
     testUniform(10.0F, 20.0F, 17.604954F)
     testUniform(10L, 20.0F, 17.604954F)
+  }
+
+  /**
+   * Draws `rows` values of `e` in partition 0, in interpreted and in generated code, checks that
+   * both give the same values, and returns them.
+   */
+  private def drawRows(e: Expression, rows: Int): Seq[Any] = {
+    val results = Seq(CodegenObjectFactoryMode.NO_CODEGEN, CodegenObjectFactoryMode.CODEGEN_ONLY)
+      .map { mode =>
+        withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> mode.toString) {
+          val projection = MutableProjection.create(Seq(e))
+          projection.initialize(0)
+          Seq.fill(rows)(projection(EmptyRow).get(0, e.dataType))
+        }
+      }
+    assert(results.head === results.last, "interpreted and generated values differ")
+    results.head
+  }
+
+  private def integralDraw(lo: Long, hi: Long, seed: Long = 0L): UniformIntegralDraw =
+    UniformIntegralDraw(Literal(lo), Literal(hi), Literal(seed))
+
+  test("UniformIntegralDraw stays in range, in either order and at the BIGINT limits") {
+    Seq(
+      (0L, 9L),
+      (9L, 0L),
+      (5L, 5L),
+      (-(1L << 40), 1L << 40),
+      (Long.MinValue, Long.MaxValue),
+      (Long.MinValue, -1L),
+      (0L, Long.MaxValue),
+      (Long.MaxValue - 1, Long.MaxValue),
+      (Long.MinValue, Long.MinValue + 1)).foreach { case (a, b) =>
+      val (lo, hi) = (math.min(a, b), math.max(a, b))
+      drawRows(integralDraw(a, b), 1000).foreach { case value: Long =>
+        assert(lo <= value && value <= hi, s"$value is not in [$lo, $hi]")
+      }
+    }
+  }
+
+  test("UniformIntegralDraw rejects the words that would bias the 64-bit draw") {
+    // A range of 3 * 2^62 + 1 values rejects about a quarter of all words. Without the rejection,
+    // the lowest 2^62 values would each be twice as likely and would take about half the results.
+    val values = drawRows(integralDraw(Long.MinValue, 1L << 62), 10000)
+    val share = values.count(_.asInstanceOf[Long] < Long.MinValue + (1L << 62)) / 10000.0
+    assert(share > 0.31 && share < 0.36, s"share $share is not about 1/3")
+  }
+
+  test("UniformIntegralDraw takes the 64-bit draw above 2^32 values") {
+    // In a range of 3 * 2^51 values, one 53-bit DOUBLE draw makes one integer in three twice as
+    // likely as its neighbors.
+    val values = drawRows(integralDraw(0L, 3L * (1L << 51) - 1), 10000)
+    val shares = values.groupBy(v => Math.floorMod(v.asInstanceOf[Long], 3L))
+      .map { case (k, vs) => k -> vs.size / 10000.0 }
+    assert(shares.size == 3 && shares.values.forall(s => s > 0.31 && s < 0.36), s"$shares")
+  }
+
+  test("UniformIntegralDraw renews and shifts its seed") {
+    val draw = integralDraw(0L, 1000000L)
+    val base = drawRows(draw, 20)
+    assert(drawRows(draw.withNewSeed(7L), 20) === drawRows(integralDraw(0L, 1000000L, 7L), 20))
+    assert(drawRows(draw.withShiftedSeed(5L), 20) === drawRows(integralDraw(0L, 1000000L, 5L), 20))
+    assert(drawRows(draw.withShiftedSeed(5L), 20) !== base)
+  }
+
+  test("UniformIntegralDraw returns NULL for a NULL bound") {
+    Seq(
+      UniformIntegralDraw(Literal.create(null, LongType), Literal(1L), Literal(0L)),
+      UniformIntegralDraw(Literal(1L), Literal.create(null, LongType), Literal(0L))).foreach { e =>
+      assert(drawRows(e, 3) === Seq(null, null, null))
+    }
+  }
+
+  test("Uniform does not evaluate its bounds when it builds the replacement") {
+    // The optimizer gives current-time and special datetime bounds their query values after the
+    // replacement is built, and folds stateful bounds on a fresh copy.
+    val now = UnixMicros(CurrentTimestamp())
+    val mapSize = Size(CreateMap(Seq(Literal(1), Literal(2), Literal(3), Literal(4))))
+    Seq(
+      Uniform(now, now, Literal(0)) -> classOf[CurrentTimestamp],
+      Uniform(Literal(0), mapSize, Literal(0)) -> classOf[CreateMap]).foreach {
+      case (uniform, boundClass) =>
+        assert(uniform.replacement.exists(boundClass.isInstance), uniform.replacement)
+    }
+  }
+
+  test("Uniform keeps the legacy flag captured when it was built") {
+    val legacy = withSQLConf(SQLConf.LEGACY_UNIFORM_INTEGRAL_TRUNCATE.key -> "true") {
+      Uniform(Literal(-1), Literal(1), Literal(0))
+    }
+    val closed = Uniform(Literal(-1), Literal(1), Literal(0))
+    assert(legacy.legacyIntegralTruncate)
+    assert(!closed.legacyIntegralTruncate)
+    Seq(legacy.withNewSeed(1), legacy.withShiftedSeed(1),
+        legacy.withTimeZone("UTC"), legacy.freshCopyIfContainsStatefulExpression()).foreach {
+      case copied: Uniform => assert(copied.legacyIntegralTruncate)
+      case other => fail(s"Expected Uniform but got ${other.getClass.getName}")
+    }
+    assert(legacy.canonicalized != closed.canonicalized)
   }
 
   test("SPARK-58208: Uniform preserves its time zone when copied") {
