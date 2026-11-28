@@ -585,9 +585,9 @@ class JsonTableSuite extends QueryTest with SharedSparkSession {
   }
 
   test("large array row source is expanded correctly") {
-    // A big array is fully and correctly expanded. Row emission is streamed element by element
-    // from the source parser (the whole expanded payload is not materialized at once); note the
-    // input is still scanned once up front to validate it is a single well-formed JSON document.
+    // A big array is fully and correctly expanded. The columns of every row are resolved in a
+    // single pass over the document, which is checked to be a single well-formed JSON value before
+    // any row is produced.
     val n = 5000
     val arr = (1 to n).map(i => s"""{"id":$i}""").mkString(",")
     val json = s"""{"items":[$arr]}"""
@@ -601,9 +601,9 @@ class JsonTableSuite extends QueryTest with SharedSparkSession {
        """.stripMargin)
     checkAnswer(df, Seq(Row(n.toLong, (n.toLong * (n + 1)) / 2)))
 
-    // A bare LIMIT (no ORDER BY) stops pulling generator rows early, so the streaming iterator is
-    // abandoned before exhaustion -- this exercises the task-completion-listener parser cleanup.
-    // Elements are in document order, so the first three ids are 1, 2, 3.
+    // A bare LIMIT (no ORDER BY) stops pulling generator rows early, so the row iterator is
+    // abandoned before exhaustion. Elements are in document order, so the first three ids are
+    // 1, 2, 3.
     checkAnswer(
       sql(
         s"""
@@ -780,9 +780,9 @@ class JsonTableSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df, Seq(Row.fromSeq(expected)))
   }
 
-  test("array row source over many input rows streams without leaking parsers") {
-    // Exercises the per-task (not per-row) parser cleanup: many input rows, each with a `[*]`
-    // array row source, must all shred correctly.
+  test("array row source over many input rows without leaking parsers") {
+    // Many input rows, each with a `[*]` array row source, must all shred correctly; each input
+    // row's parser is closed before its rows are produced.
     withTempView("docs") {
       spark.range(0, 200)
         .selectExpr("concat('{\"items\":[{\"v\":', id, '},{\"v\":', id, '}]}') AS j")
@@ -796,5 +796,95 @@ class JsonTableSuite extends QueryTest with SharedSparkSession {
       // Two rows per input document.
       assert(df.count() == 400)
     }
+  }
+
+  test("SPARK-62413: scalar values keep their text in a STRING column") {
+    // Strings are unescaped, and numbers are formatted as when the value is copied exactly:
+    // integers keep their digits (`-0` is 0), fractions and exponents use BigDecimal's form.
+    import testImplicits._
+    withTempView("docs") {
+      // JSON escapes, and non-ASCII text that is not escaped in the JSON.
+      // scalastyle:off nonascii
+      val nonAscii = "\u00e9\ud83d\ude00"
+      // scalastyle:on nonascii
+      Seq(
+        """[{"v":"a\n\"q\"\t\\"},{"v":"""" + nonAscii + """"},{"v":-0},{"v":1e2},""" +
+          """{"v":1.5E3},{"v":-0.0},{"v":12345678901234567890123},""" +
+          """{"v":0.1000000000000000055511151231257827},{"v":true},""" +
+          """{"v":{"x":1e2,"y":-0}},{"v":[1.50,"s"]}]""")
+        .toDF("j").createOrReplaceTempView("docs")
+      checkAnswer(
+        sql(
+          """
+            |SELECT t.* FROM docs,
+            |LATERAL json_table(docs.j, '$[*]' COLUMNS (o FOR ORDINALITY, v STRING PATH '$.v')) t
+          """.stripMargin),
+        Seq(
+          Row(1L, "a\n\"q\"\t\\"), Row(2L, nonAscii), Row(3L, "0"), Row(4L, "1E+2"),
+          Row(5L, "1.5E+3"), Row(6L, "0.0"), Row(7L, "12345678901234567890123"),
+          Row(8L, "0.1000000000000000055511151231257827"), Row(9L, "true"),
+          Row(10L, """{"x":1E+2,"y":0}"""), Row(11L, """[1.50,"s"]""")))
+    }
+  }
+
+  test("SPARK-62413: malformed input yields no rows before any column is cast") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      // A valid prefix with a value that cannot be cast to INT, followed by trailing content or
+      // cut short: the input is malformed, so no row is produced and no cast is attempted.
+      Seq(
+        """[{"id":"x"}] garbage""" -> "$[*]",
+        """[{"id":"x"},""" -> "$[*]",
+        """{"items":[{"id":"x"}]""" -> "$.items[*]",
+        """{"id":"x"} garbage""" -> "$",
+        """{"id":"x"} garbage""" -> "$.absent[*]").foreach { case (json, rowPath) =>
+        checkAnswer(
+          sql(s"SELECT * FROM json_table('$json', '$rowPath' COLUMNS (id INT PATH '$$.id')) t"),
+          Seq.empty)
+        val e = intercept[SparkException] {
+          sql(
+            s"""
+               |SELECT * FROM json_table(
+               |  '$json', '$rowPath' COLUMNS (id INT PATH '$$.id') ERROR ON ERROR) t
+             """.stripMargin).collect()
+        }
+        val conditions = Iterator.iterate[Throwable](e)(_.getCause).takeWhile(_ != null)
+          .collect { case t: SparkThrowable => t.getCondition }.toSeq
+        val clue = s"$json $rowPath"
+        assert(conditions.contains("MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION"), clue)
+        assert(!conditions.contains("CAST_INVALID_INPUT"), clue)
+      }
+    }
+  }
+
+  test("SPARK-62413: EXISTS columns alongside value columns at the same or deeper paths") {
+    val items = """[{"a":{"b":1,"c":null}},{"a":"s"},{"a":null},{}]"""
+    checkAnswer(
+      sql(
+        s"""
+           |SELECT * FROM json_table('$items', '$$[*]' COLUMNS (
+           |  a STRING PATH '$$.a', ae BOOLEAN EXISTS PATH '$$.a', b INT PATH '$$.a.b',
+           |  ce BOOLEAN EXISTS PATH '$$.a.c', z BOOLEAN EXISTS PATH '$$.z')) t
+         """.stripMargin),
+      Seq(
+        Row("""{"b":1,"c":null}""", true, 1, true, false),
+        Row("s", true, null, false, false),
+        Row(null, true, null, false, false),
+        Row(null, false, null, false, false)))
+    // Only an EXISTS column ends at `$.a`, and a value column reads below it.
+    checkAnswer(
+      sql(
+        s"""
+           |SELECT * FROM json_table('$items', '$$[*]' COLUMNS (
+           |  ae BOOLEAN EXISTS PATH '$$.a', b INT PATH '$$.a.b')) t
+         """.stripMargin),
+      Seq(Row(true, 1), Row(true, null), Row(true, null), Row(false, null)))
+    // Only an EXISTS column ends at an object or array, which is skipped so later fields are read.
+    checkAnswer(
+      sql(
+        """
+          |SELECT * FROM json_table('[{"a":{"x":[1,{"y":2}]},"c":1},{"a":[{"x":1}],"c":2}]',
+          |  '$[*]' COLUMNS (ae BOOLEAN EXISTS PATH '$.a', c INT PATH '$.c')) t
+        """.stripMargin),
+      Seq(Row(true, 1), Row(true, 2)))
   }
 }
