@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions.ml;
 
+import java.util.HashSet;
+
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData;
@@ -27,6 +29,44 @@ public class MLExpressionUtils {
   private static final byte DENSE_VECTOR_TYPE = 1;
 
   private MLExpressionUtils() {}
+
+  public static void validateSparseVector(InternalRow vector) {
+    byte vectorType = vector.getByte(0);
+    if (vectorType != SPARSE_VECTOR_TYPE) {
+      throw new IllegalArgumentException("Unknown sparse vector type " + vectorType + ".");
+    }
+    int size = vector.getInt(1);
+    if (size < 0) {
+      throw new IllegalArgumentException("Sparse vector size must be nonnegative: " + size);
+    }
+    ArrayData indices = vector.getArray(2);
+    ArrayData values = vector.getArray(3);
+    if (indices.numElements() != values.numElements()) {
+      throw new IllegalArgumentException(
+        "Sparse vector indices and values must have equal lengths.");
+    }
+    boolean increasing = true;
+    int previous = -1;
+    for (int i = 0; i < indices.numElements(); i++) {
+      int index = indices.getInt(i);
+      if (index < 0 || index >= size) {
+        throw new IllegalArgumentException(
+          "Sparse vector index " + index + " is out of bounds for size " + size + ".");
+      }
+      increasing &= index > previous;
+      previous = index;
+    }
+    // Avoid allocating a set for the usual, strictly increasing representation.
+    if (!increasing) {
+      HashSet<Integer> seen = new HashSet<>();
+      for (int i = 0; i < indices.numElements(); i++) {
+        int index = indices.getInt(i);
+        if (!seen.add(index)) {
+          throw new IllegalArgumentException("Sparse vector has a repeated index: " + index);
+        }
+      }
+    }
+  }
 
   public static double dotProduct(InternalRow left, InternalRow right) {
     byte leftType = left.getByte(0);

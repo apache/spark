@@ -29,7 +29,9 @@ import org.apache.spark.sql.types._
  * Expands the SQL struct representation of a sparse MLlib vector into a dense array of doubles
  * or floats. This expression is dedicated only for Spark ML and can be used with `unwrap_udt`.
  * The input must match the vector SQL schema, including field and array element nullability.
- * A null vector, size, indices, or values field produces a null result.
+ * A null vector, size, indices, or values field produces a null result. Non-null sparse vectors
+ * must have type 0, a nonnegative size, equally sized indices and values arrays, and distinct
+ * indices within the vector size. Distinct indices may be unsorted for legacy MLlib vectors.
  */
 case class SparseVectorToArray(child: Expression, elementType: DataType)
   extends UnaryExpression {
@@ -45,6 +47,8 @@ case class SparseVectorToArray(child: Expression, elementType: DataType)
 
   // The sparse vector fields are nullable in the vector SQL schema.
   override def nullable: Boolean = true
+
+  override def expensive: Boolean = true
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (child.dataType == VectorScaleShift.vectorSqlType) {
@@ -65,6 +69,7 @@ case class SparseVectorToArray(child: Expression, elementType: DataType)
     if (vector.isNullAt(1) || vector.isNullAt(2) || vector.isNullAt(3)) {
       return null
     }
+    MLExpressionUtils.validateSparseVector(vector)
     val vectorSize = vector.getInt(1)
     val vectorIndices = vector.getArray(2)
     val vectorValues = vector.getArray(3)
@@ -95,10 +100,12 @@ case class SparseVectorToArray(child: Expression, elementType: DataType)
     val result = ctx.freshName("result")
     val index = ctx.freshName("index")
     val unsafeArrayData = classOf[UnsafeArrayData].getName
+    val utils = classOf[MLExpressionUtils].getName
     nullSafeCodeGen(ctx, ev, vector => {
       s"""
          |${ev.isNull} = $vector.isNullAt(1) || $vector.isNullAt(2) || $vector.isNullAt(3);
          |if (!${ev.isNull}) {
+         |  $utils.validateSparseVector($vector);
          |  int $vectorSize = $vector.getInt(1);
          |  ArrayData $vectorIndices = $vector.getArray(2);
          |  ArrayData $vectorValues = $vector.getArray(3);

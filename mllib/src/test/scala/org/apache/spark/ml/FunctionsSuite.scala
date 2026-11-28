@@ -17,16 +17,17 @@
 
 package org.apache.spark.ml
 
-import org.apache.spark.SparkException
 import org.apache.spark.ml.functions._
 import org.apache.spark.ml.linalg.{Matrices, MatrixUDT, Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.util.MLTest
 import org.apache.spark.mllib.linalg.{Matrices => OldMatrices, MatrixUDT => OldMatrixUDT,
   Vector => OldVector, Vectors => OldVectors, VectorUDT => OldVectorUDT}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
-import org.apache.spark.sql.catalyst.expressions.ml.{VectorPosExplode, VectorScaleShift}
-import org.apache.spark.sql.functions.{col, typedLit, unwrap_udt, wrap_udt}
-import org.apache.spark.sql.types.{ArrayType, DoubleType, StructField, StructType, UserDefinedType}
+import org.apache.spark.sql.catalyst.expressions.{ScalaUDF, With}
+import org.apache.spark.sql.catalyst.expressions.ml.{SparseVectorToArray, VectorPosExplode, VectorScaleShift, VectorToArray}
+import org.apache.spark.sql.functions.{col, from_json, lit, posexplode, rand, struct, typedLit, udf, unwrap_udt, when, wrap_udt}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{ArrayType, DoubleType, FloatType, StructField, StructType, UserDefinedType}
 
 class FunctionsSuite extends MLTest {
 
@@ -92,15 +93,15 @@ class FunctionsSuite extends MLTest {
       (null, null, 0)
     ).toDF("vec", "oldVec", "label")
 
-    for ((colName, valType) <- Seq(
-        ("vec", "null"), ("oldVec", "null"), ("label", "java.lang.Integer"))) {
-      val thrown1 = intercept[SparkException] {
-        df2.select(vector_to_array(col(colName))).count()
+    for (dtype <- Seq("float64", "float32")) {
+      checkAnswer(df2.where($"label" === 0).select(
+        vector_to_array($"vec", dtype), vector_to_array($"oldVec", dtype)), Row(null, null))
+      val error = intercept[AnalysisException] {
+        df2.select(vector_to_array($"label", dtype))
       }
-      assert(thrown1.getCause.getMessage.contains(
-        "function vector_to_array requires a non-null input argument and input type must be " +
-        "`org.apache.spark.ml.linalg.Vector` or `org.apache.spark.mllib.linalg.Vector`, " +
-        s"but got ${valType}"))
+      assert(error.getCondition === "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
+      assert(error.getMessage.contains("vector_to_array"))
+      assert(!error.getMessage.contains("unwrap_udt"))
     }
 
     val df3 = Seq(
@@ -120,8 +121,8 @@ class FunctionsSuite extends MLTest {
     assert(result3 === expected3)
 
     // Check data types are correct
-    assert(dfArrayFloat.schema.simpleString ===
-      "struct<UDF(vec):array<float>,UDF(oldVec):array<float>>")
+    assert(dfArrayFloat.schema.fields.forall(
+      _.dataType == ArrayType(FloatType, containsNull = false)))
 
     val thrown2 = intercept[AnalysisException] {
       df3.select(
@@ -129,6 +130,116 @@ class FunctionsSuite extends MLTest {
     }
     assert(thrown2.getMessage.contains(
       "Unsupported dtype: \"float16\". Valid values: float64, float32."))
+  }
+
+  test("vector_to_array uses Catalyst expressions for both vector UDTs") {
+    val df = Seq(
+      (Vectors.dense(Array.emptyDoubleArray), OldVectors.dense(Array.emptyDoubleArray)),
+      (Vectors.sparse(3, Array.emptyIntArray, Array.emptyDoubleArray),
+        OldVectors.sparse(3, Array.emptyIntArray, Array.emptyDoubleArray)),
+      (Vectors.dense(-0.0, Double.NaN, Double.PositiveInfinity),
+        OldVectors.dense(-0.0, Double.NaN, Double.PositiveInfinity)),
+      (Vectors.sparse(3, Array(1), Array(-2.5)), OldVectors.sparse(3, Array(1), Array(-2.5))),
+      (null.asInstanceOf[Vector], null.asInstanceOf[OldVector])
+    ).toDF("vec", "oldVec").repartition(2)
+
+    for (dtype <- Seq("float64", "float32")) {
+      val result = df.select(vector_to_array($"vec", dtype), vector_to_array($"oldVec", dtype))
+      assert(result.queryExecution.analyzed.exists(_.expressions.exists(
+        _.exists(_.isInstanceOf[VectorToArray]))))
+      assert(!result.queryExecution.optimizedPlan.exists(_.expressions.exists(
+        _.exists(e => e.isInstanceOf[ScalaUDF] || e.isInstanceOf[VectorToArray]))))
+      val elementType = if (dtype == "float32") FloatType else DoubleType
+      assert(result.schema.fields.forall(
+        _.dataType == ArrayType(elementType, containsNull = false)))
+      val arrays = Seq(Seq.empty[Double], Seq(0.0, 0.0, 0.0),
+        Seq(-0.0, Double.NaN, Double.PositiveInfinity), Seq(0.0, -2.5, 0.0))
+      val expected = arrays.map { values =>
+        val converted = if (dtype == "float32") values.map(_.toFloat) else values
+        Row(converted, converted)
+      } :+ Row(null, null)
+      checkAnswer(result, expected)
+    }
+  }
+
+  test("vector_to_array binds nondeterministic inputs once") {
+    val df = Seq.fill(100)((Vectors.dense(1.0, 2.0, 3.0),
+      Vectors.sparse(3, Array(1), Array(7.0)))).toDF("dense", "sparse")
+    for (codegen <- Seq(true, false); dtype <- Seq("float64", "float32")) {
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString,
+          SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "false") {
+        val result = df.select(
+          vector_to_array(when(rand(123) < 0.5, $"dense").otherwise($"sparse"), dtype))
+        assert(result.collect().forall(row => !row.isNullAt(0) && row.getSeq[Any](0).size == 3))
+      }
+    }
+  }
+
+  test("vector_to_array evaluates a generator input once per row") {
+    val calls = spark.sparkContext.longAccumulator("vector_to_array input calls")
+    val vector = udf { i: Long =>
+      calls.add(1)
+      Vectors.sparse(3, Array(1), Array(i.toDouble))
+    }
+    for (dtype <- Seq("float64", "float32")) {
+      calls.reset()
+      val result = spark.range(10).select(posexplode(vector_to_array(vector($"id"), dtype)))
+      assert(result.collect().length === 30)
+      assert(calls.value === 10L)
+    }
+  }
+
+  test("vector_to_array keeps column inputs inline and renders the public call") {
+    val schema = StructType(Seq(
+      StructField("vec", new VectorUDT), StructField("oldVec", new OldVectorUDT)))
+    val rows = spark.sparkContext.parallelize(Seq(Row(Vectors.dense(1.0), OldVectors.dense(2.0))))
+    val df = spark.createDataFrame(rows, schema)
+    val nested = df.select(struct($"vec", $"oldVec").as("nested"))
+    for (dtype <- Seq("float64", "float32"); name <- Seq("vec", "oldVec")) {
+      val result = df.select(vector_to_array(col(name), dtype))
+      assert(result.columns.toSeq === Seq(s"vector_to_array($name, '$dtype')"))
+      val nestedResult = nested.select(vector_to_array(col(s"nested.$name"), dtype))
+      assert(nestedResult.columns.toSeq === Seq(s"vector_to_array(nested.$name, '$dtype')"))
+      for (query <- Seq(result, nestedResult)) {
+        assert(!query.queryExecution.optimizedPlan.exists(_.expressions.exists(
+          _.exists(_.isInstanceOf[With]))))
+        assert(query.queryExecution.optimizedPlan.collect {
+          case p: org.apache.spark.sql.catalyst.plans.logical.Project => p
+        }.length === 1)
+      }
+    }
+  }
+
+  test("vector_to_array is not duplicated by a filter on its projected alias") {
+    val schema = StructType(Seq(StructField("vec", new VectorUDT)))
+    val rows = spark.sparkContext.parallelize(Seq(Row(Vectors.sparse(3, Array(1), Array(2.0)))))
+    val df = spark.createDataFrame(rows, schema)
+    val result = df.select(vector_to_array($"vec").as("arr")).filter($"arr"(1) > 0)
+    val conversions = result.queryExecution.optimizedPlan.flatMap(_.expressions.flatMap(
+      _.collect { case e: SparseVectorToArray => e }))
+    assert(conversions.length === 1)
+    checkAnswer(result, Row(Seq(0.0, 2.0, 0.0)))
+  }
+
+  test("vector_to_array validates sparse vectors read from JSON") {
+    val schema = StructType(Seq(StructField("v", new VectorUDT)))
+    val invalid = Seq(
+      """{"v":{"type":2,"size":3,"indices":[1],"values":[2.0]}}""",
+      """{"v":{"type":0,"size":3,"indices":[1,1],"values":[1.0,2.0]}}""",
+      """{"v":{"type":0,"size":3,"indices":[1],"values":[1.0,2.0]}}""")
+    for (json <- invalid; dtype <- Seq("float64", "float32")) {
+      val parsed = spark.range(1).select(from_json(lit(json), schema).getField("v").as("v"))
+      val vector = wrap_udt($"v", new VectorUDT)
+      val error = intercept[Exception] {
+        parsed.select(vector_to_array(vector, dtype)).collect()
+      }
+      assert(Iterator.iterate[Throwable](error)(_.getCause).takeWhile(_ != null)
+        .exists(_.isInstanceOf[IllegalArgumentException]))
+    }
+    val legacy = new org.apache.spark.mllib.linalg.SparseVector(
+      4, Array(3, 0), Array(-2.5, 1.1))
+    val df = Seq(Tuple1(legacy)).toDF("vec")
+    checkAnswer(df.select(vector_to_array($"vec")), Row(Seq(1.1, 0.0, 0.0, -2.5)))
   }
 
   test("test array_to_vector") {

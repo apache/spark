@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.ml
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{BoundReference, ExpressionEvalHelper, GenericInternalRow, Literal, UnsafeArrayData, UnwrapUDT}
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, ExpressionEvalHelper, GenericInternalRow, Literal, UnsafeArrayData, UnsafeProjection, UnwrapUDT}
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.types._
 
@@ -127,6 +127,35 @@ class SparseVectorToArraySuite extends SparkFunSuite with ExpressionEvalHelper {
       .eval().asInstanceOf[ArrayData]
     assert(java.lang.Double.doubleToRawLongBits(doubles.getDouble(1)) === Long.MinValue)
     assert(java.lang.Float.floatToRawIntBits(floats.getFloat(1)) === Int.MinValue)
+  }
+
+  test("sparse vector to array rejects malformed vectors in safe and unsafe rows") {
+    val unknownType = sparseRow(3, Array(1), Array(2.0))
+    unknownType.setByte(0, 2.toByte)
+    val invalid = Seq(
+      unknownType -> "Unknown sparse vector type",
+      sparseRow(-1, Array.emptyIntArray, Array.emptyDoubleArray) -> "nonnegative",
+      sparseRow(3, Array(1, 2), Array(2.0)) -> "equal lengths",
+      sparseRow(3, Array(1), Array(2.0, 3.0)) -> "equal lengths",
+      sparseRow(3, Array(-1), Array(2.0)) -> "out of bounds",
+      sparseRow(3, Array(3), Array(2.0)) -> "out of bounds",
+      sparseRow(3, Array(1, 1), Array(2.0, 3.0)) -> "repeated index")
+    val toUnsafe = UnsafeProjection.create(vectorSqlType)
+    for ((vector, message) <- invalid;
+        row <- Seq(vector, toUnsafe(vector).copy());
+        elementType <- Seq(DoubleType, FloatType)) {
+      checkExceptionInExpression[IllegalArgumentException](
+        SparseVectorToArray(Literal(row, vectorSqlType), elementType), message)
+    }
+  }
+
+  test("sparse vector to array accepts unsorted distinct legacy indices") {
+    for (elementType <- Seq(DoubleType, FloatType)) {
+      val expression = sparseToArray(4, Array(3, 0, 2), Array(-2.5, 1.1, 4.0), elementType)
+      val expected = if (elementType == FloatType) Seq(1.1f, 0.0f, 4.0f, -2.5f)
+        else Seq(1.1, 0.0, 4.0, -2.5)
+      checkEvaluation(expression, expected)
+    }
   }
 
   test("sparse vector to array rejects unsupported output types") {

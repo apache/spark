@@ -26,6 +26,26 @@ Note that this migration guide describes the items specific to MLlib.
 Many items of SQL migration can be applied when migrating MLlib to higher versions for DataFrame-based APIs.
 Please refer [Migration Guide: SQL, Datasets and DataFrame](sql-migration-guide.html).
 
+## Upgrading from MLlib 4.4 to 4.5
+
+### Changes of behavior
+{:.no_toc}
+
+* `vector_to_array` now uses Catalyst expressions instead of Scala UDFs. Null vector inputs return
+  null instead of throwing an exception, and incompatible input types fail during analysis. The
+  output column is nullable, while its array elements remain non-nullable. Generated column names
+  now include the function and dtype, for example `vector_to_array(features, 'float32')`, instead of
+  `UDF(features)`. Use an explicit alias when relying on the output column name.
+* A streaming query whose checkpoint predates Spark 4.3 can fail state schema compatibility checks
+  on restart if its state stores the output of `vector_to_array` with the old, non-nullable schema.
+  Queries whose state schema already widens nullability are unaffected. Plan a migration to a new
+  checkpoint for affected queries; doing so starts a new query without the previous checkpoint's
+  state or progress.
+* `vector_to_array` rejects malformed sparse vectors, including unknown type bytes, negative sizes,
+  unequal indices and values lengths, out-of-range indices, and repeated indices. Unsorted distinct
+  indices remain supported for legacy MLlib vectors. Legacy vectors with repeated indices previously
+  kept the last value and now fail validation.
+
 ## Upgrading from MLlib 3.5 to 4.0
 
 ### Breaking changes
