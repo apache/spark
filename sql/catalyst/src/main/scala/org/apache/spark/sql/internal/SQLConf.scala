@@ -1290,6 +1290,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val LEGACY_DATAFRAME_AS_OF_JOIN_KEEP_BOTH_USING_COLUMNS =
+    buildConf("spark.sql.legacy.asOfJoin.keepBothUsingColumns")
+      .internal()
+      .doc("When true, a batch DataFrame AS-OF join on column names keeps the key column of " +
+        "both sides, as before Spark 4.4, instead of one column per name. It affects DataFrame " +
+        "joins only, and is read when the DataFrame is built. A streaming query keeps the value " +
+        "of its checkpoint, and a checkpoint written before this config reads true.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION =
     buildConf("spark.sql.requireAllClusterKeysForCoPartition")
       .internal()

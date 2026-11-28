@@ -843,10 +843,29 @@ class Dataset[T] private[sql](
       tolerance: Column,
       allowExactMatches: Boolean,
       direction: String): DataFrame = {
-    // An empty list means a join with no equality condition.
-    joinAsOfInternal(other, leftAsOf, rightAsOf, null,
-      if (usingColumns.isEmpty) None else Some(usingColumns), joinType,
-      tolerance, allowExactMatches, direction)
+    // A join with a streaming input keeps the key column of both sides, so the state of an
+    // existing query keeps its schema when it restarts from its checkpoint. This check sees only
+    // the inputs of this join. A batch join that a streaming query reads later, such as the
+    // static side of a stream-static join, gets one column per name here. When the query
+    // restarts from a checkpoint of an earlier version, it gives that join both key columns
+    // back where a deduplication of the query keeps them in its state, but only up to the first
+    // step with its own column list, such as select, withColumn, drop or a join on column names.
+    // A stream-stream join above it can still store one key column, and no join gets them back
+    // when any such join in the query is under a union, INTERSECT, EXCEPT or CTE.
+    if (isStreaming || other.isStreaming || sparkSession.sessionState.conf.getConf(
+        SQLConf.LEGACY_DATAFRAME_AS_OF_JOIN_KEEP_BOTH_USING_COLUMNS)) {
+      val joinConditions = usingColumns.map { name =>
+        this(name) === other(name)
+      }
+      val joinCondition = joinConditions.reduceOption(_ && _).orNull
+      joinAsOf(other, leftAsOf, rightAsOf, joinCondition, joinType,
+        tolerance, allowExactMatches, direction)
+    } else {
+      // An empty list means a join with no equality condition.
+      joinAsOfInternal(other, leftAsOf, rightAsOf, null,
+        if (usingColumns.isEmpty) None else Some(usingColumns), joinType,
+        tolerance, allowExactMatches, direction)
+    }
   }
 
   // Moves each column of a key from its Dataset's plan onto the same column of its join input.
@@ -904,7 +923,7 @@ class Dataset[T] private[sql](
         Option(tolerance).map(_.expr),
         allowExactMatches,
         AsOfJoinDirection(direction)
-      ).copy(usingColumns = usingColumns)
+      ).copy(usingColumns = usingColumns, fromDataFrameUsingColumns = usingColumns.isDefined)
       OptionalReferences.withResolvedNullReferenceOf(asOfJoin, joinPlan)
     }
 

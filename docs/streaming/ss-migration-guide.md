@@ -64,6 +64,29 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   analysis as for the sort-merge as-of join. For example, a key that does not reference its own
   input fails with `AS_OF_JOIN.KEY_REFERENCE`.
 
+- Since Spark 4.4, a DataFrame as-of join on column names, such as PySpark `DataFrame._joinAsOf`
+  with `on` set to column names, returns one column per name when both of its sides are batch
+  DataFrames. A join with a streaming side keeps the key column of both sides, as before. When a
+  streaming query restarts from a checkpoint of an earlier version, a batch join used inside it,
+  such as the static side of a stream-static join on a condition or a cross join, gets both key
+  columns back where a deduplication of the query, such as `dropDuplicates()`, keeps them in its
+  state, so the state of the query keeps its schema. The output of the query keeps the columns of
+  the DataFrame. The key columns reach the stateful step only up to the first step with its own
+  column list, such as `select`, `withColumn`, `drop`, `withColumnRenamed`, `toDF`, `selectExpr`
+  or a regular join on column names. A stream-stream join above the join can still store its rows
+  with one key column. When one batch join on column names in the query is under a union,
+  `INTERSECT`, `EXCEPT` or CTE, no join in the query gets both key columns back. In these cases an
+  existing query whose state holds the key columns of the join fails to restart with a state
+  schema error such as `STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE`. To recover, set
+  `spark.sql.legacy.asOfJoin.keepBothUsingColumns` to `true` before building the query, or use a
+  new checkpoint location. The config is read when the DataFrame is built. It helps with a
+  checkpoint of an earlier version, or one written with the config on. With a checkpoint that
+  Spark 4.4 wrote with the config off, it changes the schema of the state. A restarted query keeps
+  the value of the config from its checkpoint, also in the session of its `foreachBatch` function.
+  A positional rename with `toDF` that lists both key columns of a batch join fails with
+  `ASSIGNMENT_ARITY_MISMATCH` when the DataFrame is built, before the query starts. To fix it, set
+  the config before building the DataFrame, or list the columns of the new output.
+
 - Since Spark 4.4, a column derived from a typed Scala UDF with a primitive parameter is nullable
   when the input of the parameter can be null, as the UDF returns NULL for a NULL input.
   Previously, some of these columns, for example the output of a generator such as `explode` over

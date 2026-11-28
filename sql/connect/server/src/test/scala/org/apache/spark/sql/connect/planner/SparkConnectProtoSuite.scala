@@ -1153,6 +1153,40 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     }
   }
 
+  // A streaming join keeps the key column of both sides, so a restarted query keeps the schema
+  // of its state. Fails if a Connect streaming join gets one column per name.
+  test("joinAsOf with using columns keeps both key columns for a streaming input in Connect") {
+    val streamingLeft = proto.Relation
+      .newBuilder()
+      .setRead(
+        proto.Read
+          .newBuilder()
+          .setIsStreaming(true)
+          .setDataSource(proto.Read.DataSource.newBuilder().setFormat("rate")))
+      .build()
+    val right = createLocalRelationProto(
+      attrs =
+        Seq(AttributeReference("value", LongType)(), AttributeReference("ts", TimestampType)()),
+      data = Seq.empty)
+    val relation = proto.Relation
+      .newBuilder()
+      .setAsOfJoin(
+        proto.AsOfJoin
+          .newBuilder()
+          .setLeft(streamingLeft)
+          .setRight(right)
+          .setLeftAsOf("timestamp".protoAttr)
+          .setRightAsOf("ts".protoAttr)
+          .addUsingColumns("value")
+          .setJoinType("left")
+          .setAllowExactMatches(true)
+          .setDirection("backward"))
+      .build()
+    val analyzed = spark.sessionState.executePlan(transform(relation)).analyzed
+    assert(analyzed.isStreaming)
+    assert(analyzed.output.map(_.name) == Seq("timestamp", "value", "value", "ts"))
+  }
+
   gridTest("joinAsOf with using columns returns one column per name in Connect")(for {
     singlePass <- Seq(false, true)
     sortMerge <- Seq(false, true)
@@ -1190,6 +1224,13 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       val analyzed = spark.sessionState.executePlan(transform(relation("k"))).analyzed
       // The key comes first, then the other left columns, then the other right columns.
       assert(analyzed.output.map(_.name) == Seq("k", "lts", "rts"))
+      // A streaming query that restarts from a checkpoint with both key columns finds the join
+      // by this mark, so the state above it gets both key columns back.
+      assert(
+        analyzed
+          .collectFirst { case j: AsOfJoin => j.fromDataFrameUsingColumns }
+          .contains(true))
+      assert(AsOfJoin.keepBothUsingColumns(analyzed).map(_.output) == Right(analyzed.output))
       val e = intercept[AnalysisException] {
         spark.sessionState.executePlan(transform(relation("missing"))).analyzed
       }

@@ -114,6 +114,25 @@ class OffsetSeqLogSuite extends SharedSparkSession {
       SQLConf.PROPAGATE_EMPTY_RELATION_CAN_PRUNE_STREAMING_UNION_CHILDREN.key).contains("false"))
   }
 
+  test("SPARK-62246: old checkpoints keep both key columns of a DataFrame ASOF join") {
+    val (_, offsetSeq) = readFromResource("offset-log-version-2.1.0")
+    val metadata = offsetSeq.metadataOpt.get
+    val entry = SQLConf.LEGACY_DATAFRAME_AS_OF_JOIN_KEEP_BOTH_USING_COLUMNS
+    assert(!metadata.conf.contains(entry.key))
+    assert(OffsetSeqMetadata.readValue(metadata, entry).toBoolean)
+  }
+
+  test("SPARK-62246: new checkpoints record the session value for a DataFrame ASOF join") {
+    val key = SQLConf.LEGACY_DATAFRAME_AS_OF_JOIN_KEEP_BOTH_USING_COLUMNS.key
+    Seq("false", "true").foreach { value =>
+      withSQLConf(key -> value) {
+        val metadata = OffsetSeqMetadata(
+          batchWatermarkMs = 0, batchTimestampMs = 0, spark.conf)
+        assert(metadata.conf.get(key).contains(value))
+      }
+    }
+  }
+
   test("SPARK-60632: regex pattern cost estimate is version 0 for old checkpoints") {
     val (_, offsetSeq) = readFromResource("offset-log-version-2.1.0")
     val metadata = offsetSeq.metadataOpt.get

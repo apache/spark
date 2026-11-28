@@ -32,7 +32,7 @@ import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.analysis.{ResolveDeduplicate, V2Reference}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp, CurrentTimestampNanos, FileSourceMetadataAttribute, LocalTimestamp, LocalTimestampNanos}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Deduplicate, DeduplicateWithinWatermark, Distinct, FlatMapGroupsInPandasWithState, FlatMapGroupsWithState, GlobalLimit, Join, LeafNode, LocalRelation, LogicalPlan, Project, StreamSourceAwareLogicalPlan, TransformWithState, TransformWithStateInPySpark}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, AsOfJoin, Deduplicate, DeduplicateWithinWatermark, Distinct, FlatMapGroupsInPandasWithState, FlatMapGroupsWithState, GlobalLimit, Join, LeafNode, LocalRelation, LogicalPlan, Project, StreamSourceAwareLogicalPlan, TransformWithState, TransformWithStateInPySpark}
 import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, Unassigned, WriteToStream}
 import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -253,13 +253,54 @@ class MicroBatchExecution(
     val dedupResolver = sparkSessionForStream.sessionState.analyzer.resolver
     // Recompute streaming subplans for checkpoint compatibility and static subplans so batch
     // deduplication keeps the same semantics when embedded in a streaming query.
-    val planWithDedupKeys = analyzedPlan.transformUp {
+    def withDedupKeys(plan: LogicalPlan): LogicalPlan = plan.transformUp {
       case d @ Deduplicate(keys, child, Some(spec)) =>
         d.copy(keys = ResolveDeduplicate.recomputeKeysPreservingMetadataBoundary(
           keys, child, spec, orderDeterministically, dedupResolver))
       case d @ DeduplicateWithinWatermark(keys, child, Some(spec)) =>
         d.copy(keys = ResolveDeduplicate.recomputeKeysPreservingMetadataBoundary(
           keys, child, spec, orderDeterministically, dedupResolver))
+    }
+    // SPARK-62246: a batch DataFrame as-of join on column names returns one key column. A query
+    // whose checkpoint keeps both key columns gets them back here, before the dedup keys are
+    // recomputed from the join output, so its state keeps its schema. The value comes from the
+    // offset log, and a new query uses the session value.
+    val keepBothAsOfJoinUsingColumns = initialLatestOffsetSeq.flatMap { case (_, offsetSeq) =>
+      offsetSeq.metadataOpt.flatMap { metadata =>
+        OffsetSeqMetadata.readValueOpt(
+          metadata, SQLConf.LEGACY_DATAFRAME_AS_OF_JOIN_KEEP_BOTH_USING_COLUMNS).map(_.toBoolean)
+      }
+    }.getOrElse(streamConf.getConf(SQLConf.LEGACY_DATAFRAME_AS_OF_JOIN_KEEP_BOTH_USING_COLUMNS))
+    val planWithDedupKeys = if (keepBothAsOfJoinUsingColumns) {
+      AsOfJoin.keepBothUsingColumns(analyzedPlan) match {
+        case Right(restored) =>
+          // Only a streaming deduplication or Distinct takes the keys of its state from the
+          // columns of its input, so only they can store a key column that is given back: the
+          // other stateful operators read the columns that the analysis resolved. Every other
+          // query keeps its plan, so that a cached static side of it still reads the cache.
+          val givenBack = AsOfJoin.keyColumnsGivenBack(analyzedPlan)
+          lazy val restoredWithDedupKeys = withDedupKeys(restored)
+          def statefulOperatorKeysOnGivenBack: Boolean = restoredWithDedupKeys.exists {
+            case d: Deduplicate => d.isStreaming && d.keys.exists(givenBack.contains)
+            case d: DeduplicateWithinWatermark =>
+              d.isStreaming && d.keys.exists(givenBack.contains)
+            case d: Distinct => d.isStreaming && d.child.output.exists(givenBack.contains)
+            case _ => false
+          }
+          if (givenBack.nonEmpty && statefulOperatorKeysOnGivenBack) {
+            restoredWithDedupKeys
+          } else {
+            withDedupKeys(analyzedPlan)
+          }
+        case Left(reason) =>
+          // The state schema check then fails the query only if its state has both key columns.
+          logWarning(log"The DataFrame as-of joins on column names in this query keep one key " +
+            log"column, since they cannot get the key column of both sides back: " +
+            log"${MDC(REASON, reason)}.")
+          withDedupKeys(analyzedPlan)
+      }
+    } else {
+      withDedupKeys(analyzedPlan)
     }
 
     // Before any source is created, so that a lookup join that cannot be planned stops the query
