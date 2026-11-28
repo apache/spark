@@ -923,6 +923,97 @@ abstract class OrcSourceSuite extends OrcSuite with SharedSparkSession {
     }
   }
 
+  for {
+    vectorized <- Seq(false, true)
+    timestampType <- Seq("TIMESTAMP", "TIMESTAMP_NTZ")
+    container <- Seq("struct", "array", "map")
+  } {
+    test(s"SPARK-60792: prune $timestampType in $container, vectorized: $vectorized") {
+      withSQLConf(
+          SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> "true",
+          SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString,
+          SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
+        withTempPath { dir =>
+          val otherType = if (timestampType == "TIMESTAMP") "TIMESTAMP_NTZ" else "TIMESTAMP"
+          val value = s"named_struct('old', $otherType '2020-01-01', " +
+            s"'wanted', $timestampType '2021-01-02 03:04:05.123456')"
+          val (column, projection) = container match {
+            case "struct" => value -> "v.wanted"
+            case "array" => s"array($value)" -> "v[0].wanted"
+            case "map" => s"map('key', $value)" -> "v['key'].wanted"
+          }
+          val input = sql(s"SELECT $column AS v")
+          input.write.orc(dir.getCanonicalPath)
+          val df = spark.read.orc(dir.getCanonicalPath)
+          checkAnswer(df, input)
+          checkAnswer(df.selectExpr(projection),
+            sql(s"SELECT $timestampType '2021-01-02 03:04:05.123456'"))
+        }
+      }
+    }
+  }
+
+  for {
+    timestampType <- Seq("TIMESTAMP", "TIMESTAMP_NTZ")
+    container <- Seq("struct", "array", "map")
+  } {
+    test(s"SPARK-60792: reject a named $timestampType mismatch in $container") {
+      val otherType = if (timestampType == "TIMESTAMP") "TIMESTAMP_NTZ" else "TIMESTAMP"
+      def schema(fields: String): StructType = {
+        val struct = s"STRUCT<$fields>"
+        val wrapped = container match {
+          case "struct" => struct
+          case "array" => s"ARRAY<$struct>"
+          case "map" => s"MAP<STRING, $struct>"
+        }
+        StructType.fromDDL(s"v $wrapped")
+      }
+      val fileSchema = schema(s"old: $timestampType, wanted: $otherType")
+      val readSchema = schema(s"wanted: $timestampType")
+      val orcSchema = OrcUtils.orcTypeDescription(fileSchema)
+      val conf = new Configuration(false)
+      val error = intercept[SparkUnsupportedOperationException] {
+        OrcUtils.requestedColumnIds(false, readSchema, readSchema, orcSchema, conf)
+      }
+      checkError(
+        exception = error,
+        condition = "UNSUPPORTED_FEATURE.ORC_TYPE_CAST",
+        parameters = Map(
+          "orcType" -> s""""$otherType"""",
+          "toType" -> s""""$timestampType""""))
+    }
+  }
+
+  test("SPARK-60792: timestamp validation follows ORC field resolution") {
+    val fileSchema = StructType.fromDDL("v STRUCT<old: TIMESTAMP, wanted: TIMESTAMP_NTZ>")
+    val orcSchema = OrcUtils.orcTypeDescription(fileSchema)
+    val readSchema = StructType.fromDDL("v STRUCT<WANTED: TIMESTAMP>")
+    val conf = new Configuration(false)
+
+    // A case-insensitive match reads the incompatible field, rather than its first sibling.
+    val error = intercept[SparkUnsupportedOperationException] {
+      OrcUtils.requestedColumnIds(false, readSchema, readSchema, orcSchema, conf)
+    }
+    checkError(
+      exception = error,
+      condition = "UNSUPPORTED_FEATURE.ORC_TYPE_CAST",
+      parameters = Map("orcType" -> "\"TIMESTAMP_NTZ\"", "toType" -> "\"TIMESTAMP\""))
+
+    // A case-sensitive read sees a missing field, so there is no timestamp to validate.
+    assert(OrcUtils.requestedColumnIds(true, readSchema, readSchema, orcSchema, conf).nonEmpty)
+
+    // Positional evolution reads the first physical field despite the different name.
+    FORCE_POSITIONAL_EVOLUTION.setBoolean(conf, true)
+    assert(OrcUtils.requestedColumnIds(false, readSchema, readSchema, orcSchema, conf).nonEmpty)
+
+    // Old Hive files with anonymous root fields also retain positional matching.
+    FORCE_POSITIONAL_EVOLUTION.setBoolean(conf, false)
+    val anonymousSchema = OrcUtils.orcTypeDescription(
+      StructType.fromDDL("_col0 STRUCT<old: TIMESTAMP, wanted: TIMESTAMP_NTZ>"))
+    assert(OrcUtils.requestedColumnIds(
+      false, readSchema, readSchema, anonymousSchema, conf).nonEmpty)
+  }
+
   test("SPARK-57455: plain ORC timestamp stays TimestampType without Spark nanos metadata") {
     withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
       withTempPath { dir =>
