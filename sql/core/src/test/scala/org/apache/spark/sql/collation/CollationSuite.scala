@@ -374,6 +374,30 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("SPARK-61622: case-sensitive accent-insensitive collations compare a sharp s " +
+      "the same way in filters, aggregates, joins and IN") {
+    val inList = (1 to 11).map(i => s"'x$i'").mkString("'Strasse', ", ", ", "")
+    Seq("UNICODE_AI", "de_AI", "UNICODE_AI_RTRIM").foreach { collation =>
+      withTempView("t") {
+        // scalastyle:off nonascii
+        sql(s"SELECT id, CAST(s AS STRING COLLATE $collation) AS s FROM VALUES " +
+          "(1, 'Stra\u00DFe'), (2, 'Strasse'), (3, 'STRASSE') AS v(id, s)")
+          .createOrReplaceTempView("t")
+        // scalastyle:on nonascii
+        val equalPairs = Seq(Row(1, 1), Row(1, 2), Row(2, 1), Row(2, 2), Row(3, 3))
+        checkAnswer(sql("SELECT id FROM t WHERE s = 'Strasse'"), Seq(Row(1), Row(2)))
+        checkAnswer(sql(s"SELECT id FROM t WHERE s IN ($inList)"), Seq(Row(1), Row(2)))
+        checkAnswer(sql("SELECT id FROM t WHERE s IN ('Strasse', 'x')"), Seq(Row(1), Row(2)))
+        checkAnswer(sql("SELECT count(DISTINCT s) FROM t"), Row(2))
+        checkAnswer(sql("SELECT count(*) FROM t GROUP BY s"), Seq(Row(2), Row(1)))
+        checkAnswer(sql("SELECT a.id, b.id FROM t a JOIN t b ON a.s = b.s"), equalPairs)
+        checkAnswer(
+          sql("SELECT a.id, b.id FROM t a JOIN t b ON a.s <= b.s AND a.s >= b.s"), equalPairs)
+        checkAnswer(sql("SELECT id FROM t ORDER BY s, id"), Seq(Row(1), Row(2), Row(3)))
+      }
+    }
+  }
+
   test("checkCollation throws exception for incompatible collationIds") {
     val left: String = "abc" // collate with 'UNICODE_CI'
     val leftCollationName: String = "UNICODE_CI";
