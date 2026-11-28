@@ -458,6 +458,84 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     comparePlans(optimized, expected)
   }
 
+  test("SPARK-62411: Nested field pruning for Project and Generate with UNNEST") {
+    val query = contact
+      .generate(Unnest(Seq($"friends".getField("first")), withOrdinality = false),
+        outputNames = Seq("unnest"))
+      .select($"unnest", $"friends".getField("middle"))
+      .analyze
+    val optimized = Optimize.execute(query)
+
+    val aliases = collectGeneratedAliases(optimized)
+
+    val expected = contact
+      .select(
+        $"friends".getField("middle").as(aliases(0)),
+        $"friends".getField("first").as(aliases(1)))
+      .generate(Unnest(Seq($"${aliases(1)}"), withOrdinality = false),
+        unrequiredChildIndex = Seq(1),
+        outputNames = Seq("unnest"))
+      .select($"unnest", $"${aliases(0)}".as("friends.middle"))
+      .analyze
+    comparePlans(optimized, expected)
+  }
+
+  test("SPARK-62411: Nested field pruning of a struct read by UNNEST and above it") {
+    val document = LocalRelation(
+      $"id".int,
+      $"doc".struct(StructType.fromDDL("ts string, extra string, items array<int>")))
+    val query = document
+      .generate(Unnest(Seq($"doc".getField("items")), withOrdinality = false),
+        outputNames = Seq("item"))
+      .select($"id", $"doc".getField("ts"), $"item")
+      .analyze
+    val optimized = Optimize.execute(query)
+
+    val aliases = collectGeneratedAliases(optimized)
+
+    val expected = document
+      .select(
+        $"id",
+        $"doc".getField("ts").as(aliases(0)),
+        $"doc".getField("items").as(aliases(1)))
+      .generate(Unnest(Seq($"${aliases(1)}"), withOrdinality = false),
+        unrequiredChildIndex = Seq(2),
+        outputNames = Seq("item"))
+      .select($"id", $"${aliases(0)}".as("doc.ts"), $"item")
+      .analyze
+    comparePlans(optimized, expected)
+  }
+
+  test("SPARK-62411: aliasing a struct keeps the unrequired child output of Generate") {
+    val relation = LocalRelation(
+      $"doc".struct(StructType.fromDDL("a int, b int, c int, items array<int>")),
+      $"arr".array(IntegerType))
+    // `arr` is only read by the generator. Aliasing `doc` moves it from index 1 to 3.
+    val query = relation
+      .generate(Unnest(Seq($"doc".getField("items"), $"arr"), withOrdinality = false),
+        unrequiredChildIndex = Seq(1),
+        outputNames = Seq("x", "y"))
+      .select($"doc".getField("a"), $"doc".getField("b"), $"x", $"y")
+      .analyze
+    // A single rewrite, since a later `ColumnPruning` run recomputes the index anyway.
+    val rewritten = GeneratorNestedColumnAliasing.unapply(query).get
+
+    val aliases = collectGeneratedAliases(rewritten)
+
+    val expected = relation
+      .select(
+        $"doc".getField("a").as(aliases(0)),
+        $"doc".getField("b").as(aliases(1)),
+        $"doc".getField("items").as(aliases(2)),
+        $"arr")
+      .generate(Unnest(Seq($"${aliases(2)}", $"arr"), withOrdinality = false),
+        unrequiredChildIndex = Seq(3),
+        outputNames = Seq("x", "y"))
+      .select($"${aliases(0)}".as("doc.a"), $"${aliases(1)}".as("doc.b"), $"x", $"y")
+      .analyze
+    comparePlans(rewritten, expected)
+  }
+
   test("Nested field pruning through RepartitionByExpression") {
     val query1 = contact
       .distribute($"id")(1)

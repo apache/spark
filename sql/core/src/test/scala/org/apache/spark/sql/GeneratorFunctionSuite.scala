@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, Generator}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.plans.logical.Generate
 import org.apache.spark.sql.catalyst.trees.LeafLike
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -831,6 +832,53 @@ class GeneratorFunctionSuite extends SharedSparkSession {
           |LATERAL VIEW inline(array(named_struct('f1', 10, 'f2', 'hello'))) gen AS `a.b`, `c.d`
         """.stripMargin),
       Row(10, "hello") :: Nil)
+  }
+
+  test("SPARK-62411: nested fields are pruned through UNNEST as through explode") {
+    withSQLConf(SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> "true") {
+      withTempView("docs") {
+        spark.range(3)
+          .selectExpr("id",
+            "named_struct('ts', concat('t', id), 'extra', 'x', 'items', sequence(0, id)) AS doc")
+          .createOrReplaceTempView("docs")
+        val expected = Seq(
+          Row(0L, "t0", 0L), Row(1L, "t1", 0L), Row(1L, "t1", 1L),
+          Row(2L, "t2", 0L), Row(2L, "t2", 1L), Row(2L, "t2", 2L))
+        Seq(
+          "SELECT id, doc.ts, item FROM docs, LATERAL UNNEST(doc.items) AS u(item)",
+          "SELECT id, doc.ts, item FROM docs LATERAL VIEW explode(doc.items) e AS item"
+        ).foreach { query =>
+          val df = sql(query)
+          checkAnswer(df, expected)
+          // Only `doc.ts` is needed above the Generate, so `doc` is not copied into its rows.
+          val generates = df.queryExecution.optimizedPlan.collect { case g: Generate => g }
+          assert(generates.size == 1, query)
+          assert(generates.head.requiredChildOutput.forall(!_.dataType.isInstanceOf[StructType]),
+            s"$query: ${generates.head.requiredChildOutput}")
+        }
+      }
+    }
+  }
+
+  test("SPARK-62411: nested field aliasing keeps the unrequired child output of Generate") {
+    withSQLConf(SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> "true") {
+      withTempView("docs") {
+        spark.range(2)
+          .selectExpr(
+            "named_struct('a', id, 'b', id + 10, 'c', 'x', 'items', sequence(0, id)) AS doc",
+            "array(100L) AS arr")
+          .createOrReplaceTempView("docs")
+        // `arr` is only read by the generator, and its position shifts when `doc` is aliased.
+        checkAnswer(
+          sql("SELECT doc.a, doc.b, x, y FROM docs, LATERAL UNNEST(doc.items, arr) AS u(x, y)"),
+          Row(0L, 10L, 0L, 100L) :: Row(1L, 11L, 0L, 100L) :: Row(1L, 11L, 1L, null) :: Nil)
+        checkAnswer(
+          sql("SELECT doc.a, doc.b, x FROM docs " +
+            "LATERAL VIEW explode(concat(doc.items, arr)) e AS x"),
+          Row(0L, 10L, 0L) :: Row(0L, 10L, 100L) ::
+            Row(1L, 11L, 0L) :: Row(1L, 11L, 1L) :: Row(1L, 11L, 100L) :: Nil)
+      }
+    }
   }
 }
 
