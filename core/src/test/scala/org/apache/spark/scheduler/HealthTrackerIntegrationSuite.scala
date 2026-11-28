@@ -91,8 +91,8 @@ class HealthTrackerIntegrationSuite extends SchedulerIntegrationSuite[MultiExecu
       val jobFuture = submit(rdd, (0 until 10).toArray)
       awaitJobTermination(jobFuture, duration)
     }
-    assert(results === (0 until 10).map { _ -> 42 }.toMap)
     assertDataStructuresEmpty(noFailure = true)
+    assert(results === (0 until 10).map { _ -> 42 }.toMap)
   }
 
   // Make sure that if we've failed on all executors, but haven't hit task.maxFailures yet, we try
