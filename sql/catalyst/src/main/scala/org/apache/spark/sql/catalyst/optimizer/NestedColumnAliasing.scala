@@ -408,11 +408,10 @@ object GeneratorNestedColumnAliasing {
         attrToExtractValuesOnGenerator.flatMap(_._2).toSeq, Seq.empty,
         collectNestedGetStructFields)
 
-      // Pruning on `Generator`'s output. We only process single field case.
-      // For multiple field case, we cannot directly move field extractor into
-      // the generator expression. A workaround is to re-construct array of struct
-      // from multiple fields. But it will be more complicated and may not worth.
-      // TODO(SPARK-34956): support multiple fields.
+      // Pruning on `Generator`'s output. We only process single field case: a single field
+      // extractor can be moved into the generator expression. Multiple fields of a generator's
+      // output are pruned at the scan by `SchemaPruning` and `V2ScanRelationPushDown` instead
+      // (SPARK-34956), except for ORC scans for now.
       val nestedFieldsOnGenerator = attrToExtractValuesOnGenerator.values.flatten.toSet
       if (nestedFieldsOnGenerator.size > 1 || nestedFieldsOnGenerator.isEmpty) {
         Some(pushedThrough)
