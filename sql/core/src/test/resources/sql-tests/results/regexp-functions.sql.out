@@ -716,6 +716,48 @@ NULL
 
 
 -- !query
+SELECT regexp_instr('1a 2b 14m', '\\d+(a|b|m)', 1)
+-- !query schema
+struct<regexp_instr(1a 2b 14m, \d+(a|b|m), 1):int>
+-- !query output
+2
+
+
+-- !query
+SELECT regexp_instr('abc123', '([a-z]+)([0-9]+)', 2)
+-- !query schema
+struct<regexp_instr(abc123, ([a-z]+)([0-9]+), 2):int>
+-- !query output
+4
+
+
+-- !query
+SELECT regexp_instr('abc', '([a-z]+)([0-9]+)?', 2)
+-- !query schema
+struct<regexp_instr(abc, ([a-z]+)([0-9]+)?, 2):int>
+-- !query output
+0
+
+
+-- !query
+SELECT regexp_instr('abc123', '([a-z]+)([0-9]+)', 3)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`regexp_instr`",
+    "groupCount" : "2",
+    "groupIndex" : "3",
+    "parameter" : "`idx`"
+  }
+}
+
+
+-- !query
 SELECT regexp_instr('abc', col0, 1) FROM VALUES(') ?') AS t(col0)
 -- !query schema
 struct<>
