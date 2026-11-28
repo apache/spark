@@ -1397,6 +1397,50 @@ class JDBCSuite extends SharedSparkSession {
     assert(msSqlServer.compileExpression(bareIsNull).get === "\"a\" IS NULL")
   }
 
+  test("SPARK-62136: MsSqlServer pushes down CAST to STRING only from types it renders as Spark") {
+    val msSqlServer = JdbcDialects.get("jdbc:sqlserver://127.0.0.1/db")
+    def compileCast(dialect: JdbcDialect, from: DataType, to: DataType): Option[String] =
+      dialect.compileExpression(new V2Cast(FieldReference("c"), from, to))
+    val stringTargets = Seq(StringType, CharType(5), VarcharType(5))
+    val refusedSources = Seq(FloatType, DoubleType, BooleanType, TimestampType, TimestampNTZType,
+      BinaryType, DecimalType(20, 10), DecimalType(10, 7))
+    refusedSources.foreach { from =>
+      stringTargets.foreach { to =>
+        assert(compileCast(msSqlServer, from, to).isEmpty, s"$from -> $to")
+      }
+    }
+    Seq(ByteType, ShortType, IntegerType, LongType, DateType, StringType).foreach { from =>
+      assert(compileCast(msSqlServer, from, StringType) ===
+        Some("CAST(\"c\" AS NVARCHAR(MAX))"), from)
+    }
+    // Decimal columns with a scale up to 6 are cast to Spark's DECIMAL(p, s) first.
+    Seq(DecimalType(38, 0), DecimalType(10, 4), DecimalType(20, 6)).foreach { d =>
+      assert(compileCast(msSqlServer, d, StringType) === Some(
+        s"""CAST(CAST("c" AS DECIMAL(${d.precision},${d.scale})) AS NVARCHAR(MAX))"""), d)
+    }
+    // A computed decimal is not cast to a string remotely.
+    val decimalSum = new GeneralScalarExpression(
+      "+", Array[V2Expression](FieldReference("a"), FieldReference("b")))
+    stringTargets.foreach { to =>
+      assert(msSqlServer.compileExpression(
+        new V2Cast(decimalSum, DecimalType(38, 6), to)).isEmpty, to)
+    }
+    assert(JdbcDialects.get("jdbc:").compileExpression(
+      new V2Cast(decimalSum, DecimalType(38, 6), StringType)).isDefined)
+    // Only casts to STRING are refused, also for a computed decimal.
+    assert(msSqlServer.compileExpression(
+      new V2Cast(decimalSum, DecimalType(38, 6), IntegerType)).isDefined)
+    Seq(FloatType, DoubleType, BooleanType).foreach { from =>
+      Seq(IntegerType, DecimalType(10, 2)).foreach { to =>
+        assert(compileCast(msSqlServer, from, to).isDefined, s"$from -> $to")
+      }
+    }
+    // Other dialects keep pushing these casts.
+    refusedSources.foreach { from =>
+      assert(compileCast(JdbcDialects.get("jdbc:"), from, StringType).isDefined, from)
+    }
+  }
+
   test("SPARK-58372: fractional to integral cast pushdown is wrapped in the dialect truncating " +
     "function when needed") {
     val cast = new V2Cast(FieldReference("a"), DoubleType, IntegerType)
