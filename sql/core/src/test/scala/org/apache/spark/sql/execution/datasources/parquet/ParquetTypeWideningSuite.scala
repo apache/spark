@@ -444,6 +444,54 @@ class ParquetTypeWideningSuite
     }
   }
 
+  // SPARK-60010: Parquet stores a DECIMAL as its unscaled value, so a DECIMAL with a non-zero
+  // scale can't be read as an integral type: 1.23 would be read as 123. The vectorized reader
+  // rejects it like other unsupported conversions. Only the vectorized reader is checked here:
+  // the parquet-mr reader doesn't validate this conversion yet.
+  for {
+    fromType <- Seq(DecimalType(9, 2), DecimalType(18, 2))
+    toType <- Seq[DataType](ByteType, ShortType, IntegerType, LongType)
+  }
+  test(s"SPARK-60010: unsupported parquet conversion $fromType -> $toType") {
+    val physicalType = if (DecimalType.is32BitDecimalType(fromType)) "INT32" else "INT64"
+    for (dictionaryEnabled <- Seq(true, false)) {
+      withClue(s"with dictionary encoding '$dictionaryEnabled'") {
+        withAllParquetWriters {
+          withTempDir { dir =>
+            writeParquetFiles(dir, Seq("1.23", "-10.34"), fromType, dictionaryEnabled)
+            withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+              checkErrorMatchPVals(
+                exception = intercept[SparkException] {
+                  readParquetFiles(dir, toType).collect()
+                },
+                condition = "FAILED_READ_FILE.PARQUET_COLUMN_DATA_TYPE_MISMATCH",
+                parameters = Map(
+                  "path" -> ".*",
+                  "column" -> "\\[a\\]",
+                  "expectedType" -> toType.catalogString,
+                  "actualType" -> physicalType))
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // SPARK-60010: a DECIMAL with scale 0 stores the integral value itself, so all readers can
+  // still read it as an integral type.
+  for {
+    (values: Seq[String], fromType: DataType, toType: DataType) <- Seq(
+      (Seq("1", Byte.MinValue.toString, Byte.MaxValue.toString), DecimalType(9, 0), ByteType),
+      (Seq("1", Short.MinValue.toString, Short.MaxValue.toString), DecimalType(9, 0), ShortType),
+      (Seq("1", "-999999999", "999999999"), DecimalType(9, 0), IntegerType),
+      (Seq("1", "-999999999", "999999999"), DecimalType(9, 0), LongType),
+      (Seq("1", "-999999999999999999", "999999999999999999"), DecimalType(18, 0), LongType)
+    )
+  }
+  test(s"SPARK-60010: parquet conversion $fromType -> $toType") {
+    checkAllParquetReaders(values, fromType, toType, expectError = false)
+  }
+
   test("parquet decimal type change IntegerType -> ShortType overflows") {
     withTempDir { dir =>
       withAllParquetReaders {
