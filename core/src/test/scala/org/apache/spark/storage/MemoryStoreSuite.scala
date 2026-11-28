@@ -17,7 +17,9 @@
 
 package org.apache.spark.storage
 
+import java.io.{FilterOutputStream, InputStream, IOException, NotSerializableException, OutputStream}
 import java.nio.ByteBuffer
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
@@ -27,8 +29,9 @@ import org.scalatest._
 import org.apache.spark._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests.TEST_USE_COMPRESSED_OOPS_KEY
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.memory.{MemoryMode, UnifiedMemoryManager}
-import org.apache.spark.serializer.{KryoSerializer, SerializerManager}
+import org.apache.spark.serializer.{JavaSerializer, KryoSerializer, SerializerManager}
 import org.apache.spark.storage.memory.{BlockEvictionHandler, MemoryStore, PartiallySerializedBlock, PartiallyUnrolledIterator}
 import org.apache.spark.util._
 import org.apache.spark.util.io.ChunkedByteBuffer
@@ -86,7 +89,10 @@ class MemoryStoreSuite
     reinitializeSizeEstimator(originalArch, originalCompressedOops)
   }
 
-  def makeMemoryStore(maxMem: Long): (MemoryStore, BlockInfoManager) = {
+  def makeMemoryStore(
+      maxMem: Long,
+      serializerManager: SerializerManager = serializerManager)
+      : (MemoryStore, BlockInfoManager) = {
     val memManager = new UnifiedMemoryManager(conf, maxMem, maxMem / 2, 1)
     val blockInfoManager = new BlockInfoManager
     var memoryStore: MemoryStore = null
@@ -102,6 +108,27 @@ class MemoryStoreSuite
       new MemoryStore(conf, blockInfoManager, serializerManager, memManager, blockEvictionHandler)
     memManager.setMemoryStore(memoryStore)
     (memoryStore, blockInfoManager)
+  }
+
+  /**
+   * Returns a SerializerManager that compresses RDD blocks with [[CloseTrackingCompressionCodec]],
+   * after resetting the codec's counters. It uses Java serialization so that writing a
+   * non-serializable value fails.
+   */
+  private def closeTrackingSerializerManager(failOnClose: Boolean = false): SerializerManager = {
+    CloseTrackingCompressionCodec.reset(failOnClose)
+    val compressionConf = conf.clone
+      .set(IO_COMPRESSION_CODEC, classOf[CloseTrackingCompressionCodec].getName)
+      .set(RDD_COMPRESS, true)
+    new SerializerManager(new JavaSerializer(new SparkConf(false)), compressionConf)
+  }
+
+  /** An iterator over `numValues` byte arrays that throws `error` instead of returning the last. */
+  private def failingIterator(numValues: Int, error: Throwable): Iterator[Any] = {
+    (1 to numValues).iterator.map { i =>
+      if (i == numValues) throw error
+      new Array[Byte](10)
+    }
   }
 
   private def assertSameContents[T](expected: Seq[T], actual: Seq[T], hint: String): Unit = {
@@ -615,6 +642,138 @@ class MemoryStoreSuite
       Thread.sleep(500)
     }
     assert(allocator.getAllocatedMemory == 0)
+  }
+
+  test("SPARK-62048: putIteratorAsBytes closes the compression stream when the input iterator " +
+      "throws") {
+    Seq(MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP).foreach { memoryMode =>
+      val (memoryStore, _) = makeMemoryStore(12000, closeTrackingSerializerManager())
+      val error = new IllegalStateException("iterator failed")
+      val blockId = rdd(0, 0)
+      val e = intercept[IllegalStateException] {
+        memoryStore.putIteratorAsBytes(
+          blockId, failingIterator(5, error), ClassTag.Any, memoryMode)
+      }
+      assert(e eq error, s"original error should propagate unchanged ($memoryMode)")
+      assert(e.getSuppressed.isEmpty)
+      assert(CloseTrackingCompressionCodec.opened.get === 1)
+      assert(CloseTrackingCompressionCodec.closed.get === 1,
+        s"compression stream should be closed on failure ($memoryMode)")
+      assert(!memoryStore.contains(blockId))
+    }
+  }
+
+  test("SPARK-62048: putIteratorAsBytes closes the compression stream when serializing a value " +
+      "fails") {
+    val (memoryStore, _) = makeMemoryStore(12000, closeTrackingSerializerManager())
+    val values = Iterator[Any](new Array[Byte](10), new Object)
+    val blockId = rdd(0, 0)
+    intercept[NotSerializableException] {
+      memoryStore.putIteratorAsBytes(blockId, values, ClassTag.Any, MemoryMode.ON_HEAP)
+    }
+    assert(CloseTrackingCompressionCodec.opened.get === 1)
+    assert(CloseTrackingCompressionCodec.closed.get === 1)
+    assert(!memoryStore.contains(blockId))
+  }
+
+  test("SPARK-62048: putIteratorAsBytes keeps the original error when closing the stream fails") {
+    val (memoryStore, _) =
+      makeMemoryStore(12000, closeTrackingSerializerManager(failOnClose = true))
+    val error = new IllegalStateException("iterator failed")
+    val e = intercept[IllegalStateException] {
+      memoryStore.putIteratorAsBytes(
+        rdd(0, 0), failingIterator(5, error), ClassTag.Any, MemoryMode.ON_HEAP)
+    }
+    assert(e eq error)
+    assert(e.getSuppressed.map(_.getMessage).toSeq ===
+      Seq(CloseTrackingCompressionCodec.closeFailureMessage))
+    assert(CloseTrackingCompressionCodec.closed.get === 1)
+  }
+
+  test("SPARK-62048: putIteratorAsBytes closes the compression stream when the task is killed " +
+      "while unrolling") {
+    val (memoryStore, _) = makeMemoryStore(12000, closeTrackingSerializerManager())
+    val tc = TaskContext.empty()
+    TaskContext.setTaskContext(tc)
+    try {
+      // Task.kill() marks the context as interrupted before it interrupts the task thread, so
+      // unrolling stops with a partially serialized block and then the task is killed.
+      tc.markInterrupted("test kill")
+      Thread.currentThread().interrupt()
+      val e = intercept[TaskKilledException] {
+        memoryStore.putIteratorAsBytes(
+          rdd(0, 0), Iterator.fill[Any](10)(new Array[Byte](10)), ClassTag.Any, MemoryMode.ON_HEAP)
+      }
+      assert(e.reason === "test kill")
+      assert(e.getSuppressed.isEmpty)
+      assert(CloseTrackingCompressionCodec.opened.get === 1)
+      assert(CloseTrackingCompressionCodec.closed.get === 1)
+      assert(!memoryStore.contains(rdd(0, 0)))
+      // Checked while the task context is set, since unroll memory is tracked per task.
+      assert(memoryStore.currentUnrollMemoryForThisTask === 0)
+    } finally {
+      Thread.interrupted()
+      TaskContext.unset()
+    }
+  }
+
+  test("SPARK-62048: putIteratorAsBytes hands the compression stream off on success and on " +
+      "partial unroll") {
+    val (memoryStore, _) = makeMemoryStore(8400, closeTrackingSerializerManager())
+
+    // Success: the stream is closed once the block has been fully unrolled and stored.
+    val smallValues = Iterator.fill[Any](10)(new Array[Byte](10))
+    assert(memoryStore.putIteratorAsBytes(
+      rdd(0, 0), smallValues, ClassTag.Any, MemoryMode.ON_HEAP).isRight)
+    assert(memoryStore.contains(rdd(0, 0)))
+    assert(CloseTrackingCompressionCodec.opened.get === 1)
+    assert(CloseTrackingCompressionCodec.closed.get === 1)
+
+    // Partial unroll: the still-open stream is owned by the PartiallySerializedBlock and is
+    // closed only when that block is discarded.
+    val bigValues = Iterator.fill[Any](40)(new Array[Byte](1000))
+    val partial = memoryStore.putIteratorAsBytes(
+      rdd(0, 1), bigValues, ClassTag.Any, MemoryMode.ON_HEAP).swap.getOrElse(fail())
+    assert(CloseTrackingCompressionCodec.opened.get === 2)
+    assert(CloseTrackingCompressionCodec.closed.get === 1)
+    assert(memoryStore.currentUnrollMemoryForThisTask > 0)
+    partial.discard()
+    assert(CloseTrackingCompressionCodec.closed.get === 2)
+    assert(memoryStore.currentUnrollMemoryForThisTask === 0)
+  }
+}
+
+/**
+ * A pass-through codec that counts the compressed output streams it opens and closes, so tests
+ * can check that callers close them. It is instantiated by class name, so it must be top-level.
+ */
+private class CloseTrackingCompressionCodec(conf: SparkConf) extends CompressionCodec {
+  import CloseTrackingCompressionCodec._
+
+  override def compressedOutputStream(s: OutputStream): OutputStream = {
+    opened.incrementAndGet()
+    new FilterOutputStream(s) {
+      override def close(): Unit = {
+        closed.incrementAndGet()
+        if (failOnClose) throw new IOException(closeFailureMessage)
+        super.close()
+      }
+    }
+  }
+
+  override def compressedInputStream(s: InputStream): InputStream = s
+}
+
+private object CloseTrackingCompressionCodec {
+  val closeFailureMessage = "close failed"
+  val opened = new AtomicInteger(0)
+  val closed = new AtomicInteger(0)
+  @volatile var failOnClose = false
+
+  def reset(failOnClose: Boolean): Unit = {
+    opened.set(0)
+    closed.set(0)
+    this.failOnClose = failOnClose
   }
 }
 
