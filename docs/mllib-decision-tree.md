@@ -22,7 +22,7 @@ license: |
 * Table of contents
 {:toc}
 
-[Decision trees](http://en.wikipedia.org/wiki/Decision_tree_learning)
+[Decision trees](https://en.wikipedia.org/wiki/Decision_tree_learning)
 and their ensembles are popular methods for the machine learning tasks of
 classification and regression. Decision trees are widely used since they are easy to interpret,
 handle categorical features, extend to the multiclass classification setting, do not require
@@ -233,7 +233,7 @@ The example below demonstrates how to load a
 parse it as an RDD of `LabeledPoint` and then
 perform regression using a decision tree with variance as an impurity measure and a maximum tree
 depth of 5. The Mean Squared Error (MSE) is computed at the end to evaluate
-[goodness of fit](http://en.wikipedia.org/wiki/Goodness_of_fit).
+[goodness of fit](https://en.wikipedia.org/wiki/Goodness_of_fit).
 
 <div class="codetabs">
 

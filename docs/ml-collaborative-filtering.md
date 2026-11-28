@@ -24,7 +24,7 @@ license: |
 
 ## Collaborative filtering 
 
-[Collaborative filtering](http://en.wikipedia.org/wiki/Recommender_system#Collaborative_filtering)
+[Collaborative filtering](https://en.wikipedia.org/wiki/Recommender_system#Collaborative_filtering)
 is commonly used for recommender systems.  These techniques aim to fill in the
 missing entries of a user-item association matrix.  `spark.ml` currently supports
 model-based collaborative filtering, in which users and products are described
