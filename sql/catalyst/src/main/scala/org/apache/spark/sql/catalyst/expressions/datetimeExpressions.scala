@@ -25,7 +25,7 @@ import java.util.Locale
 
 import org.apache.commons.text.StringEscapeUtils
 
-import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkRuntimeException}
+import org.apache.spark.{QueryContext, SparkException, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
@@ -504,6 +504,17 @@ case class CurrentBatchTimestamp(
       case _: DateType => Literal(microsToDays(timestampUs, zoneId), DateType)
     }
   }
+}
+
+/**
+ * A date arithmetic expression that raises its overflow error in every evaluation mode, so it has
+ * a query context in every mode. With ANSI mode off, `d + 1` and `d1 - d2` are first analyzed
+ * into an `Add` and a `Subtract`, which have no query context as they cannot fail, and the
+ * expression that replaces them keeps its own, as `SupportQueryContext.copyTagsFrom` copies only
+ * a context with an origin.
+ */
+trait DateArithmeticQueryContext extends SupportQueryContext {
+  override def initQueryContext(): Option[QueryContext] = Some(origin.context)
 }
 
 /**
@@ -3765,7 +3776,10 @@ case class TruncTimestamp(
  * Returns the number of days from startDate to endDate.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(endDate, startDate) - Returns the number of days from `startDate` to `endDate`.",
+  usage = """_FUNC_(endDate, startDate) - Returns the number of days from `startDate` to `endDate`.
+      If that number does not fit in an INT, the function fails with `DATETIME_OVERFLOW`
+      regardless of `spark.sql.ansi.enabled`.
+      """,
   arguments = """
     Arguments:
       * endDate - The end date to count days up to.
@@ -3784,7 +3798,7 @@ case class TruncTimestamp(
   group = "datetime_funcs",
   since = "1.5.0")
 case class DateDiff(endDate: Expression, startDate: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes with DateArithmeticQueryContext {
   override def nullIntolerant: Boolean = true
 
   override def left: Expression = endDate
@@ -3793,11 +3807,13 @@ case class DateDiff(endDate: Expression, startDate: Expression)
   override def dataType: DataType = IntegerType
 
   override def nullSafeEval(end: Any, start: Any): Any = {
-    end.asInstanceOf[Int] - start.asInstanceOf[Int]
+    DateTimeUtils.daysBetween(end.asInstanceOf[Int], start.asInstanceOf[Int], getContextOrNull())
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (end, start) => s"$end - $start")
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    val errorContext = getContextOrNullCode(ctx)
+    defineCodeGen(ctx, ev, (end, start) => s"$dtu.daysBetween($end, $start, $errorContext)")
   }
 
   override protected def withNewChildrenInternal(
@@ -5059,7 +5075,7 @@ case class SubtractDates(
     left: Expression,
     right: Expression,
     legacyInterval: Boolean)
-  extends BinaryExpression with ImplicitCastInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes with DateArithmeticQueryContext {
   override def nullIntolerant: Boolean = true
 
   def this(left: Expression, right: Expression) =
@@ -5077,7 +5093,7 @@ case class SubtractDates(
     (leftDays: Int, rightDays: Int) => subtractDates(leftDays, rightDays)
   } else {
     (leftDays: Int, rightDays: Int) =>
-      Math.multiplyExact(Math.subtractExact(leftDays, rightDays), MICROS_PER_DAY)
+      subtractDatesToMicros(leftDays, rightDays, getContextOrNull())
   }
 
   override def nullSafeEval(leftDays: Any, rightDays: Any): Any = {
@@ -5090,9 +5106,11 @@ case class SubtractDates(
       s"$dtu.subtractDates($leftDays, $rightDays)"
     })
   } else {
-    val m = classOf[Math].getName
-    defineCodeGen(ctx, ev, (leftDays, rightDays) =>
-      s"$m.multiplyExact($m.subtractExact($leftDays, $rightDays), ${MICROS_PER_DAY}L)")
+    val errorContext = getContextOrNullCode(ctx)
+    defineCodeGen(ctx, ev, (leftDays, rightDays) => {
+      val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+      s"$dtu.subtractDatesToMicros($leftDays, $rightDays, $errorContext)"
+    })
   }
 
   override def toString: String = s"($left - $right)"
@@ -5101,6 +5119,12 @@ case class SubtractDates(
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): SubtractDates =
     copy(left = newLeft, right = newRight)
+
+  override def initQueryContext(): Option[QueryContext] = if (legacyInterval) {
+    None
+  } else {
+    Some(origin.context)
+  }
 }
 
 object SubtractDates {

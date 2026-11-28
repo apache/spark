@@ -487,6 +487,20 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  // The DATETIME_OVERFLOW error of an expression built in a test carries the empty query context
+  // of its origin, which `checkErrorInExpression` cannot match, so the whole message is checked.
+  private def checkDateTimeOverflow(
+      expr: Expression,
+      inputRow: InternalRow,
+      operation: String): Unit = {
+    checkExceptionInExpression[SparkArithmeticException](expr, inputRow,
+      s"[DATETIME_OVERFLOW] Datetime operation overflow: $operation. SQLSTATE: 22008")
+  }
+
+  private def checkDateTimeOverflow(expr: Expression, operation: String): Unit = {
+    checkDateTimeOverflow(expr, EmptyRow, operation)
+  }
+
   test("date_add") {
     checkEvaluation(
       DateAdd(Literal(Date.valueOf("2016-02-28")), Literal(1.toByte)),
@@ -1436,6 +1450,48 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       DateDiff(Literal.create(null, DateType), Literal.create(null, DateType)),
       null)
+    checkConsistencyBetweenInterpretedAndCodegenAllowingException(DateDiff, DateType, DateType)
+  }
+
+  test("SPARK-60910: datediff fails on overflow instead of wrapping around") {
+    def date(days: Int): Literal = Literal(days, DateType)
+    checkEvaluation(DateDiff(date(Int.MaxValue), date(0)), Int.MaxValue)
+    checkEvaluation(DateDiff(date(-1), date(Int.MaxValue)), Int.MinValue)
+    checkDateTimeOverflow(
+      DateDiff(date(Int.MaxValue), date(-1)),
+      "subtract DATE '1969-12-31' from DATE '+5881580-07-11'")
+    checkDateTimeOverflow(
+      DateDiff(date(Int.MinValue), date(Int.MaxValue)),
+      "subtract DATE '+5881580-07-11' from DATE '-5877641-06-23'")
+  }
+
+  test("SPARK-60910: DATETIME_OVERFLOW formats its dates the same way under every parser policy") {
+    // The legacy formatter rebases a date to the Julian calendar, which overflows for the dates
+    // within about 44,500 days of the minimum DATE. The dates come from the input row: the legacy
+    // formatter would also fail on the `toString` of a DATE literal of them.
+    val end = BoundReference(0, DateType, nullable = false)
+    val start = BoundReference(1, DateType, nullable = false)
+    Seq("legacy", "corrected", "exception").foreach { legacyParserPolicy =>
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> legacyParserPolicy) {
+        checkDateTimeOverflow(
+          DateDiff(end, start),
+          InternalRow(Int.MinValue, 1),
+          "subtract DATE '1970-01-02' from DATE '-5877641-06-23'")
+        checkDateTimeOverflow(
+          DateDiff(end, start),
+          InternalRow(Int.MaxValue, -1),
+          "subtract DATE '1969-12-31' from DATE '+5881580-07-11'")
+        checkDateTimeOverflow(
+          SubtractDates(end, start, legacyInterval = false),
+          InternalRow(Int.MinValue, 0),
+          "subtract DATE '1970-01-01' from DATE '-5877641-06-23'")
+        checkErrorInExpression[SparkArithmeticException](
+          TruncDate(end, Literal("QUARTER")),
+          InternalRow(Int.MinValue),
+          condition = "DATETIME_OVERFLOW",
+          parameters = Map("operation" -> "truncate DATE '-5877641-06-23' to QUARTER"))
+      }
+    }
   }
 
   test("to_utc_timestamp") {
@@ -1950,6 +2006,25 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         (end: Expression, start: Expression) => SubtractDates(end, start, ansiIntervals),
         DateType, DateType)
     }
+  }
+
+  test("SPARK-60910: subtracting dates fails with DATETIME_OVERFLOW on overflow") {
+    def date(days: Int): Literal = Literal(days, DateType)
+    // The largest number of days that a day-time interval can hold.
+    val maxDays = Long.MaxValue / MICROS_PER_DAY
+    assert(maxDays == 106751991L)
+    checkEvaluation(
+      SubtractDates(date(maxDays.toInt), date(0), legacyInterval = false),
+      Duration.ofDays(maxDays))
+    checkEvaluation(
+      SubtractDates(date(0), date(maxDays.toInt), legacyInterval = false),
+      Duration.ofDays(-maxDays))
+    checkDateTimeOverflow(
+      SubtractDates(date(maxDays.toInt + 1), date(0), legacyInterval = false),
+      "subtract DATE '1970-01-01' from DATE '+294247-01-11'")
+    checkDateTimeOverflow(
+      SubtractDates(date(Int.MaxValue), date(-1), legacyInterval = false),
+      "subtract DATE '1969-12-31' from DATE '+5881580-07-11'")
   }
 
   test("to_timestamp_ntz") {
