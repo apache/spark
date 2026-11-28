@@ -21,11 +21,14 @@ import java.util.UUID
 
 import scala.jdk.CollectionConverters._
 
+import io.grpc.StatusRuntimeException
+
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{Expression, OutputType, PipelineCommand, PipelineCommandResult, Relation, UnresolvedTableValuedFunction}
 import org.apache.spark.connect.proto.PipelineCommand.{DefineFlow, DefineOutput}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.service.{SessionKey, SparkConnectService}
+import org.apache.spark.sql.connector.catalog.InMemoryTableCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.autocdc.{ColumnSelection, UnqualifiedColumnName}
 import org.apache.spark.sql.pipelines.graph.AutoCdcFlow
@@ -54,6 +57,60 @@ class SparkDeclarativePipelinesServerSuite
       val definition =
         getDefaultSessionHolder.dataflowGraphRegistry.getDataflowGraphOrThrow(graphId)
       assert(definition.defaultDatabase == "test_db")
+    }
+  }
+
+  test("SPARK-62202: require a database when the pipeline catalog has no default namespace") {
+    withRawBlockingStub { implicit stub =>
+      val catalogName = "no_default_namespace"
+      val confKey = s"spark.sql.catalog.$catalogName"
+      val catalogClass = classOf[InMemoryTableCatalog].getName
+      val callerDatabase = "pipeline_origin"
+      val defaultDatabase = spark.sessionState.conf.defaultDatabase
+      sendPlan(buildSqlCommandPlan(s"SET $confKey=$catalogClass"))
+      sendPlan(buildSqlCommandPlan(s"CREATE DATABASE spark_catalog.$callerDatabase"))
+
+      def checkMissingDatabase(cmd: proto.PipelineCommand.CreateDataflowGraph): Unit = {
+        val error = intercept[StatusRuntimeException] {
+          sendPlan(buildCreateDataflowGraphPlan(cmd))
+        }
+        assert(error.getMessage.contains("[PIPELINE_MISSING_DEFAULT_DATABASE]"))
+        assert(error.getMessage.contains(catalogName))
+        assert(error.getMessage.contains("Set `database` in the pipeline specification"))
+      }
+
+      try {
+        sendPlan(buildSqlCommandPlan(s"USE spark_catalog.$callerDatabase"))
+        checkMissingDatabase(proto.PipelineCommand.CreateDataflowGraph.newBuilder()
+          .setDefaultCatalog(catalogName)
+          .build())
+        val caller = getDefaultSessionHolder.session
+        caller.withActive {
+          assert(caller.catalog.currentCatalog() == "spark_catalog")
+          assert(caller.catalog.currentDatabase == callerDatabase)
+        }
+
+        sendPlan(buildSqlCommandPlan(s"USE $catalogName"))
+        Seq(None, Some("")).foreach { database =>
+          val command = proto.PipelineCommand.CreateDataflowGraph.newBuilder()
+          database.foreach(command.setDefaultDatabase)
+          checkMissingDatabase(command.build())
+        }
+
+        val result = sendPlan(buildCreateDataflowGraphPlan(
+          proto.PipelineCommand.CreateDataflowGraph.newBuilder()
+            .setDefaultCatalog("spark_catalog")
+            .build()))
+        val graphId =
+          result.getPipelineCommandResult.getCreateDataflowGraphResult.getDataflowGraphId
+        val graph = getDefaultSessionHolder.dataflowGraphRegistry.getDataflowGraphOrThrow(graphId)
+        assert(graph.defaultCatalog == "spark_catalog")
+        assert(graph.defaultDatabase == defaultDatabase)
+      } finally {
+        sendPlan(buildSqlCommandPlan(s"USE spark_catalog.$defaultDatabase"))
+        sendPlan(buildSqlCommandPlan(s"DROP DATABASE spark_catalog.$callerDatabase"))
+        sendPlan(buildSqlCommandPlan(s"RESET $confKey"))
+      }
     }
   }
 

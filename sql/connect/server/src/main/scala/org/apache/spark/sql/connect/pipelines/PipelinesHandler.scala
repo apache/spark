@@ -36,6 +36,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{Command, CreateNamespace, Cr
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.service.SessionHolder
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
+import org.apache.spark.sql.connector.catalog.CatalogV2Util.isSessionCatalog
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.{ShowCatalogsCommand, ShowNamespacesCommand}
 import org.apache.spark.sql.pipelines.Language.Python
@@ -208,10 +210,12 @@ private[connect] object PipelinesHandler extends Logging {
   private def createDataflowGraph(
       cmd: proto.PipelineCommand.CreateDataflowGraph,
       sessionHolder: SessionHolder): String = {
+    val session = sessionHolder.session
+    val catalog = session.catalog
+    val currentCatalog = catalog.currentCatalog()
     val defaultCatalog = Option
       .when(cmd.hasDefaultCatalog)(cmd.getDefaultCatalog)
       .getOrElse {
-        val currentCatalog = sessionHolder.session.catalog.currentCatalog()
         logInfo(
           log"No default catalog was supplied. " +
             log"Falling back to the current catalog: ${MDC(CATALOG_NAME, currentCatalog)}.")
@@ -221,17 +225,34 @@ private[connect] object PipelinesHandler extends Logging {
     val defaultDatabase = Option
       .when(cmd.hasDefaultDatabase)(cmd.getDefaultDatabase)
       .getOrElse {
-        val currentDatabase = sessionHolder.session.catalog.currentDatabase
+        val database = if (defaultCatalog == currentCatalog) {
+          catalog.currentDatabase
+        } else {
+          val state = session.sessionState
+          val selectedCatalog = state.catalogManager.catalog(defaultCatalog)
+          // Switching to the session catalog resets its namespace to the configured database.
+          val namespace = if (isSessionCatalog(selectedCatalog)) {
+            Array(state.conf.defaultDatabase)
+          } else {
+            selectedCatalog.defaultNamespace()
+          }
+          namespace.quoted
+        }
         logInfo(
           log"No default database was supplied. " +
-            log"Falling back to the current database: ${MDC(DATABASE_NAME, currentDatabase)}.")
-        currentDatabase
+            log"Using the selected catalog's default database: ${MDC(DATABASE_NAME, database)}.")
+        database
       }
+    if (defaultDatabase.trim.isEmpty) {
+      throw new AnalysisException(
+        errorClass = "PIPELINE_MISSING_DEFAULT_DATABASE",
+        messageParameters = Map("catalog" -> QueryCompilationErrors.toSQLId(defaultCatalog)))
+    }
 
     val defaultSqlConf = cmd.getSqlConfMap.asScala.toMap
 
-    sessionHolder.session.catalog.setCurrentCatalog(defaultCatalog)
-    sessionHolder.session.catalog.setCurrentDatabase(defaultDatabase)
+    catalog.setCurrentCatalog(defaultCatalog)
+    catalog.setCurrentDatabase(defaultDatabase)
 
     sessionHolder.dataflowGraphRegistry.createDataflowGraph(
       defaultCatalog = defaultCatalog,
