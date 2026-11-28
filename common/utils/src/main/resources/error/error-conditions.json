@@ -11066,11 +11066,6 @@
     ],
     "sqlState" : "42K03"
   },
-  "_LEGACY_ERROR_TEMP_0031" : {
-    "message" : [
-      "Invalid number of buckets: <describe>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0035" : {
     "message" : [
       "Operation not allowed: <message>."
