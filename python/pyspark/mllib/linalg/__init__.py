@@ -36,6 +36,7 @@ from typing import (
     List,
     Optional,
     Sequence,
+    SupportsFloat,
     Tuple,
     Type,
     TypeVar,
@@ -45,6 +46,7 @@ from typing import (
 )
 
 import numpy as np
+from numpy.typing import NDArray
 
 from pyspark import since
 from pyspark.ml import linalg as newlinalg
@@ -306,7 +308,7 @@ class Vector:
     Abstract class for DenseVector and SparseVector
     """
 
-    def toArray(self) -> np.ndarray:
+    def toArray(self) -> NDArray[np.float64]:
         """
         Convert the vector into an numpy.ndarray
 
@@ -358,7 +360,7 @@ class DenseVector(Vector):
     """
 
     def __init__(self, ar: Union[bytes, np.ndarray, Iterable[float]]):
-        ar_: np.ndarray
+        ar_: NDArray[np.float64]
         if isinstance(ar, bytes):
             ar_ = np.frombuffer(ar, dtype=np.float64)
         elif not isinstance(ar, np.ndarray):
@@ -414,7 +416,13 @@ class DenseVector(Vector):
         """
         return np.linalg.norm(self.array, p)
 
-    def dot(self, other: "VectorLike") -> np.float64:
+    @overload
+    def dot(self, other: Union[Vector, List[float], Tuple[float, ...], range]) -> np.float64: ...
+
+    @overload
+    def dot(self, other: "VectorLike") -> Union[float, complex, np.generic, np.ndarray]: ...
+
+    def dot(self, other: "VectorLike") -> Union[float, complex, np.generic, np.ndarray]:
         """
         Compute the dot product of two Vectors. We support
         (Numpy array, list, SparseVector, or SciPy sparse)
@@ -501,7 +509,7 @@ class DenseVector(Vector):
         diff: np.ndarray = self.toArray() - other
         return np.dot(diff, diff)
 
-    def toArray(self) -> np.ndarray:
+    def toArray(self) -> NDArray[np.float64]:
         """
         Returns an numpy.ndarray
         """
@@ -521,7 +529,7 @@ class DenseVector(Vector):
         return newlinalg.DenseVector(self.array)
 
     @property
-    def values(self) -> np.ndarray:
+    def values(self) -> NDArray[np.float64]:
         """
         Returns a list of values
         """
@@ -531,9 +539,9 @@ class DenseVector(Vector):
     def __getitem__(self, item: int) -> np.float64: ...
 
     @overload
-    def __getitem__(self, item: slice) -> np.ndarray: ...
+    def __getitem__(self, item: slice) -> NDArray[np.float64]: ...
 
-    def __getitem__(self, item: Union[int, slice]) -> Union[np.float64, np.ndarray]:
+    def __getitem__(self, item: Union[int, slice]) -> Union[np.float64, NDArray[np.float64]]:
         return self.array[item]
 
     def __len__(self) -> int:
@@ -545,7 +553,7 @@ class DenseVector(Vector):
     def __repr__(self) -> str:
         return "DenseVector([%s])" % (", ".join(_format_float(i) for i in self.array))
 
-    def __eq__(self, other: Any) -> bool:
+    def __eq__(self, other: object) -> bool:
         if isinstance(other, DenseVector):
             return np.array_equal(self.array, other.array)
         elif isinstance(other, SparseVector):
@@ -554,7 +562,7 @@ class DenseVector(Vector):
             return Vectors._equals(list(range(len(self))), self.array, other.indices, other.values)
         return False
 
-    def __ne__(self, other: Any) -> bool:
+    def __ne__(self, other: object) -> bool:
         return not self == other
 
     def __hash__(self) -> int:
@@ -577,8 +585,17 @@ class DenseVector(Vector):
     def __neg__(self) -> "DenseVector":
         return DenseVector(-self.array)
 
-    def _delegate(op: str) -> Callable[["DenseVector", Any], "DenseVector"]:  # type: ignore[misc]
-        def func(self: "DenseVector", other: Any) -> "DenseVector":
+    @staticmethod
+    def _delegate(
+        op: str,
+    ) -> Callable[
+        ["DenseVector", Union["DenseVector", "SparseVector", "ArrayLike", SupportsFloat]],
+        "DenseVector",
+    ]:
+        def func(
+            self: "DenseVector",
+            other: Union["DenseVector", "SparseVector", "ArrayLike", SupportsFloat],
+        ) -> "DenseVector":
             if isinstance(other, DenseVector):
                 other = other.array
             return DenseVector(getattr(self.array, op)(other))
@@ -732,11 +749,11 @@ class SparseVector(Vector):
             raise ValueError("Tuple should end with ')'")
         s = s[start + 1 : end].strip()
 
-        size = s[: s.find(",")]
+        size_str = s[: s.find(",")]
         try:
-            size = int(size)  # type: ignore[assignment]
+            size = int(size_str)
         except ValueError:
-            raise ValueError("Cannot parse size %s." % size)
+            raise ValueError("Cannot parse size %s." % size_str)
 
         ind_start = s.find("[")
         if ind_start == -1:
@@ -763,9 +780,15 @@ class SparseVector(Vector):
             values = [float(val) for val in val_list if val]
         except ValueError:
             raise ValueError("Unable to parse values from %s." % s)
-        return SparseVector(cast(int, size), indices, values)
+        return SparseVector(size, indices, values)
 
-    def dot(self, other: "VectorLike") -> np.float64:
+    @overload
+    def dot(self, other: Union[Vector, List[float], Tuple[float, ...], range]) -> np.float64: ...
+
+    @overload
+    def dot(self, other: "VectorLike") -> Union[float, complex, np.generic, np.ndarray]: ...
+
+    def dot(self, other: "VectorLike") -> Union[float, complex, np.generic, np.ndarray]:
         """
         Dot product with a SparseVector or 1- or 2-dimensional Numpy array.
 
@@ -893,7 +916,7 @@ class SparseVector(Vector):
         else:
             return self.squared_distance(_convert_to_vector(other))
 
-    def toArray(self) -> np.ndarray:
+    def toArray(self) -> NDArray[np.float64]:
         """
         Returns a copy of this SparseVector as a 1-dimensional NumPy array.
         """
@@ -930,7 +953,7 @@ class SparseVector(Vector):
         )
         return "SparseVector({0}, {{{1}}})".format(self.size, entries)
 
-    def __eq__(self, other: Any) -> bool:
+    def __eq__(self, other: object) -> bool:
         if isinstance(other, SparseVector):
             return (
                 other.size == self.size
@@ -963,7 +986,7 @@ class SparseVector(Vector):
             return vals[insert_index]
         return np.float64(0.0)
 
-    def __ne__(self, other: Any) -> bool:
+    def __ne__(self, other: object) -> bool:
         return not self.__eq__(other)
 
     def __hash__(self) -> int:
@@ -1069,11 +1092,23 @@ class Vectors:
         """
         if len(elements) == 1 and not isinstance(elements[0], (float, int)):
             # it's list, numpy.array or other iterable object.
-            elements = elements[0]  # type: ignore[assignment]
-        return DenseVector(cast(Iterable[float], elements))
+            return DenseVector(elements[0])
+        return DenseVector(cast(Tuple[float, ...], elements))
 
     @staticmethod
-    def fromML(vec: newlinalg.DenseVector) -> DenseVector:
+    @overload
+    def fromML(vec: newlinalg.DenseVector) -> DenseVector: ...
+
+    @staticmethod
+    @overload
+    def fromML(vec: newlinalg.SparseVector) -> SparseVector: ...
+
+    @staticmethod
+    @overload
+    def fromML(vec: newlinalg.Vector) -> Vector: ...
+
+    @staticmethod
+    def fromML(vec: newlinalg.Vector) -> Vector:
         """
         Convert a vector from the new mllib-local representation.
         This does NOT copy the data; it copies references.
