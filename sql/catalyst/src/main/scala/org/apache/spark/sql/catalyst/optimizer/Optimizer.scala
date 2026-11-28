@@ -427,7 +427,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       case d: DynamicPruningSubquery => d
       case s @ ScalarSubquery(
         PhysicalOperation(projections, predicates, a @ Aggregate(group, _, child, _)),
-        _, _, _, _, mayHaveCountBug, _)
+        _, _, _, _, mayHaveCountBug, _, _)
         if conf.getConf(SQLConf.DECORRELATE_SUBQUERY_PREVENT_CONSTANT_FOLDING_FOR_COUNT_BUG) &&
           mayHaveCountBug.nonEmpty && mayHaveCountBug.get =>
         // This is a subquery with an aggregate that may suffer from a COUNT bug.
@@ -437,7 +437,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
         // (i.e., it is not being constant folded).
         // Note that this does not limit optimization opportunities for the subquery: after
         // decorrelation is done, the subquery's body becomes part of the main plan and all
-        // optimization rules are applied again.
+        // optimization rules are applied again, except those that run only before
+        // RewriteCorrelatedScalarSubquery, see below.
         val projectOverAggregateChild = Project(a.references.toSeq, child)
         val optimizedPlan = Optimizer.this.execute(Subquery.fromExpression(
           s.withNewPlan(projectOverAggregateChild)))
@@ -465,10 +466,26 @@ abstract class Optimizer(catalogManager: CatalogManager)
             case _ => a.withNewChildren(Seq(optimizedInput))
           }
         }
+        // A subquery with a count-bug result computed before decorrelation (see
+        // PullupCorrelatedPredicates) gets here also where its top Aggregate has grouping
+        // expressions, and such a top is otherwise optimized with the rest of the subquery. The
+        // rules that simplify an Aggregate itself, such as EliminateDistinct, run only before
+        // RewriteCorrelatedScalarSubquery moves it into the main plan, so apply them here to the
+        // top of such a subquery, with or without grouping expressions. Other count-bug
+        // subqueries keep their plans.
+        val simplifiedAgg = if (s.countBugResult.isDefined) {
+          // Only those that this optimizer runs, e.g. not those excluded by the conf.
+          val active = Optimizer.this.batches.iterator.flatMap(_.rules).map(_.ruleName).toSet
+          Seq(EliminateDistinct, RemoveLiteralFromGroupExpressions,
+            RemoveRepetitionFromGroupExpressions).filter(r => active.contains(r.ruleName))
+            .foldLeft(optimizedAgg: LogicalPlan)((p, rule) => rule(p))
+        } else {
+          optimizedAgg
+        }
         val newPlan = Project(projections,
-          if (predicates.nonEmpty) Filter(predicates.reduce(And), optimizedAgg) else optimizedAgg
+          if (predicates.nonEmpty) Filter(predicates.reduce(And), simplifiedAgg) else simplifiedAgg
         )
-        val needTopLevelProject = newPlan.output.zip(optimizedAgg.output).exists {
+        val needTopLevelProject = newPlan.output.zip(simplifiedAgg.output).exists {
           case (oldAttr, newAttr) => oldAttr.exprId != newAttr.exprId
         }
         s.withNewPlan(
