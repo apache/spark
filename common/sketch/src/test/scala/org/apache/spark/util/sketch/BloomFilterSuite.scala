@@ -17,7 +17,7 @@
 
 package org.apache.spark.util.sketch
 
-import java.io.ByteArrayOutputStream
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, EOFException}
 
 import scala.reflect.ClassTag
 import scala.util.Random
@@ -165,6 +165,28 @@ class BloomFilterSuite extends AnyFunSuite { // scalastyle:ignore funsuite
       val filter1 = BloomFilter.create(BloomFilter.Version.V1, 1000L, 6400L, 0)
       val filter2 = BloomFilter.create(BloomFilter.Version.V2, 1000L, 6400L, 0)
       filter1.mergeInPlace(filter2)
+    }
+  }
+
+  test("SPARK-62422: readFrom reads no further than its filter") {
+    // Each version, twice, one after the other in one stream.
+    val filters = BloomFilter.Version.values().toSeq.flatMap { version =>
+      Seq(1L, 2L).map { item =>
+        val filter = BloomFilter.create(version, 100L, 6400L, 0)
+        filter.putLong(item)
+        filter
+      }
+    }
+    val out = new ByteArrayOutputStream()
+    filters.foreach(_.writeTo(out))
+    val in = new ByteArrayInputStream(out.toByteArray)
+    filters.foreach(filter => assert(BloomFilter.readFrom(in) == filter))
+    assert(in.available() == 0)
+  }
+
+  test("SPARK-62422: readFrom fails with an EOFException on a stream shorter than the version") {
+    intercept[EOFException] {
+      BloomFilter.readFrom(new ByteArrayInputStream(Array[Byte](0, 0)))
     }
   }
 }

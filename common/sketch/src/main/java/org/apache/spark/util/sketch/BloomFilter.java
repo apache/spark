@@ -17,11 +17,12 @@
 
 package org.apache.spark.util.sketch;
 
-import java.io.BufferedInputStream;
 import java.io.ByteArrayInputStream;
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.PushbackInputStream;
 import java.nio.ByteBuffer;
 
 /**
@@ -190,18 +191,24 @@ public abstract class BloomFilter {
 
   /**
    * Reads in a {@link BloomFilter} from an input stream. It is the caller's responsibility to close
-   * the stream.
+   * the stream. It reads no further than the filter, and it does not buffer the stream. So wrap a
+   * stream without a buffer of its own, such as a {@code FileInputStream}, in a
+   * {@code BufferedInputStream}, and read on from that.
    */
   public static BloomFilter readFrom(InputStream in) throws IOException {
-    // peek into the InputStream so we can determine the version
-    BufferedInputStream bin = new BufferedInputStream(in);
-    bin.mark(4);
-    int version = ByteBuffer.wrap(bin.readNBytes(4)).getInt();
-    bin.reset();
+    // Peek at the version number, and push it back for the version's reader. Unlike a buffered
+    // stream, this reads no further than the filter. So the caller can read on after it.
+    PushbackInputStream pin = new PushbackInputStream(in, 4);
+    byte[] versionBytes = pin.readNBytes(4);
+    if (versionBytes.length < 4) {
+      throw new EOFException("Unexpected end of stream before the BloomFilter version number");
+    }
+    pin.unread(versionBytes);
+    int version = ByteBuffer.wrap(versionBytes).getInt();
 
     return switch (version) {
-      case 1 -> BloomFilterImpl.readFrom(bin);
-      case 2 -> BloomFilterImplV2.readFrom(bin);
+      case 1 -> BloomFilterImpl.readFrom(pin);
+      case 2 -> BloomFilterImplV2.readFrom(pin);
       default -> throw new IllegalArgumentException("Unknown BloomFilter version: " + version);
     };
   }
