@@ -327,6 +327,21 @@ class Vector:
         """
         raise NotImplementedError
 
+    @overload
+    def dot(self, other: Union["Vector", List[float], Tuple[float, ...], range]) -> np.float64: ...
+
+    @overload
+    def dot(self, other: "VectorLike") -> Union[np.float64, np.ndarray]: ...
+
+    def dot(self, other: "VectorLike") -> Union[np.float64, np.ndarray]:
+        """
+        Compute the dot product with a vector or matrix.
+
+        Vector operands return a scalar. NumPy and SciPy operands may
+        return an array, depending on their dimensions and representation.
+        """
+        raise NotImplementedError
+
     def __len__(self) -> int:
         raise NotImplementedError
 
@@ -414,7 +429,13 @@ class DenseVector(Vector):
         """
         return np.linalg.norm(self.array, p)
 
-    def dot(self, other: "VectorLike") -> np.float64:
+    @overload
+    def dot(self, other: Union[Vector, List[float], Tuple[float, ...], range]) -> np.float64: ...
+
+    @overload
+    def dot(self, other: "VectorLike") -> Union[np.float64, np.ndarray]: ...
+
+    def dot(self, other: "VectorLike") -> Union[np.float64, np.ndarray]:
         """
         Compute the dot product of two Vectors. We support
         (Numpy array, list, SparseVector, or SciPy sparse)
@@ -765,7 +786,13 @@ class SparseVector(Vector):
             raise ValueError("Unable to parse values from %s." % s)
         return SparseVector(cast(int, size), indices, values)
 
-    def dot(self, other: "VectorLike") -> np.float64:
+    @overload
+    def dot(self, other: Union[Vector, List[float], Tuple[float, ...], range]) -> np.float64: ...
+
+    @overload
+    def dot(self, other: "VectorLike") -> Union[np.float64, np.ndarray]: ...
+
+    def dot(self, other: "VectorLike") -> Union[np.float64, np.ndarray]:
         """
         Dot product with a SparseVector or 1- or 2-dimensional Numpy array.
 
