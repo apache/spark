@@ -771,6 +771,43 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Truncate(Literal(1.23), Literal.create(null, IntegerType)), null)
   }
 
+  test("round/bround with an extreme scale") {
+    // `BigDecimal.setScale` throws for scales beyond roughly 1e9, so before clamping these
+    // raised a raw java.lang.ArithmeticException, or a spurious ARITHMETIC_OVERFLOW on the
+    // ANSI integral path, even though neighbouring scales return the result below.
+    Seq(Int.MinValue, Int.MinValue + 1, -1000000000, -10000000).foreach { scale =>
+      checkEvaluation(Round(Literal(1.5d), Literal(scale)), 0.0d)
+      checkEvaluation(BRound(Literal(1.5d), Literal(scale)), 0.0d)
+      checkEvaluation(Round(Literal(1.5f), Literal(scale)), 0.0f)
+      checkEvaluation(Round(Literal(1L), Literal(scale)), 0L)
+      checkEvaluation(Round(Literal(1, IntegerType), Literal(scale)), 0)
+      checkEvaluation(Round(Literal(1L), Literal(scale), ansiEnabled = true), 0L)
+    }
+    // A scale past the digits a value carries leaves it unchanged.
+    Seq(Int.MaxValue, Int.MaxValue - 1, 1000000000, 10000000).foreach { scale =>
+      checkEvaluation(Round(Literal(1.5d), Literal(scale)), 1.5d)
+      checkEvaluation(BRound(Literal(1.5d), Literal(scale)), 1.5d)
+      checkEvaluation(Round(Literal(1.5f), Literal(scale)), 1.5f)
+      checkEvaluation(Round(Literal(1L), Literal(scale)), 1L)
+      checkEvaluation(Round(Literal(1L), Literal(scale), ansiEnabled = true), 1L)
+    }
+    // An integral value is returned unchanged for every scale >= 0, by both the interpreted and
+    // the generated code, including the extremes of each type.
+    Seq(0, 1, 10000000, Int.MaxValue).foreach { scale =>
+      checkEvaluation(Round(Literal(Byte.MinValue), Literal(scale)), Byte.MinValue)
+      checkEvaluation(BRound(Literal(Short.MaxValue), Literal(scale)), Short.MaxValue)
+      checkEvaluation(Round(Literal(Int.MaxValue), Literal(scale)), Int.MaxValue)
+      checkEvaluation(Round(Literal(Long.MinValue), Literal(scale), ansiEnabled = true),
+        Long.MinValue)
+      checkEvaluation(Truncate(Literal(Long.MaxValue), Literal(scale)), Long.MaxValue)
+    }
+    // The smallest subnormal has the longest exact decimal expansion, so it is the value most
+    // at risk from clamping the scale.
+    checkEvaluation(Round(Literal(Double.MinPositiveValue), Literal(Int.MaxValue)),
+      Double.MinPositiveValue)
+    checkEvaluation(Round(Literal(Double.MaxValue), Literal(Int.MinValue)), 0.0d)
+  }
+
   test("round/bround/floor/ceil") {
     val scales = -6 to 6
     val doublePi: Double = math.Pi
