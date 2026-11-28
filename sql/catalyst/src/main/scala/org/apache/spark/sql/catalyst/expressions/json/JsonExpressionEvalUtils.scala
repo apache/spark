@@ -1182,12 +1182,40 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
   private def serializeCurrentValue(parser: JsonParser): UTF8String = {
     val output = new ByteArrayOutputStream()
     Utils.tryWithResource(jsonFactory.createGenerator(output, JsonEncoding.UTF8)) {
-      // `copyCurrentStructureExact` preserves floating-point tokens byte-for-byte; the plain
-      // `copyCurrentStructure` may round them for textual formats, which would corrupt a
-      // high-precision fraction before JSON_TABLE casts the reserialized text to DECIMAL/STRING.
-      generator => generator.copyCurrentStructureExact(parser)
+      generator => copyCurrentValueExact(generator, parser)
     }
     UTF8String.fromBytes(output.toByteArray)
+  }
+
+  /**
+   * Copies the value at the parser's current token with Jackson's `copyCurrentStructureExact`,
+   * leaving the parser on the value's last token. The exact copy writes a floating-point number
+   * through `BigDecimal`, so a high-precision fraction keeps all its digits instead of being
+   * rounded to a double. For a number whose exponent `BigDecimal` cannot hold (e.g.
+   * `1e9999999999`), Jackson throws `NumberFormatException` with the parser still on that number
+   * and nothing written for it. The number is then written as its source text, and the containers
+   * still open around it are finished here, copying each remaining member the same way.
+   */
+  private def copyCurrentValueExact(generator: JsonGenerator, parser: JsonParser): Unit = {
+    val token = parser.currentToken
+    val depth = parser.getParsingContext.getNestingDepth
+    try {
+      generator.copyCurrentStructureExact(parser)
+    } catch {
+      case _: NumberFormatException if parser.currentToken == JsonToken.VALUE_NUMBER_FLOAT =>
+        generator.writeNumber(parser.getText)
+        // The depth of the context around the value. On its first token, a container is already
+        // in its own context.
+        val outerDepth = if (token.isStructStart) depth - 1 else depth
+        while (parser.getParsingContext.getNestingDepth > outerDepth) {
+          parser.nextToken() match {
+            case JsonToken.END_OBJECT => generator.writeEndObject()
+            case JsonToken.END_ARRAY => generator.writeEndArray()
+            case JsonToken.FIELD_NAME => generator.writeFieldName(parser.currentName)
+            case _ => copyCurrentValueExact(generator, parser)
+          }
+        }
+    }
   }
 
   // The array parser currently owned by an outstanding `arrayElementIterator`, or null. Since

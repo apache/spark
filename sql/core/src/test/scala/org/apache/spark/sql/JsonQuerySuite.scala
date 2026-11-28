@@ -163,6 +163,18 @@ class JsonQuerySuite extends QueryTest with SharedSparkSession {
     checkAnswer(sql(s"SELECT json_query('$doc', '$$.name')"), Row("\"Ada\""))
   }
 
+  test("SPARK-62420: a number with an exponent too large for BigDecimal keeps its source text") {
+    // Serializing the match converts each fraction or exponent number to BigDecimal, which cannot
+    // hold these exponents. They are valid JSON, so they are returned as written.
+    checkAnswer(sql("""SELECT json_query('{"a":1e9999999999}', '$.a')"""), Row("1e9999999999"))
+    // The members after such a number, including nested ones, are still copied.
+    val nested = """{"b":1e9999999999,"c":[-1E-9999999999,{"d":2.50}],"e":true}"""
+    checkAnswer(sql(s"""SELECT json_query('{"a":$nested}', '$$.a')"""), Row(nested))
+    checkAnswer(
+      sql("""SELECT json_query('{"a":1e9999999999}', '$.a' WITH ARRAY WRAPPER)"""),
+      Row("[1e9999999999]"))
+  }
+
   test("a present JSON null yields the JSON text null") {
     checkAnswer(sql(s"SELECT json_query('$doc', '$$.score')"), Row("null"))
   }

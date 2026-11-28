@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.{SparkException, SparkThrowable}
+import org.apache.spark.{SparkException, SparkNumberFormatException, SparkThrowable}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -486,6 +486,28 @@ class JsonTableSuite extends QueryTest with SharedSparkSession {
       """.stripMargin)
     checkAnswer(df,
       Seq(Row(BigDecimal("123456789.123456789123456789"), "123456789.123456789123456789")))
+  }
+
+  test("SPARK-62420: a number with an exponent too large for BigDecimal keeps its source text") {
+    // Reserializing a matched value converts each fraction or exponent number to BigDecimal, which
+    // cannot hold these exponents. They are valid JSON, so they keep their text as written instead
+    // of failing the query, both as row items and nested in a structure-valued column.
+    val item = """{"x":[2.50,1e9999999999,-1E-9999999999],"y":"z"}"""
+    val json = s"""{"items":[1e9999999999,-1E-9999999999,$item]}"""
+    checkAnswer(
+      sql(s"SELECT * FROM json_table('$json', '$$.items[*]' COLUMNS (v STRING PATH '$$'))"),
+      Seq(Row("1e9999999999"), Row("-1E-9999999999"), Row(item)))
+    // A numeric column follows the normal cast rules for that text.
+    val query = "SELECT * FROM json_table('[1e9999999999]', '$[*]' " +
+      "COLUMNS (d DOUBLE PATH '$', n DECIMAL(10, 0) PATH '$'))"
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      checkAnswer(sql(query), Row(Double.PositiveInfinity, null))
+    }
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val e = intercept[SparkNumberFormatException](sql(query).collect())
+      assert(e.getCondition == "CAST_INVALID_INPUT")
+      assert(e.getMessageParameters.get("expression") == "'1e9999999999'")
+    }
   }
 
   test("array of strings as the row source keeps string content") {
