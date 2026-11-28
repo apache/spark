@@ -646,6 +646,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val aliasMap = getAliasMap(project)
       val actualResultExprs = agg.aggregateExpressions.map(replaceAliasButKeepName(_, aliasMap))
       val actualGroupExprs = agg.groupingExpressions.map(replaceAlias(_, aliasMap))
+      if (hasEqualNondeterministicAggregates(actualResultExprs)) {
+        return agg
+      }
 
       val aggExprToOutputOrdinal = mutable.HashMap.empty[Expression, Int]
       val aggregates = collectAggregates(actualResultExprs, aggExprToOutputOrdinal)
@@ -849,6 +852,15 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
+  // Whether two of the aggregate expressions are equal and not deterministic. Spark evaluates each
+  // of them, while only one of them would be pushed down.
+  private def hasEqualNondeterministicAggregates(resultExpressions: Seq[Expression]): Boolean = {
+    val nondeterministic = resultExpressions.flatMap(_.collect {
+      case agg: AggregateExpression if !agg.deterministic => agg.canonicalized
+    })
+    nondeterministic.distinct.length < nondeterministic.length
+  }
+
   private def supportPartialAggPushDown(agg: Aggregation): Boolean = {
     // We can only partially push down min/max/sum/count without DISTINCT.
     agg.aggregateExpressions().isEmpty || agg.aggregateExpressions().forall {
@@ -925,16 +937,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       operators.joinedRelationPushedDownOperators.exists(hasRowSelectingOperators)
 
   // Whether every pushed group-by expression and aggregate function is deterministic.
-  // `V2Aggregator` does not take `BoundFunction.isDeterministic` into its `deterministic`, so it is
-  // checked here.
-  // TODO(SPARK-62133): check only `deterministic` once `V2Aggregator` takes `isDeterministic`.
   private def isDeterministicAggregation(holder: ScanBuilderHolder): Boolean =
-    holder.pushedAggOutputMap.values.forall { e =>
-      e.deterministic && !e.exists {
-        case v: aggregate.V2Aggregator[_, _] => !v.aggrFunc.isDeterministic
-        case _ => false
-      }
-    }
+    holder.pushedAggOutputMap.values.forall(_.deterministic)
 
   def buildScanWithPushedAggregate(plan: LogicalPlan): LogicalPlan = plan.transform {
     case holder: ScanBuilderHolder if holder.pushedAggregate.isDefined =>
@@ -1179,7 +1183,10 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       }
       val normalizedOrders = normalizeExpressions(newOrder, sHolder).asInstanceOf[Seq[SortOrder]]
       val orders = DataSourceStrategy.translateSortOrders(normalizedOrders)
-      if (orders.length == order.length) {
+      // A top-N is not pushed down when a sort key is on a pushed aggregate that is not
+      // deterministic, because the data source may evaluate the aggregate again rather than sort
+      // by its output column.
+      if (orders.length == order.length && newOrder.forall(_.deterministic)) {
         val (isPushed, isPartiallyPushed) =
           PushDownUtils.pushTopN(sHolder.builder, orders.toArray, limit)
         if (isPushed) {

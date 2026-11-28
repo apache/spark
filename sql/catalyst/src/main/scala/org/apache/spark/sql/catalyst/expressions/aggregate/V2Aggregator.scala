@@ -38,6 +38,8 @@ case class V2Aggregator[BUF <: java.io.Serializable, OUT](
 
   override def nullable: Boolean = aggrFunc.isResultNullable
   override def dataType: DataType = aggrFunc.resultType()
+  override lazy val deterministic: Boolean = aggrFunc.isDeterministic &&
+    children.forall(_.deterministic)
   override def inputTypes: Seq[AbstractDataType] = aggrFunc.inputTypes().toImmutableArraySeq
   override def createAggregationBuffer(): BUF = aggrFunc.newAggregationState()
 

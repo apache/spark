@@ -1065,6 +1065,49 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     }
   }
 
+  test("SPARK-62133: neither equal calls of an aggregate function that is not deterministic nor " +
+    "a top-N on it is pushed down") {
+    JdbcDialects.unregisterDialect(h2Dialect)
+    try {
+      JdbcDialects.registerDialect(testH2Dialect)
+      Seq("my_avg" -> true, "my_nondeterministic_avg" -> false).foreach { case (f, pushed) =>
+        // Spark evaluates each of two equal calls that are not deterministic, while the data
+        // source would get only one of them.
+        val twice = sql(s"SELECT name, h2.$f(id), h2.$f(id) FROM h2.test.people GROUP BY name")
+        checkAggregateRemoved(twice, pushed)
+        checkAnswer(twice, Seq(Row("fred", 1, 1), Row("mary", 2, 2)))
+        // The same goes for a call in the select list and an equal call in HAVING.
+        val having = sql(s"SELECT name, h2.$f(id) FROM h2.test.people GROUP BY name " +
+          s"HAVING h2.$f(id) > 0")
+        checkAggregateRemoved(having, pushed)
+        checkAnswer(having, Seq(Row("fred", 1), Row("mary", 2)))
+        // Different calls are pushed down.
+        val different = sql(
+          s"SELECT name, h2.$f(id), h2.$f(DISTINCT id) FROM h2.test.people GROUP BY name")
+        checkAggregateRemoved(different)
+        checkPushedInfo(different, "PushedAggregates: [iavg(ID), iavg(DISTINCT ID)]")
+        checkAnswer(different, Seq(Row("fred", 1, 1), Row("mary", 2, 2)))
+        // A single call is pushed down, but a sort key on it is not.
+        val topN = sql(
+          s"SELECT name, h2.$f(id) AS v FROM h2.test.people GROUP BY name ORDER BY v LIMIT 1")
+        checkAggregateRemoved(topN)
+        checkSortRemoved(topN, pushed)
+        checkLimitRemoved(topN, pushed)
+        checkAnswer(topN, Seq(Row("fred", 1)))
+        // A sort key on a grouping key is pushed down.
+        val topNOnKey = sql(
+          s"SELECT name, h2.$f(id) AS v FROM h2.test.people GROUP BY name ORDER BY name LIMIT 1")
+        checkAggregateRemoved(topNOnKey)
+        checkSortRemoved(topNOnKey)
+        checkLimitRemoved(topNOnKey)
+        checkAnswer(topNOnKey, Seq(Row("fred", 1)))
+      }
+    } finally {
+      JdbcDialects.unregisterDialect(testH2Dialect)
+      JdbcDialects.registerDialect(h2Dialect)
+    }
+  }
+
   test("scan with aggregate push-down, top N push-down and offset push-down") {
     val df1 = spark.read
       .table("h2.test.employee")
