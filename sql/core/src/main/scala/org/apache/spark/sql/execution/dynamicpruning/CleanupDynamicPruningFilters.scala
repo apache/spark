@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.dynamicpruning
 
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
-import org.apache.spark.sql.catalyst.expressions.{DynamicPruning, DynamicPruningSubquery, EqualNullSafe, EqualTo, Expression, ExpressionSet, PredicateHelper}
+import org.apache.spark.sql.catalyst.expressions.{AttributeSet, DynamicPruning, DynamicPruningSubquery, EqualNullSafe, EqualTo, Expression, ExpressionSet, PredicateHelper}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.planning.NodeWithOnlyDeterministicProjectAndFilter
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
@@ -54,9 +54,20 @@ object CleanupDynamicPruningFilters extends Rule[LogicalPlan] with PredicateHelp
    * count, so `part <> 3` or `part = 3 OR id > 5` keeps the DPP filter. For such a scan the
    * equality may also be in `pushedFilters`: the scan applies them to its file listing rather than
    * leaving them to a `Filter` above it.
+   *
+   * A DPP filter is also removed when its pruning key only references columns of the relation
+   * that the scan cannot prune on, e.g. after a DPP filter inserted above a Union was pushed into
+   * a branch whose table is not partitioned on the key. Such a filter would otherwise stay in a
+   * FilterExec and be evaluated per row.
+   *
+   * @param relationOutput the output of the scanned relation
+   * @param prunableAttrs the attributes the scan can prune on (partition columns, or the
+   *                      runtime filter attributes of a DSv2 scan)
    */
   private def removeUnnecessaryDynamicPruningSubquery(
       plan: LogicalPlan,
+      relationOutput: AttributeSet,
+      prunableAttrs: AttributeSet,
       pushedFilters: Seq[Expression] = Seq.empty,
       topLevelOnly: Boolean = false): LogicalPlan = {
     plan.transformWithPruning(_.containsPattern(DYNAMIC_PRUNING_SUBQUERY)) {
@@ -72,11 +83,20 @@ object CleanupDynamicPruningFilters extends Rule[LogicalPlan] with PredicateHelp
           _.containsPattern(DYNAMIC_PRUNING_SUBQUERY)) {
           case dynamicPruning: DynamicPruningSubquery
               if dynamicPruning.pruningKey.references.isEmpty ||
-                unnecessaryPruningKeys.contains(dynamicPruning.pruningKey) =>
+                unnecessaryPruningKeys.contains(dynamicPruning.pruningKey) ||
+                cannotPrune(dynamicPruning.pruningKey, relationOutput, prunableAttrs) =>
             TrueLiteral
         }
         f.copy(condition = newCondition)
     }
+  }
+
+  private def cannotPrune(
+      pruningKey: Expression,
+      relationOutput: AttributeSet,
+      prunableAttrs: AttributeSet): Boolean = {
+    val refs = pruningKey.references
+    refs.subsetOf(relationOutput) && !refs.subsetOf(prunableAttrs)
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
@@ -89,20 +109,23 @@ object CleanupDynamicPruningFilters extends Rule[LogicalPlan] with PredicateHelp
       _.containsAnyPattern(DYNAMIC_PRUNING_EXPRESSION, DYNAMIC_PRUNING_SUBQUERY)) {
       // pass through anything that is pushed down into PhysicalOperation
       case p @ NodeWithOnlyDeterministicProjectAndFilter(
-          LogicalRelationWithTable(_: HadoopFsRelation, _)) =>
-        removeUnnecessaryDynamicPruningSubquery(p)
+          l @ LogicalRelationWithTable(fs: HadoopFsRelation, _)) =>
+        val partitionColumns = AttributeSet(l.resolve(fs.partitionSchema, conf.resolver))
+        removeUnnecessaryDynamicPruningSubquery(p, l.outputSet, partitionColumns)
       // pass through anything that is pushed down into PhysicalOperation
       case p @ NodeWithOnlyDeterministicProjectAndFilter(
-          HiveTableRelation(_, _, _, _, _)) =>
-        removeUnnecessaryDynamicPruningSubquery(p)
+          h @ HiveTableRelation(_, _, _, _, _)) =>
+        removeUnnecessaryDynamicPruningSubquery(p, h.outputSet, AttributeSet(h.partitionCols))
       // Only a built-in file scan is known to prune what it plans with a partition filter it fully
       // took. Another DSv2 source may apply such a filter row by row and leave the pruning to DPP,
       // so this rule does not count its pushed filters.
       case p @ NodeWithOnlyDeterministicProjectAndFilter(r: DataSourceV2ScanRelation) =>
+        val runtimeFilterAttrs = AttributeSet(r.runtimeFilterAttrs)
         r.scan match {
           case _: RuntimePartitionPruningFileScan =>
-            removeUnnecessaryDynamicPruningSubquery(p, r.pushedFilters, topLevelOnly = true)
-          case _ => removeUnnecessaryDynamicPruningSubquery(p)
+            removeUnnecessaryDynamicPruningSubquery(
+              p, r.outputSet, runtimeFilterAttrs, r.pushedFilters, topLevelOnly = true)
+          case _ => removeUnnecessaryDynamicPruningSubquery(p, r.outputSet, runtimeFilterAttrs)
         }
       // remove any Filters with DynamicPruning that didn't get pushed down to PhysicalOperation.
       case f @ Filter(condition, _) =>
