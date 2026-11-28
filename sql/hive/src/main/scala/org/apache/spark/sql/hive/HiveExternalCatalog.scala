@@ -21,6 +21,8 @@ import java.io.IOException
 import java.lang.reflect.InvocationTargetException
 import java.util
 import java.util.Locale
+import java.util.concurrent.{TimeoutException, TimeUnit}
+import java.util.concurrent.locks.ReentrantLock
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -98,10 +100,47 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   }
 
   /**
-   * Run some code involving `client` in a [[synchronized]] block and wrap certain
+   * Lock that serializes every access to `client`. It replaces the monitor of this object
+   * so that a caller can give up waiting for it, see [[acquireClientLock]]. It is reentrant
+   * because the methods of this class nest calls to [[withClient]].
+   */
+  private val clientLock = new ReentrantLock()
+
+  /**
+   * Maximum time, in milliseconds, a thread waits for [[clientLock]]. 0 or a negative value
+   * means waiting indefinitely.
+   */
+  private val clientLockTimeoutMs: Long = conf.get(HiveUtils.HIVE_EXTERNAL_CATALOG_LOCK_TIMEOUT)
+
+  /**
+   * Acquire [[clientLock]]. When a timeout is configured and the lock is still held by another
+   * thread after it, fail instead of queueing behind that thread: a metastore call that is
+   * stuck (for example, waiting for a connection of the metastore pool) must not block every
+   * other reader of the catalog for as long as it lasts. See SPARK-32118.
+   */
+  private def acquireClientLock(): Unit = {
+    if (clientLockTimeoutMs <= 0) {
+      clientLock.lock()
+    } else if (!clientLock.tryLock(clientLockTimeoutMs, TimeUnit.MILLISECONDS)) {
+      val e = new TimeoutException(
+        s"Timed out after $clientLockTimeoutMs ms waiting for the Hive external catalog lock, " +
+          "held by another thread that is running a metastore operation " +
+          s"(${HiveUtils.HIVE_EXTERNAL_CATALOG_LOCK_TIMEOUT.key})")
+      throw new AnalysisException(
+        errorClass = "_LEGACY_ERROR_TEMP_3065",
+        messageParameters = Map(
+          "clazz" -> e.getClass.getCanonicalName,
+          "msg" -> e.getMessage),
+        cause = Some(e))
+    }
+  }
+
+  /**
+   * Run some code involving `client` while holding [[clientLock]] and wrap certain
    * exceptions thrown in the process in [[AnalysisException]].
    */
-  private def withClient[T](body: => T): T = synchronized {
+  private def withClient[T](body: => T): T = {
+    acquireClientLock()
     try {
       body
     } catch {
@@ -118,6 +157,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
             "clazz" -> e.getClass.getCanonicalName,
             "msg" -> Option(e.getMessage).getOrElse("")),
           cause = Some(e))
+    } finally {
+      clientLock.unlock()
     }
   }
 
