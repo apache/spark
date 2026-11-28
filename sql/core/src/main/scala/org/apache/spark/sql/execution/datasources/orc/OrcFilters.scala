@@ -263,6 +263,9 @@ private[sql] object OrcFilters extends OrcFiltersBase {
     def getType(attribute: String): PredicateLeaf.Type =
       getPredicateLeafType(dataTypeMap(attribute).fieldType)
 
+    def canPushNull(attribute: String): Boolean =
+      dataTypeMap.contains(attribute) && !dataTypeMap(attribute).nullableAncestor
+
     // IsNull and IsNotNull have no value, so they don't depend on `acceptsValue`.
     def canPushValue(attribute: String): Boolean =
       dataTypeMap.contains(attribute) && acceptsValue(attribute)
@@ -348,11 +351,11 @@ private[sql] object OrcFilters extends OrcFiltersBase {
         Some(builder.startNot()
           .lessThan(dataTypeMap(name).fieldName, getType(name), castedValue).end())
 
-      case IsNull(name) if dataTypeMap.contains(name) =>
+      case IsNull(name) if canPushNull(name) =>
         Some(builder.startAnd()
           .isNull(dataTypeMap(name).fieldName, getType(name)).end())
 
-      case IsNotNull(name) if dataTypeMap.contains(name) =>
+      case IsNotNull(name) if canPushNull(name) =>
         Some(builder.startNot()
           .isNull(dataTypeMap(name).fieldName, getType(name)).end())
 

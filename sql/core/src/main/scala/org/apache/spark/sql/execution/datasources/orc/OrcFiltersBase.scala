@@ -40,7 +40,10 @@ trait OrcFiltersBase {
     }
   }
 
-  case class OrcPrimitiveField(fieldName: String, fieldType: DataType)
+  case class OrcPrimitiveField(
+      fieldName: String,
+      fieldType: DataType,
+      nullableAncestor: Boolean = false)
 
   /**
    * This method returns a map which contains ORC field name and data type. Each key
@@ -57,15 +60,19 @@ trait OrcFiltersBase {
 
     def getPrimitiveFields(
         fields: Seq[StructField],
-        parentFieldNames: Seq[String] = Seq.empty): Seq[(String, OrcPrimitiveField)] = {
+        parentFieldNames: Seq[String] = Seq.empty,
+        nullableAncestor: Boolean = false): Seq[(String, OrcPrimitiveField)] = {
       fields.flatMap { f =>
         f.dataType match {
           case st: StructType =>
-            getPrimitiveFields(st.fields.toImmutableArraySeq, parentFieldNames :+ f.name)
+            getPrimitiveFields(
+              st.fields.toImmutableArraySeq,
+              parentFieldNames :+ f.name,
+              nullableAncestor || f.nullable)
           case BinaryType => None
           case _: AtomicType =>
             val fieldName = (parentFieldNames :+ f.name).quoted
-            val orcField = OrcPrimitiveField(fieldName, f.dataType)
+            val orcField = OrcPrimitiveField(fieldName, f.dataType, nullableAncestor)
             Some((fieldName, orcField))
           case _ => None
         }
