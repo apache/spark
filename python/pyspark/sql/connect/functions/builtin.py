@@ -875,7 +875,7 @@ def sec(col: "ColumnOrName") -> Column:
 sec.__doc__ = pysparkfuncs.sec.__doc__
 
 
-def shiftLeft(col: "ColumnOrName", numBits: int) -> Column:
+def shiftLeft(col: "ColumnOrName", numBits: "int | ColumnOrName") -> Column:
     warnings.warn("Deprecated in 3.4, use shiftleft instead.", FutureWarning)
     return shiftleft(col, numBits)
 
@@ -883,14 +883,16 @@ def shiftLeft(col: "ColumnOrName", numBits: int) -> Column:
 shiftLeft.__doc__ = pysparkfuncs.shiftLeft.__doc__
 
 
-def shiftleft(col: "ColumnOrName", numBits: int) -> Column:
-    return _invoke_function("shiftleft", _to_col(col), lit(numBits))
+def shiftleft(col: "ColumnOrName", numBits: "int | ColumnOrName") -> Column:
+    numBits = _enum_to_value(numBits)
+    shift = _to_col(numBits) if isinstance(numBits, (Column, str)) else lit(numBits)
+    return _invoke_function("shiftleft", _to_col(col), shift)
 
 
 shiftleft.__doc__ = pysparkfuncs.shiftleft.__doc__
 
 
-def shiftRight(col: "ColumnOrName", numBits: int) -> Column:
+def shiftRight(col: "ColumnOrName", numBits: "int | ColumnOrName") -> Column:
     warnings.warn("Deprecated in 3.4, use shiftright instead.", FutureWarning)
     return shiftright(col, numBits)
 
@@ -898,14 +900,16 @@ def shiftRight(col: "ColumnOrName", numBits: int) -> Column:
 shiftRight.__doc__ = pysparkfuncs.shiftRight.__doc__
 
 
-def shiftright(col: "ColumnOrName", numBits: int) -> Column:
-    return _invoke_function("shiftright", _to_col(col), lit(numBits))
+def shiftright(col: "ColumnOrName", numBits: "int | ColumnOrName") -> Column:
+    numBits = _enum_to_value(numBits)
+    shift = _to_col(numBits) if isinstance(numBits, (Column, str)) else lit(numBits)
+    return _invoke_function("shiftright", _to_col(col), shift)
 
 
 shiftright.__doc__ = pysparkfuncs.shiftright.__doc__
 
 
-def shiftRightUnsigned(col: "ColumnOrName", numBits: int) -> Column:
+def shiftRightUnsigned(col: "ColumnOrName", numBits: "int | ColumnOrName") -> Column:
     warnings.warn("Deprecated in 3.4, use shiftrightunsigned instead.", FutureWarning)
     return shiftrightunsigned(col, numBits)
 
@@ -913,8 +917,10 @@ def shiftRightUnsigned(col: "ColumnOrName", numBits: int) -> Column:
 shiftRightUnsigned.__doc__ = pysparkfuncs.shiftRightUnsigned.__doc__
 
 
-def shiftrightunsigned(col: "ColumnOrName", numBits: int) -> Column:
-    return _invoke_function("shiftrightunsigned", _to_col(col), lit(numBits))
+def shiftrightunsigned(col: "ColumnOrName", numBits: "int | ColumnOrName") -> Column:
+    numBits = _enum_to_value(numBits)
+    shift = _to_col(numBits) if isinstance(numBits, (Column, str)) else lit(numBits)
+    return _invoke_function("shiftrightunsigned", _to_col(col), shift)
 
 
 shiftrightunsigned.__doc__ = pysparkfuncs.shiftrightunsigned.__doc__
