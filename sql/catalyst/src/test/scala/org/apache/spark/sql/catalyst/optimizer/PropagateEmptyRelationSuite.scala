@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal, UnspecifiedFrame}
 import org.apache.spark.sql.catalyst.expressions.Literal.FalseLiteral
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{Expand, Filter, LocalRelation, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Expand, Filter, Join, LocalRelation, LogicalPlan, Project, Union}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.internal.SQLConf
@@ -191,7 +191,11 @@ class PropagateEmptyRelationSuite extends PlanTest {
       (RightOuter,
         Some(Project(Seq(Literal(null).cast(IntegerType).as("a"), $"b"), testRelation2)
           .analyze)),
-      (FullOuter, None),
+      (FullOuter,
+        Some(Union(
+          Project(Seq($"a", Literal(null).cast(IntegerType).as("b")), testRelation1),
+          Project(Seq(Literal(null).cast(IntegerType).as("a"), $"b"), testRelation2))
+          .analyze)),
       (LeftAnti, Some(testRelation1)),
       (LeftSemi, Some(LocalRelation($"a".int)))
     )
@@ -203,6 +207,53 @@ class PropagateEmptyRelationSuite extends PlanTest {
         answer.getOrElse(OptimizeWithoutPropagateEmptyRelation.execute(query.analyze))
       comparePlans(optimized, correctAnswer)
     }
+  }
+
+  test("SPARK-53618: null padding of an outer join keeps the qualifier and metadata") {
+    val plain = LocalRelation.fromExternalRows(
+      Seq($"a".int.notNull.withQualifier(Seq("t1"))), data = Seq(Row(1)))
+    val withMetadata = LocalRelation.fromExternalRows(
+      Seq($"c".int.notNull.withMetadata(metadata).withQualifier(Seq("t2"))), data = Seq(Row(1)))
+
+    for {
+      (left, right) <- Seq((plain, withMetadata), (withMetadata, plain))
+      joinType <- Seq(LeftOuter, RightOuter, FullOuter)
+      // An empty side and a false condition take different branches of the rule.
+      (emptyLeft, emptyRight, condition) <- Seq(
+        (false, false, Some(FalseLiteral)),
+        (true, false, None),
+        (false, true, None))
+    } {
+      val query = (if (emptyLeft) left.where(false) else left)
+        .join(if (emptyRight) right.where(false) else right, joinType, condition)
+        .analyze
+      val optimized = Optimize.execute(query)
+
+      assert(optimized.collectFirst { case j: Join => j }.isEmpty)
+      // Attribute equality covers name, data type, nullability, metadata, exprId and qualifier.
+      // For a full outer join with an empty side, the side that is kept is not padded and so
+      // keeps its own nullability, while the padded side is nullable.
+      val clue = s"$joinType, emptyLeft=$emptyLeft, emptyRight=$emptyRight, ${left.output}"
+      val expected = if (joinType == FullOuter && condition.isEmpty) {
+        val keptFromLeft = emptyRight
+        query.output.zip(left.output ++ right.output).zipWithIndex.map { case ((q, orig), i) =>
+          if ((i < left.output.size) == keptFromLeft) q.withNullability(orig.nullable) else q
+        }
+      } else {
+        query.output
+      }
+      assert(optimized.output === expected, clue)
+    }
+  }
+
+  test("SPARK-53618: full outer join with a false condition and a side repeating an " +
+    "attribute is not rewritten") {
+    val query = testRelation1.select($"a", $"a")
+      .join(testRelation2, FullOuter, Some(FalseLiteral))
+      .analyze
+    val optimized = Optimize.execute(query)
+    assert(optimized.collectFirst { case j: Join => j }.isDefined)
+    assert(optimized.collectFirst { case u: Union => u }.isEmpty)
   }
 
   test("propagate empty relation through UnaryNode") {

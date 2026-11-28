@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LOCAL_RELATION, REPARTITION_OPERATION, TRUE_OR_FALSE_LITERAL}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.Metadata
 
 /**
  * The base class of two rules in the normal and AQE Optimizer. It simplifies query plans with
@@ -34,6 +35,8 @@ import org.apache.spark.sql.internal.SQLConf
  *     - Union with all empty children.
  *  2. Binary-node Logical Plans
  *     - Join with one or two empty children (including Intersect/Except).
+ *     - Full outer join with a false condition
+ *       Rewrite to a UNION ALL of both sides padded with nulls.
  *     - Left semi Join
  *       Right side is non-empty and condition is empty. Eliminate join to its left side.
  *     - Left anti join
@@ -62,9 +65,13 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
   protected def empty(plan: LogicalPlan): LogicalPlan =
     LocalRelation(plan.output, data = Seq.empty, isStreaming = plan.isStreaming)
 
-  // Construct a project list from plan's output, while the value is always NULL.
-  private def nullValueProjectList(plan: LogicalPlan): Seq[NamedExpression] =
-    plan.output.map{ a => Alias(cast(Literal(null), a.dataType), a.name)(a.exprId) }
+  // Construct a project list from plan's output, while the value is always NULL. The aliases keep
+  // the qualifier and metadata of the attributes they replace, so that the output of the rewritten
+  // plan only differs from the original one in nullability.
+  private def nullValueProjectList(plan: LogicalPlan): Seq[NamedExpression] = plan.output.map { a =>
+    val explicitMetadata = if (a.metadata != Metadata.empty) Some(a.metadata) else None
+    Alias(cast(Literal(null), a.dataType), a.name)(a.exprId, a.qualifier, explicitMetadata)
+  }
 
   protected def canExecuteWithoutJoin(plan: LogicalPlan): Boolean = true
 
@@ -130,6 +137,16 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
             Project(p.left.output ++ nullValueProjectList(p.right), p.left)
           case RightOuter if isFalseCondition && canExecuteWithoutJoin(p.right) =>
             Project(nullValueProjectList(p.left) ++ p.right.output, p.right)
+          // No row of either side can find a match, so the join degenerates into both sides
+          // padded with nulls and concatenated. A join side may repeat an attribute, but a union
+          // branch may not, so the rewrite is skipped in that case.
+          case FullOuter if isFalseCondition && canExecuteWithoutJoin(p.left) &&
+              canExecuteWithoutJoin(p.right) &&
+              p.left.outputSet.size == p.left.output.size &&
+              p.right.outputSet.size == p.right.output.size =>
+            Union(
+              Project(p.left.output ++ nullValueProjectList(p.right), p.left),
+              Project(nullValueProjectList(p.left) ++ p.right.output, p.right))
           case _ => p
         }
       } else if (joinType == LeftSemi && conditionOpt.isEmpty &&
