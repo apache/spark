@@ -18,6 +18,7 @@
 import itertools
 import os
 import subprocess
+from argparse import ArgumentTypeError
 from collections.abc import Sequence
 
 from sparktestsupport import modules
@@ -109,6 +110,35 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
     return toposort_flatten(
         {m: set(m.dependencies).intersection(modules_to_test) for m in modules_to_test}, sort=True
     )
+
+
+def parse_test_modules(value: str) -> list[modules.Module]:
+    """
+    Resolve a comma-separated ``--modules`` value to modules from ``modules.all_modules``.
+
+    Names are stripped and blank entries are ignored. The result follows
+    ``all_modules`` order and contains no duplicates. ``ArgumentTypeError`` is raised
+    when no name remains or any name is unknown. Unknown names are quoted in the
+    order given.
+
+    >>> [m.name for m in parse_test_modules(" graphx, ,core,graphx ")]
+    ['core', 'graphx']
+    """
+    names = [name.strip() for name in value.split(",") if name.strip()]
+    if not names:
+        raise ArgumentTypeError("no module names were provided")
+    by_name = {module.name: module for module in modules.all_modules}
+    missing = set(names) - by_name.keys()
+    # Keep unknown names in the order they were provided.
+    unknown = [name for name in dict.fromkeys(names) if name in missing]
+    if unknown:
+        unknown_str = ", ".join(repr(name) for name in unknown)
+        supported_str = ", ".join(sorted(by_name))
+        raise ArgumentTypeError(
+            f"unrecognized module(s): {unknown_str}. Supported modules: {supported_str}"
+        )
+    requested = set(names)
+    return [module for module in modules.all_modules if module.name in requested]
 
 
 def determine_shell_script_test_goals(
