@@ -60,3 +60,5 @@ jobs:
           "rust-sdk": "true",
           "transpile": "true"
         }' || '' }}
+    secrets:
+      SPARK_DEVELOCITY_ACCESS_KEY: ${{ secrets.SPARK_DEVELOCITY_ACCESS_KEY }}

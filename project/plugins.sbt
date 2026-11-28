@@ -48,3 +48,6 @@ addSbtPlugin("com.thesamet" % "sbt-protoc" % "1.0.7")
 addSbtPlugin("com.here.platform" % "sbt-bom" % "1.0.29")
 
 addSbtPlugin("ch.epfl.scala" % "sbt-bloop" % "2.0.17")
+
+addSbtPlugin("com.gradle" % "sbt-develocity" % "1.4.5")
+addSbtPlugin("com.gradle" % "sbt-develocity-common-custom-user-data" % "1.5.0")
