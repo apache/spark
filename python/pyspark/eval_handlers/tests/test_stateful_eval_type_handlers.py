@@ -379,6 +379,39 @@ class PandasTransformWithStateUDFHandlerTests(TransformWithStateHandlerTestCase)
         )
         self.assertEqual(self._output_rows(out), [{"k": 1, "n": 6}, {"k": 2, "n": 4}])
 
+    def test_groups_nullable_integer_keys(self):
+        # SPARK-61947: nullable grouping columns must keep exact keys across batches.
+        large_key = 2**53
+        batches = [
+            self._batch(k=[None, None, large_key, large_key + 1], v=[1, 2, 3, 4]),
+            self._batch(k=[large_key + 1], v=[5]),
+        ]
+
+        for prefer_int_ext_dtype in ("false", "true"):
+            with self.subTest(prefer_int_ext_dtype=prefer_int_ext_dtype):
+                calls = []
+
+                def udf(client, mode, key, values):
+                    if mode == _PROCESS_DATA:
+                        calls.append((key, [v for pdf in values for v in pdf["v"]]))
+                    return iter([])
+
+                runner_conf = RunnerConf(
+                    {
+                        "spark.sql.execution.pythonUDF.pandas.preferIntExtensionDtype": (
+                            prefer_int_ext_dtype
+                        )
+                    }
+                )
+                handler = self._handler(
+                    PandasTransformWithStateUDFHandler, udf, self._ARG_OFFSETS, runner_conf
+                )
+                list(handler.run(0, iter(batches)))
+
+                self.assertEqual(
+                    calls, [((None,), [1, 2]), ((large_key,), [3]), ((large_key + 1,), [4, 5])]
+                )
+
     def test_passes_client_to_every_call(self):
         clients = []
 
@@ -456,6 +489,31 @@ class PandasTransformWithStateInitStateUDFHandlerTests(TransformWithStateHandler
             ],
         )
         self.assertEqual(self._output_rows(out), [{"k": 1, "n": 1}, {"k": 2, "n": 2}])
+
+    def test_groups_nullable_integer_keys_with_initial_state(self):
+        # SPARK-61947: input and initial state must use the same exact grouping keys.
+        calls = []
+
+        def udf(client, mode, key, values, init_states):
+            if mode == _PROCESS_DATA:
+                input_values = [v for pdf in values for v in pdf["v"]]
+                initial_values = [v for pdf in init_states for v in pdf["v"]]
+                calls.append((key, input_values, initial_values))
+            return iter([])
+
+        large_key = 2**53 + 1
+        batches = [
+            self._init_state_batch(init_rows=[{"k": None, "v": 100}]),
+            self._init_state_batch(input_rows=[{"k": None, "v": 1}]),
+            self._init_state_batch(init_rows=[{"k": None, "v": 200}, {"k": large_key, "v": 300}]),
+            self._init_state_batch(input_rows=[{"k": large_key, "v": 2}]),
+        ]
+        handler = self._handler(
+            PandasTransformWithStateInitStateUDFHandler, udf, self._INIT_STATE_ARG_OFFSETS
+        )
+        list(handler.run(0, iter(batches)))
+
+        self.assertEqual(calls, [((None,), [1], [100, 200]), ((large_key,), [2], [300])])
 
     def test_chunks_key_by_max_records(self):
         chunks = []
