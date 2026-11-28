@@ -1731,6 +1731,39 @@ class SqlScriptingCursorE2eSuite extends SharedSparkSession {
     checkAnswer(result, Seq(Row("After NOT FOUND", 20, false)))
   }
 
+  test("SPARK-62359: NOT FOUND handler declared before another handler") {
+    checkAnswer(sql(
+      """
+        |BEGIN
+        |  DECLARE x INT;
+        |  DECLARE found BOOLEAN DEFAULT true;
+        |  DECLARE cur CURSOR FOR SELECT 20;
+        |  DECLARE CONTINUE HANDLER FOR NOT FOUND SET found = false;
+        |  DECLARE EXIT HANDLER FOR SQLSTATE '22012' SET found = false;
+        |  OPEN cur;
+        |  FETCH cur INTO x;
+        |  FETCH cur INTO x;
+        |  CLOSE cur;
+        |  VALUES (x, found);
+        |END;
+        |""".stripMargin), Row(20, false))
+  }
+
+  test("SPARK-62359: SQLEXCEPTION handler declared before another handler") {
+    checkAnswer(sql(
+      """
+        |BEGIN
+        |  DECLARE result STRING DEFAULT 'not caught';
+        |  BEGIN
+        |    DECLARE EXIT HANDLER FOR SQLEXCEPTION SET result = 'caught';
+        |    DECLARE EXIT HANDLER FOR SQLSTATE '22003' SET result = 'overflow';
+        |    SELECT 1 / 0;
+        |  END;
+        |  SELECT result;
+        |END;
+        |""".stripMargin), Row("caught"))
+  }
+
   test("Test 80: EXIT HANDLER for NOT FOUND - exits immediately") {
     val result = sql(
       """
