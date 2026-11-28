@@ -33,7 +33,11 @@ case object Final extends WindowGroupLimitMode
 
 /**
  * This operator is designed to filter out unnecessary rows before WindowExec
- * for top-k computation.
+ * for top-k computation. When `rankLikeFunction` is `RowNumber`, it emits exactly the first
+ * `limit` rows of each group of byte-equal partition keys; `InferWindowGroupLimit`'s top-1
+ * elimination relies on that exact-output guarantee to drop the `Window`/`Filter` that would
+ * otherwise re-check these rows (see its class doc for the binary-stable partition key
+ * requirement that guarantee depends on).
  * @param partitionSpec Should be the same as [[WindowExec#partitionSpec]].
  * @param orderSpec Should be the same as [[WindowExec#orderSpec]].
  * @param rankLikeFunction The function to compute row rank, should be RowNumber/Rank/DenseRank.
