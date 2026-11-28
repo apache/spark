@@ -24,7 +24,7 @@ import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioningLike, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
-import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, PushDownKeyedShuffleExchange}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanLike
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, REPARTITION_BY_NUM, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.SortMergeAsOfJoinExec
@@ -1131,21 +1131,24 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     // from the outside by the extension-driven cases in `SparkSessionExtensionSuite`, which need a
     // session of their own.
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
-      // Pins the property the standard pipeline has to keep: a stamping pass runs immediately after
-      // `EnsureRequirements`, so the decision is taken from the plan the exchanges were placed in
-      // and no rule in between can change a partitioning the parent already planned against. The
-      // shuffle push-down sits between the two in the AQE list only, which
-      // `AdaptiveQueryExecSuite` covers. A count would break on a sixth legitimate pass and say
-      // nothing about the order.
+      // Pins the property the standard pipeline has to keep: a stamping pass runs behind
+      // `EnsureRequirements` and the keyed shuffle push-down, before any injected rule can change
+      // a partitioning the parent already planned against. The push-down can change what a union
+      // reports, since the final check accepts any keyed member of the moved subtree, and a union
+      // merges only children that each report a single `KeyedPartitioning`. What keeps the plan
+      // correct is `validateWithOrigins`, which rechecks the whole plan before the stamp answers.
+      // A count would break on a sixth legitimate pass and say nothing about the order.
       val rules = QueryExecution.preparations(spark, subquery = false)
       val firstStamp = rules.indexWhere(_.isInstanceOf[StampUnionDecisions])
       val ensureRequirements = rules.indexWhere(_.isInstanceOf[EnsureRequirements])
+      val keyedPushDown = rules.indexWhere(_.isInstanceOf[PushDownKeyedShuffleExchange])
       val columnarRules =
         rules.indexWhere(_.isInstanceOf[ApplyColumnarRulesAndInsertTransitions])
-      assert(ensureRequirements >= 0 && firstStamp == ensureRequirements + 1 &&
-          firstStamp < columnarRules,
-        "expected a stamping pass right behind EnsureRequirements and before the columnar " +
-          s"rules, got $ensureRequirements/$firstStamp/$columnarRules")
+      assert(ensureRequirements >= 0 && keyedPushDown == ensureRequirements + 1 &&
+          firstStamp == ensureRequirements + 2 && firstStamp < columnarRules,
+        "expected the keyed shuffle push-down and then a stamping pass behind " +
+          s"EnsureRequirements and before the columnar rules, got " +
+          s"$ensureRequirements/$keyedPushDown/$firstStamp/$columnarRules")
 
       val stamped = withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
         val df = spark.range(0, 20, 1, 2).selectExpr("id % 5 AS k").repartition(4, col("k"))
@@ -1185,16 +1188,19 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
 
   test("SPARK-59122: the stamp uses the conf the exchanges were planned against") {
     // `EnsureRequirements` asks the union what it reports, and the barrier behind it freezes that
-    // answer one rule later in classic preparation. `conf` is live, so another thread turning
+    // answer in classic preparation. `conf` is live, so another thread turning
     // `UNION_OUTPUT_PARTITIONING` off in between would leave the parent's elided exchange standing
     // over a union that then concatenates. `SnapshotUnionPreparationConf` records the value ahead
-    // of `EnsureRequirements` for both to use. Driven rule by rule, because the two sit next to
-    // each other in the pipeline and no injected rule can run in the window.
+    // of `EnsureRequirements` for both to use. Driven rule by rule, because the snapshot and
+    // `EnsureRequirements` sit next to each other in the pipeline and no injected rule can run in
+    // the window.
     withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
         SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
-      // The three have to stay contiguous, which nothing at the list itself says: an injected rule
-      // cannot land between them, but an edit to the list can. AQE builds its own list, and
+      // The snapshot has to sit directly before `EnsureRequirements`, which nothing at the list
+      // itself says: an injected rule cannot land between them, but an edit to the list can. The
+      // stamp follows behind, with only the keyed shuffle push-down between them, and that rule
+      // validates the whole plan before the stamp answers. AQE builds its own list, and
       // `AdaptiveQueryExecSuite` asserts the same order there.
       val rules = QueryExecution.preparations(spark, subquery = false)
       val snapshot = rules.indexWhere(_.isInstanceOf[SnapshotUnionPreparationConf])
