@@ -521,10 +521,14 @@ class Dataset[T] private[sql](
   def as[U : Encoder]: Dataset[U] = Dataset[U](sparkSession, logicalPlan)
 
   /** @inheritdoc */
-  def to(schema: StructType): DataFrame = withPlan {
-    val replaced = CharVarcharUtils.failIfHasCharVarchar(schema).asInstanceOf[StructType]
-    Project.matchSchema(logicalPlan, replaced, sparkSession.sessionState.conf)
-  }
+  def to(schema: StructType): DataFrame = to(schema, allowTimePrecisionNarrowing = false)
+
+  private[sql] def to(schema: StructType, allowTimePrecisionNarrowing: Boolean): DataFrame =
+    withPlan {
+      val replaced = CharVarcharUtils.failIfHasCharVarchar(schema).asInstanceOf[StructType]
+      Project.matchSchema(
+        logicalPlan, replaced, sparkSession.sessionState.conf, allowTimePrecisionNarrowing)
+    }
 
   /** @inheritdoc */
   @scala.annotation.varargs

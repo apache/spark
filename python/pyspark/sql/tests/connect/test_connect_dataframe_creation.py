@@ -30,6 +30,7 @@ from pyspark.sql.types import (
     StringType,
     StructField,
     StructType,
+    TimeType,
 )
 from pyspark.testing.connectutils import ReusedMixedTestCase, should_test_connect
 from pyspark.testing.objects import MyObject, PythonOnlyPoint, PythonOnlyUDT
@@ -417,6 +418,22 @@ class SparkConnectDataFrameCreationTests(ReusedMixedTestCase, PandasOnSparkTestU
 
         self.assertEqual(cdf.schema, sdf.schema)
         self.assertEqual(cdf.collect(), sdf.collect())
+
+    def test_create_dataframe_with_time_precision(self):
+        key = "spark.sql.timeType.enabled"
+        old_value = self.connect.conf.get(key)
+        self.connect.conf.set(key, "true")
+        try:
+            value = datetime.time(6, 9, 29, 123456)
+            schema = StructType().add("t", TimeType(0)).add("ts", ArrayType(TimeType(3)))
+            df = self.connect.createDataFrame([(value, [value, None])], schema)
+            self.assertEqual(df.schema, schema)
+            self.assertEqual(
+                df.collect(),
+                [Row(t=datetime.time(6, 9, 29), ts=[datetime.time(6, 9, 29, 123000), None])],
+            )
+        finally:
+            self.connect.conf.set(key, old_value)
 
     def test_create_dataframe_with_coercion(self):
         data1 = [[1.33, 1], ["2.1", 1]]

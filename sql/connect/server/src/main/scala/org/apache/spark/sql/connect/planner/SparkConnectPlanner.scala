@@ -1760,7 +1760,8 @@ class SparkConnectPlanner(
             logicalPlan = logical.LocalRelation(
               normalizeLocalRelationType(structType).asInstanceOf[StructType]))
           .toDF(normalized.names.toImmutableArraySeq: _*)
-          .to(normalized)
+          // Arrow's time type carries a storage unit but loses Spark's fractional precision.
+          .to(normalized, allowTimePrecisionNarrowing = true)
           .logicalPlan
           .asInstanceOf[Project]
 
