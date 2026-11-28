@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.trees.TreePattern.{ANALYSIS_AWARE_EXPRESSION, TreePattern}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, GeneratedColumn, IdentityColumn, V2ExpressionBuilder}
 import org.apache.spark.sql.catalyst.util.FieldMetadataUtils.FIELD_ID_METADATA_KEY
-import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.validateDefaultValueExpr
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.{existenceDefaultSQL, validateDefaultValueExpr}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumnsUtils.{CURRENT_DEFAULT_COLUMN_METADATA_KEY, EXISTS_DEFAULT_COLUMN_METADATA_KEY}
 import org.apache.spark.sql.connector.catalog.{Column => V2Column, ColumnDefaultValue, DefaultValue, IdentityColumnSpec}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
@@ -99,7 +99,7 @@ case class ColumnDefinition(
       metadataBuilder.putExpression(
         CURRENT_DEFAULT_COLUMN_METADATA_KEY, default.originalSQL, Some(default.child))
       val existsSQL = default.child match {
-        case l: Literal => l.sql
+        case l: Literal => existenceDefaultSQL(l)
         case _ => default.originalSQL
       }
       metadataBuilder.putString(EXISTS_DEFAULT_COLUMN_METADATA_KEY, existsSQL)

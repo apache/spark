@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql
 
+import java.time.Instant
+
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.analysis.TableOutputResolver
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, ResolveDefaultColumns}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, ResolveDefaultColumns}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StringType}
 
@@ -423,5 +426,39 @@ class ResolveDefaultColumnsSuite extends SharedSparkSession {
     })
     assert(hasLengthCheck,
       "by-position default fill must apply the CHAR/VARCHAR write-side length check")
+  }
+
+  test("TIMESTAMP existence defaults keep their instants in every reader session") {
+    // The rows written before ALTER TABLE ADD COLUMNS read the existence defaults, which must be
+    // the instants that the ALTER TABLE statement evaluated, as the rows written after it hold.
+    // The second one is 01:30 PST on the fall-back day of America/Los_Angeles, whose wall clock
+    // there also denotes 01:30 PDT, one hour earlier. TIMESTAMP_NTZ values have no time zone.
+    val june = DateTimeUtils.instantToMicros(Instant.parse("2024-06-01T16:00:00Z"))
+    val fallBack = DateTimeUtils.instantToMicros(Instant.parse("2024-11-03T09:30:00Z"))
+    Seq("parquet", "orc", "json").foreach { format =>
+      withTable("t") {
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+          sql(s"CREATE TABLE t(id INT) USING $format")
+          sql("INSERT INTO t VALUES (1)")
+          sql("ALTER TABLE t ADD COLUMNS (" +
+            "ts TIMESTAMP DEFAULT TIMESTAMP '2024-06-01 09:00:00', " +
+            "dst TIMESTAMP DEFAULT TIMESTAMP '2024-11-03 09:30:00Z', " +
+            "ntz TIMESTAMP_NTZ DEFAULT TIMESTAMP_NTZ '2024-06-01 09:00:00')")
+          sql("INSERT INTO t (id) VALUES (2)")
+        }
+        for {
+          timeZone <- Seq("UTC", "America/Los_Angeles", "Asia/Kathmandu")
+          timestampType <- Seq("TIMESTAMP_LTZ", "TIMESTAMP_NTZ")
+        } {
+          withSQLConf(
+              SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone,
+              SQLConf.TIMESTAMP_TYPE.key -> timestampType) {
+            checkAnswer(
+              sql("SELECT id, unix_micros(ts), unix_micros(dst), CAST(ntz AS STRING) FROM t"),
+              Seq(1, 2).map(Row(_, june, fallBack, "2024-06-01 09:00:00")))
+          }
+        }
+      }
+    }
   }
 }

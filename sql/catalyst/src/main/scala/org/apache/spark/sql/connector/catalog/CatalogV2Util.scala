@@ -836,7 +836,7 @@ private[sql] object CatalogV2Util {
 
   private def extractExistsDefault(default: ColumnDefaultValue): Option[String] = {
     Option(default.getValue).map { literal =>
-      Literal(literal.value, literal.dataType).sql
+      existenceDefaultSQL(Literal(literal.value, literal.dataType))
     }
   }
 

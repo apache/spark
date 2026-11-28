@@ -305,7 +305,7 @@ private[sql] object CreateTableHelper extends SQLConfHelper with Logging with Al
       throw QueryCompilationErrors.defaultValueNotConstantError(statementType, colName,
         defaultValue.originalSQL)
     }
-    constantFolded.sql
+    existenceDefaultSQL(constantFolded)
   }
 
   /** Checks partitioning and bucketing when a V1 CREATE TABLE has no schema. */

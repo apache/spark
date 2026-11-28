@@ -17,25 +17,31 @@
 
 package org.apache.spark.sql.types
 
+import java.time.Instant
+
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.json4s.{JArray, JBool, JObject, JString, JValue}
 import org.json4s.jackson.JsonMethods.parse
 
 import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, DefaultValueExpression}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{ResolveDefaultColumns, ResolveDefaultColumnsUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData, ResolveDefaultColumns, ResolveDefaultColumnsUtils}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, ColumnDefaultValue}
+import org.apache.spark.sql.connector.expressions.LiteralValue
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DayTimeIntervalType => DT}
 import org.apache.spark.sql.types.{YearMonthIntervalType => YM}
 import org.apache.spark.sql.types.DayTimeIntervalType._
 import org.apache.spark.sql.types.StructType.fromDDL
 import org.apache.spark.sql.types.YearMonthIntervalType._
+import org.apache.spark.unsafe.types.TimestampNanosVal
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.unsafe.types.UTF8String.LongWrapper
 
@@ -1256,5 +1262,49 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     val res3Wrapper = new LongWrapper
     assert(res(3).asInstanceOf[UTF8String].toLong(res3Wrapper))
     assert(res3Wrapper.value > 0)
+  }
+
+  test("existence defaults keep the instants of TIMESTAMP values in every session") {
+    // 01:30 PST on the fall-back day of America/Los_Angeles, whose wall clock there also denotes
+    // 01:30 PDT, one hour earlier.
+    val micros = DateTimeUtils.instantToMicros(Instant.parse("2024-11-03T09:30:00Z"))
+    val values = Seq(
+      Literal(micros, TimestampType),
+      Literal(TimestampNanosVal.fromParts(micros, 789.toShort), TimestampLTZNanosType(9)),
+      Literal(new GenericArrayData(Array[Any](micros, null)), ArrayType(TimestampType)),
+      Literal(InternalRow(micros, 1),
+        new StructType().add("t", TimestampType).add("i", IntegerType)),
+      Literal(ArrayBasedMapData(Array(micros), Array(micros)),
+        MapType(TimestampType, TimestampType)))
+    def inUtc(value: Literal): String =
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC")(value.sql)
+    // A DDL statement stores the existence defaults through the V1 and V2 column conversions.
+    val fields = withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+      values.zipWithIndex.flatMap { case (value, i) =>
+        val v1 = ColumnDefinition(s"v1_$i", value.dataType, true, None,
+          Some(DefaultValueExpression(value, value.sql))).toV1Column
+        val default = new ColumnDefaultValue(value.sql, LiteralValue(value.value, value.dataType))
+        val v2 = CatalogV2Util.v2ColumnsToStructType(
+          Seq(Column.create(s"v2_$i", value.dataType, true, null, default, null))).head
+        Seq(value -> v1, value -> v2)
+      }
+    }
+    for {
+      timeZone <- Seq("UTC", "America/Los_Angeles", "Asia/Kathmandu")
+      timestampType <- Seq("TIMESTAMP_LTZ", "TIMESTAMP_NTZ")
+    } {
+      withSQLConf(
+          SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone,
+          SQLConf.TIMESTAMP_TYPE.key -> timestampType) {
+        fields.foreach { case (value, field) =>
+          val existsSQL =
+            field.metadata.getString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY)
+          val actual =
+            Literal(ResolveDefaultColumns.getExistenceDefaultValue(field), value.dataType)
+          assert(actual == value, s"${field.name} = $existsSQL read in $timeZone with " +
+            s"$timestampType is ${inUtc(actual)} in UTC instead of ${inUtc(value)}")
+        }
+      }
+    }
   }
 }
