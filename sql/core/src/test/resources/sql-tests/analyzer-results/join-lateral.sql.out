@@ -2767,6 +2767,68 @@ Project [id#x, m#x, w#x, k#x]
 
 
 -- !query
+SELECT * FROM VALUES (1, CAST(NULL AS ARRAY<STRUCT<x: INT, y: STRING>>)),
+  (2, ARRAY(NAMED_STRUCT('x', 1, 'y', 'a'), NULL)), (3, ARRAY()) AS t(id, arr)
+  LEFT JOIN LATERAL (SELECT coalesce(x, -1) AS w, 'k' AS k, t.id AS i FROM INLINE(arr))
+-- !query analysis
+Project [id#x, arr#x, w#x, k#x, i#x]
++- LateralJoin lateral-subquery#x [id#x && arr#x], LeftOuter
+   :  +- SubqueryAlias __auto_generated_subquery_name
+   :     +- Project [coalesce(x#x, -1) AS w#x, k AS k#x, outer(id#x) AS i#x]
+   :        +- Generate inline(outer(arr#x)), false, [x#x, y#x]
+   :           +- OneRowRelation
+   +- SubqueryAlias t
+      +- LocalRelation [id#x, arr#x]
+
+
+-- !query
+SELECT * FROM t3 LEFT JOIN LATERAL (SELECT coalesce(v, -1) AS w, 'k' AS k FROM STACK(2, c1, c1 + 1) t(v))
+-- !query analysis
+Project [c1#x, c2#x, w#x, k#x]
++- LateralJoin lateral-subquery#x [c1#x && c1#x], LeftOuter
+   :  +- SubqueryAlias __auto_generated_subquery_name
+   :     +- Project [coalesce(v#x, -1) AS w#x, k AS k#x]
+   :        +- SubqueryAlias t
+   :           +- Project [col0#x AS v#x]
+   :              +- Generate stack(2, outer(c1#x), (outer(c1#x) + 1)), false, [col0#x]
+   :                 +- OneRowRelation
+   +- SubqueryAlias spark_catalog.default.t3
+      +- View (`spark_catalog`.`default`.`t3`, [c1#x, c2#x])
+         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as array<int>) AS c2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT * FROM VALUES (1, '{"a": 1}'), (2, CAST(NULL AS STRING)), (3, '[1]') AS t(id, j)
+  LEFT JOIN LATERAL (SELECT coalesce(a, '0') AS a, 'k' AS k FROM JSON_TUPLE(t.j, 'a') t2(a))
+-- !query analysis
+Project [id#x, j#x, a#x, k#x]
++- LateralJoin lateral-subquery#x [j#x], LeftOuter
+   :  +- SubqueryAlias __auto_generated_subquery_name
+   :     +- Project [coalesce(a#x, 0) AS a#x, k AS k#x]
+   :        +- SubqueryAlias t2
+   :           +- Project [c0#x AS a#x]
+   :              +- Generate json_tuple(outer(j#x), a), false, [c0#x]
+   :                 +- OneRowRelation
+   +- SubqueryAlias t
+      +- LocalRelation [id#x, j#x]
+
+
+-- !query
+SELECT * FROM VALUES (1, '{"a": 1}'), (2, '{}'), (3, CAST(NULL AS STRING)) AS t(id, j)
+  LEFT JOIN LATERAL (SELECT 'k' AS k, key FROM VARIANT_EXPLODE(parse_json(t.j)))
+-- !query analysis
+Project [id#x, j#x, k#x, key#x]
++- LateralJoin lateral-subquery#x [j#x], LeftOuter
+   :  +- SubqueryAlias __auto_generated_subquery_name
+   :     +- Project [k AS k#x, key#x]
+   :        +- Generate variant_explode(parse_json(outer(j#x), true), false), false, [pos#x, key#x, value#x]
+   :           +- OneRowRelation
+   +- SubqueryAlias t
+      +- LocalRelation [id#x, j#x]
+
+
+-- !query
 SELECT * FROM tm LEFT JOIN LATERAL EXPLODE(m) t(k, v) WHERE k IS NULL
 -- !query analysis
 Project [id#x, m#x, k#x, v#x]

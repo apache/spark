@@ -480,6 +480,14 @@ SELECT * FROM VALUES (0, ARRAY()), (1, ARRAY(1)) AS t(c1, c2)
   LEFT JOIN LATERAL (SELECT 10 / c1 + v AS w FROM EXPLODE(c2) t2(v));
 SELECT * FROM t3 LEFT JOIN LATERAL (SELECT coalesce(v, -1) AS w, p FROM POSEXPLODE(c2) t(p, v));
 SELECT * FROM tm LEFT JOIN LATERAL (SELECT coalesce(v, 0) AS w, k FROM EXPLODE(m) t(k, v));
+SELECT * FROM VALUES (1, CAST(NULL AS ARRAY<STRUCT<x: INT, y: STRING>>)),
+  (2, ARRAY(NAMED_STRUCT('x', 1, 'y', 'a'), NULL)), (3, ARRAY()) AS t(id, arr)
+  LEFT JOIN LATERAL (SELECT coalesce(x, -1) AS w, 'k' AS k, t.id AS i FROM INLINE(arr));
+SELECT * FROM t3 LEFT JOIN LATERAL (SELECT coalesce(v, -1) AS w, 'k' AS k FROM STACK(2, c1, c1 + 1) t(v));
+SELECT * FROM VALUES (1, '{"a": 1}'), (2, CAST(NULL AS STRING)), (3, '[1]') AS t(id, j)
+  LEFT JOIN LATERAL (SELECT coalesce(a, '0') AS a, 'k' AS k FROM JSON_TUPLE(t.j, 'a') t2(a));
+SELECT * FROM VALUES (1, '{"a": 1}'), (2, '{}'), (3, CAST(NULL AS STRING)) AS t(id, j)
+  LEFT JOIN LATERAL (SELECT 'k' AS k, key FROM VARIANT_EXPLODE(parse_json(t.j)));
 SELECT * FROM tm LEFT JOIN LATERAL EXPLODE(m) t(k, v) WHERE k IS NULL;
 SET spark.sql.optimizer.decorrelateInnerQuery.enabled=false;
 SELECT * FROM t3 LEFT JOIN LATERAL EXPLODE(c2);

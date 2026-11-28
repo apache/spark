@@ -17,15 +17,17 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, UnresolvedTableValuedFunction, UnresolvedTVFAliases}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Coalesce, Explode, GeneratedRowMarker, If, IsNotNull, Literal, PosExplode, ScalarSubquery, Stack}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Coalesce, Explode, Expression, GeneratedRowMarker, Generator, GetStructField, If, Inline, IsNotNull, JsonTuple, Literal, PosExplode, ScalarSubquery, Stack, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{DomainJoin, Generate, LocalRelation, LogicalPlan, OneRowRelation, Project, SubqueryAlias}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, IntegerType}
+import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType, StringType, StructType}
 
 class OptimizeOneRowRelationSubquerySuite extends PlanTest {
 
@@ -268,21 +270,79 @@ class OptimizeOneRowRelationSubquerySuite extends PlanTest {
     }
   }
 
-  test("SPARK-60564: other generators are wrapped in GeneratedRowMarker") {
-    // SELECT * FROM t3 LEFT JOIN LATERAL (SELECT coalesce(col0, 0) AS v FROM STACK(2, a, b))
-    val query = t3.lateralJoin(
+  test("SPARK-60564: stack and json_tuple return a row for every input row") {
+    // A left outer lateral join over them is an inner one, so the Generate stays inner and
+    // unmarked, as before.
+    val t5 = LocalRelation($"a".int, $"b".int, $"js".string)
+    Seq(
       t0.generate(Stack(Seq(2, $"a", $"b"))).select(Coalesce(Seq($"col0", 0)).as("v")),
-      LeftOuter, None)
+      t0.generate(JsonTuple(Seq($"js", Literal("x")))).select(Coalesce(Seq($"c0", "")).as("v"))
+    ).foreach { subquery =>
+      val optimized = Optimize.execute(t5.lateralJoin(subquery, LeftOuter, None).analyze)
+      val generate = optimized.collectFirst { case g: Generate => g }.get
+      assert(!generate.outer)
+      assert(!generate.generator.isInstanceOf[GeneratedRowMarker])
+    }
+  }
+
+  test("SPARK-60564: a column the generator declares not nullable marks its rows") {
+    // SELECT * FROM t5 LEFT JOIN LATERAL (SELECT coalesce(value, 0) AS v FROM EXPLODE(m)): the key
+    // of a map can not be NULL
+    val t5 = LocalRelation($"a".int, AttributeReference("m", MapType(StringType, IntegerType))())
+    val query = t5.lateralJoin(
+      t0.generate(Explode($"m")).select(Coalesce(Seq($"value", 0)).as("v")), LeftOuter, None)
     val optimized = Optimize.execute(query.analyze)
     val generate = optimized.collectFirst { case g: Generate => g }.get
     assert(generate.outer)
-    assert(generate.generator.isInstanceOf[GeneratedRowMarker])
-    val marker = generate.generatorOutput.last
-    assert(marker.name == GeneratedRowMarker.columnName)
+    assert(generate.generator.isInstanceOf[Explode])
     optimized.asInstanceOf[Project].projectList.last match {
       case Alias(If(IsNotNull(m: Attribute), _, Literal(null, _)), "v") =>
-        assert(m.exprId == marker.exprId)
+        assert(m.exprId == generate.generatorOutput.head.exprId)
+        assert(m.nullable)
       case o => fail(s"Unexpected expression: $o")
+    }
+  }
+
+  test("SPARK-60564: an inline becomes a posexplode whose struct fields a Project extracts") {
+    // SELECT * FROM t5 LEFT JOIN LATERAL (SELECT coalesce(x, 0) AS v FROM INLINE(s))
+    val t5 = LocalRelation($"a".int, $"s".array(new StructType().add("x", IntegerType)))
+    val query = t5.lateralJoin(
+      t0.generate(Inline($"s")).select(Coalesce(Seq($"x", 0)).as("v")), LeftOuter, None)
+    val optimized = Optimize.execute(query.analyze)
+    val project = optimized.asInstanceOf[Project]
+    val generate = optimized.collectFirst { case g: Generate => g }.get
+    assert(generate.outer)
+    assert(generate.generator.isInstanceOf[PosExplode])
+    val Seq(pos, struct) = generate.generatorOutput
+    val fields = project.child.asInstanceOf[Project]
+    fields.projectList.last match {
+      case Alias(GetStructField(s: Attribute, 0, _), "x") => assert(s.exprId == struct.exprId)
+      case o => fail(s"Unexpected expression: $o")
+    }
+    project.projectList.last match {
+      case Alias(If(IsNotNull(m: Attribute), _, Literal(null, _)), "v") =>
+        assert(m.exprId == pos.exprId)
+      case o => fail(s"Unexpected expression: $o")
+    }
+  }
+
+  test("SPARK-60564: other generators are wrapped in GeneratedRowMarker") {
+    // Also one that declares its column not nullable, as the code of a UDTF may not keep that
+    Seq(true, false).foreach { nullable =>
+      val query = t3.lateralJoin(
+        t0.generate(TestGenerator($"a", nullable)).select(Coalesce(Seq($"v", 0)).as("w")),
+        LeftOuter, None)
+      val optimized = Optimize.execute(query.analyze)
+      val generate = optimized.collectFirst { case g: Generate => g }.get
+      assert(generate.outer)
+      assert(generate.generator.isInstanceOf[GeneratedRowMarker])
+      val marker = generate.generatorOutput.last
+      assert(marker.name == GeneratedRowMarker.columnName)
+      optimized.asInstanceOf[Project].projectList.last match {
+        case Alias(If(IsNotNull(m: Attribute), _, Literal(null, _)), "w") =>
+          assert(m.exprId == marker.exprId)
+        case o => fail(s"Unexpected expression: $o")
+      }
     }
   }
 
@@ -325,4 +385,14 @@ class OptimizeOneRowRelationSubquerySuite extends PlanTest {
         t3.generate(Explode($"arr")).select($"a", $"b", $"arr", ($"col" + 1).as("v")).analyze)
     }
   }
+}
+
+/** A generator that is not built in, returning its input once. */
+private case class TestGenerator(child: Expression, columnNullable: Boolean)
+  extends UnaryExpression with Generator with CodegenFallback {
+  override def elementSchema: StructType = new StructType().add("v", child.dataType, columnNullable)
+  override def eval(input: InternalRow): IterableOnce[InternalRow] =
+    Seq(InternalRow(child.eval(input)))
+  override protected def withNewChildInternal(newChild: Expression): TestGenerator =
+    copy(child = newChild)
 }

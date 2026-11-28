@@ -1715,6 +1715,56 @@ struct<id:int,m:map<string,int>,w:int,k:string>
 
 
 -- !query
+SELECT * FROM VALUES (1, CAST(NULL AS ARRAY<STRUCT<x: INT, y: STRING>>)),
+  (2, ARRAY(NAMED_STRUCT('x', 1, 'y', 'a'), NULL)), (3, ARRAY()) AS t(id, arr)
+  LEFT JOIN LATERAL (SELECT coalesce(x, -1) AS w, 'k' AS k, t.id AS i FROM INLINE(arr))
+-- !query schema
+struct<id:int,arr:array<struct<x:int,y:string>>,w:int,k:string,i:int>
+-- !query output
+1	NULL	NULL	NULL	NULL
+2	[{"x":1,"y":"a"},null]	-1	k	2
+2	[{"x":1,"y":"a"},null]	1	k	2
+3	[]	NULL	NULL	NULL
+
+
+-- !query
+SELECT * FROM t3 LEFT JOIN LATERAL (SELECT coalesce(v, -1) AS w, 'k' AS k FROM STACK(2, c1, c1 + 1) t(v))
+-- !query schema
+struct<c1:int,c2:array<int>,w:int,k:string>
+-- !query output
+0	[0,1]	0	k
+0	[0,1]	1	k
+1	[2]	1	k
+1	[2]	2	k
+2	[]	2	k
+2	[]	3	k
+NULL	[4]	-1	k
+NULL	[4]	-1	k
+
+
+-- !query
+SELECT * FROM VALUES (1, '{"a": 1}'), (2, CAST(NULL AS STRING)), (3, '[1]') AS t(id, j)
+  LEFT JOIN LATERAL (SELECT coalesce(a, '0') AS a, 'k' AS k FROM JSON_TUPLE(t.j, 'a') t2(a))
+-- !query schema
+struct<id:int,j:string,a:string,k:string>
+-- !query output
+1	{"a": 1}	1	k
+2	NULL	0	k
+3	[1]	0	k
+
+
+-- !query
+SELECT * FROM VALUES (1, '{"a": 1}'), (2, '{}'), (3, CAST(NULL AS STRING)) AS t(id, j)
+  LEFT JOIN LATERAL (SELECT 'k' AS k, key FROM VARIANT_EXPLODE(parse_json(t.j)))
+-- !query schema
+struct<id:int,j:string,k:string,key:string>
+-- !query output
+1	{"a": 1}	k	a
+2	{}	NULL	NULL
+3	NULL	NULL	NULL
+
+
+-- !query
 SELECT * FROM tm LEFT JOIN LATERAL EXPLODE(m) t(k, v) WHERE k IS NULL
 -- !query schema
 struct<id:int,m:map<string,int>,k:string,v:int>

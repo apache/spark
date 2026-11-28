@@ -744,6 +744,16 @@ abstract class SchemaPruningSuite
         |""".stripMargin)
     checkScan(query2, "struct<id:int,friends:array<struct<first:string>>>")
     checkAnswer(query2, Row(0, "Susan") :: Row(1, null) :: Row(2, null) :: Row(3, null) :: Nil)
+
+    // An inline becomes a posexplode, whose struct fields a Project extracts
+    val query3 = sql(
+      """
+        |select c.id, x.* from contacts c
+        |left join lateral (select c.id as i, first from inline(c.friends)) x
+        |""".stripMargin)
+    checkScan(query3, "struct<id:int,friends:array<struct<first:string>>>")
+    checkAnswer(query3,
+      Row(0, 0, "Susan") :: Row(1, null, null) :: Row(2, null, null) :: Row(3, null, null) :: Nil)
   }
 
   testSchemaPruning("select one deep nested complex field after repartition") {
