@@ -92,6 +92,17 @@ abstract class SchemaPruningSuite
   val organizations =
     Organization(Team(Array[Employer](null, employerWithNullCompany, employer))) :: Nil
 
+  case class Element(x: Int, y: Int)
+  case class Elements(arr: Array[Element], e: Int)
+  case class ElementRow(id: Int, s: Elements, seq: Array[Int])
+  case class JoinKey(rid: Int)
+
+  // One row whose `s.arr` holds 1000 elements with x = 0..999, and 1000 rows that join to it.
+  val elementRows =
+    ElementRow(1, Elements(Array.tabulate(1000)(i => Element(i, i)), 0), Array.range(1, 1001)) ::
+      Nil
+  val joinKeys = Seq.fill(1000)(JoinKey(1))
+
   case class Name(first: String, last: String)
   case class BriefContact(id: Int, name: Name, address: String)
 
@@ -809,6 +820,70 @@ abstract class SchemaPruningSuite
       Row("Jane", "abc") ::
         Row("John", null) ::
         Row(null, null) :: Nil)
+  }
+
+  testSchemaPruning("SPARK-62042: non-deterministic nested field accesses give the same " +
+      "results with and without nested column aliasing") {
+    withDataSourceTable(elementRows, "elements") {
+      withDataSourceTable(joinKeys, "join_keys") {
+        // Each row reads monotonically_increasing_id() twice in one select list: as `m`, and as
+        // `v` through an access of `s.arr`, whose element i has x = i. Both are evaluated once
+        // per row of the select list's input, so v = m in every row, whatever the partitioning.
+        val id = "CAST(monotonically_increasing_id() % 1000 AS INT)"
+        val v = s"s.arr[$id].x AS v"
+        val m = s"$id AS m"
+        // The same check with input_file_block_start(), over a join whose side that holds `s`
+        // reads no file. The broadcast join evaluates the select list in the tasks that scan
+        // `join_keys`, where the function returns the start of the scanned block. get() returns
+        // null instead of failing for an index of -1, the function's value where no file is read.
+        val start = "CAST(input_file_block_start() AS INT)"
+        // Each query builds about 1000 rows from the one row of `elements`. The explode query
+        // reads `n`, without which nested column aliasing does not apply to the explode.
+        val queries: Seq[(String, () => DataFrame)] = Seq(
+          "join" -> (() => sql(s"SELECT count(*), count_if(v != m) FROM " +
+            s"(SELECT $v, $m FROM elements JOIN join_keys ON id = rid)")),
+          "explode" -> (() => sql(s"SELECT count(*), count_if(v != m), sum(n) FROM " +
+            s"(SELECT $v, $m, n FROM elements LATERAL VIEW explode(seq) t AS n)")),
+          "sample" -> (() => spark.table("elements")
+            .sample(withReplacement = true, fraction = 1000.0, seed = 0L)
+            .selectExpr(v, m)
+            .selectExpr("count(*)", "count_if(v != m)")),
+          "join with a side that reads no file" -> (() => sql(
+            "SELECT count(*), count_if(v IS DISTINCT FROM m) FROM (SELECT /*+ BROADCAST(l) */ " +
+              s"get(l.s.arr, $start).x AS v, $start AS m " +
+              "FROM local_elements l JOIN join_keys ON l.id = rid)")))
+
+        def withNestedColumnAliasing[T](enabled: Boolean)(f: => T): T = withSQLConf(
+            SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> enabled.toString,
+            SQLConf.NESTED_PRUNING_ON_EXPRESSIONS.key -> enabled.toString)(f)
+
+        // `local_elements` holds the rows of `elements` in a local relation, which reads no file.
+        spark.createDataFrame(elementRows).createOrReplaceTempView("local_elements")
+        val results = try {
+          queries.map { case (name, query) =>
+            (name,
+              withNestedColumnAliasing(enabled = false)(query().collect().toSeq),
+              withNestedColumnAliasing(enabled = true)(query().collect().toSeq))
+          }
+        } finally {
+          spark.catalog.dropTempView("local_elements")
+        }
+        results.foreach { case (name, without, _) =>
+          assert(without.head.getLong(1) == 0, s"$name without nested column aliasing: $without")
+        }
+        assert(results.forall { case (_, without, withAliasing) => without == withAliasing },
+          "results without and with nested column aliasing: " + results.map {
+            case (name, without, withAliasing) => s"$name: $without vs $withAliasing"
+          }.mkString("; "))
+
+        // `s.e` is still pruned: only the element access itself stays above the join.
+        withNestedColumnAliasing(enabled = true) {
+          checkScan(sql(s"SELECT $v, $m FROM elements JOIN join_keys ON id = rid"),
+            "struct<id:int,s:struct<arr:array<struct<x:int,y:int>>>>",
+            "struct<rid:int>")
+        }
+      }
+    }
   }
 
   testSchemaPruning("select nested field in aggregation function of Aggregate") {

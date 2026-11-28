@@ -164,6 +164,16 @@ class OffsetSeqLogSuite extends SharedSparkSession {
     assert(metadata.conf.get(entry.key).contains("true"))
   }
 
+  test("SPARK-62042: excludeNondeterministic is false for a checkpoint that does not record " +
+      "it") {
+    val entry = SQLConf.NESTED_COLUMN_ALIASING_EXCLUDE_NONDETERMINISTIC
+    val (_, offsetSeq) = readFromResource(
+      "checkpoint-version-4.2.0-deduplication-metadata-boundary/offsets")
+    assert(OffsetSeqMetadata.readValue(offsetSeq.metadataOpt.get, entry) == "false")
+    val metadata = OffsetSeqMetadata(batchWatermarkMs = 0, batchTimestampMs = 0, spark.conf)
+    assert(metadata.conf.get(entry.key).contains("true"))
+  }
+
   test("SPARK-59919: v1 and v2 metadata persist rebound stateful shuffle partitions") {
     withSQLConf(
       SQLConf.SHUFFLE_PARTITIONS.key -> "10",
