@@ -342,6 +342,7 @@ try:
         },
         package_data={
             "pyspark": ["**/*.pyi", "**/py.typed", "**/*.json"],
+            "pyspark.sql": ["srs_registry.csv"],
             "pyspark.jars": ["**/*.jar"],
             "pyspark.bin": ["**/*"],
             "pyspark.sbin": [

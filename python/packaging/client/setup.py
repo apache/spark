@@ -207,6 +207,7 @@ try:
         include_package_data=True,
         package_data={
             "pyspark": ["**/*.pyi", "**/py.typed", "**/*.json"],
+            "pyspark.sql": ["srs_registry.csv"],
         },
         license="Apache-2.0",
         license_files=["LICENSE", "NOTICE"],
