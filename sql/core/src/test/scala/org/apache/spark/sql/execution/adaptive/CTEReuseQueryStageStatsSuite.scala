@@ -38,8 +38,12 @@ class CTEReuseQueryStageStatsSuite extends QueryTest with SharedSparkSession {
 
   test("a CTE reuse stage reports its inner root's attribute statistics in its own attributes") {
     val child = spark.range(5).selectExpr("id", "id * 2 AS v").queryExecution.sparkPlan
-    val columnStat = ColumnStat(distinctCount = Some(BigInt(5)))
-    val shuffle = AttributeStatsShuffleExchangeExec(child, columnStat)
+    // Each column gets a statistic of its own, so a remap that pairs an output attribute with
+    // another column's statistics fails the check below.
+    val columnStats = Seq(
+      ColumnStat(distinctCount = Some(BigInt(5))),
+      ColumnStat(distinctCount = Some(BigInt(3))))
+    val shuffle = AttributeStatsShuffleExchangeExec(child, columnStats)
     val shuffleStage = ShuffleQueryStageExec(0, shuffle, shuffle.canonicalized)
     val context = AdaptiveExecutionContext(spark, spark.range(1).queryExecution)
     val inner = AdaptiveSparkPlanExec(shuffleStage, context, Nil, isSubquery = true)
@@ -53,17 +57,20 @@ class CTEReuseQueryStageStatsSuite extends QueryTest with SharedSparkSession {
     val stats = stage.computeStats().getOrElse(fail("Expected the materialized stage's stats"))
     assert(stats.rowCount.contains(BigInt(5)) && stats.sizeInBytes == BigInt(80), stats)
     assert(stats.attributeStats.keys.map(_.exprId).toSet == output.map(_.exprId).toSet &&
-      stats.attributeStats.values.forall(_ == columnStat),
+      output.zip(columnStats).forall { case (attr, columnStat) =>
+        stats.attributeStats.get(attr).contains(columnStat)
+      },
       s"Expected the inner root's attribute statistics keyed by the stage's output $output, " +
+        s"each with the statistic of the inner column at its position, " +
         s"got ${stats.attributeStats}")
   }
 }
 
 /**
- * A shuffle that is never run and reports fixed runtime statistics, including attribute
- * statistics for every output column of its child.
+ * A shuffle that is never run and reports fixed runtime statistics, including the attribute
+ * statistics `columnStats` for the output columns of its child, by position.
  */
-case class AttributeStatsShuffleExchangeExec(child: SparkPlan, columnStat: ColumnStat)
+case class AttributeStatsShuffleExchangeExec(child: SparkPlan, columnStats: Seq[ColumnStat])
   extends ShuffleExchangeLike {
   override def numMappers: Int = 1
   override def numPartitions: Int = 1
@@ -76,7 +83,7 @@ case class AttributeStatsShuffleExchangeExec(child: SparkPlan, columnStat: Colum
   override def runtimeStatistics: Statistics = Statistics(
     sizeInBytes = 80,
     rowCount = Some(5),
-    attributeStats = AttributeMap(child.output.map(_ -> columnStat)))
+    attributeStats = AttributeMap(child.output.zip(columnStats)))
   override def shuffleId: Int = 0
   override def outputPartitioning: Partitioning = SinglePartition
   override protected def doExecute(): RDD[InternalRow] =

@@ -117,7 +117,11 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
    * random expressions and substituting the previous iteration's rows for the recursive
    * reference, and those rewrites do not reach the shared body of a [[CTEReuseRelation]]. Such a
    * definition keeps the plain lowering, or the repartition its pin requires, so its copies
-   * outside that term are no longer guaranteed to share one materialization. Also returns the
+   * outside that term are no longer guaranteed to share one materialization. A definition read
+   * inside the anchor of a recursive CTE is sealed together with its copies elsewhere, which keeps
+   * those copies sharing one materialization, but its copy in the anchor is materialized apart:
+   * `UnionLoopExec` runs the anchor in QueryExecutions of its own, which do not share the query's
+   * materialization of that body (see the `UnionLoop` case below). Also returns the
    * number of copies of every definition's body in the lowered plan, and the definitions with a
    * copy inside a recursive term (both empty when the plan is streaming, the reuse flag is off,
    * or the plan has no `forceSkipInline` definition).
@@ -151,7 +155,14 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
             counts(enclosing) = counts.getOrElse(enclosing, 0) + 1
             if (inRecursiveTerm) readInRecursiveTerm += ref.cteId
           case u: UnionLoop =>
-            // The anchor runs once; the recursion is rewritten and run again in every iteration.
+            // The recursion is rewritten and run again in every iteration. The anchor is not
+            // rewritten, so its copies are counted with the query's other copies, but
+            // `UnionLoopExec` plans and runs it through `Dataset.ofRows` in QueryExecutions of
+            // its own, which neither see the query's shared inner adaptive plans nor take part in
+            // its exchange reuse, so a sealed copy in the anchor reads a materialization of its
+            // own.
+            // TODO: share a sealed body's materialization between the query and the
+            // QueryExecutions in which `UnionLoopExec` runs a recursive CTE's anchor.
             collect(u.anchor, enclosing, inRecursiveTerm)
             collect(u.recursion, enclosing, inRecursiveTerm = true)
           case _ =>
@@ -361,10 +372,12 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
   /**
    * The root of a shared forced definition as one repartition that can carry the plan-reuse id.
    * A root that already plans to a single shuffle is converted to a [[RepartitionByExpression]]
-   * with the same partitioning instead of being wrapped in a second shuffle: a shuffling
-   * [[Repartition]] keeps its partition count, and a [[RebalancePartitions]] keeps its keys, its
-   * partition count and its advisory partition size (both take their partitioning from
-   * [[HasPartitionExpressions]]). A converted rebalance gives up its adaptive coalescing and skew
+   * that places rows as the original root does, instead of being wrapped in a second shuffle: a
+   * shuffling [[Repartition]] becomes a round-robin repartition to its partition count, and a
+   * [[RebalancePartitions]] a repartition on its keys, its partition count and its advisory
+   * partition size. A converted root with one partition reports `SinglePartition`, where a
+   * rebalance into one partition reports a hash partitioning on its keys, or a round-robin one
+   * without keys. A converted rebalance gives up its adaptive coalescing and skew
    * splitting, because a CTE reuse shuffle keeps one frozen layout for all its consumers. A
    * coalesce root is wrapped in a repartition to its partition count, and any other root, such as
    * a merged-subquery body, in a round-robin repartition.
@@ -442,10 +455,13 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
       }
     }
     // Only a forced definition whose body a batch query holds two or more copies of, a definition
-    // whose deterministic body equals such a sealed body, or a definition that the body of such a
-    // sealed, unpinned forced definition only selects and that the plan also reads elsewhere, is
-    // sealed for reuse (see `sealedDefinitions` and `LoweringContext.unsealedTwins`). A single
-    // copy of any other body already runs it once.
+    // whose deterministic body equals such a sealed body, a definition that the body of such a
+    // sealed, unpinned forced definition only selects and that the plan also reads elsewhere, or
+    // a definition an earlier lowering of the plan sealed, which stays sealed while the plan holds
+    // a copy of its body (`keepSealed`), is sealed for reuse (see `sealedDefinitions` and
+    // `LoweringContext.unsealedTwins`). `sealedDefinitions` never seals the definitions it marks
+    // unsealable, such as one with a copy inside a recursive term. A single copy of any other body
+    // already runs it once.
     if (ctx.shouldSeal(cteDef.id)) {
       // A pin's repartition over the other definition's root is a shuffle the pin requires, so a
       // pinned definition does not seal that definition with it.

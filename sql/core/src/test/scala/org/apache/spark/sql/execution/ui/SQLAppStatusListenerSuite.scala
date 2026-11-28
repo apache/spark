@@ -560,6 +560,38 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     assert(stored.metrics.contains(lateMetric))
   }
 
+  test("adaptive metric update after the ended execution's record is removed is dropped") {
+    val statusStore = createStatusStore()
+    val listener = statusStore.listener.get
+
+    val executionId = 0
+    val df = createTestDataFrame
+    listener.onOtherEvent(SparkListenerSQLExecutionStart(
+      executionId,
+      Some(executionId),
+      "test",
+      "test",
+      df.queryExecution.toString,
+      SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
+      System.currentTimeMillis(),
+      Map.empty))
+    listener.onOtherEvent(SparkListenerSQLExecutionEnd(
+      executionId, System.currentTimeMillis()))
+    assert(listener.noLiveData())
+    assert(statusStore.execution(executionId).nonEmpty)
+    // As the retained-executions cleanup does once the execution is evicted.
+    kvstore.delete(classOf[SQLExecutionUIData], executionId.toLong)
+    assert(statusStore.execution(executionId).isEmpty)
+
+    // A shared inner CTE plan that its query abandoned can post this after that.
+    val lateMetric =
+      SQLPlanMetric("late metric", AccumulatorContext.newId(), MetricUtils.SUM_METRIC)
+    listener.onOtherEvent(SparkListenerSQLAdaptiveSQLMetricUpdates(executionId, Seq(lateMetric)))
+
+    assert(listener.noLiveData())
+    assert(statusStore.execution(executionId).isEmpty)
+  }
+
   test("adaptive metric update of a running execution adds its metrics") {
     val statusStore = createStatusStore()
     val listener = statusStore.listener.get

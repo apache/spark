@@ -50,7 +50,9 @@ class CTEReuseWithoutAQESuite
       cteReuseConf -> "true",
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
       // Fail fast if guaranteed reuse does not hold, so these tests actually exercise the
-      // fail-on-reuse-failure path (the individual reuse-disabled test overrides this to false).
+      // fail-on-reuse-failure path. Only "exchange reuse disabled: no reuse, verification does
+      // not throw" overrides this to false; the other exchange-reuse-disabled tests keep it on to
+      // assert the internal error.
       SQLConf.FAIL_ON_CTE_REUSE_WITHOUT_AQE.key -> "true"
     )(f)
   }

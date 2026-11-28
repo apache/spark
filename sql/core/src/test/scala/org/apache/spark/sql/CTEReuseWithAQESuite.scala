@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, Adapti
 import org.apache.spark.sql.execution.adaptive.{AQEShuffleReadExec, Cost, CostEvaluator, CTEReuseQueryStageExec, ShuffleQueryStageExec, SimpleCostEvaluator}
 import org.apache.spark.sql.execution.exchange.{REBALANCE_PARTITIONS_BY_NONE, ShuffleExchangeLike}
 import org.apache.spark.sql.execution.joins.BaseJoinExec
-import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionEnd
+import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.internal.SQLConf
@@ -772,13 +772,30 @@ class CTEReuseWithAQESuite
       withTable("job_ctx_src") {
         sql("CREATE TABLE job_ctx_src (id INT) USING parquet")
         sql("INSERT INTO job_ctx_src VALUES (1), (2), (3)")
+        val tag = "cte-reuse-job-context"
         val jobs = mutable.ArrayBuffer.empty[java.util.Properties]
+        // Records the jobs of the executions whose start this listener receives, and the jobs that
+        // carry this test's tag, so that a late job start from an earlier statement or test, such
+        // as one of an inner CTE plan that an earlier query abandoned, is left out.
         val listener = new SparkListener {
+          private val started = mutable.HashSet.empty[String]
+          override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
+            case e: SparkListenerSQLExecutionStart => jobs.synchronized {
+              started += e.executionId.toString
+            }
+            case _ =>
+          }
           override def onJobStart(jobStart: SparkListenerJobStart): Unit = jobs.synchronized {
-            jobs += jobStart.properties
+            Option(jobStart.properties).foreach { props =>
+              val ownExecution = Option(props.getProperty(SQLExecution.EXECUTION_ID_KEY))
+                .exists(started.contains)
+              val tagged = Option(props.getProperty(SparkContext.SPARK_JOB_TAGS))
+                .exists(_.split(SparkContext.SPARK_JOB_TAGS_SEP).contains(tag))
+              if (ownExecution || tagged) jobs += props
+            }
           }
         }
-        val tag = "cte-reuse-job-context"
+        spark.sparkContext.listenerBus.waitUntilEmpty()
         spark.sparkContext.addSparkListener(listener)
         spark.sparkContext.addJobTag(tag)
         try {
@@ -1410,16 +1427,113 @@ class CTEReuseWithAQESuite
     }
   }
 
-  /** Records the ids of the jobs that start under each SQL execution id. */
+  // As in the test above where a replan drops every CTE stage, but the CTE body also holds a
+  // repartition canonically equal to one the query reads in another branch, so the shared inner
+  // plan reuses the query's shuffle stage for it through the stage cache. The other repartition
+  // of the body fails once the replan has dropped the CTE, while the shared stage is still
+  // running: its task waits until the outer plan has recorded the CTE failure. The failing inner
+  // plan must not cancel the shared stage, which the query still needs. Every shuffle's map side
+  // is one task, so the waiting tasks never hold both cores.
+  test("a failing shared CTE plan does not cancel a stage that its query still reads") {
+    withCTEReuseEnabled {
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+          "org.apache.spark.sql.catalyst.optimizer.PropagateEmptyRelation") {
+        DroppedCTEStageSync.reset()
+        spark.udf.register("shared_cte_wait_for_stages", udf { (id: Long) =>
+          DroppedCTEStageSync.await(DroppedCTEStageSync.stagesSeen, "the CTE stages")
+          id
+        }.asNondeterministic())
+        spark.udf.register("shared_cte_fail_after_drop", udf { (id: Long) =>
+          DroppedCTEStageSync.await(DroppedCTEStageSync.stagesDropped, "the replan")
+          if (id >= 0) throw new IllegalStateException("shared CTE body failed")
+          true
+        }.asNondeterministic())
+        spark.udf.register("shared_cte_wait_for_failure", udf { (id: Long) =>
+          DroppedCTEStageSync.await(DroppedCTEStageSync.failureSeen, "the CTE failure")
+          true
+        }.asNondeterministic())
+        val df = sqlWithForcedCTEReuse(
+          """WITH c AS (
+            |  SELECT /*+ REPARTITION(id) */ id FROM range(0, 4, 1, 1)
+            |  WHERE shared_cte_fail_after_drop(id)
+            |  UNION ALL
+            |  SELECT /*+ REPARTITION(id) */ id FROM range(0, 4, 1, 1)
+            |  WHERE shared_cte_wait_for_failure(id)
+            |)
+            |SELECT c1.id FROM c c1 JOIN (
+            |  SELECT id FROM range(0, 10, 1, 1) WHERE shared_cte_wait_for_stages(id) > 100
+            |) e1 ON c1.id = e1.id
+            |UNION ALL
+            |SELECT c2.id FROM c c2 JOIN (
+            |  SELECT id FROM range(0, 10, 1, 1) WHERE shared_cte_wait_for_stages(id) > 100
+            |) e2 ON c2.id = e2.id
+            |UNION ALL
+            |SELECT /*+ REPARTITION(id) */ id FROM range(0, 4, 1, 1)
+            |WHERE shared_cte_wait_for_failure(id)
+            |""".stripMargin)
+        val aqe = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+        def cteStages: Seq[CTEReuseQueryStageExec] =
+          aqe.executedPlan.collect { case s: CTEReuseQueryStageExec => s }
+        def shuffleStages(plan: SparkPlan): Seq[ShuffleQueryStageExec] =
+          plan.collect { case s: ShuffleQueryStageExec => s }
+        val result = Future(df.collect())(ExecutionContext.global)
+        try {
+          DroppedCTEStageSync.waitUntil("the outer plan creates the CTE stages") {
+            cteStages.nonEmpty
+          }
+          val dropped = cteStages
+          DroppedCTEStageSync.waitUntil("the shared CTE plan reuses the query's shuffle stage") {
+            val outerShuffles = shuffleStages(aqe.executedPlan).map(_.shuffle)
+            aqe.context.cteAQERegistry.values.exists { inner =>
+              shuffleStages(inner.executedPlan).exists(s => outerShuffles.exists(_ eq s.shuffle))
+            }
+          }
+          DroppedCTEStageSync.stagesSeen.countDown()
+          DroppedCTEStageSync.waitUntil("a replan drops every CTE stage") {
+            cteStages.isEmpty
+          }
+          DroppedCTEStageSync.stagesDropped.countDown()
+          // The shared inner plan cancels its stages before it reports its failure; without the
+          // fix, it cancels the shared stage too, and the query fails.
+          DroppedCTEStageSync.waitUntil("the outer plan records the CTE failure") {
+            dropped.exists(_.hasFailed) || result.isCompleted
+          }
+          DroppedCTEStageSync.failureSeen.countDown()
+          val rows = ThreadUtils.awaitResult(result, 2.minutes)
+          assert(rows.toSeq.map(_.getLong(0)).sorted == Seq(0L, 1L, 2L, 3L))
+        } finally {
+          DroppedCTEStageSync.releaseAll()
+        }
+      }
+    }
+  }
+
+  /**
+   * Records the ids of the jobs that start under each SQL execution id, for the executions whose
+   * start this listener receives. A test drains the listener bus before adding it, so a late job
+   * start from an earlier statement or test, such as one of an inner CTE plan that an earlier
+   * query abandoned, does not enter its assertions.
+   */
   private class JobsByExecutionListener extends SparkListener {
+    private val started = mutable.HashSet.empty[Long]
     private val jobs = mutable.HashMap.empty[Long, mutable.Set[Int]]
+
+    override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
+      case e: SparkListenerSQLExecutionStart => jobs.synchronized { started += e.executionId }
+      case _ =>
+    }
 
     override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
       Option(jobStart.properties)
         .flatMap(p => Option(p.getProperty(SQLExecution.EXECUTION_ID_KEY)))
+        .map(_.toLong)
         .foreach { id =>
           jobs.synchronized {
-            jobs.getOrElseUpdate(id.toLong, mutable.Set.empty[Int]) += jobStart.jobId
+            if (started.contains(id)) {
+              jobs.getOrElseUpdate(id, mutable.Set.empty[Int]) += jobStart.jobId
+            }
           }
         }
     }
@@ -1468,6 +1582,7 @@ class CTEReuseWithAQESuite
         val aqe = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
         val listener = new JobsByExecutionListener
         val sc = spark.sparkContext
+        sc.listenerBus.waitUntilEmpty()
         sc.addSparkListener(listener)
         try {
           assert(df.collect().isEmpty)
@@ -1536,6 +1651,7 @@ class CTEReuseWithAQESuite
         val listener = new JobsByExecutionListener
         val sc = spark.sparkContext
         df.cache()
+        sc.listenerBus.waitUntilEmpty()
         sc.addSparkListener(listener)
         try {
           val cachedAQE = spark.sharedState.cacheManager
@@ -1599,6 +1715,7 @@ class CTEReuseWithAQESuite
         }
       }
       val sc = spark.sparkContext
+      sc.listenerBus.waitUntilEmpty()
       sc.addSparkListener(listener)
       sc.addSparkListener(endListener)
       try {

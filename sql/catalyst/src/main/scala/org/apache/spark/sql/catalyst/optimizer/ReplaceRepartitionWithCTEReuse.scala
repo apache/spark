@@ -28,11 +28,15 @@ import org.apache.spark.sql.internal.SQLConf
  * Converts plan-reuse repartitions into [[CTEReuseRelation]] nodes for guaranteed exchange reuse.
  *
  * By the time this runs, [[ReplaceCTERefWithRepartition]] has turned the references of each
- * `forceSkipInline` definition that a batch query holds two or more copies of, of each
- * definition whose deterministic body equals such a sealed body, and of each definition that the
- * body of such a sealed, unpinned forced definition only selects and that the plan also reads
- * elsewhere, into plan-reuse [[RepartitionByExpression]]s: copies of the lowered body that all
- * carry the same nonzero `repartitionId`. No other rule assigns such ids. This rule seals every id
+ * definition it seals into plan-reuse [[RepartitionByExpression]]s: copies of the lowered body
+ * that all carry the same nonzero `repartitionId`. It seals each `forceSkipInline` definition that
+ * a batch query holds two or more copies of, except the definitions that
+ * `ReplaceCTERefWithRepartition.sealedDefinitions` never seals, such as one with a copy inside the
+ * recursive term of a recursive CTE (see its doc). It also seals, as twins, each definition whose
+ * deterministic body equals such a sealed body, and each definition that the body of such a
+ * sealed, unpinned forced definition only selects and that the plan also reads elsewhere; when
+ * sealing them would leave a twin not sharing the id of a definition sealed on its own, the twins
+ * stay unsealed. No other rule assigns such ids. This rule seals every id
  * that still has two or more copies into [[CTEReuseRelation]]s sharing that id as their `cteId`.
  * With AQE on, the body is then materialized once, by one inner adaptive plan that every reference
  * reads. With AQE off, the copies are deduplicated by exchange reuse, which is best effort: a

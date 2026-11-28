@@ -699,6 +699,60 @@ case class AdaptiveSparkPlanExec(
     }
   }
 
+  /** Whether this is the shared inner plan of a sealed CTE, registered in its context. */
+  private def isSharedCTEPlan: Boolean = context.cteAQERegistry.valuesIterator.exists(_ eq this)
+
+  /**
+   * The failure cleanup of a shared inner CTE plan. The plan lives in its query's adaptive
+   * execution context and shares its stage cache, so another adaptive plan of the context, such
+   * as the query's own plan after a replan dropped every reference to the CTE, can read some of
+   * its exchange stages and still need them. As obsolete-stage cancellation does, this skips a
+   * stage that is materialized or whose result another adaptive plan of the context reuses, and
+   * cancels every other stage under a cancellation reservation, removing it from the stage cache
+   * so that no plan reuses the cancelled stage. A plan that tries to reuse it meanwhile waits for
+   * the reservation and then plans a stage of its own.
+   */
+  private def cancelUnsharedStagesOfFailedCTEPlan(earlyFailedStage: Option[Int]): Unit = {
+    val stagesByResult = mutable.LinkedHashMap.empty[
+      AtomicReference[Option[Any]], ExchangeQueryStageExec]
+    currentPhysicalPlan.foreach {
+      // As in the general cleanup, the stage that failed before calling doMaterialize is not
+      // cancelled, so that its failure is not triggered again.
+      case s: ExchangeQueryStageExec if !earlyFailedStage.contains(s.id) =>
+        stagesByResult.getOrElseUpdate(s.resultOption, s)
+      case _ =>
+    }
+    def isUnshared(stage: ExchangeQueryStageExec): Boolean =
+      !stage.isMaterialized && !context.isSharedStageResult(stage.resultOption)
+    stagesByResult.values.foreach { stage =>
+      val reservation = context.withStageLifecycleLock {
+        if (isUnshared(stage)) context.reserveStageCancellation(stage.resultOption) else None
+      }
+      reservation.foreach { cancellation =>
+        try {
+          withShuffleCancellationLock(stage) {
+            if (context.withStageLifecycleLock(isUnshared(stage))) {
+              try {
+                stage.cancel("The shared CTE plan that created this query stage has failed.")
+                context.withStageLifecycleLock {
+                  removeStageFromCache(stage)
+                }
+              } catch {
+                case NonFatal(t) =>
+                  logError(log"Exception in cancelling query stage: " +
+                    log"${MDC(QUERY_PLAN, stage.treeString)}", t)
+              }
+            }
+          }
+        } finally {
+          context.withStageLifecycleLock {
+            context.finishStageCancellation(stage.resultOption, cancellation)
+          }
+        }
+      }
+    }
+  }
+
   /** Serialize shuffle eligibility and cancellation with the exchange's job submission. */
   private def withShuffleCancellationLock[T](
       stage: ExchangeQueryStageExec)(body: => T): T = stage match {
@@ -1368,23 +1422,29 @@ case class AdaptiveSparkPlanExec(
 
   /**
    * Cancel all running stages with best effort and throw an Exception containing all stage
-   * materialization errors and stage cancellation errors.
+   * materialization errors and stage cancellation errors. A shared inner CTE plan cancels only
+   * the stages that no other adaptive plan of its context reads (see
+   * [[cancelUnsharedStagesOfFailedCTEPlan]]).
    */
   private def cleanUpAndThrowException(
        errors: Seq[Throwable],
        earlyFailedStage: Option[Int]): Unit = {
-    currentPhysicalPlan.foreach {
-      // earlyFailedStage is the stage which failed before calling doMaterialize,
-      // so we should avoid calling cancel on it to re-trigger the failure again.
-      case s: ExchangeQueryStageExec if !earlyFailedStage.contains(s.id) =>
-        try {
-          s.cancel("The corresponding SQL query has failed.")
-        } catch {
-          case NonFatal(t) =>
-            logError(log"Exception in cancelling query stage: " +
-              log"${MDC(QUERY_PLAN, s.treeString)}", t)
-        }
-      case _ =>
+    if (isSharedCTEPlan) {
+      cancelUnsharedStagesOfFailedCTEPlan(earlyFailedStage)
+    } else {
+      currentPhysicalPlan.foreach {
+        // earlyFailedStage is the stage which failed before calling doMaterialize,
+        // so we should avoid calling cancel on it to re-trigger the failure again.
+        case s: ExchangeQueryStageExec if !earlyFailedStage.contains(s.id) =>
+          try {
+            s.cancel("The corresponding SQL query has failed.")
+          } catch {
+            case NonFatal(t) =>
+              logError(log"Exception in cancelling query stage: " +
+                log"${MDC(QUERY_PLAN, s.treeString)}", t)
+          }
+        case _ =>
+      }
     }
     // Respect SparkFatalException which can be thrown by BroadcastExchangeExec
     val originalErrors = errors.map {

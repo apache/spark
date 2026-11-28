@@ -369,10 +369,14 @@ class SQLAppStatusListener(
     val SparkListenerSQLAdaptiveSQLMetricUpdates(executionId, sqlPlanMetrics) = event
 
     // An adaptive plan that outlives its execution, such as a shared inner CTE plan that its query
-    // dropped or abandoned, can post this after the execution ended.
-    val exec = getOrRestoreExecution(executionId)
-    exec.addMetrics(sqlPlanMetrics)
-    update(exec)
+    // dropped or abandoned, can post this after the execution ended. The execution's start event
+    // precedes every update on the listener bus, so an execution with neither a live entry nor a
+    // stored record has ended and had its record removed, for example by the retained-executions
+    // cleanup: drop the update instead of creating a blank running entry that nothing ends.
+    liveOrRestoredExecution(executionId).foreach { exec =>
+      exec.addMetrics(sqlPlanMetrics)
+      update(exec)
+    }
   }
 
   private def onExecutionEnd(event: SparkListenerSQLExecutionEnd): Unit = {
@@ -427,13 +431,21 @@ class SQLAppStatusListener(
   }
 
   /**
+   * The live entry of `executionId`, or a new one when the listener has neither a live entry nor
+   * a stored record for it (see `liveOrRestoredExecution`).
+   */
+  private def getOrRestoreExecution(executionId: Long): LiveExecutionData = {
+    liveOrRestoredExecution(executionId).getOrElse(getOrCreateExecution(executionId))
+  }
+
+  /**
    * The live entry of `executionId`. When the execution has already ended and is no longer live,
    * the entry is rebuilt from its stored record with all of its end events counted, so that a
    * late event does not overwrite that record with a blank running entry: the next `update`
    * writes the record back and stops tracking the execution again, unless the event added a job.
-   * A new entry is created only when nothing is stored.
+   * None when nothing is stored either.
    */
-  private def getOrRestoreExecution(executionId: Long): LiveExecutionData = {
+  private def liveOrRestoredExecution(executionId: Long): Option[LiveExecutionData] = {
     Option(liveExecutions.get(executionId))
       .orElse {
         try {
@@ -460,7 +472,7 @@ class SQLAppStatusListener(
         } catch {
           case _: NoSuchElementException => None
         }
-      }.getOrElse(getOrCreateExecution(executionId))
+      }
   }
 
   private def update(exec: LiveExecutionData, force: Boolean = false): Unit = {
