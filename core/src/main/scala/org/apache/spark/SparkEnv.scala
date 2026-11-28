@@ -291,6 +291,13 @@ class SparkEnv (
     }
     if (shouldStop) {
       pythonWorkers.values.foreach(_.stop())
+      // After the factories, whose workers import from it, have stopped.
+      try {
+        PythonWorkerFactory.clearGlobalPythonModulesDirectory()
+      } catch {
+        case e: Exception =>
+          logWarning("Exception while deleting the copies of the application's Python modules", e)
+      }
       udfDispatcherManager.foreach(_.close())
       mapOutputTracker.stop()
       _streamingShuffleOutputTracker.foreach(_.stop())

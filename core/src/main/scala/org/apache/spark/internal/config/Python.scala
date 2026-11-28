@@ -70,6 +70,31 @@ private[spark] object Python {
     .booleanConf
     .createWithDefault(false)
 
+  val PYTHON_ISOLATED_SESSION_GLOBAL_PY_FILES_ENABLED =
+    ConfigBuilder("spark.python.isolatedSession.globalPyFiles.enabled")
+      .internal()
+      .doc("When true, the Python workers that run in the folder of a session with artifact " +
+        "isolation, such as those of Python UDFs, UDTFs and data sources in a Spark Connect " +
+        "session, can also import the Python files that the application was started with " +
+        "(--py-files or spark.submit.pyFiles): the modules and the .zip, .egg and .jar " +
+        "archives among them that have a copy in the default files directory. spark-submit " +
+        "makes these copies in client mode outside YARN, and PySpark does when it starts the " +
+        "driver; a JVM driver on YARN in client mode and an application in standalone cluster " +
+        "deploy mode get none. The workers add these files when they set up a task, and the " +
+        "session's own files still come first. The archives include the jars that --packages " +
+        "resolves for applications such as the Spark Connect server, and each of these workers " +
+        "reads the index of every listed archive, so large archives make its first tasks " +
+        "slower and use memory. Set to false when starting the application to avoid this and " +
+        "to restore the previous behavior, where these workers can only import the session's " +
+        "own Python files, except on YARN's application master and executors, which YARN " +
+        "gives these files on their PYTHONPATH. Workers started without the session's " +
+        "artifact state, such as the Spark Connect foreachBatch and streaming listener " +
+        "workers, keep their previous path.")
+      .version("4.5.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val PYTHON_UNIX_DOMAIN_SOCKET_ENABLED = ConfigBuilder("spark.python.unix.domain.socket.enabled")
     .doc("When set to true, the Python driver uses a Unix domain socket for operations like " +
       "creating or collecting a DataFrame from local data, using accumulators, and executing " +

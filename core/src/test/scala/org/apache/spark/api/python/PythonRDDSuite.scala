@@ -21,6 +21,7 @@ import java.io.{ByteArrayOutputStream, DataOutputStream, File}
 import java.net.{InetAddress, InetSocketAddress}
 import java.nio.channels.SocketChannel
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.util
 
 import scala.annotation.tailrec
@@ -53,6 +54,21 @@ class PythonRDDSuite extends SparkFunSuite with LocalSparkContext {
       Utils.deleteRecursively(tempDir)
     } finally {
       super.afterAll()
+    }
+  }
+
+  test("SPARK-62000: Stopping a SparkContext deletes the copies of the application's modules") {
+    sc = new SparkContext("local", "test")
+    val dir = Utils.createTempDir()
+    try {
+      val module = new File(dir, "stop_module.py")
+      Files.writeString(module.toPath, "value = 'stop'")
+      val copies = PythonWorkerFactory.globalPythonModulesDirectory(sc.getConf, Seq(module))
+      assert(new File(copies, module.getName).isFile)
+      sc.stop()
+      assert(!copies.exists())
+    } finally {
+      Utils.deleteRecursively(dir)
     }
   }
 
