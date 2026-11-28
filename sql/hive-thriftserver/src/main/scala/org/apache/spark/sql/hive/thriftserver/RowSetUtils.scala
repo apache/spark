@@ -66,6 +66,53 @@ object RowSetUtils {
     new TRowSet(startRowOffSet, tRows)
   }
 
+  // Dense `Int` codes for the per-column dispatch in `toColumnBasedSet`, resolved from `DataType`
+  // once per column up front. Dispatching on one of these inside the single pass over all rows
+  // compiles to a `tableswitch`, avoiding a virtual call through a column-type-specific writer:
+  // with as few as 3 distinct column types in the schema (e.g. Int/Double/String round-robin),
+  // that call site becomes megamorphic and the JIT can no longer inline or speculate on it, which
+  // benchmarking showed can make a polymorphic-writer design slower than not doing a single pass
+  // at all for moderately-sized pages (tens of thousands of rows).
+  private final val KIND_BOOLEAN = 0
+  private final val KIND_BYTE = 1
+  private final val KIND_SHORT = 2
+  private final val KIND_INT = 3
+  private final val KIND_LONG = 4
+  private final val KIND_FLOAT = 5
+  private final val KIND_DOUBLE = 6
+  private final val KIND_STRING = 7
+  private final val KIND_BINARY = 8
+  // Fallback for types with no fixed-width Thrift column representation (CHAR, VARCHAR,
+  // non-default-collation strings, geospatial types, etc.), rendered with `toHiveString`.
+  private final val KIND_HIVE_STRING = 9
+
+  // Boxed singletons for null-cell filler values, so that a run of nulls in a column doesn't
+  // allocate a fresh wrapper per cell (java.lang.Double has no small-value cache the way
+  // java.lang.Integer/Long do, and a fresh empty ByteBuffer would otherwise be allocated per null
+  // binary cell).
+  private val DEFAULT_DOUBLE: java.lang.Double = java.lang.Double.valueOf(0.0)
+  private val EMPTY_BYTE_BUFFER: ByteBuffer = ByteBuffer.wrap(Array.empty[Byte])
+
+  private def kindOf(typ: DataType): Int = typ match {
+    case BooleanType => KIND_BOOLEAN
+    case ByteType => KIND_BYTE
+    case ShortType => KIND_SHORT
+    case IntegerType => KIND_INT
+    case LongType => KIND_LONG
+    case FloatType => KIND_FLOAT
+    case DoubleType => KIND_DOUBLE
+    case StringType => KIND_STRING
+    case BinaryType => KIND_BINARY
+    case _ => KIND_HIVE_STRING
+  }
+
+  // Cast back from the Any-typed buffer `toColumnBasedSet` accumulates into to the concrete
+  // element type a Thrift T*Column constructor expects. Safe because `colValues(i)` is only ever
+  // populated by the branch matching `kinds(i)`, which always adds the same boxed type for a
+  // given kind.
+  private def asList[T](values: java.util.ArrayList[Any]): java.util.List[T] =
+    values.asInstanceOf[java.util.List[T]]
+
   private def toColumnBasedSet(
       startRowOffSet: Long,
       rows: Seq[Row],
@@ -73,115 +120,106 @@ object RowSetUtils {
       timeFormatters: TimeFormatters,
       binaryFormatter: BinaryFormatter): TRowSet = {
     val rowSize = rows.length
-    val tRowSet = new TRowSet(startRowOffSet, new java.util.ArrayList[TRow](rowSize))
-    var i = 0
     val columnSize = schema.length
-    val columns = new java.util.ArrayList[TColumn](columnSize)
-    while (i < columnSize) {
-      columns.add(i, toTColumn(rows, i, schema(i), timeFormatters, binaryFormatter))
-      i += 1
+
+    val kinds = schema.map(kindOf)
+    // Only meaningful for KIND_HIVE_STRING columns. `nested` was historically set to true for all
+    // types by default, but ideally it should be false in general. This was never a problem
+    // because other types that reach this branch do not use the `nested` flag in `toHiveString`.
+    // Now, Geospatial types use it for wrapping EWKT in quotes when nested = true, so we need to
+    // set `nested` here to false to avoid spurious quotes for standalone geo values. String types
+    // need the same treatment: the fast path in `kindOf` matches only the default-collation
+    // StringType singleton, so CHAR, VARCHAR and collated strings land here and would otherwise be
+    // rendered as "value" instead of value.
+    val hiveStringNested = schema.map {
+      case _: GeometryType | _: GeographyType => false
+      case _: StringType => false
+      case _ => true
     }
+    val defaultVals = kinds.map {
+      case KIND_BOOLEAN => java.lang.Boolean.TRUE
+      case KIND_BYTE => java.lang.Byte.valueOf(0.toByte)
+      case KIND_SHORT => java.lang.Short.valueOf(0.toShort)
+      case KIND_INT => java.lang.Integer.valueOf(0)
+      case KIND_LONG => java.lang.Long.valueOf(0L)
+      case KIND_FLOAT | KIND_DOUBLE => DEFAULT_DOUBLE
+      case KIND_STRING | KIND_HIVE_STRING => ""
+      case KIND_BINARY => EMPTY_BYTE_BUFFER
+    }
+    // Thrift's T*Column constructors all take a java.util.List, so one Any-typed ArrayList per
+    // column (cast back to its concrete element type via `asList` when building the TColumn below)
+    // does the same job as a separate Array[ArrayList[_]] per kind, without the bookkeeping of nine
+    // mostly-empty arrays. Column-level setup here is O(columnSize), unlike the O(rowSize) work
+    // below, so it doesn't need to be folded into a single pass.
+    val colValues = Array.fill(columnSize)(new java.util.ArrayList[Any](rowSize))
+    // Unlike colValues, not pre-sized to rowSize: colValues always ends up fully populated, but
+    // most columns have few or no nulls in practice, and BitSet's backing long[] only grows (by
+    // doubling) the first time `set` actually needs a bit beyond its current capacity. Pre-sizing
+    // to rowSize would pay for a rowSize-bit array on every column up front, even ones that never
+    // call `set` at all.
+    val nulls = Array.fill(columnSize)(new java.util.BitSet())
+
+    // Plain while/Iterator rather than `rows.foreach`: `rowIndex` is a var mutated from inside the
+    // loop body, so a closure capturing it would force the compiler to box it into a heap-allocated
+    // `IntRef` and add a `Function1` dispatch per row; up to a million rows, that's a million extra
+    // indirections on the one loop in this method that actually scales with row count.
+    var rowIndex = 0
+    val rowIter = rows.iterator
+    while (rowIter.hasNext) {
+      val row = rowIter.next()
+      var col = 0
+      while (col < columnSize) {
+        val v = row.get(col)
+        val value = if (v == null) {
+          // BitSet bits already default to false; only touch a bit when it needs to become true.
+          // `set(idx, false)` on an untouched BitSet is a cheap no-op, but once any bit in the same
+          // word has been set, `set(idx, false)` degrades to a clear() that also rescans backward
+          // for the new highest in-use word, so unconditionally calling it on every non-null cell
+          // can turn into O(rowSize) work per call for columns that do contain nulls.
+          nulls(col).set(rowIndex)
+          defaultVals(col)
+        } else {
+          kinds(col) match {
+            case KIND_FLOAT =>
+              // Floats are converted to doubles during thrift transportation. Passing float to
+              // Double.valueOf directly causes precision loss, e.g. Double.valueOf(0.1f) is
+              // 0.10000000149011612, so go through toString first, e.g. 0.1f.toString is "0.1".
+              java.lang.Double.valueOf(v.toString)
+            case KIND_BINARY =>
+              ByteBuffer.wrap(v.asInstanceOf[Array[Byte]])
+            case KIND_HIVE_STRING =>
+              toHiveString(
+                (v, schema(col)), hiveStringNested(col), timeFormatters, binaryFormatter)
+            case _ =>
+              v
+          }
+        }
+        colValues(col).add(value)
+        col += 1
+      }
+      rowIndex += 1
+    }
+
+    // Also O(columnSize), so built declaratively like `toRowBasedSet` above rather than with an
+    // explicit accumulator loop.
+    val columns = (0 until columnSize).map { i =>
+      val values = colValues(i)
+      kinds(i) match {
+        case KIND_BOOLEAN => TColumn.boolVal(new TBoolColumn(asList(values), nulls(i)))
+        case KIND_BYTE => TColumn.byteVal(new TByteColumn(asList(values), nulls(i)))
+        case KIND_SHORT => TColumn.i16Val(new TI16Column(asList(values), nulls(i)))
+        case KIND_INT => TColumn.i32Val(new TI32Column(asList(values), nulls(i)))
+        case KIND_LONG => TColumn.i64Val(new TI64Column(asList(values), nulls(i)))
+        case KIND_FLOAT | KIND_DOUBLE =>
+          TColumn.doubleVal(new TDoubleColumn(asList(values), nulls(i)))
+        case KIND_STRING | KIND_HIVE_STRING =>
+          TColumn.stringVal(new TStringColumn(asList(values), nulls(i)))
+        case KIND_BINARY => TColumn.binaryVal(new TBinaryColumn(asList(values), nulls(i)))
+      }
+    }.asJava
+    val tRowSet = new TRowSet(startRowOffSet, new java.util.ArrayList[TRow]())
     tRowSet.setColumns(columns)
     tRowSet
-  }
-
-  private def toTColumn(
-      rows: Seq[Row],
-      ordinal: Int,
-      typ: DataType,
-      timeFormatters: TimeFormatters,
-      binaryFormatter: BinaryFormatter): TColumn = {
-    val nulls = new java.util.BitSet()
-    typ match {
-      case BooleanType =>
-        val values = getOrSetAsNull[java.lang.Boolean](rows, ordinal, nulls, true)
-        TColumn.boolVal(new TBoolColumn(values, nulls))
-
-      case ByteType =>
-        val values = getOrSetAsNull[java.lang.Byte](rows, ordinal, nulls, 0.toByte)
-        TColumn.byteVal(new TByteColumn(values, nulls))
-
-      case ShortType =>
-        val values = getOrSetAsNull[java.lang.Short](rows, ordinal, nulls, 0.toShort)
-        TColumn.i16Val(new TI16Column(values, nulls))
-
-      case IntegerType =>
-        val values = getOrSetAsNull[java.lang.Integer](rows, ordinal, nulls, 0)
-        TColumn.i32Val(new TI32Column(values, nulls))
-
-      case LongType =>
-        val values = getOrSetAsNull[java.lang.Long](rows, ordinal, nulls, 0L)
-        TColumn.i64Val(new TI64Column(values, nulls))
-
-      case FloatType =>
-        val values = getOrSetAsNull[java.lang.Float](rows, ordinal, nulls, 0.toFloat)
-          .asScala.map(n => java.lang.Double.valueOf(n.toString)).asJava
-        TColumn.doubleVal(new TDoubleColumn(values, nulls))
-
-      case DoubleType =>
-        val values = getOrSetAsNull[java.lang.Double](rows, ordinal, nulls, 0.toDouble)
-        TColumn.doubleVal(new TDoubleColumn(values, nulls))
-
-      case StringType =>
-        val values = getOrSetAsNull[java.lang.String](rows, ordinal, nulls, "")
-        TColumn.stringVal(new TStringColumn(values, nulls))
-
-      case BinaryType =>
-        val values = getOrSetAsNull[Array[Byte]](rows, ordinal, nulls, Array.empty[Byte])
-          .asScala
-          .map(ByteBuffer.wrap)
-          .asJava
-        TColumn.binaryVal(new TBinaryColumn(values, nulls))
-
-      case _ =>
-        var i = 0
-        val rowSize = rows.length
-        val values = new java.util.ArrayList[String](rowSize)
-        rows.foreach { row =>
-          nulls.set(i, row.isNullAt(ordinal))
-          val value = if (row.isNullAt(ordinal)) {
-            ""
-          } else {
-            // In this code path, `nested` was historically set to true for all types by default,
-            // but ideally it should be false in general. This was never a problem because other
-            // types that reach this branch do not use the `nested` flag in `toHiveString`. Now,
-            // Geospatial types use it for wrapping EWKT in quotes when nested = true, so we need
-            // to set `nested` here to false to avoid spurious quotes for standalone geo values.
-            // String types need the same treatment: the fast path above matches only the
-            // default-collation StringType singleton, so CHAR/VARCHAR and collated strings land
-            // here and would otherwise be rendered as "value" instead of value.
-            val nested = typ match {
-              case _: GeometryType | _: GeographyType => false
-              case _: StringType => false
-              case _ => true
-            }
-            toHiveString((row.get(ordinal), typ), nested, timeFormatters, binaryFormatter)
-          }
-          values.add(value)
-          i += 1
-        }
-        TColumn.stringVal(new TStringColumn(values, nulls))
-    }
-  }
-
-  private def getOrSetAsNull[T](
-      rows: Seq[Row],
-      ordinal: Int,
-      nulls: java.util.BitSet,
-      defaultVal: T): java.util.List[T] = {
-    val size = rows.length
-    val ret = new java.util.ArrayList[T](size)
-    var idx = 0
-    rows.foreach { row =>
-      if (row.isNullAt(ordinal)) {
-        nulls.set(idx, true)
-        ret.add(idx, defaultVal)
-      } else {
-        ret.add(idx, row.getAs[T](ordinal))
-      }
-      idx += 1
-    }
-    ret
   }
 
   private def toTColumnValue(

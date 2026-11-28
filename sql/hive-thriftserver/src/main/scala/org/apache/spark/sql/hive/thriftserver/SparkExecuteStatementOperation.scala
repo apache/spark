@@ -100,7 +100,7 @@ private[hive] class SparkExecuteStatementOperation(
   private def getNextRowSetInternal(
       order: FetchOrientation,
       maxRowsL: Long): TRowSet = withLocalProperties {
-    log.debug(s"Received getNextRowSet request order=${order} and maxRowsL=${maxRowsL} " +
+    logDebug(s"Received getNextRowSet request order=${order} and maxRowsL=${maxRowsL} " +
       s"with ${statementId}")
     validateDefaultFetchOrientation(order)
     assertState(OperationState.FINISHED)
@@ -116,7 +116,7 @@ private[hive] class SparkExecuteStatementOperation(
     val maxRows = maxRowsL.toInt
     val offset = iter.getPosition
     val rows = iter.take(maxRows).toList
-    log.debug(s"Returning result set with ${rows.length} rows from offsets " +
+    logDebug(s"Returning result set with ${rows.length} rows from offsets " +
       s"[${iter.getFetchStart}, ${iter.getPosition}) with $statementId")
     RowSetUtils.toTRowSet(offset, rows, dataTypes, getProtocolVersion)
   }
