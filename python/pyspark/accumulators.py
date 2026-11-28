@@ -335,6 +335,7 @@ class UpdateRequestHandler(socketserver.StreamRequestHandler):
 
 
 class AccumulatorTCPServer(socketserver.TCPServer):
+    server_address: Tuple[str, int]
     server_shutdown = False
 
     def __init__(
