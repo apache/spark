@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StatefulProcessor, TimeMode, TimerValues}
-import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder, StructType}
+import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, MetadataBuilder, StructType, TimestampType}
 
 /** A dummy command for testing unsupported operations. */
 case class DummyCommand() extends LeafCommand
@@ -868,6 +868,25 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     "window",
     Window(Nil, Nil, Nil, _),
     condition = "NON_TIME_WINDOW_NOT_SUPPORTED_IN_STREAMING")
+
+  // BinBy: supported, it keeps no state across rows
+  {
+    val rangeStart = AttributeReference("ts_start", TimestampType)()
+    val rangeEnd = AttributeReference("ts_end", TimestampType)()
+    val value = AttributeReference("value", DoubleType)()
+    assertSupportedInStreamingPlan(
+      "bin by with stream relation",
+      TestStreamingRelation(Seq(rangeStart, rangeEnd, value)).binBy(
+        rangeStart = rangeStart,
+        rangeEnd = rangeEnd,
+        distributeColumns = Seq(value),
+        scaledDistributeColumns = Seq(value.newInstance()),
+        appendedAttributes = Seq(
+          AttributeReference("bin_start", TimestampType)(),
+          AttributeReference("bin_end", TimestampType)(),
+          AttributeReference("bin_distribute_ratio", DoubleType)())),
+      Append)
+  }
 
   // Output modes with aggregation and non-aggregation plans
   testOutputMode(Append, shouldSupportAggregation = false, shouldSupportNonAggregation = true)
