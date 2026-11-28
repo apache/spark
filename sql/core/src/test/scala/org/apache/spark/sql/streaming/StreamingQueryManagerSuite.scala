@@ -31,15 +31,17 @@ import org.scalatest.time.Span
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, Dataset, Encoders}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoders, Row}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Project}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2ScanRelation
 import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetMap, OffsetSeq, OffsetSeqLog,
   OffsetSeqMetadata, OffsetSeqMetadataV2}
 import org.apache.spark.sql.execution.streaming.runtime._
-import org.apache.spark.sql.functions.udf
+import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.BlockingSource
+import org.apache.spark.sql.types.{CharType, Metadata}
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
 
@@ -167,6 +169,81 @@ class StreamingQueryManagerSuite extends StreamTest {
           "Except on a streaming DataFrame/Dataset on the left is not supported"))
         assert(spark.conf.get(SQLConf.ALLOW_EXCEPT_ON_STREAMING_DATAFRAME))
       }
+    }
+  }
+
+  test("SPARK-61972: a restored streaming query keeps the CHAR padding of its set operations") {
+    val key = SQLConf.LEGACY_NO_CHAR_WIDENING_IN_SET_OPERATIONS.key
+    def charColumn(input: MemoryStream[String], length: Int): DataFrame = input.toDF()
+      .select(col("value").as("c", CharVarcharUtils.withRawType(Metadata.empty, CharType(length))))
+    // Adds a value to `input` and returns the rows of the batch of a query with an aggregation.
+    def run(result: => DataFrame, input: MemoryStream[String], checkpoint: File): Seq[Row] = {
+      val output = ArrayBuffer.empty[Row]
+      val query = result.writeStream
+        .outputMode("update")
+        .foreachBatch { (batch: DataFrame, _: Long) =>
+          output ++= batch.collect()
+          ()
+        }
+        .option("checkpointLocation", checkpoint.getCanonicalPath)
+        .start()
+      try {
+        input.addData("b")
+        query.processAllAvailable()
+      } finally {
+        query.stop()
+      }
+      output.toSeq
+    }
+    val padded = "b" + " ".repeat(4)
+
+    // A query written as one SQL statement is analyzed again with the value of the checkpoint,
+    // which for a checkpoint that predates the flag is true.
+    withTempDir { checkpoint =>
+      withTempView("s3", "s5") {
+        val in3 = MemoryStream[String]
+        val in5 = MemoryStream[String]
+        charColumn(in3, 3).createOrReplaceTempView("s3")
+        charColumn(in5, 5).createOrReplaceTempView("s5")
+        def result: DataFrame = spark.sql("SELECT c, count(*) FROM " +
+          "(SELECT c FROM s3 UNION ALL SELECT c FROM s5) GROUP BY c")
+        withSQLConf(key -> "true") {
+          assert(run(result, in3, checkpoint) === Seq(Row("b", 1)))
+        }
+        rewriteOffsetLogConf(checkpoint)(_ - key)
+        assert(run(result, in3, checkpoint) === Seq(Row("b", 2)))
+      }
+    }
+
+    // A Classic DataFrame is analyzed when it is built, so the query fails to start.
+    withTempDir { checkpoint =>
+      val in3 = MemoryStream[String]
+      val in5 = MemoryStream[String]
+      def result: DataFrame = charColumn(in3, 3).union(charColumn(in5, 5)).groupBy("c").count()
+      withSQLConf(key -> "true") {
+        assert(run(result, in3, checkpoint) === Seq(Row("b", 1)))
+      }
+      rewriteOffsetLogConf(checkpoint)(_ - key)
+      checkError(
+        exception = intercept[AnalysisException](run(result, in3, checkpoint)),
+        condition = "STREAMING_SET_OPERATION_CHAR_PADDING_CHANGED",
+        parameters = Map("config" -> ("\"" + key + "\""), "recordedValue" -> "\"true\""))
+      withSQLConf(key -> "true") {
+        assert(run(result, in3, checkpoint) === Seq(Row("b", 2)))
+      }
+    }
+
+    // A query started with the padding records it, and keeps it when it is restarted.
+    withTempDir { checkpoint =>
+      val in3 = MemoryStream[String]
+      val in5 = MemoryStream[String]
+      def result: DataFrame = charColumn(in3, 3).union(charColumn(in5, 5)).groupBy("c").count()
+      assert(run(result, in3, checkpoint) === Seq(Row(padded, 1)))
+      val offsetLog = new OffsetSeqLog(spark, new File(checkpoint, "offsets").getCanonicalPath)
+      val metadata = offsetLog.getLatest().get._2.metadataOpt.get
+      assert(OffsetSeqMetadata.readValue(
+        metadata, SQLConf.LEGACY_NO_CHAR_WIDENING_IN_SET_OPERATIONS) === "false")
+      assert(run(result, in3, checkpoint) === Seq(Row(padded, 2)))
     }
   }
 

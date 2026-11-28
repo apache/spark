@@ -22,10 +22,11 @@ import scala.collection.mutable
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.{EmptyRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.SetOperationCharPadding
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, ExpressionWithRandomSeed, InterpretedMutableProjection, Literal}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation.hasUnevaluableExpr
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, LocalRelation, LogicalPlan, OneRowRelation, Project, Union, UnionLoopRef}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, LocalRelation, LogicalPlan, OneRowRelation, Project, SetOperation, Union, UnionLoopRef}
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.execution.LogicalRDD.rewriteStatsAndConstraints
 import org.apache.spark.sql.execution.metric.SQLMetrics
@@ -100,6 +101,20 @@ case class UnionLoopExec(
     conf.getConf(SQLConf.CTE_RECURSION_ANCHOR_ROWS_LIMIT_TO_CONVERT_TO_LOCAL_RELATION)
 
   /**
+   * Marks the set operations of a plan built from the optimized anchor or recursive term, which
+   * the query's analysis padded already, so that they are not padded again when it is analyzed,
+   * see SetOperationCharPadding.
+   */
+  private def skipCharPadding(plan: LogicalPlan): LogicalPlan = {
+    plan.foreachWithSubqueries {
+      case s @ (_: Union | _: SetOperation) =>
+        s.setTagValue(SetOperationCharPadding.SKIP_CHAR_PADDING, ())
+      case _ =>
+    }
+    plan
+  }
+
+  /**
    * This function executes the plan (optionally with appended limit node) and caches the result,
    * with the caching mode specified in config.
    */
@@ -111,7 +126,7 @@ case class UnionLoopExec(
     } else {
       plan
     }
-    val df = Dataset.ofRows(session, planWithLimit)
+    val df = Dataset.ofRows(session, skipCharPadding(planWithLimit))
 
     df.queryExecution.optimizedPlan match {
       case l: LocalRelation =>
@@ -281,7 +296,7 @@ case class UnionLoopExec(
         if (unionChildren.length == 1) {
           Dataset.ofRows(session, unionChildren.head)
         } else {
-          Dataset.ofRows(session, Union(unionChildren.toSeq))
+          Dataset.ofRows(session, skipCharPadding(Union(unionChildren.toSeq)))
         }
       }
       val coalescedDF = df.coalesce(numPartitions)

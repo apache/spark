@@ -90,6 +90,20 @@ public class CharVarcharCodegenUtils {
   }
 
   /**
+   * Narrows a value of a longer CHAR type to the given CHAR length by removing the trailing spaces
+   * past it, and pads shorter values. Like {@link #readSidePadding}, it keeps values that have
+   * other characters past the length instead of failing or truncating them.
+   */
+  public static UTF8String charTypeNarrowing(UTF8String inputStr, int limit) {
+    int numChars = inputStr.numChars();
+    if (numChars <= limit) {
+      return readSidePadding(inputStr, limit);
+    }
+    UTF8String trimmed = inputStr.trimTrailingSpaces(numChars - limit);
+    return trimmed.numChars() == limit ? trimmed : inputStr;
+  }
+
+  /**
    * Read-side CHAR check under standard semantics: pad to limit, or trim trailing
    * spaces then error if still longer than limit.
    *

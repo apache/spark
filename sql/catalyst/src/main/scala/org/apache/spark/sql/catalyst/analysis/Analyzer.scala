@@ -649,7 +649,8 @@ class Analyzer(
     }
   }
 
-  override def execute(plan: LogicalPlan): LogicalPlan = {
+  // Every run of the analyzer is part of the analysis phase, see AnalysisHelper.isInAnalyzer.
+  override def execute(plan: LogicalPlan): LogicalPlan = AnalysisHelper.markInAnalyzer {
     AnalysisContext.withNewAnalysisContext {
       val analyzed = if (AnalysisContext.definesView(plan)) {
         AnalysisContext.withViewDefinition(executeSameContext(plan))
@@ -955,6 +956,9 @@ class Analyzer(
       BindParameters ::
       typeCoercionRules() ++
       Seq(
+        // After WidenSetOperationTypes, and not part of the type coercion rules, which also run on
+        // optimized plans.
+        PadSetOperationCharLengths,
         ResolveStockJsonConstructors,
         ResolveWithCTE,
         ExtractDistributedSequenceID,
@@ -1789,7 +1793,9 @@ class Analyzer(
           if (u.allChildrenCompatible &&
           conf.getConf(SQLConf.ENFORCE_TYPE_COERCION_BEFORE_UNION_DEDUPLICATION)) &&
           children.exists(c => c.output.map(_.exprId).distinct.length < c.output.length) =>
-        DeduplicateUnionChildOutput.deduplicateOutputPerChild(u)
+        // Nothing above the union is resolved yet, so its output needs no mapping.
+        SetOperationCharPadding.padResolved(
+          DeduplicateUnionChildOutput.deduplicateOutputPerChild(u))._1
 
       // A special case for Generate, because the output of Generate should not be resolved by
       // ResolveReferences. Attributes in the output will be resolved by ResolveGenerate.

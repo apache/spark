@@ -47,7 +47,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{
 }
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
-import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.errors.DataTypeErrors.cannotMergeIncompatibleDataTypesError
 import org.apache.spark.sql.types.DataType
@@ -192,7 +192,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
       plan resolveOperatorsUpWithNewOutput {
         case s @ Except(left, right, isAll)
             if s.childrenResolved &&
-            left.output.length == right.output.length && !s.resolved =>
+            left.output.length == right.output.length && !s.resolvedExceptCharLengths =>
           val newChildren: Seq[LogicalPlan] = withOrigin(s.origin) {
             buildNewChildrenWithWiderTypes(left :: right :: Nil)
           }
@@ -201,12 +201,13 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
           } else {
             assert(newChildren.length == 2)
             val attrMapping = left.output.zip(newChildren.head.output)
-            Except(newChildren.head, newChildren.last, isAll) -> attrMapping
+            SetOperationCharPadding.padResolved(
+              Except(newChildren.head, newChildren.last, isAll), attrMapping)
           }
 
         case s @ Intersect(left, right, isAll)
             if s.childrenResolved &&
-            left.output.length == right.output.length && !s.resolved =>
+            left.output.length == right.output.length && !s.resolvedExceptCharLengths =>
           val newChildren: Seq[LogicalPlan] = withOrigin(s.origin) {
             buildNewChildrenWithWiderTypes(left :: right :: Nil)
           }
@@ -215,12 +216,14 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
           } else {
             assert(newChildren.length == 2)
             val attrMapping = left.output.zip(newChildren.head.output)
-            Intersect(newChildren.head, newChildren.last, isAll) -> attrMapping
+            SetOperationCharPadding.padResolved(
+              Intersect(newChildren.head, newChildren.last, isAll), attrMapping)
           }
 
         case s: Union
             if s.childrenResolved && !s.byName &&
-            s.children.forall(_.output.length == s.children.head.output.length) && !s.resolved =>
+            s.children.forall(_.output.length == s.children.head.output.length) &&
+            !s.resolvedExceptCharLengths =>
           val newChildren: Seq[LogicalPlan] = withOrigin(s.origin) {
             buildNewChildrenWithWiderTypes(s.children)
           }
@@ -228,8 +231,13 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
             s -> Nil
           } else {
             val attrMapping = s.children.head.output.zip(newChildren.head.output)
-            s.copy(children = newChildren) -> attrMapping
+            SetOperationCharPadding.padResolved(s.copy(children = newChildren), attrMapping)
           }
+
+        // Pads a set operation that needs no widening in the same traversal, so that a parent
+        // that needs widening is widened in it too, see SetOperationCharPadding.
+        case s @ (_: Union | _: Intersect | _: Except) if s.childrenResolved =>
+          SetOperationCharPadding.padResolved(s)
 
         case s: UnionLoop
             if s.childrenResolved && s.anchor.output.length == s.recursion.output.length
@@ -244,7 +252,8 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
               val widerType = findWiderTypeForTwo(attr.dataType, dt)
               if (widerType.isDefined && widerType.get == dt) {
                 if (attr.dataType != dt) {
-                  Alias(Cast(attr, dt), attr.name)()
+                  Alias(Cast(attr, dt), attr.name)(
+                    explicitMetadata = CharVarcharUtils.metadataOfCast(attr.metadata, dt))
                 } else {
                   attr
                 }
@@ -267,7 +276,10 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
 
       if (targetTypes.exists(_.isDefined)) {
         // Add an extra Project if the targetTypes are different from the original types.
-        children.map(widenTypes(_, targetTypes))
+        val keepCharTypes =
+          CharVarcharUtils.keepsCharTypesInCast(
+            children.map(_.output), targetTypes, SetOperationCharPadding.isEnabled)
+        children.map(widenTypes(_, targetTypes, keepCharTypes))
       } else {
         Nil
       }
@@ -288,13 +300,20 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
     }
 
     /** Given a plan, add an extra project on top to widen some columns' data types. */
-    private def widenTypes(plan: LogicalPlan, targetTypes: Seq[Option[DataType]]): LogicalPlan = {
+    private def widenTypes(
+        plan: LogicalPlan,
+        targetTypes: Seq[Option[DataType]],
+        keepCharTypes: Seq[Boolean]): LogicalPlan = {
       var changed = false
-      val casted = plan.output.zip(targetTypes).map {
-        case (e, Some(dt)) if e.dataType != dt =>
+      val casted = plan.output.zip(targetTypes).zip(keepCharTypes).map {
+        case ((e, Some(dt)), keepCharType) if e.dataType != dt =>
           changed = true
-          Alias(Cast(e, dt, Some(conf.sessionLocalTimeZone)), e.name)()
-        case (e, _) => e
+          // The cast keeps the CHAR types of the value that it doesn't change, where the set
+          // operation can pad them, see SetOperationCharPadding.
+          Alias(Cast(e, dt, Some(conf.sessionLocalTimeZone)), e.name)(
+            explicitMetadata =
+              if (keepCharType) CharVarcharUtils.metadataOfCast(e.metadata, dt) else None)
+        case ((e, _), _) => e
       }
       if (changed) {
         Project(casted, plan)

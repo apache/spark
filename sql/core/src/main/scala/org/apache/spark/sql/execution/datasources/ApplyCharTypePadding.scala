@@ -20,10 +20,10 @@ package org.apache.spark.sql.execution.datasources
 import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark.internal.LogKeys
-import org.apache.spark.sql.catalyst.analysis.ApplyCharTypePaddingHelper
+import org.apache.spark.sql.catalyst.analysis.{ApplyCharTypePaddingHelper, SetOperationCharPadding}
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeMap, AttributeReference, Expression, NamedExpression, OuterReference, SubExprUtils, SubqueryExpression}
-import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, LogicalPlan, OverwriteByExpression, Project, ReplaceData, WriteDelta}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, Cast, Expression, NamedExpression, OuterReference, SubExprUtils, SubqueryExpression}
+import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, LogicalPlan, OverwriteByExpression, Project, ReplaceData, UnionLoop, View, WriteDelta}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMAND, REPLACE_DATA, WRITE_DELTA}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -31,6 +31,7 @@ import org.apache.spark.sql.connector.write.RowLevelOperationTable
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExternalLookupRelation,
   ExtractV2Table}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.DataType
 
 /**
  * This rule performs string padding for char type.
@@ -88,10 +89,108 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
           })
       }, skipCond = p => p.analyzed || p.isInstanceOf[DeleteFromTable], canGetOutput = _.resolved)
       padRowLevelConditions(padDeleteConditions(
-        ApplyCharTypePaddingHelper.paddingForStringComparison(newPlan, padCharCol = false)))
+        ApplyCharTypePaddingHelper.paddingForStringComparison(
+          narrowCharColumns(newPlan), padCharCol = false)))
     } else {
       ApplyCharTypePaddingHelper.paddingForStringComparison(
-        plan, padCharCol = !conf.getConf(SQLConf.LEGACY_NO_CHAR_PADDING_IN_PREDICATE))
+        narrowCharColumns(plan),
+        padCharCol = !conf.getConf(SQLConf.LEGACY_NO_CHAR_PADDING_IN_PREDICATE))
+    }
+  }
+
+  /**
+   * Set operations of CHAR columns of different lengths have the widest length, see
+   * [[SetOperationCharPadding]]. This narrows the values of recursive CTEs and views, whose
+   * columns keep shorter lengths, to those lengths.
+   */
+  private def narrowCharColumns(plan: LogicalPlan): LogicalPlan = {
+    if (SetOperationCharPadding.isEnabled) narrowViewColumns(narrowRecursiveTerms(plan)) else plan
+  }
+
+  /**
+   * The columns of a recursive CTE have the CHAR lengths of its anchor. This narrows values of the
+   * recursive term with longer CHAR lengths, such as those of a set operation in it, to them, as
+   * [[narrowViewColumns]] does for a view, and pads those with shorter CHAR lengths to them, such
+   * as when the anchor is a set operation padded to a longer length than the recursive term reads.
+   */
+  private def narrowRecursiveTerms(plan: LogicalPlan): LogicalPlan = {
+    plan.resolveOperatorsUp {
+      case loop: UnionLoop if loop.resolved =>
+        val recursion = loop.recursion
+        val projectList = recursion.output.zip(loop.anchor.output).map { case (attr, anchorAttr) =>
+          (for {
+            rawType <- CharVarcharUtils.getRawType(attr.metadata, attr.dataType)
+            anchorType <- CharVarcharUtils.getRawType(anchorAttr.metadata, anchorAttr.dataType)
+            narrowed <- narrowToLength(attr, rawType, anchorType, padShorter = true)
+          } yield Alias(narrowed, attr.name)(
+            qualifier = attr.qualifier,
+            explicitMetadata = Some(CharVarcharUtils.withRawType(attr.metadata, anchorType))
+          )).getOrElse(attr)
+        }
+        if (projectList == recursion.output) {
+          loop
+        } else {
+          loop.copy(recursion = Project(projectList, recursion))
+        }
+    }
+  }
+
+  // The value narrowed to the CHAR lengths of `toType`, with the data type of the value. A rebuilt
+  // struct loses the metadata of its fields, which holds their raw types.
+  private def narrowToLength(
+      expr: Expression,
+      fromType: DataType,
+      toType: DataType,
+      padShorter: Boolean = false): Option[Expression] = {
+    CharVarcharUtils.narrowCharToLength(expr, fromType, toType, padShorter).map { narrowed =>
+      if (narrowed.dataType == expr.dataType) {
+        narrowed
+      } else {
+        Cast(narrowed, expr.dataType, Some(conf.sessionLocalTimeZone))
+      }
+    }
+  }
+
+  /**
+   * A view stores the CHAR types of its columns, and keeps them for the values of its query. The
+   * stored CHAR length of a column can be shorter than the one of its query, such as for a view of
+   * a set operation created before the output had the widest length of its children, which stores
+   * the length of the first child, or a view of a table recreated with a longer CHAR column. This
+   * narrows the values of such a column back to the stored length, so that comparisons padded to
+   * it still match them. The columns keep their expression IDs and metadata.
+   *
+   * TODO: neither ReadSidePadding nor V2ExpressionBuilder translates the narrowing, so a filter on
+   * such a column is not pushed down to the source and does not use its column statistics.
+   */
+  private def narrowViewColumns(plan: LogicalPlan): LogicalPlan = {
+    def queryAttr(e: Expression): Option[Attribute] = e match {
+      case a: Attribute => Some(a)
+      case c: Cast => queryAttr(c.child)
+      case _ => None
+    }
+    plan.resolveOperatorsUp {
+      case v @ View(_, _, p @ Project(projectList, _), _) =>
+        val newProjectList = projectList.map {
+          case a @ Alias(child, _) =>
+            (for {
+              attr <- queryAttr(child)
+              // A column whose query has the raw type that the view stores needs no narrowing.
+              viewTypeString = CharVarcharUtils.getRawTypeString(a.metadata)
+              if viewTypeString.isEmpty ||
+                viewTypeString != CharVarcharUtils.getRawTypeString(attr.metadata)
+              viewType <- CharVarcharUtils.getRawType(a.metadata, a.dataType)
+              // The raw type of the query's column after the view's cast to its stored type.
+              queryType <- CharVarcharUtils.getRawType(attr.metadata, attr.dataType)
+                .flatMap(CharVarcharUtils.rawTypeOfCast(_, child.dataType))
+              narrowed <- narrowToLength(child, queryType, viewType)
+            } yield a.withNewChildren(Seq(narrowed)).asInstanceOf[Alias]).getOrElse(a)
+          case other => other
+        }
+        if (newProjectList == projectList) {
+          v
+        } else {
+          v.copy(child = p.copy(projectList = newProjectList))
+        }
     }
   }
 

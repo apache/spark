@@ -418,6 +418,24 @@ object AnalysisHelper {
     }
   }
 
+  /**
+   * Whether this is the analysis phase of query compilation: a run of the analyzer, which
+   * [[markInAnalyzer]] marks, and not the optimization of a query that a rule of the analyzer
+   * runs, which [[markOutsideAnalyzer]] marks. Besides the test-only check of
+   * [[assertNotAnalysisRule]], `SetOperationCharPadding` reads it, as only analysis pads the
+   * children of set operations.
+   */
+  private[sql] def isInAnalyzer: Boolean = inAnalyzer.get > 0
+
+  /** Runs `f`, such as the optimizer, as not part of the analysis phase, see [[isInAnalyzer]]. */
+  private[sql] def markOutsideAnalyzer[T](f: => T): T = {
+    val depth = inAnalyzer.get
+    inAnalyzer.set(0)
+    try f finally {
+      inAnalyzer.set(depth)
+    }
+  }
+
   def markInAnalyzer[T](f: => T): T = {
     inAnalyzer.set(inAnalyzer.get + 1)
     try f finally {
