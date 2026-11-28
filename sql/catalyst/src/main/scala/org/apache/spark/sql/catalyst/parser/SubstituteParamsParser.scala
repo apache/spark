@@ -237,8 +237,7 @@ class SubstituteParamsParser extends Logging {
         substitutions += Substitution(location, value)
     }
 
-    val substitutedText = applySubstitutions(sqlText, substitutions.toList)
-    (substitutedText, substitutions.toList)
+    applySubstitutions(sqlText, substitutions.toList)
   }
 
   /**
@@ -268,12 +267,17 @@ class SubstituteParamsParser extends Logging {
    * ANTLR's CodePointCharStream reports token positions in Unicode code points, but
    * Java/Scala String indices are in UTF-16 code units. Supplementary characters
    * (e.g. emojis) occupy 1 code point but 2 code units, so we must convert.
+   *
+   * When a separator space is inserted, the returned [[Substitution]] list records the emitted
+   * replacement (including that space) so [[PositionMapper]] offsets match the substituted text.
    */
-  private def applySubstitutions(sqlText: String, substitutions: List[Substitution]): String = {
+  private def applySubstitutions(
+      sqlText: String,
+      substitutions: List[Substitution]): (String, List[Substitution]) = {
     val sortedSubstitutions = substitutions.sortBy(-_.start)
 
     var result = sqlText
-    sortedSubstitutions.foreach { substitution =>
+    val appliedSubstitutions = sortedSubstitutions.map { substitution =>
       val startCU = result.offsetByCodePoints(0, substitution.start)
       val endCU = result.offsetByCodePoints(0, substitution.end)
       val prefix = result.substring(0, startCU)
@@ -284,10 +288,12 @@ class SubstituteParamsParser extends Logging {
         (result.charAt(startCU - 1) == '\'' || result.charAt(startCU - 1) == '"') &&
         replacement.nonEmpty && !replacement.charAt(0).isWhitespace
 
-      val space = if (needsSpace) " " else ""
-      result = s"$prefix$space$replacement$suffix"
+      val emittedReplacement = if (needsSpace) s" $replacement" else replacement
+      result = s"$prefix$emittedReplacement$suffix"
+      substitution.copy(replacement = emittedReplacement)
     }
-    result
+    // Restore ascending order for the position mapper.
+    (result, appliedSubstitutions.sortBy(_.start))
   }
 }
 

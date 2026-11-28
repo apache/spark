@@ -2017,9 +2017,22 @@ class ParametersSuite extends SharedSparkSession {
   // back to the original SQL text.
   // =============================================================================
 
+  private def getSqlQueryContext(exception: Throwable): SQLQueryContext = {
+    val contexts = exception match {
+      case pe: ParseException => pe.getQueryContext
+      case ae: AnalysisException => ae.context
+      case other => fail(s"Expected a SQL exception, got ${other.getClass.getName}")
+    }
+    assert(contexts.nonEmpty, s"Expected SQL query context for ${exception.getClass.getName}")
+    contexts.head match {
+      case context: SQLQueryContext => context
+      case other => fail(s"Expected SQL query context, got ${other.getClass.getName}")
+    }
+  }
+
   /**
-   * Verify that a parameterized SQL query that produces an error
-   * has the error context pointing to the original SQL text and correct positions.
+   * Verify that a parameterized SQL query that produces an error has the error context pointing
+   * to the original SQL text and correct positions.
    */
   private def checkParameterError[T <: Throwable](
       sql: String,
@@ -2028,53 +2041,29 @@ class ParametersSuite extends SharedSparkSession {
       params: Map[String, Any] = Map.empty,
       positionalParams: Array[Any] = Array.empty)(implicit ct: scala.reflect.ClassTag[T]): T = {
 
-    val exception = intercept[T] {
-      if (positionalParams.nonEmpty) {
-        spark.sql(sql, positionalParams)
-      } else {
-        spark.sql(sql, params)
+    val exception =
+      withSQLConf(SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY.key -> "false") {
+        intercept[T] {
+          if (positionalParams.nonEmpty) {
+            spark.sql(sql, positionalParams)
+          } else {
+            spark.sql(sql, params)
+          }
+        }
       }
+
+    val context = getSqlQueryContext(exception)
+    assert(context.sqlText === Some(sql))
+    expectedStartPos.foreach { expectedStart =>
+      assert(context.originStartIndex === Some(expectedStart))
     }
-
-    // For exceptions with query context, verify they reference the original SQL and positions
-    exception match {
-      case pe: ParseException =>
-        if (pe.getQueryContext.nonEmpty) {
-          val context = pe.getQueryContext.head.asInstanceOf[SQLQueryContext]
-          assert(context.sqlText.exists(_.contains(sql)),
-            s"Parse error should reference original SQL.\n" +
-            s"Expected to contain: $sql\n" +
-            s"Actual context SQL: ${context.sqlText}")
-
-          // Verify position mapping if expected positions are provided
-          expectedStartPos.foreach { expectedStart =>
-            assert(context.originStartIndex.contains(expectedStart),
-              s"Start position should be $expectedStart, got: ${context.originStartIndex}")
-          }
-          expectedStopPos.foreach { expectedStop =>
-            assert(context.originStopIndex.contains(expectedStop),
-              s"Stop position should be $expectedStop, got: ${context.originStopIndex}")
-          }
-        }
-      case ae: AnalysisException =>
-        if (ae.context.nonEmpty) {
-          val context = ae.context.head.asInstanceOf[SQLQueryContext]
-          assert(context.sqlText.exists(_.contains(sql)),
-            s"Analysis error should reference original SQL.\n" +
-            s"Expected to contain: $sql\n" +
-            s"Actual context SQL: ${context.sqlText}")
-
-          // Verify position mapping if expected positions are provided
-          expectedStartPos.foreach { expectedStart =>
-            assert(context.originStartIndex.contains(expectedStart),
-              s"Start position should be $expectedStart, got: ${context.originStartIndex}")
-          }
-          expectedStopPos.foreach { expectedStop =>
-            assert(context.originStopIndex.contains(expectedStop),
-              s"Stop position should be $expectedStop, got: ${context.originStopIndex}")
-          }
-        }
-      case _ => // Runtime exceptions may not have query context
+    expectedStopPos.foreach { expectedStop =>
+      assert(context.originStopIndex === Some(expectedStop))
+    }
+    (expectedStartPos, expectedStopPos) match {
+      case (Some(start), Some(stop)) =>
+        assert(context.fragment === SQLQueryContext.sliceByCodePoints(sql, start, stop))
+      case _ =>
     }
 
     exception
@@ -2089,46 +2078,20 @@ class ParametersSuite extends SharedSparkSession {
       expectedStartPos: Int,
       expectedStopPos: Int,
       params: Map[String, Any] = Map.empty,
-      positionalParams: Array[Any] = Array.empty)(implicit ct: scala.reflect.ClassTag[T]): Unit = {
-
-    val exception = intercept[T] {
-      if (positionalParams.nonEmpty) {
-        spark.sql(sql, positionalParams)
-      } else {
-        spark.sql(sql, params)
-      }
-    }
-
-    // Extract query context and verify position mapping
-    val contexts = exception match {
-      case pe: ParseException => pe.getQueryContext
-      case ae: AnalysisException => ae.context
-      case _ => Array.empty[org.apache.spark.QueryContext]
-    }
-
-    // Only proceed with position mapping if contexts exist
-    // Some parse errors don't create contexts - that's existing behavior, not a regression
-    if (contexts.nonEmpty) {
-      val context = contexts.head.asInstanceOf[SQLQueryContext]
-
-      // Verify the SQL text is the original
-      assert(context.sqlText.contains(sql),
-        s"Context should reference original SQL.\n" +
-        s"Expected: $sql\n" +
-        s"Actual: ${context.sqlText}")
-
-        // Verify position mapping
-        assert(context.originStartIndex.contains(expectedStartPos),
-          s"Start position should be $expectedStartPos, got: ${context.originStartIndex}")
-        assert(context.originStopIndex.contains(expectedStopPos),
-          s"Stop position should be $expectedStopPos, got: ${context.originStopIndex}")
-      }
+      positionalParams: Array[Any] = Array.empty)(implicit
+      ct: scala.reflect.ClassTag[T]): Unit = {
+    checkParameterError[T](
+      sql,
+      expectedStartPos = Some(expectedStartPos),
+      expectedStopPos = Some(expectedStopPos),
+      params = params,
+      positionalParams = positionalParams)
   }
 
   /**
-   * Verify that EXECUTE IMMEDIATE errors correctly reference the inner query context.
-   * This is the correct behavior - errors should point to the actual inner query where
-   * the error occurred, similar to how views work.
+   * Verify that EXECUTE IMMEDIATE errors correctly reference the inner query context. This is the
+   * correct behavior - errors should point to the actual inner query where the error occurred,
+   * similar to how views work.
    */
   private def checkExecuteImmediateError[T <: Throwable](
       executeImmediateSQL: String,
@@ -2136,49 +2099,27 @@ class ParametersSuite extends SharedSparkSession {
       expectedStartPos: Option[Int] = None,
       expectedStopPos: Option[Int] = None)(implicit ct: scala.reflect.ClassTag[T]): T = {
 
-    val exception = intercept[T] {
-      spark.sql(executeImmediateSQL)
+    val exception =
+      withSQLConf(SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY.key -> "false") {
+        intercept[T] {
+          spark.sql(executeImmediateSQL)
+        }
+      }
+
+    val context = getSqlQueryContext(exception)
+    assert(context.sqlText === Some(innerQuery))
+    expectedStartPos.foreach { expectedStart =>
+      assert(context.originStartIndex === Some(expectedStart))
     }
-
-    // For exceptions with query context, verify they reference the inner query
-    exception match {
-      case pe: ParseException =>
-        if (pe.getQueryContext.nonEmpty) {
-          val context = pe.getQueryContext.head.asInstanceOf[SQLQueryContext]
-          assert(context.sqlText.exists(_.contains(innerQuery)),
-            s"Parse error should reference inner query SQL.\n" +
-            s"Expected to contain: $innerQuery\n" +
-            s"Actual context SQL: ${context.sqlText}")
-
-          // Verify position mapping if expected positions are provided
-          expectedStartPos.foreach { expectedStart =>
-            assert(context.originStartIndex.contains(expectedStart),
-              s"Start position should be $expectedStart, got: ${context.originStartIndex}")
-          }
-          expectedStopPos.foreach { expectedStop =>
-            assert(context.originStopIndex.contains(expectedStop),
-              s"Stop position should be $expectedStop, got: ${context.originStopIndex}")
-          }
-        }
-      case ae: AnalysisException =>
-        if (ae.context.nonEmpty) {
-          val context = ae.context.head.asInstanceOf[SQLQueryContext]
-          assert(context.sqlText.exists(_.contains(innerQuery)),
-            s"Analysis error should reference inner query SQL.\n" +
-            s"Expected to contain: $innerQuery\n" +
-            s"Actual context SQL: ${context.sqlText}")
-
-          // Verify position mapping if expected positions are provided
-          expectedStartPos.foreach { expectedStart =>
-            assert(context.originStartIndex.contains(expectedStart),
-              s"Start position should be $expectedStart, got: ${context.originStartIndex}")
-          }
-          expectedStopPos.foreach { expectedStop =>
-            assert(context.originStopIndex.contains(expectedStop),
-              s"Stop position should be $expectedStop, got: ${context.originStopIndex}")
-          }
-        }
-      case _ => // Runtime exceptions may not have query context
+    expectedStopPos.foreach { expectedStop =>
+      assert(context.originStopIndex === Some(expectedStop))
+    }
+    (expectedStartPos, expectedStopPos) match {
+      case (Some(start), Some(stop)) =>
+        assert(
+          context.fragment ===
+            SQLQueryContext.sliceByCodePoints(innerQuery, start, stop))
+      case _ =>
     }
 
     exception
@@ -2188,22 +2129,93 @@ class ParametersSuite extends SharedSparkSession {
   // POSITION MAPPING TESTS
   // =============================================================================
 
-  test("position mapping - parse error with named parameter") {
-    checkParameterError[AnalysisException](
-      "SELECT *** :param",
-      expectedStartPos = Some(0),
-      expectedStopPos = Some(16), // "SELECT *** :param".length - 1 = 17 - 1 = 16
-      params = Map("param" -> 42)
-    )
+  test("position mapping - inserted string literal separator") {
+    val sqlText = "SELECT 'prefix':hello, nonexistent FROM range(1)"
+    val missingStart = sqlText.indexOf("nonexistent")
+    val exception = checkParameterError[AnalysisException](
+      sqlText,
+      expectedStartPos = Some(missingStart),
+      expectedStopPos = Some(missingStart + "nonexistent".length - 1),
+      params = Map("hello" -> "value"))
+    assert(exception.line === Some(1))
+    assert(exception.startPosition === Some(missingStart))
   }
 
-  test("position mapping - parse error with positional parameter") {
-    checkParameterError[ParseException](
-      "SELECT *** ?",
-      expectedStartPos = Some(0),
-      expectedStopPos = Some(11), // "SELECT *** ?".length - 1 = 12 - 1 = 11
-      positionalParams = Array(42)
-    )
+  test("position mapping - multiline Unicode SQL and multiline parameter") {
+    val emoji = new String(Character.toChars(0x1f600))
+    val sqlText = s"SELECT '$emoji', :veryLongParameter\nFROM nonexistent"
+    val missingStart = sqlText.codePointCount(0, sqlText.indexOf("nonexistent"))
+    val exception = checkParameterError[AnalysisException](
+      sqlText,
+      expectedStartPos = Some(missingStart),
+      expectedStopPos = Some(missingStart + "nonexistent".length - 1),
+      params = Map("veryLongParameter" -> s"$emoji\nvalue"))
+    assert(exception.line === Some(2))
+    assert(exception.startPosition === Some(5))
+  }
+
+  test("position mapping - parse error inside a substituted value underlines the marker") {
+    val sqlText = "SELECT :a, CAST(1 AS DECIMAL(:second))"
+    val markerStart = sqlText.indexOf(":second")
+    val exception = checkParameterError[ParseException](
+      sqlText,
+      expectedStartPos = Some(markerStart),
+      expectedStopPos = Some(markerStart + ":second".length - 1),
+      params = Map("a" -> "abc\ndef", "second" -> "not_int"))
+    assert(getSqlQueryContext(exception).fragment === ":second")
+    assert(exception.line === Some(1))
+    assert(exception.startPosition === Some(markerStart))
+    assert(exception.getMessage.contains(
+      s"$sqlText\n${" " * markerStart}${"^" * ":second".length}\n"))
+  }
+
+  test("position mapping - parse error inside a substituted value stable across lengths") {
+    val sqlText = "SELECT 'prefix':a, CAST(1 AS DECIMAL(:second))"
+    val markerStart = sqlText.indexOf(":second")
+    Seq("x", "a much longer value").foreach { value =>
+      checkParameterError[ParseException](
+        sqlText,
+        expectedStartPos = Some(markerStart),
+        expectedStopPos = Some(markerStart + ":second".length - 1),
+        params = Map("a" -> value, "second" -> value))
+    }
+  }
+
+  test("position mapping - parse error with identifier clause - SPARK-49757 regression test") {
+    val sqlText = "SET CATALOG IDENTIFIER(:param)"
+    val exception =
+      withSQLConf(SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY.key -> "false") {
+        intercept[AnalysisException] {
+          spark.sql(sqlText, Map("param" -> "testcat.ns1"))
+        }
+      }
+
+    // Verify specific context details for this test case
+    val contexts = exception.getQueryContext
+    // Some parse errors may not have query context - this is acceptable
+    if (contexts.nonEmpty) {
+      val context = contexts.head.asInstanceOf[SQLQueryContext]
+      assert(context.sqlText.contains(sqlText),
+        s"Context should contain original SQL: $sqlText")
+      assert(context.originStartIndex.contains(0),
+        s"Start index should be 0, got: ${context.originStartIndex}")
+      assert(context.originStopIndex.contains(sqlText.length - 1),
+        s"Stop index should be ${sqlText.length - 1}, got: ${context.originStopIndex}")
+    }
+  }
+
+  test("position mapping - analysis error position stable across value lengths") {
+    val sqlText = "SELECT :param FROM nonexistent_table"
+    val missingStart = sqlText.indexOf("nonexistent_table")
+    Seq[Any](1, "a much longer value").foreach { value =>
+      val exception = checkParameterError[AnalysisException](
+        sqlText,
+        expectedStartPos = Some(missingStart),
+        expectedStopPos = Some(sqlText.length - 1),
+        params = Map("param" -> value))
+      assert(exception.line === Some(1))
+      assert(exception.startPosition === Some(missingStart))
+    }
   }
 
   test("position mapping - analysis error with named parameter") {
@@ -2222,27 +2234,6 @@ class ParametersSuite extends SharedSparkSession {
       expectedStopPos = Some(30), // "SELECT ? FROM nonexistent_table".length - 1 = 31 - 1 = 30
       positionalParams = Array(42)
     )
-  }
-
-  test("position mapping - parse error with identifier clause - SPARK-49757 regression test") {
-    val sqlText = "SET CATALOG IDENTIFIER(:param)"
-    val exception = checkParameterError[AnalysisException](
-      sqlText,
-      params = Map("param" -> "testcat.ns1")
-    )
-
-    // Verify specific context details for this test case
-    val contexts = exception.getQueryContext
-    // Some parse errors may not have query context - this is acceptable
-    if (contexts.nonEmpty) {
-      val context = contexts.head.asInstanceOf[SQLQueryContext]
-      assert(context.sqlText.contains(sqlText),
-        s"Context should contain original SQL: $sqlText")
-      assert(context.originStartIndex.contains(0),
-        s"Start index should be 0, got: ${context.originStartIndex}")
-        assert(context.originStopIndex.contains(sqlText.length - 1),
-          s"Stop index should be ${sqlText.length - 1}, got: ${context.originStopIndex}")
-      }
   }
 
   test("IDENTIFIER clause with parameter marker - multipart identifier error") {
@@ -2390,110 +2381,12 @@ class ParametersSuite extends SharedSparkSession {
     }
   }
 
-  test("position mapping - multiple parameters with parse error") {
-    checkParameterError[ParseException](
-      "SELECT :param1, :param2 ***",
-      expectedStartPos = Some(0),
-      expectedStopPos = Some(27), // "SELECT :param1, :param2 ***".length - 1 = 28 - 1 = 27
-      params = Map("param1" -> 10, "param2" -> 20)
-    )
-  }
-
   test("position mapping - parameter substitution with different lengths") {
     checkParameterError[AnalysisException](
       "SELECT :a, :bb, :ccc FROM nonexistent",
       expectedStartPos = Some(26), // Position of "nonexistent" in original SQL
       expectedStopPos = Some(36), // length - 1 = 37 - 1 = 36
       params = Map("a" -> 1, "bb" -> 22, "ccc" -> 333)
-    )
-  }
-
-  test("position mapping - complex expression with parameter") {
-    checkParameterError[ParseException](
-      "SELECT CASE WHEN :param > 0 THEN 'yes' *** END",
-      expectedStartPos = Some(0),
-      expectedStopPos = Some(46), // length - 1 = 47 - 1 = 46
-      params = Map("param" -> 5)
-    )
-  }
-
-  test("position mapping - error at start of SQL") {
-    // Error at position 0: "***" starts at position 0
-    checkPositionMapping[ParseException](
-      "*** :param",
-      expectedStartPos = 0,
-      expectedStopPos = 9, // "*** :param".length - 1
-      params = Map("param" -> 42)
-    )
-  }
-
-  test("position mapping - error after parameter") {
-    // "SELECT :param ***" - error "***" starts at position 14
-    checkPositionMapping[ParseException](
-      "SELECT :param ***",
-      expectedStartPos = 0,
-      expectedStopPos = 16, // "SELECT :param ***".length - 1
-      params = Map("param" -> 42)
-    )
-  }
-
-  test("position mapping - parameter length difference") {
-    // ":x" (2 chars) gets replaced with "42" (2 chars) - no offset change
-    checkPositionMapping[ParseException](
-      "SELECT :x ***",
-      expectedStartPos = 0,
-      expectedStopPos = 12, // "SELECT :x ***".length - 1
-      params = Map("x" -> 42)
-    )
-  }
-
-  test("position mapping - long parameter name vs short value") {
-    // ":verylongparametername" (22 chars) gets replaced with "1" (1 char)
-    checkPositionMapping[ParseException](
-      "SELECT :verylongparametername ***",
-      expectedStartPos = 0,
-      expectedStopPos = 32, // "SELECT :verylongparametername ***".length - 1
-      params = Map("verylongparametername" -> 1)
-    )
-  }
-
-  test("position mapping - short parameter name vs long value") {
-    // ":x" (2 chars) gets replaced with "'very long string value'" (25 chars)
-    checkPositionMapping[ParseException](
-      "SELECT :x ***",
-      expectedStartPos = 0,
-      expectedStopPos = 12, // "SELECT :x ***".length - 1
-      params = Map("x" -> "very long string value")
-    )
-  }
-
-  test("position mapping - multiple parameters with different lengths") {
-    // ":a" -> "1", ":bb" -> "22", ":ccc" -> "333"
-    checkPositionMapping[ParseException](
-      "SELECT :a, :bb, :ccc ***",
-      expectedStartPos = 0,
-      expectedStopPos = 23, // "SELECT :a, :bb, :ccc ***".length - 1
-      params = Map("a" -> 1, "bb" -> 22, "ccc" -> 333)
-    )
-  }
-
-  test("position mapping - positional parameters") {
-    // "SELECT ? ***" - error at end
-    checkPositionMapping[ParseException](
-      "SELECT ? ***",
-      expectedStartPos = 0,
-      expectedStopPos = 11, // "SELECT ? ***".length - 1
-      positionalParams = Array(42)
-    )
-  }
-
-  test("position mapping - multiple positional parameters") {
-    // "SELECT ?, ?, ? ***"
-    checkPositionMapping[ParseException](
-      "SELECT ?, ?, ? ***",
-      expectedStartPos = 0,
-      expectedStopPos = 17, // "SELECT ?, ?, ? ***".length - 1
-      positionalParams = Array(1, 22, 333)
     )
   }
 
@@ -2524,26 +2417,6 @@ class ParametersSuite extends SharedSparkSession {
       expectedStartPos = 14, // Actual position reported by analysis
       expectedStopPos = 17, // Actual stop position reported by analysis
       params = Map("param" -> 42)
-    )
-  }
-
-  test("position mapping - string parameter with quotes") {
-    // String parameter that affects quoting
-    checkPositionMapping[ParseException](
-      "SELECT :param ***",
-      expectedStartPos = 0,
-      expectedStopPos = 16, // "SELECT :param ***".length - 1
-      params = Map("param" -> "string with 'quotes'")
-    )
-  }
-
-  test("position mapping - null parameter") {
-    // Null parameter substitution
-    checkPositionMapping[ParseException](
-      "SELECT :param ***",
-      expectedStartPos = 0,
-      expectedStopPos = 16, // "SELECT :param ***".length - 1
-      params = Map("param" -> null)
     )
   }
 
