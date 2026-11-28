@@ -903,6 +903,18 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(DateTimeUtils.truncTimestamp(apr, DateTimeUtils.TRUNC_TO_MONTH, la) === expectedMonth)
   }
 
+  test("SPARK-62368: truncTimestamp to a month starting in a midnight overlap") {
+    val zone = ZoneId.of("America/Havana")
+    val earlierMidnight = instantToMicros(Instant.parse("2020-11-01T04:00:00Z"))
+    val laterMidnight = instantToMicros(Instant.parse("2020-11-01T05:00:00Z"))
+    val laterInMonth = instantToMicros(Instant.parse("2020-11-20T17:00:00Z"))
+
+    for (ts <- Seq(earlierMidnight, laterMidnight, laterInMonth)) {
+      assert(truncTimestamp(ts, TRUNC_TO_MONTH, zone) === earlierMidnight)
+    }
+    assert(truncTimestamp(laterMidnight, TRUNC_TO_DAY, zone) === laterMidnight)
+  }
+
   test("truncTimestamp at Pacific/Apia after the 2011 calendar shift") {
     // Pacific/Apia jumped from UTC-11 to UTC+13 on 2011-12-30, skipping the
     // local date Dec 30 entirely. Verify that DAY truncation at a clean,

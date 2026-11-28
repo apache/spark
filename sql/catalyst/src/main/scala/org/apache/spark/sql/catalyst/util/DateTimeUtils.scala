@@ -626,7 +626,8 @@ object DateTimeUtils extends SparkDateTimeUtils {
    * truncation runs in the shifted-local frame, and the result is shifted back to UTC
    * micros. Falls back to [[truncTimestampSlow]] when the offset at the candidate
    * truncated instant differs from the offset at `micros` (DST/historical transition
-   * spans the candidate; SPARK-30766/30857) or on arithmetic overflow.
+   * spans the candidate; SPARK-30766/30857), when date-level truncation reaches an ambiguous
+   * local midnight, or on arithmetic overflow.
    *
    * Sub-minute LMT offsets (e.g. America/Los_Angeles -07:52:58 pre-1883, see
    * SPARK-33404) and 30/45-minute offsets (Asia/Kolkata +05:30, Asia/Kathmandu +05:45)
@@ -677,7 +678,10 @@ object DateTimeUtils extends SparkDateTimeUtils {
         val candidateSec = Math.floorDiv(candidate, MICROS_PER_SECOND)
         val candidateOffsetSec =
           rules.getOffset(Instant.ofEpochSecond(candidateSec)).getTotalSeconds.toLong
-        if (candidateOffsetSec != originalOffsetSec) {
+        // Date-level truncation uses the earlier occurrence of an ambiguous midnight.
+        if (candidateOffsetSec != originalOffsetSec ||
+            (level >= TRUNC_TO_WEEK && rules.getValidOffsets(
+              LocalDate.ofEpochDay(truncatedLocal / MICROS_PER_DAY).atStartOfDay()).size() > 1)) {
           return truncTimestampSlow(micros, level, zoneId)
         }
       }
@@ -689,9 +693,9 @@ object DateTimeUtils extends SparkDateTimeUtils {
 
   /**
    * Slow-path reference implementation: equivalent to [[truncTimestamp]] without the
-   * offset-arithmetic fast path. Invoked from [[truncTimestamp]] on DST-cross or
-   * arithmetic overflow. It is also a complete handler for every supported `level`, so
-   * the fast path's correctness can be verified against this method case-by-case.
+   * offset-arithmetic fast path. Invoked from [[truncTimestamp]] on DST-cross, an ambiguous
+   * date boundary, or arithmetic overflow. It handles every supported `level`, so the fast
+   * path's correctness can be verified against this method case-by-case.
    */
   private def truncTimestampSlow(micros: Long, level: Int, zoneId: ZoneId): Long = {
     level match {
