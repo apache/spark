@@ -70,6 +70,38 @@ class PivotTableMixin:
             almost=True,
         )
 
+        # SPARK-37553: '_' in a values column name or in a pivot value
+        pdf = pd.DataFrame(
+            {
+                "a": ["x_1", "x_1", "y", "x_1", "y_2"],
+                "b": [7, 8, 9, 10, 11],
+                "b_b": [1, 2, 3, 4, 5],
+                "e": [10, 20, 30, 40, 50],
+                "c": [1, 1, 1, 2, 2],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+
+        self.assert_eq(
+            psdf.pivot_table(
+                index=["c"], columns="a", values=["b_b", "e"], aggfunc="sum"
+            ).sort_index(),
+            pdf.pivot_table(
+                index=["c"], columns="a", values=["b_b", "e"], aggfunc="sum"
+            ).sort_index(),
+            almost=True,
+        )
+
+        self.assert_eq(
+            psdf.pivot_table(
+                index=["c"], columns="a", values=["e", "b_b"], aggfunc={"b_b": "max", "e": "sum"}
+            ).sort_index(),
+            pdf.pivot_table(
+                index=["c"], columns="a", values=["e", "b_b"], aggfunc={"b_b": "max", "e": "sum"}
+            ).sort_index(),
+            almost=True,
+        )
+
 
 class PivotTableTests(
     PivotTableMixin,
