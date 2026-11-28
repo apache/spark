@@ -22,7 +22,10 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.apache.hadoop.fs.Options.OpenFileOptions.{FS_OPTION_OPENFILE_READ_POLICY,
+  FS_OPTION_OPENFILE_READ_POLICY_SEQUENTIAL}
 import org.apache.hadoop.hdfs.DFSInputStream
+import org.apache.hadoop.util.functional.FutureIO
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.history.EventLogFileWriter.codecName
@@ -138,7 +141,11 @@ object EventLogFileReader extends Logging {
    * @return input stream that holds one JSON record per line.
    */
   def openEventLog(log: Path, fs: FileSystem): InputStream = {
-    val in = new BufferedInputStream(fs.open(log))
+    // Event logs are always read from start to end, so ask for the sequential read policy.
+    val in = new BufferedInputStream(FutureIO.awaitFuture(
+      fs.openFile(log)
+        .opt(FS_OPTION_OPENFILE_READ_POLICY, FS_OPTION_OPENFILE_READ_POLICY_SEQUENTIAL)
+        .build()))
     try {
       val codec = codecName(log).map { c =>
         codecMap.computeIfAbsent(c, CompressionCodec.createCodec(new SparkConf, _))
