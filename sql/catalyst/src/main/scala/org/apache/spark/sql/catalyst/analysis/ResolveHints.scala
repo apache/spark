@@ -21,7 +21,7 @@ import java.util.Locale
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.StringLiteral
+import org.apache.spark.sql.catalyst.expressions.{Expression, StringLiteral}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
@@ -73,9 +73,10 @@ object ResolveHints {
   /**
    * The list of allowed join strategy hints is defined in [[JoinStrategyHint.strategies]], and a
    * sequence of relation aliases can be specified with a join strategy hint, e.g., "MERGE(a, c)",
-   * "BROADCAST(a)". A join strategy hint plan node will be inserted on top of any relation (that
-   * is not aliased differently), subquery, or common table expression that match the specified
-   * name.
+   * "BROADCAST(a)". The SKEW_JOIN hint additionally takes the columns to detect skewed keys on
+   * for every relation, e.g., "SKEW_JOIN(a(x, y), c(z))". A join strategy hint plan node will be
+   * inserted on top of any relation (that is not aliased differently), subquery, or common table
+   * expression that match the specified name.
    *
    * The hint resolution works by recursively traversing down the query plan to find a relation or
    * subquery that matches one of the specified relation aliases. The traversal does not go past
@@ -104,32 +105,34 @@ object ResolveHints {
 
     private def applyJoinStrategyHint(
         plan: LogicalPlan,
-        relationsInHint: Set[Seq[String]],
-        relationsInHintWithMatch: mutable.HashSet[Seq[String]],
-        hintName: String): LogicalPlan = {
+        hintInfos: Map[Seq[String], HintInfo],
+        relationsInHintWithMatch: mutable.HashSet[Seq[String]]): LogicalPlan = {
       // Whether to continue recursing down the tree
       var recurse = true
 
-      def matchedIdentifierInHint(identInQuery: Seq[String]): Boolean = {
-        relationsInHint.find(matchedIdentifier(_, identInQuery))
-          .map(relationsInHintWithMatch.add).nonEmpty
+      def matchedHintInfo(identInQuery: Seq[String]): Option[HintInfo] = {
+        hintInfos.find { case (identInHint, _) => matchedIdentifier(identInHint, identInQuery) }
+          .map { case (identInHint, hintInfo) =>
+            relationsInHintWithMatch.add(identInHint)
+            hintInfo
+          }
       }
 
       val newNode = CurrentOrigin.withOrigin(plan.origin) {
         plan match {
           case ResolvedHint(u @ UnresolvedRelation(ident, _, _), hint)
-              if matchedIdentifierInHint(ident) =>
-            ResolvedHint(u, createHintInfo(hintName).merge(hint, hintErrorHandler))
+              if matchedHintInfo(ident).isDefined =>
+            ResolvedHint(u, matchedHintInfo(ident).get.merge(hint, hintErrorHandler))
 
           case ResolvedHint(r: SubqueryAlias, hint)
-              if matchedIdentifierInHint(extractIdentifier(r)) =>
-            ResolvedHint(r, createHintInfo(hintName).merge(hint, hintErrorHandler))
+              if matchedHintInfo(extractIdentifier(r)).isDefined =>
+            ResolvedHint(r, matchedHintInfo(extractIdentifier(r)).get.merge(hint, hintErrorHandler))
 
-          case UnresolvedRelation(ident, _, _) if matchedIdentifierInHint(ident) =>
-            ResolvedHint(plan, createHintInfo(hintName))
+          case UnresolvedRelation(ident, _, _) if matchedHintInfo(ident).isDefined =>
+            ResolvedHint(plan, matchedHintInfo(ident).get)
 
-          case r: SubqueryAlias if matchedIdentifierInHint(extractIdentifier(r)) =>
-            ResolvedHint(plan, createHintInfo(hintName))
+          case r: SubqueryAlias if matchedHintInfo(extractIdentifier(r)).isDefined =>
+            ResolvedHint(plan, matchedHintInfo(extractIdentifier(r)).get)
 
           case _: ResolvedHint | _: View | _: UnresolvedWith | _: SubqueryAlias =>
             // Don't traverse down these nodes.
@@ -148,7 +151,7 @@ object ResolveHints {
 
       if ((plan fastEquals newNode) && recurse) {
         newNode.mapChildren { child =>
-          applyJoinStrategyHint(child, relationsInHint, relationsInHintWithMatch, hintName)
+          applyJoinStrategyHint(child, hintInfos, relationsInHintWithMatch)
         }
       } else {
         newNode
@@ -158,26 +161,62 @@ object ResolveHints {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsPattern(UNRESOLVED_HINT), ruleId) {
       case h: UnresolvedHint if JoinStrategyHint.isJoinStrategyHintName(h.name) =>
-        if (h.parameters.isEmpty) {
+        val hintInfo = createHintInfo(h.name)
+        if (hintInfo.strategy.contains(SKEW_JOIN)) {
+          resolveSkewJoinHint(h)
+        } else if (h.parameters.isEmpty) {
           // If there is no table alias specified, apply the hint on the entire subtree.
-          ResolvedHint(h.child, createHintInfo(h.name))
+          ResolvedHint(h.child, hintInfo)
         } else {
           // Otherwise, find within the subtree query plans to apply the hint.
-          val relationNamesInHint = h.parameters.map {
-            case StringLiteral(tableName) => UnresolvedAttribute.parseAttributeName(tableName)
-            case tableId: UnresolvedAttribute => tableId.nameParts
-            case unsupported =>
-              throw QueryCompilationErrors.joinStrategyHintParameterNotSupportedError(unsupported)
-          }.toSet
-          val relationsInHintWithMatch = new mutable.HashSet[Seq[String]]
-          val applied = applyJoinStrategyHint(
-            h.child, relationNamesInHint, relationsInHintWithMatch, h.name)
-
-          // Filters unmatched relation identifiers in the hint
-          val unmatchedIdents = relationNamesInHint -- relationsInHintWithMatch
-          hintErrorHandler.hintRelationsNotFound(h.name, h.parameters, unmatchedIdents)
-          applied
+          val relationNamesInHint = h.parameters.map(relationName).toSet
+          applyToRelations(h, relationNamesInHint.map(_ -> hintInfo).toMap)
         }
+    }
+
+    private def relationName(param: Expression): Seq[String] = param match {
+      case StringLiteral(tableName) => UnresolvedAttribute.parseAttributeName(tableName)
+      case tableId: UnresolvedAttribute => tableId.nameParts
+      case unsupported =>
+        throw QueryCompilationErrors.joinStrategyHintParameterNotSupportedError(unsupported)
+    }
+
+    private def applyToRelations(
+        h: UnresolvedHint,
+        hintInfos: Map[Seq[String], HintInfo]): LogicalPlan = {
+      val relationsInHintWithMatch = new mutable.HashSet[Seq[String]]
+      val applied = applyJoinStrategyHint(h.child, hintInfos, relationsInHintWithMatch)
+
+      // Filters unmatched relation identifiers in the hint
+      val unmatchedIdents = hintInfos.keySet -- relationsInHintWithMatch
+      hintErrorHandler.hintRelationsNotFound(h.name, h.parameters, unmatchedIdents)
+      applied
+    }
+
+    /**
+     * Resolves `SKEW_JOIN(a(x, y), b(z))`. The parser reads every `a(x, y)` as a function call,
+     * the function name being the relation and the arguments the columns of that relation.
+     */
+    private def resolveSkewJoinHint(h: UnresolvedHint): LogicalPlan = {
+      if (h.parameters.isEmpty) {
+        throw QueryCompilationErrors.invalidSkewJoinHintError(
+          "the relation and the columns to detect skewed keys on must be specified, " +
+            "e.g. SKEW_JOIN(t(col))")
+      }
+      val hintInfos = h.parameters.map {
+        case f: UnresolvedFunction if f.arguments.nonEmpty =>
+          val columns = f.arguments.map {
+            case c: UnresolvedAttribute if c.nameParts.length == 1 => c.nameParts.head
+            case other =>
+              throw QueryCompilationErrors.invalidSkewJoinHintError(
+                s"${other.sql} is not a column name of the relation ${f.nameParts.mkString(".")}")
+          }
+          f.nameParts -> HintInfo(Some(SKEW_JOIN), columns)
+        case other =>
+          throw QueryCompilationErrors.invalidSkewJoinHintError(
+            s"${other.sql} must be given as relation(columns), e.g. SKEW_JOIN(t(col))")
+      }.toMap
+      applyToRelations(h, hintInfos)
     }
   }
 
