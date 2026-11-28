@@ -34,7 +34,7 @@ import org.apache.spark.internal.LogKeys.{CONFIG, CONFIG2, PATH, VALUE}
 import org.apache.spark.sql.catalyst.analysis.RelationCache
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.CacheManager
+import org.apache.spark.sql.execution.{CacheManager, ScanLimitListener}
 import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
 import org.apache.spark.sql.execution.ui.{SQLAppStatusListener, SQLAppStatusStore, SQLTab, StreamingQueryStatusStore}
 import org.apache.spark.sql.internal.StaticSQLConf._
@@ -126,6 +126,23 @@ private[sql] class SharedState(
     val statusStore = new SQLAppStatusStore(kvStore, Some(listener))
     sparkContext.ui.foreach(new SQLTab(statusStore, _))
     statusStore
+  }
+
+  /**
+   * The listener that enforces `spark.sql.execution.maxScanBytes`. It is created, and starts to
+   * receive events, when the first query with a limit runs, and it receives them until the
+   * SparkContext stops: while no query has a limit, its event handlers return at once. It has a
+   * queue of its own on the listener bus, so that it does not slow down the listeners of the UI
+   * and they do not delay or drop its events. The events that its own queue drops when it is full
+   * still weaken the limit: `spark.scheduler.listenerbus.eventqueue.scanLimit.capacity` sets how
+   * many events the queue holds.
+   */
+  private[sql] lazy val scanLimitListener: ScanLimitListener = {
+    // The listener is never removed, so its function must not capture this SharedState.
+    val sc = sparkContext
+    val listener = new ScanLimitListener(sc.cancelJobsWithTag(_, _))
+    sc.listenerBus.addToQueue(listener, ScanLimitListener.QUEUE_NAME)
+    listener
   }
 
   /**
