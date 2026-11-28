@@ -19,6 +19,10 @@
 Upgrading PySpark
 ==================
 
+Upgrading from PySpark 4.3 to 4.4
+---------------------------------
+* In Spark 4.4, ``VariantVal.toJson`` and ``str(VariantVal)`` format doubles, floats, decimals and timestamps the same way as the ``to_json`` SQL function, and quote NaN and infinities (``"NaN"``, ``"Infinity"``) so that the output is always valid JSON. For example, ``10000000.0`` becomes ``1.0E7``, a decimal ``1.00`` becomes ``1``, and a timestamp fraction ``.500000`` becomes ``.5``. Update code that stores or compares these strings.
+
 Upgrading from PySpark 4.2 to 4.3
 ---------------------------------
 * In Spark 4.3, Python 3.10 support was dropped in PySpark.
