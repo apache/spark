@@ -125,6 +125,13 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     }
   }
 
+  test("SPARK-60200: avoid building unbounded plain strings for negative scales") {
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      assert(Decimal(new java.math.BigDecimal("1e1000")).toPlainString === "1" + "0" * 1000)
+      assert(Decimal(new java.math.BigDecimal("1e1001")).toPlainString === "1E+1001")
+    }
+  }
+
   test("SPARK-30252, SPARK-51084: Negative scale is not allowed by default") {
     def checkNegativeScaleDecimal(d: => Decimal): Unit = {
       checkError(
