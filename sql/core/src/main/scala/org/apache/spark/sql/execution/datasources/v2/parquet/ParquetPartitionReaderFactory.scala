@@ -141,7 +141,7 @@ case class ParquetPartitionReaderFactory(
 
           if (openedFooter.footer != null && !openedFooter.footer.getBlocks.isEmpty) {
             ParquetUtils.createAggInternalRowFromFooter(openedFooter.footer,
-              file.urlEncodedPath, dataSchema, partitionSchema, aggregation.get,
+              file.urlEncodedPath, dataSchema, isCaseSensitive, partitionSchema, aggregation.get,
               readDataSchema, file.partitionValues,
               getDatetimeRebaseSpec(openedFooter.footer.getFileMetaData))
           } else {
@@ -187,7 +187,7 @@ case class ParquetPartitionReaderFactory(
 
           if (openedFooter.footer != null && !openedFooter.footer.getBlocks.isEmpty) {
             val row = ParquetUtils.createAggInternalRowFromFooter(openedFooter.footer,
-              file.urlEncodedPath, dataSchema, partitionSchema, aggregation.get,
+              file.urlEncodedPath, dataSchema, isCaseSensitive, partitionSchema, aggregation.get,
               readDataSchema, file.partitionValues,
               getDatetimeRebaseSpec(openedFooter.footer.getFileMetaData))
             AggregatePushDownUtils.convertAggregatesRowToBatch(
