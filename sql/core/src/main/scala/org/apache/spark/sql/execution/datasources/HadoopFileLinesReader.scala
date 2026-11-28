@@ -25,6 +25,7 @@ import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.{FileSplit, LineRecordReader}
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
+import org.apache.spark.io.HadoopCodecStreams
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
@@ -61,7 +62,12 @@ class HadoopFileLinesReader(
       // HadoopLineRecordReader is LineRecordReader with some changes like support for specifying
       // compression codec as opposed to always infer from file extension.
       // If the line separator is `None`, it covers `\r`, `\r\n` and `\n`.
-      if (SQLConf.get.hadoopLineRecordReaderEnabled) {
+      // A forced `decompression` codec in `conf` was validated while planning the read, against
+      // the flag value at that time (see `CompressionCodecs.setReadCodecConfiguration`). The plan
+      // may run again after the flag is turned off, so follow the conf rather than the flag: the
+      // legacy reader would silently decompress by the file name extension instead.
+      if (SQLConf.get.hadoopLineRecordReaderEnabled ||
+          conf.get(HadoopCodecStreams.DECOMPRESSION_CODEC_CONF) != null) {
         new HadoopLineRecordReader(lineSeparator.orNull)
       } else {
         new LineRecordReader(lineSeparator.orNull)

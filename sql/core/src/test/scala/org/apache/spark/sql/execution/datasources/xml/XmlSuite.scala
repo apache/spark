@@ -3868,13 +3868,15 @@ class XmlSuite
     withTempDir { dir =>
       val file = new File(dir, "data.xml")
       writeCompressed(file, xmlDoc(Seq((1, "a"))), "")
-      checkErrorMatchPVals(
+      checkError(
         exception = intercept[SparkIllegalArgumentException] {
           spark.read.option("decompression", "illegal").option("rowTag", "ROW")
             .xml(file.getCanonicalPath).collect()
         },
         condition = "CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION",
-        parameters = Map("codecName" -> "illegal", "availableCodecs" -> ".*zstd.*")
+        sqlState = Some("56038"),
+        parameters = Map("codecName" -> "illegal", "availableCodecs" -> ".*zstd.*"),
+        matchPVals = true
       )
     }
   }
