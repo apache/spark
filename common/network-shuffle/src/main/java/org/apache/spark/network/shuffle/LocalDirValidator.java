@@ -31,18 +31,23 @@ import org.apache.spark.internal.MDC;
 /**
  * Validates the local directories an executor reports at registration, before the external shuffle
  * service turns them into filesystem paths. {@link ExternalBlockHandler} owns one of these (built
- * from the host's configured local-directory roots) and applies it at the RPC boundary, so every
- * consumer of those directories -- the block resolver and the merged-shuffle manager -- only ever
- * operates on validated paths.
+ * from the host's configured local-directory roots) and applies it at the RPC boundary. So both the
+ * block resolver and the merged-shuffle manager get validated paths at registration.
  *
- * Each entry must canonicalize to a path contained under one of the configured roots (YARN passes
- * {@code yarn.nodemanager.local-dirs}; standalone passes the configured local directories) and,
- * when app scoping is required, within the registering application's own directory (the
- * {@code appId} must appear as a path segment). When no roots are configured there is nothing to
- * contain the entries against and they are accepted. An empty array is always allowed.
+ * Each entry must canonicalize to a path below one of the configured roots (YARN passes
+ * {@code yarn.nodemanager.local-dirs}, standalone the configured local directories), and must
+ * neither be a root nor contain one. When app scoping is required, it must also be within the
+ * registering application's own directory (the {@code appId} must appear as a path segment). When
+ * no roots are configured there is nothing to contain the entries against and they are accepted.
+ * An empty array is always allowed.
+ *
+ * The block resolver also applies it to executors reloaded from its state store.
  */
 class LocalDirValidator {
   private static final SparkLogger logger = SparkLoggerFactory.getLogger(LocalDirValidator.class);
+
+  /** A validator without configured roots, which accepts every local dir. */
+  static final LocalDirValidator ACCEPT_ALL = new LocalDirValidator(null, false);
 
   private final List<Path> allowedLocalDirRoots;
   private final boolean requireAppScopedLocalDirs;
@@ -74,6 +79,12 @@ class LocalDirValidator {
     } catch (IOException e) {
       throw new IllegalArgumentException(
         "localDirs entry could not be canonicalized: " + localDir, e);
+    }
+    // A root holds the directories of every application, so an entry must neither be a root nor
+    // contain one.
+    if (allowedLocalDirRoots.stream().anyMatch(root -> root.startsWith(canonical))) {
+      throw new IllegalArgumentException(
+        "localDirs entry is or contains one of the service's local directories: " + localDir);
     }
     if (allowedLocalDirRoots.stream().noneMatch(canonical::startsWith)) {
       throw new IllegalArgumentException(

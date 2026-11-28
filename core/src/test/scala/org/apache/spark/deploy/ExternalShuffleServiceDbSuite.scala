@@ -56,7 +56,9 @@ abstract class ExternalShuffleServiceDbSuite extends SparkFunSuite {
     securityManager = new SecurityManager(sparkConf)
 
     dataContext = new TestShuffleDataContext(2, 5)
-    dataContext.create()
+    // Below the shuffle service's local dirs, which it validates the reloaded executor against.
+    // SPARK_LOCAL_DIRS takes precedence over spark.local.dir there.
+    dataContext.create(Utils.getConfiguredLocalDirs(sparkConf).head)
     // Write some sort data.
     dataContext.insertSortShuffleData(0, 0,
       Array[Array[Byte]](sortBlock0.getBytes(StandardCharsets.UTF_8),

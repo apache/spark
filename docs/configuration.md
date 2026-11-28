@@ -1567,7 +1567,7 @@ Apart from these, the following properties are also available, and may be useful
     Whether the ExternalShuffleService re-resolves the path of a shuffle or RDD block file when
     serving it, and refuses the file if the resolved path is no longer under the executor's
     registered local directories. Disabling it skips the path canonicalization done on each
-    block fetch.
+    block fetch. Removing a block always checks its path, whatever this setting says.
   </td>
   <td>4.1.4</td>
 </tr>

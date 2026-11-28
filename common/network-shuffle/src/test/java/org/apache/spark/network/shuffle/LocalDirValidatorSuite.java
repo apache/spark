@@ -64,6 +64,42 @@ public class LocalDirValidatorSuite {
   }
 
   @Test
+  public void rejectsConfiguredRootItself() throws Exception {
+    File root = Files.createTempDirectory("ess-local-root").toFile();
+    try {
+      LocalDirValidator validator = new LocalDirValidator(new String[] { root.getPath() }, false);
+      assertThrows(IllegalArgumentException.class,
+        () -> validator.validate(new String[] { root.getPath() }, "app0"),
+        "validate must reject a localDir that is a configured root itself");
+    } finally {
+      JavaUtils.deleteRecursively(root);
+    }
+  }
+
+  @Test
+  public void rejectsConfiguredRootBelowAnotherRoot() throws Exception {
+    File outerRoot = Files.createTempDirectory("ess-local-root").toFile();
+    try {
+      File betweenRoots = new File(outerRoot, "a");
+      File innerRoot = new File(betweenRoots, "inner");
+      File ownDir = new File(innerRoot, "spark-x/executor-x/blockmgr-x");
+      assertTrue(ownDir.mkdirs(), "precondition: directory created");
+      LocalDirValidator validator = new LocalDirValidator(
+        new String[] { outerRoot.getPath(), innerRoot.getPath() }, false);
+      assertThrows(IllegalArgumentException.class,
+        () -> validator.validate(new String[] { innerRoot.getPath() }, "app0"),
+        "validate must reject a configured root even when it is below another root");
+      assertThrows(IllegalArgumentException.class,
+        () -> validator.validate(new String[] { betweenRoots.getPath() }, "app0"),
+        "validate must reject a localDir that contains a configured root");
+      // Must not throw.
+      validator.validate(new String[] { ownDir.getPath() }, "app0");
+    } finally {
+      JavaUtils.deleteRecursively(outerRoot);
+    }
+  }
+
+  @Test
   public void rejectsAnotherApplicationsDir() throws Exception {
     File root = Files.createTempDirectory("ess-nm-local").toFile();
     try {
