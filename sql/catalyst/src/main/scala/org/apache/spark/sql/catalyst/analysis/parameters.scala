@@ -192,9 +192,9 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
   /**
    * Fails if a statement with optional references (`hasOptionalReferences`, a fact about the
    * statement as written, because its references may be resolved by now) has fewer positional
-   * parameter markers than values. In such a statement, a `?` after an identifier or a
-   * non-reserved keyword is an optional reference where the syntax allows a reference, and the
-   * remaining markers must not take its value silently. See `SubstituteParamsParser` for the
+   * parameter markers than values. In such a statement, a `?` directly after a name can mark an
+   * optional reference instead of a positional parameter, and the remaining markers must not take
+   * its value silently. See `SubstituteParamsParser` for the
    * statements that are not bound here.
    */
   private def checkUnusedPositionalArgs(

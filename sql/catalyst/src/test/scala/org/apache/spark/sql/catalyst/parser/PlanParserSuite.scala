@@ -3259,14 +3259,14 @@ class PlanParserSuite extends AnalysisTest {
 
     // Test named parameters
     val sql1 = "SELECT :param_1"
-    val ParameterSubstitution(substituted1, _, _, _) = substitutor.substitute(
+    val ParameterSubstitution(substituted1, _, _) = substitutor.substitute(
       sql1, Map("param_1" -> "42"))
     comparePlans(
       parsePlan(substituted1),
       Project(UnresolvedAlias(Literal(42), None) :: Nil, OneRowRelation()))
 
     val sql2 = "SELECT abs(:1Abc)"
-    val ParameterSubstitution(substituted2, _, _, _) = substitutor.substitute(
+    val ParameterSubstitution(substituted2, _, _) = substitutor.substitute(
       sql2, Map("1Abc" -> "123"))
     comparePlans(
       parsePlan(substituted2),
@@ -3278,7 +3278,7 @@ class PlanParserSuite extends AnalysisTest {
         OneRowRelation()))
 
     val sql3 = "SELECT * FROM a LIMIT :limitA"
-    val ParameterSubstitution(substituted3, _, _, _) = substitutor.substitute(
+    val ParameterSubstitution(substituted3, _, _) = substitutor.substitute(
       sql3, Map("limitA" -> "10"))
     comparePlans(
       parsePlan(substituted3),
@@ -3287,14 +3287,14 @@ class PlanParserSuite extends AnalysisTest {
     // Test error cases - invalid parameter syntax should be caught by SubstituteParamsParser
     checkError(
       exception = intercept[org.apache.spark.sql.catalyst.parser.ParseException] {
-        val ParameterSubstitution(substituted, _, _, _) = substitutor.substitute("SELECT :-")
+        val ParameterSubstitution(substituted, _, _) = substitutor.substitute("SELECT :-")
         substituted
       },
       condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'-'", "hint" -> ""))
     checkError(
       exception = intercept[org.apache.spark.sql.catalyst.parser.ParseException] {
-        val ParameterSubstitution(substituted, _, _, _) = substitutor.substitute("SELECT :")
+        val ParameterSubstitution(substituted, _, _) = substitutor.substitute("SELECT :")
         substituted
       },
       condition = "PARSE_SYNTAX_ERROR",
@@ -3326,14 +3326,14 @@ class PlanParserSuite extends AnalysisTest {
 
     // Test positional parameters
     val sql1 = "SELECT ?"
-    val ParameterSubstitution(substituted1, _, _, _) = substitutor.substitute(
+    val ParameterSubstitution(substituted1, _, _) = substitutor.substitute(
       sql1, positionalParams = List("42"))
     comparePlans(
       parsePlan(substituted1),
       Project(UnresolvedAlias(Literal(42), None) :: Nil, OneRowRelation()))
 
     val sql2 = "SELECT abs(?)"
-    val ParameterSubstitution(substituted2, _, _, _) = substitutor.substitute(
+    val ParameterSubstitution(substituted2, _, _) = substitutor.substitute(
       sql2, positionalParams = List("123"))
     comparePlans(
       parsePlan(substituted2),
@@ -3345,7 +3345,7 @@ class PlanParserSuite extends AnalysisTest {
         OneRowRelation()))
 
     val sql3 = "SELECT * FROM a LIMIT ?"
-    val ParameterSubstitution(substituted3, _, _, _) = substitutor.substitute(
+    val ParameterSubstitution(substituted3, _, _) = substitutor.substitute(
       sql3, positionalParams = List("10"))
     comparePlans(
       parsePlan(substituted3),

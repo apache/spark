@@ -1,5 +1,5 @@
--- Tests for optional column, field, variable, and named parameter references: a `?` after an
--- identifier makes that identifier optional, so that a reference that cannot be resolved
+-- Tests for optional column, field, variable, and named parameter references: a `?` directly
+-- after an identifier makes that identifier optional, so that a reference that cannot be resolved
 -- evaluates to a static NULL of type VOID instead of raising a not-found error.
 
 --SET spark.sql.optionalReferences.enabled=true
@@ -25,8 +25,10 @@ SELECT id?, name? FROM people;
 SELECT typeof(id?), typeof(name?) FROM people LIMIT 1;
 SELECT * FROM (SELECT id?, name? FROM people);
 
--- Whitespace and comments between the identifier and `?` are insignificant.
-SELECT id ?, name /* comment */ ? FROM people;
+-- The `?` directly follows the name. A `?` after whitespace or a comment is a positional
+-- parameter marker, as it is without optional references.
+SELECT id ?, name FROM people;
+SELECT id, name /* comment */ ? FROM people;
 
 -- Optional references in expressions, predicates, grouping, ordering, and function arguments.
 SELECT id, bonus? + 1 AS b FROM people;
@@ -491,7 +493,7 @@ EXECUTE IMMEDIATE 'SELECT :x?, :y?' USING 1 AS x;
 EXECUTE IMMEDIATE 'SELECT id FROM people WHERE :city? IS NULL OR addr.city = :city? ORDER BY id';
 EXECUTE IMMEDIATE 'SELECT id FROM people WHERE :city? IS NULL OR addr.city = :city? ORDER BY id'
   USING 'SF' AS city;
-EXECUTE IMMEDIATE 'SELECT :x ?, :x /* comment */ ?' USING 5 AS x;
+EXECUTE IMMEDIATE 'SELECT :x ?' USING 5 AS x;
 EXECUTE IMMEDIATE 'SELECT :x?::INT' USING '5' AS x;
 EXECUTE IMMEDIATE 'SELECT :x?AS v, :y?IS NULL AS w' USING 5 AS x;
 EXECUTE IMMEDIATE 'SELECT :y?, :y';
@@ -513,20 +515,43 @@ EXECUTE IMMEDIATE 'SELECT NOT ?, CASE ? WHEN 1 THEN ? ELSE ? END' USING true, 1,
 EXECUTE IMMEDIATE
   'SELECT id FROM people WHERE id BETWEEN ? AND ? AND addr.city LIKE ? ORDER BY id'
   USING 1, 2, '%F';
--- A statement that is valid without optional references keeps its meaning: the `?` is a
--- parameter marker, although `distinct?` is also a reference to a column named `distinct`.
-EXECUTE IMMEDIATE 'SELECT first(DISTINCT ?) AS f FROM people' USING 5;
+-- A `?` directly after a keyword is a positional parameter marker where no reference to a
+-- column with the name of the keyword can be.
+EXECUTE IMMEDIATE 'SELECT CASE? WHEN ''x'' THEN? ELSE? END' USING 'x', 'a', 'b';
+EXECUTE IMMEDIATE 'SELECT id FROM people WHERE addr.city LIKE? ORDER BY id' USING '%F';
+EXECUTE IMMEDIATE
+  'SELECT id FROM people WHERE addr.city BETWEEN? AND? AND addr.city LIKE? ORDER BY id'
+  USING 'A', 'Z', '%F';
+-- Where such a reference can be, as `distinct?` in `SELECT DISTINCT?`, the grammar mostly prefers
+-- the keyword.
+EXECUTE IMMEDIATE 'SELECT TRIM(BOTH? FROM?)' USING 'x', 'xabcx';
+EXECUTE IMMEDIATE 'SELECT INTERVAL? DAY' USING '1';
+EXECUTE IMMEDIATE 'SELECT DISTINCT? FROM people' USING 'a';
+EXECUTE IMMEDIATE 'SELECT ALL? FROM people LIMIT 1' USING 'a';
+-- After the keywords for which it would prefer the reference, a `?` stays a positional parameter
+-- marker too, so that a statement that is valid without optional references keeps its meaning.
+-- The legacy mode binds the markers in the plan; a substituted value would be joined to the
+-- keyword (`DISTINCT5`), with or without optional references.
+SET spark.sql.legacy.parameterSubstitution.constantsOnly=true;
+EXECUTE IMMEDIATE 'SELECT first(DISTINCT?) AS f FROM people' USING 5;
+EXECUTE IMMEDIATE
+  'SELECT count(*) AS c FROM VALUES (true) AS v(`not`) WHERE NOT HAVING?'
+  USING true;
+RESET spark.sql.legacy.parameterSubstitution.constantsOnly;
+-- A column with the name of such a keyword is quoted to be optional, and the name of a field is
+-- not such a keyword.
+SELECT `distinct`?, `select`?, addr.from? FROM people;
 -- Parameter markers in a statement with optional references.
 EXECUTE IMMEDIATE
   'SELECT missing?, id FROM people WHERE id IN (SELECT ?) AND id BETWEEN ? AND ? LIMIT ?'
   USING 2, 1, 2, 1;
--- In a statement that is not valid without optional references, a `?` after a keyword marks a
--- reference to a column with the name of the keyword where the syntax allows a reference, so
--- `distinct?` is NULL here. A value that no marker takes is an error, so that the following
--- markers do not take the values of the preceding ones silently.
+-- A `?` after whitespace stays a positional parameter marker in a statement with optional
+-- references.
 EXECUTE IMMEDIATE 'SELECT missing?, first(DISTINCT ?) AS f FROM people' USING 5;
 EXECUTE IMMEDIATE 'SELECT first(DISTINCT ?) AS f, ? AS g FROM people' USING 5, 6;
 EXECUTE IMMEDIATE 'SELECT missing?, first(DISTINCT ?) AS f, ? AS g FROM people' USING 5, 6;
+-- A value that no marker takes is an error in a statement with optional references, so that the
+-- markers do not take the values that were meant for a `?` that is an optional reference.
 EXECUTE IMMEDIATE 'SELECT missing? FROM people' USING 5;
 EXECUTE IMMEDIATE 'SELECT p.missing?, ? AS g FROM people p' USING 1, 2;
 EXECUTE IMMEDIATE "SELECT IDENTIFIER('miss' || 'ing')?, ? AS g FROM people" USING 1, 2;
@@ -660,8 +685,7 @@ SELECT * FROM people_v ORDER BY id;
 SELECT captured_fn();
 SELECT * FROM captured_table_fn();
 
--- A session that does not set the config can still query a view or call a SQL function that was
--- created while optional references were enabled, because they capture the config.
+-- Optional references are enabled by default.
 RESET spark.sql.optionalReferences.enabled;
 SELECT id? FROM people;
 SELECT * FROM people_v ORDER BY id;

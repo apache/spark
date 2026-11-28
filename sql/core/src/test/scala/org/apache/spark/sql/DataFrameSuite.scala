@@ -319,11 +319,13 @@ class DataFrameSuite extends SharedSparkSession
         assert(e.getMessageParameters.get("objectName") == "`name`", e.getMessage)
       }
     }
-    // Optional references are disabled by default.
-    checkError(
-      exception = intercept[AnalysisException](df.selectExpr("id?")),
-      condition = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "'?'", "hint" -> ": extra input '?'"))
+    // Without optional references, `?` is a positional parameter marker.
+    withSQLConf(SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "false") {
+      checkError(
+        exception = intercept[AnalysisException](df.selectExpr("id?")),
+        condition = "PARSE_SYNTAX_ERROR",
+        parameters = Map("error" -> "'?'", "hint" -> ": extra input '?'"))
+    }
   }
 
   test("filterExpr") {

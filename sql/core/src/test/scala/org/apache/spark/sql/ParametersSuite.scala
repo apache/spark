@@ -1394,7 +1394,7 @@ class ParametersSuite extends SharedSparkSession {
       ) {
         // A marker with a value is bound, and a marker without a value is NULL.
         checkAnswer(spark.sql("SELECT :x?, :y?", Map("x" -> 1)), Row(1, null))
-        checkAnswer(spark.sql("SELECT :x ?, :x? + 1", Map("x" -> 1)), Row(1, 2))
+        checkAnswer(spark.sql("SELECT :x?, :x? + 1", Map("x" -> 1)), Row(1, 2))
         checkAnswer(spark.sql(optionalFilterQuery, Map("low" -> 2L)), Row(2))
         checkAnswer(
           spark.sql(optionalFilterQuery, Map("unused" -> 1)),
@@ -1424,23 +1424,30 @@ class ParametersSuite extends SharedSparkSession {
     }
   }
 
-  test("a statement that the parameter substitution parsed with optional references is parsed " +
-    "with them after the substitution") {
-    // `:x?` selects optional references, so `DISTINCT ?` is an optional reference to the column
-    // `distinct` rather than a positional parameter marker. The substitution of `:x?` removes the
-    // `?` that selected them.
-    val query = "SELECT :x? AS a, first(DISTINCT ?) AS f FROM VALUES (2) AS t(`distinct`)"
+  test("a ? after whitespace is a positional parameter marker in a statement with optional " +
+    "references") {
+    // `DISTINCT ?` is a parameter marker, and the column `distinct` is quoted to be optional.
+    val query = "SELECT missing? AS a, first(DISTINCT ?) AS f, first(`distinct`?) AS g " +
+      "FROM VALUES (2) AS t(`distinct`)"
     Seq(false, true).foreach { constantsOnly =>
       withSQLConf(
         SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true",
         SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY.key -> constantsOnly.toString
       ) {
-        checkAnswer(spark.sql(query, Map("x" -> 1)), Row(1, 2))
-        checkAnswer(spark.sql(query, Map("y" -> 1)), Row(null, 2))
-        checkAnswer(
-          spark.sql(s"EXECUTE IMMEDIATE '${query.replace("'", "''")}' USING 1 AS x"),
-          Row(1, 2))
+        checkAnswer(spark.sql(query, Array(5)), Row(null, 5, 2))
+        checkAnswer(spark.sql(s"EXECUTE IMMEDIATE '$query' USING 5"), Row(null, 5, 2))
       }
+    }
+    // So is `DISTINCT?`: DISTINCT is a keyword that a parameter marker can follow. The legacy
+    // binding mode binds the marker in the plan, while the substitution of the text would
+    // join the value to the keyword before it.
+    withSQLConf(
+      SQLConf.OPTIONAL_REFERENCES_ENABLED.key -> "true",
+      SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY.key -> "true"
+    ) {
+      checkAnswer(
+        spark.sql(query.replace("DISTINCT ?", "DISTINCT?"), Array(5)),
+        Row(null, 5, 2))
     }
   }
 
@@ -1461,9 +1468,8 @@ class ParametersSuite extends SharedSparkSession {
 
   test("a parameter marker of a DECLARE CURSOR query does not select optional references") {
     // The marker of the cursor query is bound when the cursor is opened, so the substitution of
-    // `:x` does not substitute it. The script has no optional reference, so `DISTINCT ?` is a
-    // parameter marker, not a reference to the column `distinct`. See also
-    // `OptionalReferencesParserSuite`, which checks the parse mode that the substitution reports.
+    // `:x` does not substitute it. `DISTINCT ?` is a parameter marker, not a reference to the
+    // column `distinct`.
     val script =
       """BEGIN
         |  DECLARE r INT;
@@ -1489,12 +1495,15 @@ class ParametersSuite extends SharedSparkSession {
       ) {
         // A statement that is valid without optional references keeps its markers.
         checkAnswer(spark.sql("SELECT first(DISTINCT ?) AS f, ? AS g", Array(5, 6)), Row(5, 6))
-        // In a statement with optional references, a `?` after a non-reserved keyword where the
-        // syntax allows a reference is an optional reference, so the remaining markers would
-        // take the values of the preceding ones silently.
+        checkAnswer(
+          spark.sql("SELECT missing?, first(DISTINCT ?) AS f, ? AS g", Array(5, 6)),
+          Row(null, 5, 6))
+        // In a statement with optional references, a value without a marker is an error, so that
+        // the markers do not take the values that were meant for a `?` that is an optional
+        // reference silently.
         checkError(
           exception = intercept[AnalysisException] {
-            spark.sql("SELECT missing?, first(DISTINCT ?) AS f, ? AS g", Array(5, 6))
+            spark.sql("SELECT missing?, ? AS g", Array(5, 6))
           },
           condition = "UNUSED_SQL_PARAMETER_VALUES",
           parameters = Map("numMarkers" -> "1", "numValues" -> "2"))
@@ -1519,7 +1528,7 @@ class ParametersSuite extends SharedSparkSession {
         sql("CREATE TEMPORARY VIEW v AS SELECT 1 AS id, 2 AS `distinct`")
         // The parameters are bound after the references resolved, so the check must go by the
         // statement as written.
-        val query = "SELECT id?, first(DISTINCT ?) AS f, ? AS g FROM v GROUP BY id"
+        val query = "SELECT id?, first(`distinct`?) AS f, ? AS g FROM v GROUP BY id"
         checkError(
           exception = intercept[AnalysisException](spark.sql(query, Array(5, 6))),
           condition = "UNUSED_SQL_PARAMETER_VALUES",
@@ -1534,7 +1543,7 @@ class ParametersSuite extends SharedSparkSession {
         checkAnswer(spark.sql(s"EXECUTE IMMEDIATE '$query' USING 6"), Row(1, 2, 6))
         // The common table expressions of the statement and of its subqueries, which are not
         // children of the operator that defines them, are searched too.
-        val cte = "WITH c AS (SELECT first(DISTINCT ?) AS f, missing? AS m FROM v)"
+        val cte = "WITH c AS (SELECT first(`distinct`?) AS f, missing? AS m FROM v)"
         Seq(
           s"$cte SELECT f, ? AS g FROM c",
           s"SELECT ($cte SELECT f FROM c) AS f, ? AS g"

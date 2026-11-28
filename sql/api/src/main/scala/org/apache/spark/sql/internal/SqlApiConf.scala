@@ -128,7 +128,7 @@ private[sql] object DefaultSqlApiConf extends SqlApiConf {
   override def legacyIdentifierClauseOnly: Boolean = false
   override def timestampNanosTypesEnabled: Boolean = SparkEnvUtils.isTesting
   override def isFileTypeEnabled: Boolean = false
-  override def optionalReferencesEnabled: Boolean = false
+  override def optionalReferencesEnabled: Boolean = true
   override def allowCreatingUDTFromString: Boolean = true
   override def allowedDynamicUDTClasses: Seq[String] = Nil
 }
