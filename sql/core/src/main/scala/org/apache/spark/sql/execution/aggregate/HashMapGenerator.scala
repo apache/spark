@@ -132,6 +132,7 @@ abstract class HashMapGenerator(
     """
        |public void close() {
        |  batch.close();
+       |  buckets = null;
        |}
      """.stripMargin
   }
