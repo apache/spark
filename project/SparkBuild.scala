@@ -205,8 +205,9 @@ object SparkBuild extends PomBuild {
   // scalacOptions, as it imports the default <args> under 2.13.
   lazy val scala3Settings: Seq[sbt.Def.Setting[_]] = Seq(
     // sbt names the output directory after the full Scala 3 version (scala-3.3.8), while
-    // Maven, the bin/ scripts, the launcher and the assembly paths in this file expect
-    // scala-<binary version>. Use the binary version, as sbt already does for 2.13.
+    // Maven, the docs build and the assembly paths in this file use scala-<binary version>.
+    // Use the binary version, as sbt already does for 2.13. (bin/load-spark-env.sh and the
+    // launcher still assume scala-2.13; running Spark on Scala 3 is not supported yet.)
     crossTarget := {
       if (scalaBinaryVersion.value.startsWith("3")) {
         target.value / s"scala-${scalaBinaryVersion.value}"
@@ -221,6 +222,12 @@ object SparkBuild extends PomBuild {
       val opts = scalacOptions.value
       val (first, second) = opts.splitAt(opts.length / 2)
       if (scalaBinaryVersion.value.startsWith("3") && first == second) first else opts
+    },
+    // Skip API docs on Scala 3, as the scala-3 Maven profile does: the doc options below
+    // (-groups, -skip-packages, -doc-title) are Scala 2 scaladoc flags. sbt runs no doc tool
+    // when the doc task has no sources.
+    (Compile / doc / sources) := {
+      if (scalaBinaryVersion.value.startsWith("3")) Nil else (Compile / doc / sources).value
     }
   )
 
@@ -417,7 +424,8 @@ object SparkBuild extends PomBuild {
       // compiler warns when it is given twice.
       (if (scalaBinaryVersion.value.startsWith("3")) Nil else Seq("-release", javaVersion.value)) ++
       Seq(
-        "-sourcepath", (ThisBuild / baseDirectory).value.getAbsolutePath  // Required for relative source links in scaladoc
+        // Required for relative source links in scaladoc
+        "-sourcepath", (ThisBuild / baseDirectory).value.getAbsolutePath
       )
     },
 

@@ -160,6 +160,7 @@ def get_scala_profiles(scala_version):
 
     sbt_maven_scala_profiles = {
         "scala2.13": ["-Pscala-2.13"],
+        "scala3": ["-Pscala-3"],
     }
 
     if scala_version in sbt_maven_scala_profiles:
@@ -180,7 +181,7 @@ def switch_scala_version(scala_version):
     Switch the code base to use the given Scala version.
     """
     assert scala_version is not None
-    ver_num = scala_version[-4:]  # Simply extract. e.g.) 2.13 from scala2.13
+    ver_num = scala_version[len("scala") :]  # e.g.) 2.13 from scala2.13, 3 from scala3
     command = [os.path.join(SPARK_HOME, "dev", "change-scala-version.sh"), ver_num]
     run_cmd(command)
 

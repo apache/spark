@@ -192,6 +192,9 @@
          scala.binary.version. -->
     <kafka.scala.binary.version>2.13</kafka.scala.binary.version>
     <classutil.scala.binary.version>2.13</classutil.scala.binary.version>
+    <!-- scala-compiler and scala-reflect exist only for Scala 2, so they stay on 2.13 under
+         Scala 3 too, and so does the scala-xml they bring in. -->
+    <scala213.binary.version>2.13</scala213.binary.version>
     <scalatest-maven-plugin.version>2.2.0</scalatest-maven-plugin.version>
     <scala-maven-plugin.version>4.9.10</scala-maven-plugin.version>
     <maven.scaladoc.skip>false</maven.scaladoc.skip>
@@ -1232,22 +1235,18 @@
       <dependency>
         <groupId>org.scala-lang</groupId>
         <artifactId>scala-compiler</artifactId>
-        <!-- scala-compiler and scala-reflect are Scala 2 only; there is no 3.x artifact.
-             Track the 2.13 line explicitly rather than ${scala.version}, which the switch
-             points at ${scala3.version}. Identical under Scala 2.13, where scala.version
-             is ${scala213.version}. -->
-        <version>${scala213.version}</version>
+        <version>${scala.version}</version>
         <exclusions>
           <exclusion>
             <groupId>org.scala-lang.modules</groupId>
-            <artifactId>scala-xml_2.13</artifactId>
+            <artifactId>scala-xml_${scala213.binary.version}</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
       <dependency>
         <groupId>org.scala-lang</groupId>
         <artifactId>scala-reflect</artifactId>
-        <version>${scala213.version}</version>
+        <version>${scala.version}</version>
       </dependency>
       <dependency>
         <groupId>org.scala-lang</groupId>
@@ -3650,6 +3649,24 @@
           <dependency>
             <groupId>org.scala-lang</groupId>
             <artifactId>scala-library</artifactId>
+            <version>${scala213.version}</version>
+          </dependency>
+          <!-- scala-compiler and scala-reflect have no 3.x artifact; keep them on the 2.13
+               line instead of following scala.version. -->
+          <dependency>
+            <groupId>org.scala-lang</groupId>
+            <artifactId>scala-compiler</artifactId>
+            <version>${scala213.version}</version>
+            <exclusions>
+              <exclusion>
+                <groupId>org.scala-lang.modules</groupId>
+                <artifactId>scala-xml_${scala213.binary.version}</artifactId>
+              </exclusion>
+            </exclusions>
+          </dependency>
+          <dependency>
+            <groupId>org.scala-lang</groupId>
+            <artifactId>scala-reflect</artifactId>
             <version>${scala213.version}</version>
           </dependency>
         </dependencies>

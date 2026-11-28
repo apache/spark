@@ -87,9 +87,8 @@ sed_i '1,/<scala\.binary\.version>[0-9][0-9.]*</s/<scala\.binary\.version>[0-9][
   "$BASEDIR/pom.xml"
 
 # The stdlib is published under a different coordinate per version, so flip it alongside
-# the two properties above. Leaving it behind would rewrite the POM into a state that only
-# resolves once -Pscala-3 is also passed, since the profile is what supplies the Scala 3
-# value; keeping all three together means the rewritten POM is consistent on its own.
+# the two properties above, keeping the three in agreement in the rewritten POM. Building
+# Scala 3 still needs -Pscala-3, which supplies the compiler flags and the 2.13 pins.
 if [ $TO_VERSION = "3" ]; then
   SCALA_LIBRARY_ARTIFACT="scala3-library_3"
 else
