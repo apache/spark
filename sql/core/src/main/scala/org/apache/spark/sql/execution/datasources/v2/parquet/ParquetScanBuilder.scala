@@ -21,14 +21,14 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
-import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
+import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, CountStar}
 import org.apache.spark.sql.connector.read.{SupportsPushDownAggregates, SupportsPushDownVariantExtractions, VariantExtraction}
 import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, PartitioningAwareFileIndex}
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFilters, SparkToParquetSchemaConverter}
 import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{FileType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 
@@ -96,6 +96,13 @@ case class ParquetScanBuilder(
 
   override def pushAggregation(aggregation: Aggregation): Boolean = {
     if (!sparkSession.sessionState.conf.parquetAggregatePushDown) {
+      return false
+    }
+    // The footer holds one column chunk per leaf, and a FILE column has one per field, so the
+    // chunk of a column's statistics is not at its top-level position once the data schema holds
+    // a FILE. Only COUNT(*), which needs the row counts alone, is answered from the footer then.
+    if (dataSchema.existsRecursively(_.isInstanceOf[FileType]) &&
+        !aggregation.aggregateExpressions.forall(_.isInstanceOf[CountStar])) {
       return false
     }
 

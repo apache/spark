@@ -885,10 +885,10 @@ object SQLConf {
       .internal()
       .doc("When true, the FILE data type is supported. This is a preview feature under " +
         "SPARK-59132 and may change in future releases. The default is false in production; " +
-        "tests enable it by default via Utils.isTesting. Enabling this flag does not " +
-        "guarantee full SQL support: the physical representation, casts, Parquet read and " +
-        "write, and other operations may still fail until their respective features are " +
-        "implemented.")
+        "tests enable it by default via Utils.isTesting. It also decides whether the Parquet " +
+        "data sources store FILE columns. Enabling this flag does not guarantee full SQL " +
+        "support: casts and other operations may still fail until their respective features " +
+        "are implemented.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf

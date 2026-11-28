@@ -204,6 +204,13 @@ object ParquetUtils extends Logging {
   }
 
   /**
+   * Whether Parquet can store `dt`, if `dt` is a framework type with Parquet support, or None
+   * otherwise. For the Parquet data sources outside this package, such as the V2 `ParquetTable`.
+   */
+  def supportFrameworkDataType(dt: DataType): Option[Boolean] =
+    ParquetTypeOps(dt).map(_.supportDataType)
+
+  /**
    * Whether columnar read is supported for the input `schema`.
    */
   def isBatchReadSupportedForSchema(sqlConf: SQLConf, schema: StructType): Boolean =

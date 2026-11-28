@@ -224,6 +224,12 @@ class ParquetToSparkSchemaConverter(
     }
     field match {
       case primitiveColumn: PrimitiveColumnIO => convertPrimitiveField(primitiveColumn, targetType)
+      case groupColumn: GroupColumnIO if targetType.exists(_.isInstanceOf[FileType]) =>
+        // A FILE is stored as a group of its fields: read the group as that struct, and keep the
+        // requested FileType, with its mode, as the Spark type.
+        val col = convertGroupField(groupColumn, ignoreVariantAnnotation = false,
+          Some(FileType.asStruct))
+        col.copy(sparkType = targetType.get)
       case groupColumn: GroupColumnIO if targetType.contains(VariantType) =>
         if (SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_READING_SHREDDED)) {
           // We need the underlying file type regardless of the config.

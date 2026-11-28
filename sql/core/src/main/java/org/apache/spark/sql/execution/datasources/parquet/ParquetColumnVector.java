@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Set;
 
 import org.apache.spark.network.util.JavaUtils;
+import org.apache.spark.sql.catalyst.types.ops.TypeOps$;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 import org.apache.spark.sql.types.ArrayType;
 import org.apache.spark.sql.types.DataType;
@@ -58,6 +59,9 @@ final class ParquetColumnVector {
   /** Whether this column is primitive (i.e., leaf column) */
   private final boolean isPrimitive;
 
+  /** Whether this column is assembled as a struct, see `isStructBacked` */
+  private final boolean isStructBacked;
+
   /** Reader for this column - only set if 'isPrimitive' is true */
   private VectorizedColumnReader columnReader;
 
@@ -72,6 +76,7 @@ final class ParquetColumnVector {
     this.vector = vector;
     this.children = new ArrayList<>();
     this.isPrimitive = column.isPrimitive();
+    this.isStructBacked = isStructBacked(column.sparkType());
 
     if (missingColumns.contains(column)) {
       if (ParquetRowIndexUtil.isRowIndexColumn(column)) {
@@ -170,6 +175,15 @@ final class ParquetColumnVector {
   }
 
   /**
+   * Whether a column of `type` is assembled as a struct: a struct, a variant, or a framework type
+   * whose row representation is a struct, such as FILE.
+   */
+  private static boolean isStructBacked(DataType type) {
+    return type instanceof VariantType ||
+      TypeOps$.MODULE$.rowRepresentationOrSelf(type) instanceof StructType;
+  }
+
+  /**
    * Assembles this column and calculate collection offsets recursively.
    * This is a no-op for primitive columns.
    */
@@ -195,7 +209,7 @@ final class ParquetColumnVector {
         child.assemble();
       }
       assembleCollection();
-    } else if (type instanceof StructType || type instanceof VariantType) {
+    } else if (isStructBacked) {
       for (ParquetColumnVector child : children) {
         child.assemble();
       }
