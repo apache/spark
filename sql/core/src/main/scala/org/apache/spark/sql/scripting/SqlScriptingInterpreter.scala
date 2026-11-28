@@ -115,23 +115,21 @@ case class SqlScriptingInterpreter(session: SparkSession) {
       })
 
       // Get NOT FOUND handler.
-      notFoundHandler = if (handler.exceptionHandlerTriggers.notFound) {
+      if (handler.exceptionHandlerTriggers.notFound) {
         if (notFoundHandler.isDefined) {
           throw SqlScriptingErrors.duplicateHandlerForSameCondition(CurrentOrigin.get, "NOT FOUND")
-        } else {
-          Some(handlerExec)
         }
-      } else None
+        notFoundHandler = Some(handlerExec)
+      }
 
       // Get SQLEXCEPTION handler.
-      sqlExceptionHandler = if (handler.exceptionHandlerTriggers.sqlException) {
+      if (handler.exceptionHandlerTriggers.sqlException) {
         if (sqlExceptionHandler.isDefined) {
           throw SqlScriptingErrors
             .duplicateHandlerForSameCondition(CurrentOrigin.get, "SQLEXCEPTION")
-        } else {
-          Some(handlerExec)
         }
-      } else None
+        sqlExceptionHandler = Some(handlerExec)
+      }
     })
 
     // Create a trigger to exception handler map for the current CompoundBody.
