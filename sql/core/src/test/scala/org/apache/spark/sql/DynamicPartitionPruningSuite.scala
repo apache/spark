@@ -613,6 +613,56 @@ abstract class DynamicPartitionPruningSuiteBase
     }
   }
 
+  test("SPARK-60703: project broadcast value rows when AQE is not force-applied") {
+    withTable("dpp_aqe_dates", "dpp_aqe_users", "dpp_aqe_target") {
+      Seq((1L, Date.valueOf("2024-01-01")), (2L, Date.valueOf("2024-01-08")))
+        .toDF("cohort_id", "cohort_date")
+        .write.format(tableFormat).saveAsTable("dpp_aqe_dates")
+      Seq((1L, "u1"), (2L, "u2"))
+        .toDF("cohort_id", "user_id")
+        .write.format(tableFormat).saveAsTable("dpp_aqe_users")
+      Seq(("u1", "2024-01-07", "p1"), ("u2", "2024-01-14", "p2"), ("u1", "2024-01-21", "p3"))
+        .toDF("user_id", "ds", "payload")
+        .write.partitionBy("ds").format(tableFormat).saveAsTable("dpp_aqe_target")
+
+      // The broadcast plan of `d` has no exchange, so unless forceApply is on, AQE wraps it only
+      // when it is compiled as a subquery.
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "false",
+          SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+          SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true",
+          SQLConf.DYNAMIC_PARTITION_PRUNING_BROADCAST_PROJECTION_ENABLED.key -> "true",
+          SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        val df = sql(
+          """
+            |WITH cohorts AS (
+            |  SELECT /*+ BROADCAST(d) */ d.cohort_date, u.user_id
+            |  FROM dpp_aqe_dates d JOIN dpp_aqe_users u ON d.cohort_id = u.cohort_id
+            |  WHERE u.user_id <> 'filtered'
+            |)
+            |SELECT c.user_id, w.payload
+            |FROM cohorts c
+            |JOIN dpp_aqe_target w
+            |  ON w.user_id = c.user_id
+            | AND w.ds = date_format(date_add(c.cohort_date, 6), 'yyyy-MM-dd')
+            |""".stripMargin)
+
+        checkAnswer(df, Seq(Row("u1", "p1"), Row("u2", "p2")))
+        checkPartitionPruningPredicate(df, withSubquery = false, withBroadcast = true)
+
+        val projected = collectWithSubqueries(df.queryExecution.executedPlan) {
+          case subquery: ProjectedBroadcastValueSubqueryExec => subquery
+        }
+        assert(projected.size === 1, df.queryExecution.executedPlan)
+        val pruning = collectDynamicPruningExpressions(df.queryExecution.executedPlan)
+          .collectFirst { case in: InSubqueryExec => in }.get
+        assert(pruning.values().get.map(String.valueOf).toSet ===
+          Set("2024-01-07", "2024-01-14"))
+      }
+    }
+  }
+
   /**
    * Collect the children of all correctly pushed down dynamic pruning expressions in a spark plan.
    */
