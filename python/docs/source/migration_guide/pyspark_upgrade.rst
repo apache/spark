@@ -19,6 +19,10 @@
 Upgrading PySpark
 ==================
 
+Upgrading from PySpark 4.4 to 5.0
+---------------------------------
+* In Spark 5.0, ``Rolling.count`` in pandas API on Spark (including ``Series.rolling``, ``DataFrame.rolling`` and their ``groupby`` variants) honors ``min_periods`` and, as in pandas, defaults it to the window size, so the first ``window - 1`` rows now return ``NaN`` instead of a count over the partial window. To restore the previous results, pass ``min_periods=1``.
+
 Upgrading from PySpark 4.2 to 4.3
 ---------------------------------
 * In Spark 4.3, Python 3.10 support was dropped in PySpark.
