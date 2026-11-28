@@ -270,6 +270,8 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
                 return self._secure_channel(endpoint, creds)
 
         session = RemoteSparkSession.builder.channelBuilder(CustomChannelBuilder()).create()
+        session.release_session_on_close = False
+        self.addCleanup(session.stop)
         session.sql("select 1 + 1")
 
     def test_reset_when_server_and_client_sessionids_mismatch(self):
@@ -284,6 +286,8 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
 
         # assert that getOrCreate() generates a new session
         session = RemoteSparkSession.builder.remote("sc://localhost").getOrCreate()
+        session.release_session_on_close = False
+        self.addCleanup(session.stop)
         session.range(3).collect()
 
     def test_reset_when_server_session_id_mismatch(self):
@@ -298,6 +302,8 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
 
         # assert that getOrCreate() generates a new session
         session = RemoteSparkSession.builder.remote("sc://localhost").getOrCreate()
+        session.release_session_on_close = False
+        self.addCleanup(session.stop)
         session.range(3).collect()
 
     def test_stop_invalid_session(self):  # SPARK-47986
@@ -323,11 +329,23 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
     def test_authentication(self):
         # All servers start with a default token of "deadbeef", so supply in invalid one
         session = RemoteSparkSession.builder.remote("sc://localhost/;token=invalid").create()
+        session.release_session_on_close = False
+        self.addCleanup(session.stop)
 
         with self.assertRaises(SparkConnectGrpcException) as e:
             session.range(3).collect()
 
         self.assertTrue("Invalid authentication token" in str(e.exception))
+
+    def test_failed_create_preserves_active_session(self):
+        builder = RemoteSparkSession.builder.remote("sc://localhost/;token=invalid").config(
+            "spark.sql.shuffle.partitions", 2
+        )
+        with self.assertRaisesRegex(SparkConnectGrpcException, "Invalid authentication token"):
+            builder.create()
+
+        self.assertIs(RemoteSparkSession.getActiveSession(), self.spark)
+        self.assertIs(RemoteSparkSession.builder.remote("sc://localhost").getOrCreate(), self.spark)
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
@@ -378,11 +396,18 @@ class SparkConnectSessionBuilderTests(unittest.TestCase):
 
     def test_session_create_sets_active_session(self):
         session = RemoteSparkSession.builder.remote("sc://abc").create()
-        session2 = RemoteSparkSession.builder.remote("sc://other").getOrCreate()
-
-        self.assertIs(session, session2)
         session.release_session_on_close = False
-        session.stop()
+        self.addCleanup(session.stop)
+        self.assertIs(RemoteSparkSession.getActiveSession(), session)
+
+        builder = RemoteSparkSession.builder.remote("sc://other")
+        session2 = builder.create()
+        session2.release_session_on_close = False
+        self.addCleanup(session2.stop)
+
+        self.assertIs(RemoteSparkSession.getActiveSession(), session2)
+        self.assertIs(builder.getOrCreate(), session2)
+        self.assertIs(RemoteSparkSession._get_default_session(), session)
 
     def test_active_session_expires_when_client_closes(self):
         s1 = RemoteSparkSession.builder.remote("sc://other").getOrCreate()
