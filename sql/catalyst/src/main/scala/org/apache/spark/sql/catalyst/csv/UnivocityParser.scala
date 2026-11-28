@@ -467,6 +467,9 @@ class UnivocityParser(
    * type. The state is reset for every input file.
    *
    * Floating point types (double, float) are not considered to avoid precision loss.
+   *
+   * When `variantPrimitivesAsString` is enabled, no type is tried and every non-null value is
+   * stored as a string.
    */
   private final class VariantValueConverter extends ValueConverter {
     private var currentType: DataType = LongType
@@ -487,7 +490,7 @@ class UnivocityParser(
         return
       }
 
-      if (!options.inferSchemaFlag && options.variantRespectInferSchema) {
+      if (options.variantPrimitivesAsString) {
         builder.appendString(s)
         return
       }

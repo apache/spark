@@ -220,6 +220,15 @@ class JSONOptions(
   // E.g. spark.read.format("json").option("singleVariantColumn", "colName")
   val singleVariantColumn: Option[String] = parameters.get(SINGLE_VARIANT_COLUMN)
 
+  // When true, JSON number and boolean values read into a VARIANT are stored as strings holding
+  // their text as written, instead of numeric or boolean values. This avoids precision loss for
+  // numbers that do not fit a variant decimal. The one exception is leading zeros accepted via
+  // `allowNumericLeadingZeros`, which the JSON parser drops before the text is read. See
+  // `DataSourceOptions.VARIANT_PRIMITIVES_AS_STRING`. Unlike `primitivesAsString`, which applies
+  // to non-variant columns, it has no effect on schema inference.
+  val variantPrimitivesAsString: Boolean =
+    parameters.get(VARIANT_PRIMITIVES_AS_STRING).exists(_.toBoolean)
+
   // This option takes in a field name and specifies that the input JSON files are object
   // documents with a top-level array-valued field of that name, i.e.
   // `{..., "<fieldName>": [element1, element2, ...], ...}`. Each element of the array becomes one
@@ -346,6 +355,7 @@ object JSONOptions extends DataSourceOptions {
   val TIME_ZONE = newOption("timeZone")
   val WRITE_NON_ASCII_CHARACTER_AS_CODEPOINT = newOption("writeNonAsciiCharacterAsCodePoint")
   val SINGLE_VARIANT_COLUMN = newOption(DataSourceOptions.SINGLE_VARIANT_COLUMN)
+  val VARIANT_PRIMITIVES_AS_STRING = newOption(DataSourceOptions.VARIANT_PRIMITIVES_AS_STRING)
   val EXPLODE_EMBEDDED_ARRAY = newOption(DataSourceOptions.EXPLODE_EMBEDDED_ARRAY)
   val USE_UNSAFE_ROW = newOption("useUnsafeRow")
   val ENABLE_STREAMING_TOP_LEVEL_ARRAY = newOption("enableStreamingTopLevelArray")

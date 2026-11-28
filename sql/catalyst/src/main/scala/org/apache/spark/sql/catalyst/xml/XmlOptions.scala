@@ -124,7 +124,6 @@ class XmlOptions(
   val ignoreSurroundingSpaces = getBool(IGNORE_SURROUNDING_SPACES, true)
   val parseMode = ParseMode.fromString(parameters.getOrElse(MODE, PermissiveMode.name))
   val inferSchema = getBool(INFER_SCHEMA, true)
-  val respectVariantInferSchema = SQLConf.get.xmlVariantRespectInferSchema
   val rowValidationXSDPath = parameters.get(ROW_VALIDATION_XSD_PATH).orNull
   val wildcardColName =
     parameters.getOrElse(WILDCARD_COL_NAME, XmlOptions.DEFAULT_WILDCARD_COL_NAME)
@@ -200,6 +199,19 @@ class XmlOptions(
   // E.g. spark.read.format("xml").option("singleVariantColumn", "colName")
   val singleVariantColumn = parameters.get(SINGLE_VARIANT_COLUMN)
 
+  // The value of the `variantPrimitivesAsString` option, or None if the user did not set it.
+  val variantPrimitivesAsStringOpt: Option[Boolean] =
+    parameters.get(VARIANT_PRIMITIVES_AS_STRING).flatMap(Option(_))
+      .map(_ => getBool(VARIANT_PRIMITIVES_AS_STRING))
+
+  // When true, XML text, attribute and value tag values read into a VARIANT are stored as strings
+  // instead of a type inferred from their text. See
+  // `DataSourceOptions.VARIANT_PRIMITIVES_AS_STRING`. When the option is not set, it falls back to
+  // the deprecated `spark.sql.xml.variant.respectInferSchema` SQL conf, which keeps values as
+  // strings only together with `inferSchema=false`.
+  val variantPrimitivesAsString: Boolean = variantPrimitivesAsStringOpt.getOrElse(
+    !inferSchema && SQLConf.get.xmlVariantRespectInferSchema)
+
   // When set to true, use the legacy XML parser for parsing XML files.
   // Compared to the default parser, the legacy parser has less stringent validation checks for
   // malformed content, but it's less memory-efficient
@@ -252,6 +264,7 @@ object XmlOptions extends DataSourceOptions {
   val PREFERS_DECIMAL = newOption("prefersDecimal")
   val VALIDATE_NAME = newOption("validateName")
   val SINGLE_VARIANT_COLUMN = newOption("singleVariantColumn")
+  val VARIANT_PRIMITIVES_AS_STRING = newOption(DataSourceOptions.VARIANT_PRIMITIVES_AS_STRING)
   val USE_LEGACY_XML_PARSER = newOption("useLegacyXMLParser")
   // Options with alternative
   val ENCODING = "encoding"
