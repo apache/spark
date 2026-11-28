@@ -71,6 +71,9 @@ class StateStoreConf(
   val autoSnapshotRepairMaxChangeFileReplay: Int =
     sqlConf.stateStoreAutoSnapshotRepairMaxChangeFileReplay
 
+  /** Whether to trim the checkpoint v2 lineage when a RocksDB state store is loaded */
+  val trimLineageOnLoadEnabled: Boolean = sqlConf.stateStoreTrimLineageOnLoadEnabled
+
   /** Minimum versions a State Store implementation should retain to allow rollbacks */
   val minVersionsToRetain: Int = sqlConf.minBatchesToRetain
 
