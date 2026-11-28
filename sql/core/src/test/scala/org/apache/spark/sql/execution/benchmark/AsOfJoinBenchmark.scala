@@ -24,7 +24,8 @@ import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Benchmark to measure AS-OF join performance: sort-merge operator vs correlated subquery.
- * The sort-merge operator runs with the buffered scan and with the cursor scan.
+ * The sort-merge operator runs backward and nearest joins, each with the buffered scan and with
+ * the cursor scan.
  * To run this benchmark:
  * {{{
  *   1. build/sbt "sql/Test/runMain <this class>"
@@ -39,13 +40,34 @@ object AsOfJoinBenchmark extends SqlBasedBenchmark {
   private def doAsOfJoin(
       left: classic.DataFrame,
       right: classic.DataFrame,
-      usingColumns: Seq[String]): Unit = {
+      usingColumns: Seq[String],
+      direction: String = "backward"): Unit = {
     left.joinAsOf(
       right, left.col("ts"), right.col("ts"),
       usingColumns = usingColumns,
       joinType = "inner", tolerance = null,
-      allowExactMatches = true, direction = "backward"
+      allowExactMatches = true, direction = direction
     ).noop()
+  }
+
+  /** Adds the sort-merge join cases of `direction`: with the buffered and the cursor scan. */
+  private def addSortMergeCases(
+      benchmark: Benchmark,
+      name: String,
+      direction: String,
+      left: classic.DataFrame,
+      right: classic.DataFrame,
+      usingColumns: Seq[String]): Unit = {
+    Seq("buffered" -> false, "cursor" -> true).foreach { case (scan, cursorScan) =>
+      benchmark.addCase(s"$name, $scan scan") { _ =>
+        withSQLConf(
+          SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+          SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> cursorScan.toString,
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+          doAsOfJoin(left, right, usingColumns, direction)
+        }
+      }
+    }
   }
 
   private def asOfJoinBenchmark(
@@ -77,23 +99,10 @@ object AsOfJoinBenchmark extends SqlBasedBenchmark {
       }
     }
 
-    benchmark.addCase("Sort-merge AS-OF join, buffered scan") { _ =>
-      withSQLConf(
-        SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
-        SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> "false",
-        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
-        doAsOfJoin(left, right, Seq("group_id"))
-      }
-    }
-
-    benchmark.addCase("Sort-merge AS-OF join, cursor scan") { _ =>
-      withSQLConf(
-        SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
-        SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> "true",
-        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
-        doAsOfJoin(left, right, Seq("group_id"))
-      }
-    }
+    addSortMergeCases(benchmark, "Sort-merge AS-OF join", "backward", left, right, Seq("group_id"))
+    // Nearest joins have no generated scan, so both of their cases run interpreted.
+    addSortMergeCases(benchmark, "Sort-merge nearest AS-OF join", "nearest", left, right,
+      Seq("group_id"))
 
     benchmark.run()
   }
@@ -123,23 +132,10 @@ object AsOfJoinBenchmark extends SqlBasedBenchmark {
       }
     }
 
-    benchmark.addCase("Sort-merge AS-OF join, buffered scan") { _ =>
-      withSQLConf(
-        SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
-        SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> "false",
-        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
-        doAsOfJoin(left, right, Seq.empty)
-      }
-    }
-
-    benchmark.addCase("Sort-merge AS-OF join, cursor scan") { _ =>
-      withSQLConf(
-        SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
-        SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> "true",
-        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
-        doAsOfJoin(left, right, Seq.empty)
-      }
-    }
+    addSortMergeCases(benchmark, "Sort-merge AS-OF join", "backward", left, right, Seq.empty)
+    // Nearest joins have no generated scan, so both of their cases run interpreted.
+    addSortMergeCases(benchmark, "Sort-merge nearest AS-OF join", "nearest", left, right,
+      Seq.empty)
 
     benchmark.run()
   }

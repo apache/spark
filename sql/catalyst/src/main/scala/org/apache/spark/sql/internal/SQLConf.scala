@@ -1281,9 +1281,10 @@ object SQLConf {
         "the whole residual join condition, such as r >= l - 10 for a backward join. The " +
         "bound has the right sort key first, which must be a column, then >= or > for a " +
         "backward join or <= or < for a forward join, then the left sort key, alone or plus " +
-        "or minus a constant. Other joins, and joins on STRUCT, ARRAY, TIME, nanosecond " +
-        "timestamp or user-defined type keys, buffer each right-side group and scan the " +
-        "buffer again for every left row.")
+        "or minus a constant. A nearest join reads the right side once if it allows exact " +
+        "matches and has no tolerance and no residual join condition. Other joins, and joins " +
+        "on STRUCT, ARRAY, TIME, nanosecond timestamp or user-defined type keys, buffer each " +
+        "right-side group and scan the buffer again for every left row.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
