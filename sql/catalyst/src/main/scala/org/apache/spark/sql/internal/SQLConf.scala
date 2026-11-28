@@ -9489,13 +9489,14 @@ object SQLConf {
   val PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_WITH_SUBQUERIES_ENABLED =
     buildConf("spark.sql.adaptive.pushDownShuffleThroughUnion.allowWithSubqueries.enabled")
       .internal()
-      .doc("When true, allows shuffle push-down in queries containing scalar, IN or dynamic " +
-        "pruning subqueries, including scalar builds injected by runtime Bloom filters even " +
-        "when the SQL has no explicit subquery. Independent adaptive plans can differ, " +
-        "reducing exchange reuse or disabling broadcast-only dynamic partition pruning. Failed " +
-        "broadcast reuse can remove the pruning filter and scan all fact partitions, which " +
-        "can outweigh the build-side shuffle saving. When false, push-down is disabled for " +
-        "the main query and all its subqueries.")
+      .doc("When false, a subquery plan is never rewritten, and neither is a plan that embeds " +
+        "a subquery holding a shuffle over a union the rewrite could move, or that has a union " +
+        "whose direct child is a REPARTITION_BY_COL shuffle the rewrite would retarget. When " +
+        "true, push-down is allowed in all of them. Rewriting drops or retargets exchanges " +
+        "from the shared stage cache and from broadcast-only dynamic partition pruning reuse, " +
+        "which the other side still matches against; failed broadcast reuse can remove the " +
+        "pruning filter and scan all fact partitions. The reuse configs are not read: with " +
+        "reuse off the freeze only forgoes the rewrite.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf

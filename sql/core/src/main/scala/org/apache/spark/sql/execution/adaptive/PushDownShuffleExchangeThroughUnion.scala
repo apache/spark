@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
 import org.apache.spark.sql.execution.{
-  FilterExec, ProjectExec, SortExec, SparkPlan, UnaryExecNode, UnionExec}
+  BaseSubqueryExec, FilterExec, ProjectExec, SortExec, SparkPlan, UnaryExecNode, UnionExec}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.datasources.v2.GroupPartitionsExec
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, EnsureRequirements, Exchange, PartitioningOrigin, REPARTITION_BY_COL, REPARTITION_BY_NUM, ShuffleExchangeExec, ShuffleExchangeLike, ValidateRequirements}
@@ -111,10 +111,13 @@ import org.apache.spark.sql.internal.SQLConf
  * skew optimization can restore a union exchange after moved branches have shuffled, shuffling
  * them a second time.
  *
- * The query-wide subquery gate includes optimizer-injected runtime Bloom filter builds.
- * Allowing subqueries can make pruning builds differ from main-query broadcast builds. With
- * broadcast-only dynamic pruning, failed broadcast reuse removes the pruning filter and can scan
- * all fact partitions; that cost can outweigh the saved build-side shuffle.
+ * `AdaptiveSparkPlanExec` never rewrites a subquery's plan, and leaves the enclosing plan
+ * unrewritten while an embedded subquery holds a shuffle this rewrite could move, or while the
+ * plan has a `REPARTITION_BY_COL` union child this rewrite would retarget: either rewrite drops
+ * or retargets exchanges another plan reuses (the shared stage cache and broadcast-only dynamic
+ * pruning). Subqueries without such a shuffle do not block it. The internal
+ * `spark.sql.adaptive.pushDownShuffleThroughUnion.allowWithSubqueries.enabled` override lifts
+ * both.
  *
  * The rule runs only in AQE preparation, after `EnsureRequirements` and before
  * `StampUnionDecisions`. It preserves the root distribution and all user repartition layouts
@@ -143,35 +146,19 @@ import org.apache.spark.sql.internal.SQLConf
 case class PushDownShuffleExchangeThroughUnion(
     ensureRequirements: EnsureRequirements) extends Rule[SparkPlan] {
 
+  import PushDownShuffleExchangeThroughUnion._
+
   override def apply(plan: SparkPlan): SparkPlan = {
     if (!ensureRequirements.pushDownShuffleThroughUnionEnabled) {
       return plan
     }
 
-    val lookThrough =
-      conf.getConf(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_LOOK_THROUGH_OPERATORS_ENABLED)
     // A keyed source reports its layout on a leaf, so it is kept only when the consumer's shuffle
     // group cannot coalesce: the opt-in below, coalescing off, or inputs that do not all reach an
     // exchange, which the pass allows per site. The kept scan also leaves the union's coalesce
     // group ineligible: `CoalesceShufflePartitions` admits only exchange stages, so AQE cannot
     // coalesce the keyed layout away.
-    val policy = LayoutPolicy(
-      allowNonCoalescible = !conf.getConf(SQLConf.COALESCE_PARTITIONS_ENABLED) || conf.getConf(
-        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_NON_COALESCIBLE_BRANCHES_ENABLED),
-      maxMovedBranches =
-        conf.getConf(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_MAX_MOVED_BRANCHES),
-      maxUnionChildren =
-        conf.getConf(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_MAX_UNION_CHILDREN),
-      maxTargetPartitionNumFactor = conf.getConf(
-        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_MAX_TARGET_PARTITION_NUM_FACTOR),
-      keepJoinBranches =
-        conf.getConf(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_JOIN_BRANCHES_ENABLED),
-      allowV2Bucketing = conf.getConf(
-        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_V2_BUCKETING_ENABLED) &&
-        conf.getConf(SQLConf.V2_BUCKETING_ENABLED) && conf.v2BucketingShuffleEnabled &&
-        !conf.v2BucketingPartiallyClusteredDistributionEnabled,
-      allowSubsetTargets = conf.getConf(SQLConf
-        .PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_PARTITION_KEYS_SUBSET_OF_CLUSTER_KEYS_ENABLED))
+    val policy = layoutPolicy(conf)
     val allowJoinInputs =
       conf.getConf(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_JOIN_INPUTS_ENABLED)
 
@@ -217,7 +204,7 @@ case class PushDownShuffleExchangeThroughUnion(
             val sitePolicy = policy.copy(allowV2Bucketing =
               policy.allowV2Bucketing && keyedSites.forall(_.contains(index)))
             val matched = operator.children.map { child =>
-              findPushableShuffle(child, lookThrough, sitePolicy)
+              findPushableShuffle(child, sitePolicy)
             }
             if (matched.forall(_.isEmpty) ||
                 !operator.requiredChildDistribution.forall(_.isInstanceOf[ClusteredDistribution])) {
@@ -388,29 +375,6 @@ case class PushDownShuffleExchangeThroughUnion(
     }
   }
 
-  /**
-   * One of an operator's children this rule can rewrite: the shuffle it moves and the union that
-   * shuffle is moved past.
-   */
-  private case class PushableChild(shuffle: ShuffleExchangeExec, union: UnionExec) {
-    /** The layout of the exchange this rewrite removes. */
-    def partitioning: Partitioning with Expression =
-      shuffle.outputPartitioning.asInstanceOf[Partitioning with Expression]
-  }
-
-  /**
-   * Layout selection settings, read once per pass.
-   */
-  private case class LayoutPolicy(
-      allowNonCoalescible: Boolean,
-      maxMovedBranches: Int,
-      maxUnionChildren: Int,
-      maxTargetPartitionNumFactor: Double,
-      keepJoinBranches: Boolean,
-      allowV2Bucketing: Boolean,
-      allowSubsetTargets: Boolean,
-      preferRemovedLayout: Boolean = false)
-
   /** Lazily discover the reported layouts and rank the targets once per site for both attempts. */
   private class PreparedChild(
       val pushable: PushableChild,
@@ -496,54 +460,10 @@ case class PushDownShuffleExchangeThroughUnion(
         children(index) match {
           case stage: ShuffleQueryStageExec =>
             val shuffle = stage.shuffle
-            PushDownShuffleExchangeThroughUnion.isMarked(shuffle) ||
-              shuffle.shuffleOrigin == ENSURE_REQUIREMENTS
+            isMarked(shuffle) || shuffle.shuffleOrigin == ENSURE_REQUIREMENTS
           case _ => false
         }
       }.toSet
-    }
-  }
-
-  /**
-   * The shape this rule acts on below one of an operator's children: a pushable shuffle and the
-   * union it is moved past, with the operators in between looked through to reach it. Hash
-   * shuffles and opted-in keyed shuffles are pushable, since the layout that replaces one comes
-   * from the union's own children, and a union with more children than `maxUnionChildren` is not a
-   * site.
-   *
-   * What the child owes its operator is not read here: this is asked of every child of every
-   * operator, and `requiredChildDistribution` is not free of side effects: `WindowExecBase` logs
-   * from it for an unpartitioned window.
-   */
-  @tailrec
-  private def findPushableShuffle(
-      plan: SparkPlan,
-      lookThrough: Boolean,
-      policy: LayoutPolicy,
-      found: Option[ShuffleExchangeExec] = None): Option[PushableChild] = {
-    plan match {
-      // A local sort above the shuffle is looked through, since the rebuilt child is sorted back
-      // to the same requirement; one below it is an operator in between and needs the gate.
-      case SortExec(_, false, child, _) if found.isEmpty || lookThrough =>
-        findPushableShuffle(child, lookThrough, policy, found)
-      case shuffle @ ShuffleExchangeExec(partitioning, child, ENSURE_REQUIREMENTS, _, _)
-          if found.isEmpty &&
-            (partitioning.isInstanceOf[HashPartitioning] ||
-              (policy.allowV2Bucketing && partitioning.isInstanceOf[KeyedPartitioning])) =>
-        findPushableShuffle(child, lookThrough, policy, Some(shuffle))
-      // A union is a site only when the shuffle below it was found and it is eligible for one.
-      // AttributeMap keeps the last duplicate exprId, while runtime binding uses the first;
-      // positional rebinding is ambiguous for those unions, so retain their exchange. A union
-      // with too many children is not a site either.
-      case union: UnionExec if found.isEmpty || union.childOutputRepeatsExprId ||
-          union.children.length > policy.maxUnionChildren =>
-        None
-      // Below it: the operators this rule can cross, down to the union the shuffle is moved past.
-      case union: UnionExec =>
-        found.map(PushableChild(_, union))
-      case operator: UnaryExecNode if found.isDefined && lookThrough && canCross(operator) =>
-        findPushableShuffle(operator.child, lookThrough, policy, found)
-      case _ => None
     }
   }
 
@@ -935,7 +855,7 @@ case class PushDownShuffleExchangeThroughUnion(
       sharedExchanges: Set[SparkPlan]): Option[SparkPlan] = {
     def addExchange(partitioning: Partitioning, child: SparkPlan): ShuffleExchangeExec = {
       val exchange = ShuffleExchangeExec(partitioning, child, ENSURE_REQUIREMENTS)
-      PushDownShuffleExchangeThroughUnion.mark(exchange, PushedShuffle)
+      mark(exchange, PushedShuffle)
       exchange
     }
     val newChildren = union.children.zipWithIndex.map { case (child, index) =>
@@ -958,7 +878,7 @@ case class PushDownShuffleExchangeThroughUnion(
                 (sharedExchanges.isEmpty || !sharedExchanges.contains(shuffle.canonicalized)) =>
             val retargeted = shuffle.copy(outputPartitioning = partitioning)
             retargeted.copyTagsFrom(shuffle)
-            PushDownShuffleExchangeThroughUnion.mark(retargeted, RetargetedShuffle)
+            mark(retargeted, RetargetedShuffle)
             if (PartitioningOrigin.validateNode(retargeted)) {
               retargeted
             } else {
@@ -1022,42 +942,6 @@ case class PushDownShuffleExchangeThroughUnion(
   }
 
   /**
-   * Whether moving the shuffle past `operator` preserves results. Only deterministic projects
-   * and filters, non-streaming grouped partial aggregates without session windows, and partial
-   * window group limits are admitted.
-   *
-   * The operators in between are all behind `lookThrough`, and the reducing ones are why: the
-   * rewrite shuffles a child before the reduction, which can be more data than the shuffle it
-   * replaces. These reducers stay above the union; target ranking does not estimate the lost
-   * reduction on moved branches.
-   *   - A project drops no row.
-   *   - A partial aggregate holds one buffer per group per input partition, and the aggregate
-   *     above the shuffle merges them, whichever way the rows arrived.
-   *   - A partial window group limit keeps the top rows per group per input partition, a superset
-   *     of the global top rows the final one then takes.
-   *   - A filter drops the same rows wherever they sit.
-   * A local sort is looked through by `findPushableShuffle` instead, since it re-establishes its
-   * ordering within whatever partitions it is handed; that is also why its ordering does not have
-   * to be deterministic.
-   */
-  private def canCross(operator: UnaryExecNode): Boolean = operator match {
-    case project: ProjectExec =>
-      project.projectList.forall(_.deterministic)
-    case filter: FilterExec =>
-      filter.condition.deterministic
-    case aggregate: BaseAggregateExec =>
-      !aggregate.isStreaming &&
-        aggregate.requiredChildDistributionExpressions.isEmpty &&
-        aggregate.groupingExpressions.nonEmpty &&
-        !aggregate.groupingExpressions.exists(_.metadata.contains(SessionWindow.marker)) &&
-        aggregate.aggregateExpressions.forall(_.mode == PartialAggregate) &&
-        aggregate.expressions.forall(_.deterministic)
-    case limit: WindowGroupLimitExec =>
-      limit.mode == PartialWindowGroupLimit
-    case _ => false
-  }
-
-  /**
    * `child` sorted back to the ordering its operator requires, which is what put the local sort
    * above the shuffle this rule moved, added the way [[EnsureRequirements]] adds it.
    */
@@ -1118,5 +1002,193 @@ object PushDownShuffleExchangeThroughUnion {
       case _ => false
     }
     union.children.exists(counted)
+  }
+
+  /**
+   * Whether `plan` holds a shuffle the rewrite could move, under `conf`: an
+   * `ENSURE_REQUIREMENTS` hash or keyed shuffle below which the rule can reach a union. Only the
+   * exchange is read, not the operator above it.
+   *
+   * The consumer would answer the wrong question: it says whether the rule acts inside the plan,
+   * while the rewrite that can break reuse runs in the enclosing plan, where the same exchange may
+   * sit under a consumer the rule does act on. A copy below a join input (`allowJoinInputs=false`)
+   * is never moved, yet the enclosing copy below a window is, and removing it leaves the first
+   * copy unmatched. This predicate is a superset of the rewrite's own sites, so a plan it rejects
+   * cannot be rewritten.
+   */
+  private[adaptive] def holdsPushableSite(plan: SparkPlan, conf: SQLConf): Boolean = {
+    val policy = layoutPolicy(conf)
+    plan.exists(node => findPushableShuffle(node, policy).isDefined)
+  }
+
+  /**
+   * Whether rewriting `plan` could break reuse in another adaptive plan: a subquery it embeds at
+   * any level holds a shuffle the rewrite could move, or, while the query has subqueries, the
+   * plan has a union with a `REPARTITION_BY_COL` child the rewrite would retarget in place.
+   * Rewriting either drops or retargets exchanges from the shared stage cache and from
+   * broadcast-only dynamic pruning reuse, which another plan still matches against. Subquery
+   * plans are gated off directly, so the subquery side is read for the enclosing plan only. The
+   * subqueries' prepared plans are read, not their rule's outcome, so the answer does not depend
+   * on which preparation runs first.
+   */
+  private[adaptive] def mayBreakReuse(plan: SparkPlan, conf: SQLConf): Boolean =
+    subqueryHoldsPushableSite(plan, conf) ||
+      (plan.subqueriesAll.nonEmpty && hasRetargetableShuffle(plan))
+
+  /**
+   * Whether a subquery `plan` embeds, at any level, holds a shuffle the rewrite could move.
+   * `subqueriesAll` caches each node's scan and already includes nested subqueries; a subquery
+   * hides its own behind the adaptive wrapper, so those are reached through its prepared plan.
+   */
+  private def subqueryHoldsPushableSite(plan: SparkPlan, conf: SQLConf): Boolean =
+    plan.subqueriesAll.exists {
+      case subquery: BaseSubqueryExec => subquery.child match {
+        case adaptive: AdaptiveSparkPlanExec =>
+          holdsPushableSite(adaptive.initialPlan, conf) ||
+            subqueryHoldsPushableSite(adaptive.initialPlan, conf)
+        // Unreachable: InsertAdaptiveSparkPlan plans every subquery of an adaptive plan as its
+        // own AdaptiveSparkPlanExec, and a non-adaptive one drops AQE for the whole query.
+        case _ => false
+      }
+      case _ => false
+    }
+
+  /**
+   * Whether `plan` has a union whose direct child is a `REPARTITION_BY_COL` shuffle. The rewrite
+   * retargets such a child in place, changing its canonical form; whether another plan shares it
+   * cannot be decided here, so the gate treats the shape as a hazard. Conservative in one
+   * direction: a target equal to that child's own layout keeps it, and nothing changes, which is
+   * also not decidable here. A union child with `ENSURE_REQUIREMENTS` is retargeted too, but only
+   * appears after `EnsureRequirements`, so the caller cannot see it on the input plan.
+   */
+  private[adaptive] def hasRetargetableShuffle(plan: SparkPlan): Boolean =
+    plan.exists {
+      case union: UnionExec => union.children.exists {
+        case shuffle: ShuffleExchangeExec => shuffle.shuffleOrigin == REPARTITION_BY_COL
+        case _ => false
+      }
+      case _ => false
+    }
+
+  /**
+   * One of an operator's children this rule can rewrite: the shuffle it moves and the union that
+   * shuffle is moved past.
+   */
+  private case class PushableChild(shuffle: ShuffleExchangeExec, union: UnionExec) {
+    /** The layout of the exchange this rewrite removes. */
+    def partitioning: Partitioning with Expression =
+      shuffle.outputPartitioning.asInstanceOf[Partitioning with Expression]
+  }
+
+  /**
+   * Layout selection settings, read once per pass.
+   */
+  private case class LayoutPolicy(
+      lookThrough: Boolean,
+      allowNonCoalescible: Boolean,
+      maxMovedBranches: Int,
+      maxUnionChildren: Int,
+      maxTargetPartitionNumFactor: Double,
+      keepJoinBranches: Boolean,
+      allowV2Bucketing: Boolean,
+      allowSubsetTargets: Boolean,
+      preferRemovedLayout: Boolean = false)
+
+  private def layoutPolicy(conf: SQLConf): LayoutPolicy = LayoutPolicy(
+    lookThrough =
+      conf.getConf(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_LOOK_THROUGH_OPERATORS_ENABLED),
+    allowNonCoalescible = !conf.getConf(SQLConf.COALESCE_PARTITIONS_ENABLED) || conf.getConf(
+      SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_NON_COALESCIBLE_BRANCHES_ENABLED),
+    maxMovedBranches =
+      conf.getConf(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_MAX_MOVED_BRANCHES),
+    maxUnionChildren =
+      conf.getConf(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_MAX_UNION_CHILDREN),
+    maxTargetPartitionNumFactor = conf.getConf(
+      SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_MAX_TARGET_PARTITION_NUM_FACTOR),
+    keepJoinBranches =
+      conf.getConf(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_JOIN_BRANCHES_ENABLED),
+    allowV2Bucketing = conf.getConf(
+      SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_V2_BUCKETING_ENABLED) &&
+      conf.getConf(SQLConf.V2_BUCKETING_ENABLED) && conf.v2BucketingShuffleEnabled &&
+      !conf.v2BucketingPartiallyClusteredDistributionEnabled,
+    allowSubsetTargets = conf.getConf(SQLConf
+      .PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_PARTITION_KEYS_SUBSET_OF_CLUSTER_KEYS_ENABLED))
+
+  /**
+   * Whether moving the shuffle past `operator` preserves results. Only deterministic projects
+   * and filters, non-streaming grouped partial aggregates without session windows, and partial
+   * window group limits are admitted.
+   *
+   * The operators in between are all behind `lookThrough`, and the reducing ones are why: the
+   * rewrite shuffles a child before the reduction, which can be more data than the shuffle it
+   * replaces. These reducers stay above the union; target ranking does not estimate the lost
+   * reduction on moved branches.
+   *   - A project drops no row.
+   *   - A partial aggregate holds one buffer per group per input partition, and the aggregate
+   *     above the shuffle merges them, whichever way the rows arrived.
+   *   - A partial window group limit keeps the top rows per group per input partition, a superset
+   *     of the global top rows the final one then takes.
+   *   - A filter drops the same rows wherever they sit.
+   * A local sort is looked through by `findPushableShuffle` instead, since it re-establishes its
+   * ordering within whatever partitions it is handed; that is also why its ordering does not have
+   * to be deterministic.
+   */
+  private def canCross(operator: UnaryExecNode): Boolean = operator match {
+    case project: ProjectExec =>
+      project.projectList.forall(_.deterministic)
+    case filter: FilterExec =>
+      filter.condition.deterministic
+    case aggregate: BaseAggregateExec =>
+      !aggregate.isStreaming &&
+        aggregate.requiredChildDistributionExpressions.isEmpty &&
+        aggregate.groupingExpressions.nonEmpty &&
+        !aggregate.groupingExpressions.exists(_.metadata.contains(SessionWindow.marker)) &&
+        aggregate.aggregateExpressions.forall(_.mode == PartialAggregate) &&
+        aggregate.expressions.forall(_.deterministic)
+    case limit: WindowGroupLimitExec =>
+      limit.mode == PartialWindowGroupLimit
+    case _ => false
+  }
+
+  /**
+   * The shape this rule acts on below one of an operator's children: a pushable shuffle and the
+   * union it is moved past, with the operators in between looked through to reach it. Hash
+   * shuffles and opted-in keyed shuffles are pushable, since the layout that replaces one comes
+   * from the union's own children, and a union with more children than `maxUnionChildren` is not a
+   * site.
+   *
+   * What the child owes its operator is not read here: this is asked of every child of every
+   * operator, and `requiredChildDistribution` is not free of side effects: `WindowExecBase` logs
+   * from it for an unpartitioned window.
+   */
+  @tailrec
+  private def findPushableShuffle(
+      plan: SparkPlan,
+      policy: LayoutPolicy,
+      found: Option[ShuffleExchangeExec] = None): Option[PushableChild] = {
+    plan match {
+      // A local sort above the shuffle is looked through, since the rebuilt child is sorted back
+      // to the same requirement; one below it is an operator in between and needs the gate.
+      case SortExec(_, false, child, _) if found.isEmpty || policy.lookThrough =>
+        findPushableShuffle(child, policy, found)
+      case shuffle @ ShuffleExchangeExec(partitioning, child, ENSURE_REQUIREMENTS, _, _)
+          if found.isEmpty &&
+            (partitioning.isInstanceOf[HashPartitioning] ||
+              (policy.allowV2Bucketing && partitioning.isInstanceOf[KeyedPartitioning])) =>
+        findPushableShuffle(child, policy, Some(shuffle))
+      // A union is a site only when the shuffle below it was found and it is eligible for one.
+      // AttributeMap keeps the last duplicate exprId, while runtime binding uses the first;
+      // positional rebinding is ambiguous for those unions, so retain their exchange. A union
+      // with too many children is not a site either.
+      case union: UnionExec if found.isEmpty || union.childOutputRepeatsExprId ||
+          union.children.length > policy.maxUnionChildren =>
+        None
+      // Below it: the operators this rule can cross, down to the union the shuffle is moved past.
+      case union: UnionExec =>
+        found.map(PushableChild(_, union))
+      case operator: UnaryExecNode if found.isDefined && policy.lookThrough && canCross(operator) =>
+        findPushableShuffle(operator.child, policy, found)
+      case _ => None
+    }
   }
 }
