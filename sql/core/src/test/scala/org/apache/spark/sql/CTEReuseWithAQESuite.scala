@@ -30,7 +30,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListe
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
-import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, CTEReuseRelation, LogicalPlan, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, CTEReuseRelation, LogicalPlan, RepartitionByExpression, SubqueryAlias, UnionLoop}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.{ApplyColumnarRulesAndInsertTransitions, ColumnarToRowExec, EmptyRelationExec, FileSourceScanExec, LeafExecNode, SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
@@ -69,12 +69,15 @@ class CTEReuseWithAQESuite
    * CTE point to the same inner AdaptiveSparkPlanExec by identity, so a CTE referenced N times
    * creates N stage wrappers but is materialized exactly once. `expectedDistinctCTEs` is the number
    * of distinct shared inner plans, one per plan-reuse id (default 1); forced CTEs with identical
-   * deterministic bodies share one.
+   * deterministic bodies share one. `expectedStages`, when given, is the number of
+   * [[CTEReuseQueryStageExec]] stages, one per reference, so that the check also fails when a
+   * reference is planned without a CTE reuse stage over the shared inner plan.
    */
   private def assertInnerAQEShared(
       df: DataFrame,
       expectedDistinctCTEs: Int = 1,
-      allowEmpty: Boolean = false): Unit = {
+      allowEmpty: Boolean = false,
+      expectedStages: Option[Int] = None): Unit = {
     val executedPlan = df.queryExecution.executedPlan
     val stages = collectWithSubqueries(executedPlan) {
       case s: CTEReuseQueryStageExec => s
@@ -85,6 +88,11 @@ class CTEReuseWithAQESuite
       assert(allowEmpty,
         s"Expected CTEReuseQueryStageExec stages but found none:\n${executedPlan.treeString}")
       return
+    }
+    expectedStages.foreach { n =>
+      assert(stages.size == n,
+        s"Expected $n CTEReuseQueryStageExec, but found ${stages.size}.\n" +
+          s"Plan:\n${executedPlan.treeString}")
     }
     val distinctAQEs = stages.map(s =>
       System.identityHashCode(s.innerAQE)).toSet
@@ -392,7 +400,8 @@ class CTEReuseWithAQESuite
             s"got ${reuses.size}.\nPlan:\n" +
             df.queryExecution.optimizedPlan.treeString)
         checkAnswer(df, rowsWithoutCTEReuse(text))
-        assertInnerAQEShared(df)
+        // One CTE reuse stage per reference: the main query's and the subquery's.
+        assertInnerAQEShared(df, expectedStages = Some(2))
       }
     }
   }
@@ -431,7 +440,8 @@ class CTEReuseWithAQESuite
             s"got ${reuses.size}.\nPlan:\n" +
             df.queryExecution.optimizedPlan.treeString)
         checkAnswer(df, rowsWithoutCTEReuse(text))
-        assertInnerAQEShared(df)
+        // One CTE reuse stage per reference: the main query's and the subquery's.
+        assertInnerAQEShared(df, expectedStages = Some(2))
       }
     }
   }
@@ -616,7 +626,8 @@ class CTEReuseWithAQESuite
             |  (SELECT sum(v) FROM cte) as total
             |""".stripMargin)
         checkAnswer(df, Row(8, 360))
-        assertInnerAQEShared(df)
+        // One CTE reuse stage per scalar subquery's reference.
+        assertInnerAQEShared(df, expectedStages = Some(2))
       }
     }
   }
@@ -1729,6 +1740,114 @@ class CTEReuseWithAQESuite
               dpp.queryExecution.executedPlan.treeString)
         }
       }
+    }
+  }
+
+  // -----------------------------------------------------------------
+  // A forced CTE with a copy inside a recursive CTE's recursive term
+  // -----------------------------------------------------------------
+
+  /** Asserts that no CTE reuse relation or plan-reuse id is left inside a recursive term. */
+  private def assertNotSealedInRecursiveTerm(df: DataFrame): Unit = {
+    val optimized = df.queryExecution.optimizedPlan
+    val loops = optimized.collectWithSubqueries { case u: UnionLoop => u }
+    assert(loops.nonEmpty, s"Expected a recursive CTE:\n${optimized.treeString}")
+    loops.foreach { loop =>
+      val sealedInLoop = loop.recursion.collectWithSubqueries {
+        case r: CTEReuseRelation => r
+        case r: RepartitionByExpression if r.isForPlanReuse => r
+      }
+      assert(sealedInLoop.isEmpty,
+        s"Expected nothing sealed inside the recursive term:\n${optimized.treeString}")
+    }
+  }
+
+  test("a forced CTE read twice inside a recursive term reads the previous iteration's rows") {
+    val queries = Seq(
+      // `f` is defined inside the recursive term and reads the recursive reference.
+      """WITH RECURSIVE r(n) AS (
+        |  SELECT 0
+        |  UNION ALL (
+        |    WITH f AS (SELECT n FROM r WHERE n < 4)
+        |    SELECT f1.n + 1 FROM f f1 JOIN f f2 ON f1.n = f2.n
+        |  )
+        |)
+        |SELECT n FROM r
+        |""".stripMargin,
+      // `f` is read twice inside the body of `g`, which the recursive term reads once.
+      """WITH RECURSIVE r(n) AS (
+        |  SELECT 0
+        |  UNION ALL (
+        |    WITH f AS (SELECT n FROM r WHERE n < 4),
+        |      g AS (SELECT f1.n FROM f f1 JOIN f f2 ON f1.n = f2.n)
+        |    SELECT n + 1 FROM g
+        |  )
+        |)
+        |SELECT n FROM r
+        |""".stripMargin)
+    withCTEReuseEnabled {
+      queries.foreach { text =>
+        val df = sqlWithForcedCTEs(text, Set("f", "g"))
+        checkAnswer(df, (0 to 4).map(Row(_)))
+        assertNotSealedInRecursiveTerm(df)
+      }
+    }
+  }
+
+  test("a forced random CTE read twice inside a recursive term is reseeded in every iteration") {
+    val queries = Seq(
+      // `f` is defined inside the recursive term.
+      """WITH RECURSIVE r(n, v) AS (
+        |  SELECT 0, CAST(-1.0 AS DOUBLE)
+        |  UNION ALL (
+        |    WITH f AS (SELECT rand(7) AS x)
+        |    SELECT r.n + 1, f1.x FROM r CROSS JOIN f f1 CROSS JOIN f f2
+        |    WHERE r.n < 4 AND f1.x = f2.x
+        |  )
+        |)
+        |SELECT n, v FROM r
+        |""".stripMargin,
+      // `f` is defined beside `r` in the WITH RECURSIVE clause.
+      """WITH RECURSIVE f AS (SELECT rand(7) AS x), r(n, v) AS (
+        |  SELECT 0, CAST(-1.0 AS DOUBLE)
+        |  UNION ALL
+        |  SELECT r.n + 1, f1.x FROM r CROSS JOIN f f1 CROSS JOIN f f2
+        |  WHERE r.n < 4 AND f1.x = f2.x
+        |)
+        |SELECT n, v FROM r
+        |""".stripMargin)
+    withCTEReuseEnabled {
+      queries.foreach { text =>
+        val expected = withSQLConf(cteReuseConf -> "false") {
+          sqlWithForcedCTEs(text, Set("f")).collect().toSeq
+        }
+        // Every level, the anchor's included, has its own value.
+        assert(expected.map(_.getDouble(1)).distinct.size == 5, expected.mkString(", "))
+        val df = sqlWithForcedCTEs(text, Set("f"))
+        checkAnswer(df, expected)
+        assertNotSealedInRecursiveTerm(df)
+      }
+    }
+  }
+
+  test("a forced CTE read twice outside a recursive CTE is still sealed beside it") {
+    withCTEReuseEnabled {
+      val df = sqlWithForcedCTEs(
+        """WITH RECURSIVE g AS (SELECT id, rand(3) AS x FROM range(5)), r(n) AS (
+          |  SELECT 0
+          |  UNION ALL (
+          |    WITH f AS (SELECT n FROM r WHERE n < 4)
+          |    SELECT f1.n + 1 FROM f f1 JOIN f f2 ON f1.n = f2.n
+          |  )
+          |)
+          |SELECT r.n, g1.x = g2.x FROM r JOIN g g1 ON r.n = g1.id JOIN g g2 ON g1.id = g2.id
+          |""".stripMargin, Set("f", "g"))
+      checkAnswer(df, (0 to 4).map(Row(_, true)))
+      assertNotSealedInRecursiveTerm(df)
+      val reuses = collectCTEReuseRelations(df)
+      assert(reuses.size == 2 && reuses.map(_.cteId).distinct.size == 1,
+        s"Expected `g` to be sealed:\n${df.queryExecution.optimizedPlan.treeString}")
+      assertInnerAQEShared(df, expectedStages = Some(2))
     }
   }
 

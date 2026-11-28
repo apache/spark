@@ -22,7 +22,7 @@ import org.apache.logging.log4j.Level
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, DynamicPruningExpression, DynamicPruningSubquery}
-import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, CTEReuseRelation, LogicalPlan, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, CTEReuseRelation, LogicalPlan, RepartitionByExpression, SubqueryAlias, UnionLoop}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{BaseSubqueryExec, FileSourceScanExec, QueryExecution, ReusedSubqueryExec, SparkPlan}
@@ -1484,6 +1484,116 @@ class CTEReuseWithoutAQESuite
         }
         checkAnswer(df, Seq(Row(1, 10), Row(2, 20), Row(3, 30), Row(4, 40), Row(5, 50)))
       }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // A forced CTE with a copy inside a recursive CTE's recursive term.
+  // ---------------------------------------------------------------------------
+
+  /** Asserts that no CTE reuse relation or plan-reuse id is left inside a recursive term. */
+  private def assertNotSealedInRecursiveTerm(df: DataFrame): Unit = {
+    val optimized = df.queryExecution.optimizedPlan
+    val loops = optimized.collectWithSubqueries { case u: UnionLoop => u }
+    assert(loops.nonEmpty, s"Expected a recursive CTE:\n${optimized.treeString}")
+    loops.foreach { loop =>
+      val sealedInLoop = loop.recursion.collectWithSubqueries {
+        case r: CTEReuseRelation => r
+        case r: RepartitionByExpression if r.isForPlanReuse => r
+      }
+      assert(sealedInLoop.isEmpty,
+        s"Expected nothing sealed inside the recursive term:\n${optimized.treeString}")
+    }
+  }
+
+  test("a forced CTE read twice inside a recursive term reads the previous iteration's rows") {
+    val queries = Seq(
+      // `f` is defined inside the recursive term and reads the recursive reference.
+      """WITH RECURSIVE r(n) AS (
+        |  SELECT 0
+        |  UNION ALL (
+        |    WITH f AS (SELECT n FROM r WHERE n < 4)
+        |    SELECT f1.n + 1 FROM f f1 JOIN f f2 ON f1.n = f2.n
+        |  )
+        |)
+        |SELECT n FROM r
+        |""".stripMargin,
+      // `f` is read twice inside the body of `g`, which the recursive term reads once.
+      """WITH RECURSIVE r(n) AS (
+        |  SELECT 0
+        |  UNION ALL (
+        |    WITH f AS (SELECT n FROM r WHERE n < 4),
+        |      g AS (SELECT f1.n FROM f f1 JOIN f f2 ON f1.n = f2.n)
+        |    SELECT n + 1 FROM g
+        |  )
+        |)
+        |SELECT n FROM r
+        |""".stripMargin)
+    withCTEReuseNoAQE {
+      queries.foreach { text =>
+        val df = sqlWithForcedCTEs(text, Set("f", "g"))
+        checkAnswer(df, (0 to 4).map(Row(_)))
+        assertNotSealedInRecursiveTerm(df)
+      }
+    }
+  }
+
+  test("a forced random CTE read twice inside a recursive term is reseeded in every iteration") {
+    val queries = Seq(
+      // `f` is defined inside the recursive term.
+      """WITH RECURSIVE r(n, v) AS (
+        |  SELECT 0, CAST(-1.0 AS DOUBLE)
+        |  UNION ALL (
+        |    WITH f AS (SELECT rand(7) AS x)
+        |    SELECT r.n + 1, f1.x FROM r CROSS JOIN f f1 CROSS JOIN f f2
+        |    WHERE r.n < 4 AND f1.x = f2.x
+        |  )
+        |)
+        |SELECT n, v FROM r
+        |""".stripMargin,
+      // `f` is defined beside `r` in the WITH RECURSIVE clause.
+      """WITH RECURSIVE f AS (SELECT rand(7) AS x), r(n, v) AS (
+        |  SELECT 0, CAST(-1.0 AS DOUBLE)
+        |  UNION ALL
+        |  SELECT r.n + 1, f1.x FROM r CROSS JOIN f f1 CROSS JOIN f f2
+        |  WHERE r.n < 4 AND f1.x = f2.x
+        |)
+        |SELECT n, v FROM r
+        |""".stripMargin)
+    withCTEReuseNoAQE {
+      queries.foreach { text =>
+        val expected = withSQLConf(cteReuseConf -> "false") {
+          sqlWithForcedCTEs(text, Set("f")).collect().toSeq
+        }
+        // Every level, the anchor's included, has its own value.
+        assert(expected.map(_.getDouble(1)).distinct.size == 5, expected.mkString(", "))
+        val df = sqlWithForcedCTEs(text, Set("f"))
+        checkAnswer(df, expected)
+        assertNotSealedInRecursiveTerm(df)
+      }
+    }
+  }
+
+  test("a forced CTE read twice outside a recursive CTE is still sealed beside it") {
+    withCTEReuseNoAQE {
+      val df = sqlWithForcedCTEs(
+        """WITH RECURSIVE g AS (SELECT id, rand(3) AS x FROM range(5)), r(n) AS (
+          |  SELECT 0
+          |  UNION ALL (
+          |    WITH f AS (SELECT n FROM r WHERE n < 4)
+          |    SELECT f1.n + 1 FROM f f1 JOIN f f2 ON f1.n = f2.n
+          |  )
+          |)
+          |SELECT r.n, g1.x = g2.x FROM r JOIN g g1 ON r.n = g1.id JOIN g g2 ON g1.id = g2.id
+          |""".stripMargin, Set("f", "g"))
+      checkAnswer(df, (0 to 4).map(Row(_, true)))
+      assertNotSealedInRecursiveTerm(df)
+      val reuses = df.queryExecution.optimizedPlan.collectWithSubqueries {
+        case r: CTEReuseRelation => r
+      }
+      assert(reuses.size == 2 && reuses.map(_.cteId).distinct.size == 1,
+        s"Expected `g` to be sealed:\n${df.queryExecution.optimizedPlan.treeString}")
+      assertCTEReuseApplied(df)
     }
   }
 

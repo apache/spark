@@ -56,9 +56,10 @@ import org.apache.spark.sql.internal.SQLConf
  * definition sealed on its own, a third pass seals them while it also keeps sealed every
  * definition the first pass sealed, and when a twin still does not share such an id, `apply`
  * keeps the first lowering, in which no twin of the query is sealed. Every other definition,
- * including every definition of a streaming query, keeps the plain lowering: a repartition
- * without a plan-reuse id, or no extra repartition when the body already repartitions or hosts a
- * merged scalar subquery. The one exception is a forced definition pinned through
+ * including every definition of a streaming query and every definition with a copy inside the
+ * recursive term of a recursive CTE (see `sealedDefinitions`), keeps the plain lowering: a
+ * repartition without a plan-reuse id, or no extra repartition when the body already repartitions
+ * or hosts a merged scalar subquery. The one exception is a forced definition pinned through
  * `forcePartitioning` while the flag is on: it is repartitioned on its pin even when it is not
  * sealed.
  *
@@ -97,8 +98,8 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
       plan: LogicalPlan,
       twins: Set[Long],
       keepSealed: Set[Long]): (LogicalPlan, LoweringContext) = {
-    val (sealedIds, copies) = sealedDefinitions(plan, twins, keepSealed)
-    val ctx = new LoweringContext(sealedIds, copies)
+    val (sealedIds, copies, unsealable) = sealedDefinitions(plan, twins, keepSealed)
+    val ctx = new LoweringContext(sealedIds, copies, unsealable)
     (replaceWithRepartition(plan, mutable.HashMap.empty[Long, LogicalPlan], ctx), ctx)
   }
 
@@ -110,43 +111,75 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
    * earlier lowering of the plan sealed, which stay sealed when sealing the twins leaves one of
    * them a single copy (see `apply`). Streaming queries seal nothing, so the per-micro-batch
    * rewrites, such as the reseeding of random expressions, keep reaching every copy of a body.
-   * Also returns the number of copies of every definition's body in the lowered plan (empty when
-   * the plan is streaming, the reuse flag is off, or the plan has no `forceSkipInline`
-   * definition).
+   * For the same reason, a definition with a copy inside the recursive term of a recursive CTE,
+   * read there or inside the body of such a definition, is not sealed anywhere in the plan, nor
+   * sealed as a twin: `UnionLoopExec` rewrites that term before every iteration, reseeding its
+   * random expressions and substituting the previous iteration's rows for the recursive
+   * reference, and those rewrites do not reach the shared body of a [[CTEReuseRelation]]. Such a
+   * definition keeps the plain lowering, or the repartition its pin requires, so its copies
+   * outside that term are no longer guaranteed to share one materialization. Also returns the
+   * number of copies of every definition's body in the lowered plan, and the definitions with a
+   * copy inside a recursive term (both empty when the plan is streaming, the reuse flag is off,
+   * or the plan has no `forceSkipInline` definition).
    */
   private def sealedDefinitions(
       plan: LogicalPlan,
       twins: Set[Long],
-      keepSealed: Set[Long]): (Set[Long], Map[Long, Int]) = {
+      keepSealed: Set[Long]): (Set[Long], Map[Long, Int], Set[Long]) = {
     // A plan with no forced definition, inside subqueries included, has nothing to seal. The flag
     // and the tree pattern are checked first because `isStreaming` walks the plan.
     if (!conf.getConf(SQLConf.REPLACE_CTE_REF_WITH_CTE_REUSE) ||
         !plan.containsPattern(FORCE_SKIP_INLINE_CTE_DEF) || plan.isStreaming) {
-      return (Set.empty, Map.empty)
+      return (Set.empty, Map.empty, Set.empty)
     }
     // For each reference, the definition whose body holds it (None for the main query), counted
-    // across the main query, its subqueries and every definition's body.
+    // across the main query, its subqueries and every definition's body. Also records each
+    // definition with a reference inside the recursive term of a recursive CTE.
     val defs = mutable.HashMap.empty[Long, CTERelationDef]
     val refsByDef = mutable.HashMap.empty[Long, mutable.HashMap[Option[Long], Int]]
-    def collect(p: LogicalPlan, enclosing: Option[Long]): Unit = {
+    val readInRecursiveTerm = mutable.HashSet.empty[Long]
+    def collect(p: LogicalPlan, enclosing: Option[Long], inRecursiveTerm: Boolean): Unit = {
       if (p.containsPattern(CTE)) {
         p match {
           case d: CTERelationDef =>
             defs(d.id) = d
-            collect(d.child, Some(d.id))
+            // The copies of a body are where its definition's references are, so whether they
+            // sit inside a recursive term follows from those references (see `unsealable`).
+            collect(d.child, Some(d.id), inRecursiveTerm = false)
           case ref: CTERelationRef =>
             val counts = refsByDef.getOrElseUpdate(ref.cteId, mutable.HashMap.empty)
             counts(enclosing) = counts.getOrElse(enclosing, 0) + 1
+            if (inRecursiveTerm) readInRecursiveTerm += ref.cteId
+          case u: UnionLoop =>
+            // The anchor runs once; the recursion is rewritten and run again in every iteration.
+            collect(u.anchor, enclosing, inRecursiveTerm)
+            collect(u.recursion, enclosing, inRecursiveTerm = true)
           case _ =>
-            p.children.foreach(collect(_, enclosing))
+            p.children.foreach(collect(_, enclosing, inRecursiveTerm))
             p.expressions.foreach(_.foreach {
-              case s: SubqueryExpression => collect(s.plan, enclosing)
+              case s: SubqueryExpression => collect(s.plan, enclosing, inRecursiveTerm)
               case _ =>
             })
         }
       }
     }
-    collect(plan, None)
+    collect(plan, None, inRecursiveTerm = false)
+
+    // The definitions with a copy inside the recursive term of a recursive CTE: those read there,
+    // and those read inside the body of such a definition, which is not sealed and so is copied
+    // into that term too. None of them is sealed (see the method doc).
+    val inRecursiveTermById = mutable.HashMap.empty[Long, Boolean]
+    def hasCopyInRecursiveTerm(id: Long): Boolean = inRecursiveTermById.get(id) match {
+      case Some(b) => b
+      case None =>
+        // A definition is only referenced by later definitions; guard against a cycle anyway.
+        inRecursiveTermById(id) = false
+        val b = readInRecursiveTerm.contains(id) ||
+          refsByDef.get(id).exists(_.keysIterator.exists(_.exists(hasCopyInRecursiveTerm)))
+        inRecursiveTermById(id) = b
+        b
+    }
+    val unsealable = defs.keysIterator.filter(hasCopyInRecursiveTerm).toSet
 
     // The number of copies of each definition's body in the lowered plan. The body of a definition
     // that is not sealed is copied once per copy of each plan that references it; a sealed body is
@@ -168,14 +201,15 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
           count * copiesOf(enclosing)
         }.sum).getOrElse(0)
         copies(id) = n
-        if ((n >= 2 && defs.get(id).exists(_.forceSkipInline)) ||
-            (n >= 1 && (twins.contains(id) || keepSealed.contains(id)))) {
+        if (!unsealable.contains(id) &&
+            ((n >= 2 && defs.get(id).exists(_.forceSkipInline)) ||
+              (n >= 1 && (twins.contains(id) || keepSealed.contains(id))))) {
           toSeal += id
         }
         n
     }
     defs.keys.foreach(numCopies)
-    (toSeal.toSet, copies.toMap)
+    (toSeal.toSet, copies.toMap, unsealable)
   }
 
   /**
@@ -187,9 +221,13 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
    * such a definition whose deterministic body equals a sealed body can share that body's single
    * materialization instead of computing it once more, and each such definition that the body of
    * a sealed definition only selects, so that it is sealed together with it (see
-   * `unsealedTwins`).
+   * `unsealedTwins`). A definition in `unsealable`, which `sealedDefinitions` never seals, is
+   * never recorded as a twin either.
    */
-  private class LoweringContext(val sealedIds: Set[Long], copies: Map[Long, Int]) {
+  private class LoweringContext(
+      val sealedIds: Set[Long],
+      copies: Map[Long, Int],
+      unsealable: Set[Long]) {
     private val idByBody = mutable.HashMap.empty[LogicalPlan, Long]
     // The plan-reuse id each sealed definition's root was given.
     private val idByDef = mutable.HashMap.empty[Long, Long]
@@ -225,7 +263,7 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
      * sealed has no plan-reuse id for the other definition to share.
      */
     def recordSelectedBySealed(cteId: Long, inlined: LogicalPlan): Unit = {
-      retainedOwner(cteId, inlined).foreach(selectedBySealed += _)
+      retainedOwner(cteId, inlined).filterNot(unsealable.contains).foreach(selectedBySealed += _)
     }
 
     private def retainedOwner(cteId: Long, inlined: LogicalPlan): Option[Long] = {
@@ -256,7 +294,7 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
      * with. Only a plan that seals a definition and reads `cteId` records it.
      */
     def recordUnsealed(cteId: Long, root: => RepartitionByExpression): Unit = {
-      if (sealedIds.nonEmpty && copies.getOrElse(cteId, 0) >= 1) {
+      if (sealedIds.nonEmpty && copies.getOrElse(cteId, 0) >= 1 && !unsealable.contains(cteId)) {
         unsealedRoots(cteId) = root
       }
     }

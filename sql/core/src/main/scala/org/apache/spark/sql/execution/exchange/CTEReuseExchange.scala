@@ -37,9 +37,12 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
  *    shared inner `AdaptiveSparkPlanExec` that `PlanCTEReuse` built and registered for `cteId`
  *    in `AdaptiveExecutionContext.cteAQERegistry`.
  *  - AQE off: `UnwrapCTEReuseExchange` replaces each ref with its shuffle, whose
- *    `LOCAL_SHUFFLE_FOR_CTE(cteId)` origin carries the `cteId`; the final
- *    `ReuseExchangeAndSubquery` then reuses the canonically-equal copies via
- *    [[ReusedExchangeExec]], and `VerifyCTEReuse` confirms it held.
+ *    `LOCAL_SHUFFLE_FOR_CTE(cteId)` origin carries the `cteId`, and the final
+ *    `ReuseExchangeAndSubquery` usually reuses the canonically-equal copies via
+ *    [[ReusedExchangeExec]]. This is best effort: when copies are not reused, for example with
+ *    `spark.sql.exchange.reuse` off or when `DisableUnnecessaryBucketedScan` plans two copies
+ *    differently, the body runs once per live shuffle, and `VerifyCTEReuse` logs the cteIds and
+ *    the plan, or throws an internal error under `spark.sql.cteReuse.failOnMissWithoutAQE`.
  *
  * @param cteId    The plan-reuse id of the shared body, which every reference of one sealed
  *                 definition carries. Sealed definitions whose deterministic bodies are

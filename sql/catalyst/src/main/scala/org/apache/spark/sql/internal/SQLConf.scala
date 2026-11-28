@@ -7649,7 +7649,10 @@ object SQLConf {
         "CTE that does not pin its partitioning only selects it and the plan also reads it " +
         "elsewhere: it is then sealed with it and shares its single materialization. When " +
         "sealing these CTEs would leave one of them not sharing the materialization of a CTE " +
-        "sealed on its own, every such CTE of the query keeps its plain repartition. A " +
+        "sealed on its own, every such CTE of the query keeps its plain repartition. A CTE " +
+        "with a copy inside the recursive term of a recursive CTE is never sealed, so the " +
+        "rewrites that term gets before every iteration reach every copy; its copies elsewhere " +
+        "in the query are then deduplicated only by exchange reuse. A " +
         "forceSkipInline CTE that pins a hash partitioning is repartitioned on its pin even " +
         "when it is not sealed. When false, forceSkipInline definitions are lowered like any " +
         "other retained CTE.")

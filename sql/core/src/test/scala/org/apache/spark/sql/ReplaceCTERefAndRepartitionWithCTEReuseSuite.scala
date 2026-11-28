@@ -275,7 +275,7 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
   // A CTE that is not forceSkipInline keeps the plain lowering, whatever its root
   // ---------------------------------------------------------------------------
 
-  test("CTE body ending in a customer repartition is not converted to CTEReuseRelation") {
+  test("CTE body ending in a user repartition is not converted to CTEReuseRelation") {
     withCTEReuseEnabled {
       // The CTE is not forceSkipInline, so ReplaceCTERefWithRepartition keeps the plain lowering
       // whatever its root is: here it leaves the body's user REPARTITION in place
@@ -291,7 +291,7 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
       val optimized = df.queryExecution.optimizedPlan
       val reuses = collectCTEReuseRelations(optimized)
       assert(reuses.isEmpty,
-        s"Expected no CTEReuseRelation for a CTE whose body root is a customer repartition:" +
+        s"Expected no CTEReuseRelation for a CTE whose body root is a user repartition:" +
           s"\n${optimized.treeString}")
     }
   }
