@@ -511,13 +511,21 @@ object ApproxTopKAggregateBuffer {
    * [sketch bytes][null count (8 bytes)]
    */
   def deserialize(bytes: Array[Byte], serDe: ArrayOfItemsSerDe[Any]):
-  ApproxTopKAggregateBuffer[Any] = {
-    val byteBuffer = java.nio.ByteBuffer.wrap(bytes)
-    val sketchBytesLength = bytes.length - 8
-    val sketchBytes = new Array[Byte](sketchBytesLength)
-    byteBuffer.get(sketchBytes, 0, sketchBytesLength)
-    val nullCount = byteBuffer.getLong(sketchBytesLength)
-    val deserializedSketch = ItemsSketch.getInstance(Memory.wrap(sketchBytes), serDe)
+  ApproxTopKAggregateBuffer[Any] = deserialize(bytes, 0, bytes.length, serDe)
+
+  /**
+   * Deserialize the buffer stored in `bytes[offset, offset + length)`, in the same format as
+   * above. The sketch is read in place, without copying it out of `bytes` first.
+   */
+  def deserialize(
+      bytes: Array[Byte],
+      offset: Int,
+      length: Int,
+      serDe: ArrayOfItemsSerDe[Any]): ApproxTopKAggregateBuffer[Any] = {
+    val sketchBytesLength = length - java.lang.Long.BYTES
+    val nullCount = java.nio.ByteBuffer.wrap(bytes).getLong(offset + sketchBytesLength)
+    val sketchMemory = Memory.wrap(bytes).region(offset, sketchBytesLength)
+    val deserializedSketch = ItemsSketch.getInstance(sketchMemory, serDe)
     new ApproxTopKAggregateBuffer[Any](deserializedSketch, nullCount)
   }
 }
@@ -778,14 +786,14 @@ object CombineInternal {
       DataType.fromJson(new String(typeBytes, StandardCharsets.UTF_8))
     }
     // read sketchBytes
-    val sketchBytes = new Array[Byte](buffer.length - Integer.BYTES - Integer.BYTES - typeLength)
-    byteBuffer.get(sketchBytes)
+    val sketchOffset = byteBuffer.position()
     val serDe = if (itemDataType == null) {
       new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
     } else {
       ApproxTopK.genSketchSerDe(itemDataType)
     }
-    val sketchWithNullCount = ApproxTopKAggregateBuffer.deserialize(sketchBytes, serDe)
+    val sketchWithNullCount = ApproxTopKAggregateBuffer.deserialize(
+      buffer, sketchOffset, buffer.length - sketchOffset, serDe)
     new CombineInternal[Any](sketchWithNullCount, itemDataType, maxItemsTracked)
   }
 }
