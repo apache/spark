@@ -942,6 +942,84 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(totalRunningTasksPerResourceProfile(manager) === 0)
   }
 
+  test("ignore late task start events from completed stages") {
+    val manager = createManager(createConf(0, 10, 0))
+    val stage = createStageInfo(0, 2)
+    post(SparkListenerStageSubmitted(stage))
+
+    val earlyTask = createTaskInfo(0, 0, "executor-1")
+    post(SparkListenerTaskStart(0, 0, earlyTask))
+    post(SparkListenerStageCompleted(stage))
+
+    val lateTask = createTaskInfo(1, 1, "executor-1")
+    post(SparkListenerTaskStart(0, 0, lateTask))
+    post(SparkListenerTaskEnd(0, 0, null, Success, earlyTask, new ExecutorMetrics, null))
+    post(SparkListenerTaskEnd(0, 0, null, Success, lateTask, new ExecutorMetrics, null))
+
+    assert(pendingRegularTasksForDefaultProfile(manager) === 0)
+    assert(numStageAttemptsForDefaultProfile(manager) === 0)
+
+    post(SparkListenerStageSubmitted(createStageInfo(1, 1)))
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 1)
+
+    val updatesNeeded =
+      new mutable.HashMap[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
+  }
+
+  test("ignore late speculative task start events from completed stages") {
+    val manager = createManager(createConf(0, 10, 0))
+    val stage = createStageInfo(0, 2)
+    post(SparkListenerStageSubmitted(stage))
+
+    val regularTask = createTaskInfo(0, 0, "executor-1")
+    post(SparkListenerTaskStart(0, 0, regularTask))
+    post(speculativeTaskSubmitEventFromTaskIndex(0, taskIndex = 1))
+    post(SparkListenerStageCompleted(stage))
+
+    val speculativeTask = createTaskInfo(1, 1, "executor-1", speculative = true)
+    post(SparkListenerTaskStart(0, 0, speculativeTask))
+    post(SparkListenerTaskEnd(0, 0, null, Success, regularTask, new ExecutorMetrics, null))
+    post(SparkListenerTaskEnd(0, 0, null, Success, speculativeTask, new ExecutorMetrics, null))
+
+    assert(numSpeculativeTaskIndexMaps(manager) === 0)
+    assert(numStageAttemptsForDefaultProfile(manager) === 0)
+  }
+
+  test("ignore late speculative task submitted events from completed stages") {
+    val manager = createManager(createConf(0, 10, 0))
+    val stage = createStageInfo(0, 1)
+    post(SparkListenerStageSubmitted(stage))
+
+    val task = createTaskInfo(0, 0, "executor-1")
+    post(SparkListenerTaskStart(0, 0, task))
+    post(SparkListenerStageCompleted(stage))
+    post(speculativeTaskSubmitEventFromTaskIndex(0, taskIndex = 0))
+    post(SparkListenerTaskEnd(0, 0, null, Success, task, new ExecutorMetrics, null))
+
+    assert(pendingSpeculativeTasksForDefaultProfile(manager) === 0)
+    assert(numStageAttemptsForDefaultProfile(manager) === 0)
+    assert(addTime(manager) === NOT_SET)
+  }
+
+  test("ignore late failed task end events from completed stages") {
+    val manager = createManager(createConf(0, 10, 0))
+    val stage = createStageInfo(0, 1)
+    post(SparkListenerStageSubmitted(stage))
+
+    val task = createTaskInfo(0, 0, "executor-1")
+    post(SparkListenerTaskStart(0, 0, task))
+    post(SparkListenerStageCompleted(stage))
+    assert(addTime(manager) === NOT_SET)
+
+    val failure = ExceptionFailure(null, null, null, null, None)
+    post(SparkListenerTaskEnd(0, 0, null, failure, task, new ExecutorMetrics, null))
+
+    assert(numStageAttemptsForDefaultProfile(manager) === 0)
+    assert(addTime(manager) === NOT_SET)
+  }
+
   testRetry("cancel pending executors when no longer needed") {
     val manager = createManager(createConf(0, 10, 0))
     post(SparkListenerStageSubmitted(createStageInfo(2, 5)))
@@ -2113,6 +2191,12 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
     PrivateMethod[mutable.HashMap[Int, Int]](Symbol("numLocalityAwareTasksPerResourceProfileId"))
   private val _rpIdToHostToLocalTaskCount =
     PrivateMethod[Map[Int, Map[String, Int]]](Symbol("rpIdToHostToLocalTaskCount"))
+  private val _resourceProfileIdToStageAttempt =
+    PrivateMethod[mutable.HashMap[Int, mutable.Set[Any]]](
+      Symbol("resourceProfileIdToStageAttempt"))
+  private val _stageAttemptToSpeculativeTaskIndices =
+    PrivateMethod[mutable.HashMap[Any, mutable.HashSet[Int]]](
+      Symbol("stageAttemptToSpeculativeTaskIndices"))
 
   private val defaultProfile = ResourceProfile.getOrCreateDefaultProfile(new SparkConf)
 
@@ -2213,6 +2297,26 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
     manager.synchronized {
       manager.listener.totalRunningTasksPerResourceProfile(defaultProfile.id)
     }
+
+  private def pendingRegularTasksForDefaultProfile(manager: ExecutorAllocationManager): Int =
+    manager.synchronized {
+      manager.listener.pendingTasksPerResourceProfile(defaultProfile.id)
+    }
+
+  private def pendingSpeculativeTasksForDefaultProfile(manager: ExecutorAllocationManager): Int =
+    manager.synchronized {
+      manager.listener.pendingSpeculativeTasksPerResourceProfile(defaultProfile.id)
+    }
+
+  private def numStageAttemptsForDefaultProfile(manager: ExecutorAllocationManager): Int = {
+    val attempts = manager.listener invokePrivate _resourceProfileIdToStageAttempt()
+    attempts.get(defaultProfile.id).map(_.size).getOrElse(0)
+  }
+
+  private def numSpeculativeTaskIndexMaps(manager: ExecutorAllocationManager): Int = {
+    val taskIndices = manager.listener invokePrivate _stageAttemptToSpeculativeTaskIndices()
+    taskIndices.size
+  }
 
   private def hostToLocalTaskCount(
       manager: ExecutorAllocationManager): Map[String, Int] = {
