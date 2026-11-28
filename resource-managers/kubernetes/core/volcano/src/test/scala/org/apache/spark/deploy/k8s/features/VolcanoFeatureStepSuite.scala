@@ -35,7 +35,8 @@ class VolcanoFeatureStepSuite extends SparkFunSuite {
     val annotations = configuredPod.pod.getMetadata.getAnnotations
 
     assert(annotations.get("scheduling.k8s.io/group-name") === s"${kubernetesConf.appId}-podgroup")
-    val podGroup = step.getAdditionalPreKubernetesResources().head.asInstanceOf[PodGroup]
+    assert(step.getAdditionalPreKubernetesResources().isEmpty)
+    val podGroup = step.getAdditionalKubernetesResources().head.asInstanceOf[PodGroup]
     assert(podGroup.getMetadata.getName === s"${kubernetesConf.appId}-podgroup")
   }
 
@@ -58,7 +59,8 @@ class VolcanoFeatureStepSuite extends SparkFunSuite {
     val step = new VolcanoFeatureStep()
     step.init(kubernetesConf)
     step.configurePod(SparkPod.initialPod())
-    val podGroup = step.getAdditionalPreKubernetesResources().head.asInstanceOf[PodGroup]
+    assert(step.getAdditionalPreKubernetesResources().isEmpty)
+    val podGroup = step.getAdditionalKubernetesResources().head.asInstanceOf[PodGroup]
     assert(podGroup.getSpec.getMinMember == 1)
     assert(podGroup.getSpec.getMinResources.get("cpu").getAmount == "2")
     assert(podGroup.getSpec.getMinResources.get("memory").getAmount == "2048")
@@ -86,7 +88,8 @@ class VolcanoFeatureStepSuite extends SparkFunSuite {
     val step = new VolcanoFeatureStep()
     step.init(kubernetesConf)
     step.configurePod(SparkPod.initialPod())
-    val podGroup = step.getAdditionalPreKubernetesResources().head.asInstanceOf[PodGroup]
+    assert(step.getAdditionalPreKubernetesResources().isEmpty)
+    val podGroup = step.getAdditionalKubernetesResources().head.asInstanceOf[PodGroup]
     assert(podGroup.getSpec.getMinMember == 1)
     assert(podGroup.getSpec.getMinResources.get("cpu").getAmount == "2")
     assert(podGroup.getSpec.getMinResources.get("memory").getAmount == "2048")
@@ -100,5 +103,12 @@ class VolcanoFeatureStepSuite extends SparkFunSuite {
     val step = new VolcanoFeatureStep()
     step.init(kubernetesConf)
     assert(step.getAdditionalPreKubernetesResources() === Seq.empty)
+  }
+
+  test("SPARK-59725: return empty for executor post resources") {
+    val kubernetesConf = KubernetesTestConf.createExecutorConf(new SparkConf())
+    val step = new VolcanoFeatureStep()
+    step.init(kubernetesConf)
+    assert(step.getAdditionalKubernetesResources() === Seq.empty)
   }
 }
