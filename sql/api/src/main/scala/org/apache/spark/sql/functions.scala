@@ -3097,8 +3097,10 @@ object functions {
   /**
    * Aggregate function: merges binary KllLongsSketch representations and returns the merged
    * sketch. The optional k parameter controls the size and accuracy of the merged sketch (range
-   * 8-65535). If k is not specified, the merged sketch adopts the k value from the first input
-   * sketch.
+   * 8-65535). If k is not specified, the merged sketch takes the lowest k among the first
+   * non-empty input sketch and the input sketches that have started compacting. If every input
+   * sketch is empty, it takes the k of the first one, and without input sketches the default k
+   * (200).
    *
    * @param e
    *   The column containing binary KllLongsSketch representations to merge. A column that
@@ -3117,8 +3119,10 @@ object functions {
   /**
    * Aggregate function: merges binary KllLongsSketch representations and returns the merged
    * sketch. The optional k parameter controls the size and accuracy of the merged sketch (range
-   * 8-65535). If k is not specified, the merged sketch adopts the k value from the first input
-   * sketch.
+   * 8-65535). If k is not specified, the merged sketch takes the lowest k among the first
+   * non-empty input sketch and the input sketches that have started compacting. If every input
+   * sketch is empty, it takes the k of the first one, and without input sketches the default k
+   * (200).
    *
    * @param e
    *   The column containing binary KllLongsSketch representations to merge. A column that
@@ -3137,8 +3141,10 @@ object functions {
   /**
    * Aggregate function: merges binary KllLongsSketch representations and returns the merged
    * sketch. The optional k parameter controls the size and accuracy of the merged sketch (range
-   * 8-65535). If k is not specified, the merged sketch adopts the k value from the first input
-   * sketch.
+   * 8-65535). If k is not specified, the merged sketch takes the lowest k among the first
+   * non-empty input sketch and the input sketches that have started compacting. If every input
+   * sketch is empty, it takes the k of the first one, and without input sketches the default k
+   * (200).
    *
    * @param columnName
    *   The column containing binary KllLongsSketch representations. A column that evaluates to a
@@ -3156,8 +3162,9 @@ object functions {
 
   /**
    * Aggregate function: merges binary KllLongsSketch representations and returns the merged
-   * sketch. If k is not specified, the merged sketch adopts the k value from the first input
-   * sketch.
+   * sketch. If k is not specified, the merged sketch takes the lowest k among the first non-empty
+   * input sketch and the input sketches that have started compacting. If every input sketch is
+   * empty, it takes the k of the first one, and without input sketches the default k (200).
    *
    * @param e
    *   The column containing binary KllLongsSketch representations. A column that evaluates to a
@@ -3172,8 +3179,9 @@ object functions {
 
   /**
    * Aggregate function: merges binary KllLongsSketch representations and returns the merged
-   * sketch. If k is not specified, the merged sketch adopts the k value from the first input
-   * sketch.
+   * sketch. If k is not specified, the merged sketch takes the lowest k among the first non-empty
+   * input sketch and the input sketches that have started compacting. If every input sketch is
+   * empty, it takes the k of the first one, and without input sketches the default k (200).
    *
    * @param columnName
    *   The column containing binary KllLongsSketch representations. A column that evaluates to a
@@ -3189,7 +3197,9 @@ object functions {
   /**
    * Aggregate function: merges binary KllFloatsSketch representations and returns merged sketch.
    * The optional k parameter controls the size and accuracy of the merged sketch (range 8-65535).
-   * If k is not specified, the merged sketch adopts the k value from the first input sketch.
+   * If k is not specified, the merged sketch takes the lowest k among the first non-empty input
+   * sketch and the input sketches that have started compacting. If every input sketch is empty,
+   * it takes the k of the first one, and without input sketches the default k (200).
    *
    * @param e
    *   The column containing binary KllFloatsSketch representations. A column that evaluates to a
@@ -3208,7 +3218,9 @@ object functions {
   /**
    * Aggregate function: merges binary KllFloatsSketch representations and returns merged sketch.
    * The optional k parameter controls the size and accuracy of the merged sketch (range 8-65535).
-   * If k is not specified, the merged sketch adopts the k value from the first input sketch.
+   * If k is not specified, the merged sketch takes the lowest k among the first non-empty input
+   * sketch and the input sketches that have started compacting. If every input sketch is empty,
+   * it takes the k of the first one, and without input sketches the default k (200).
    *
    * @param e
    *   The column containing binary KllFloatsSketch representations. A column that evaluates to a
@@ -3227,7 +3239,9 @@ object functions {
   /**
    * Aggregate function: merges binary KllFloatsSketch representations and returns merged sketch.
    * The optional k parameter controls the size and accuracy of the merged sketch (range 8-65535).
-   * If k is not specified, the merged sketch adopts the k value from the first input sketch.
+   * If k is not specified, the merged sketch takes the lowest k among the first non-empty input
+   * sketch and the input sketches that have started compacting. If every input sketch is empty,
+   * it takes the k of the first one, and without input sketches the default k (200).
    *
    * @param columnName
    *   The column containing binary KllFloatsSketch representations. A column that evaluates to a
@@ -3245,7 +3259,9 @@ object functions {
 
   /**
    * Aggregate function: merges binary KllFloatsSketch representations and returns merged sketch.
-   * If k is not specified, the merged sketch adopts the k value from the first input sketch.
+   * If k is not specified, the merged sketch takes the lowest k among the first non-empty input
+   * sketch and the input sketches that have started compacting. If every input sketch is empty,
+   * it takes the k of the first one, and without input sketches the default k (200).
    *
    * @param e
    *   The column containing binary KllFloatsSketch representations. A column that evaluates to a
@@ -3260,7 +3276,9 @@ object functions {
 
   /**
    * Aggregate function: merges binary KllFloatsSketch representations and returns merged sketch.
-   * If k is not specified, the merged sketch adopts the k value from the first input sketch.
+   * If k is not specified, the merged sketch takes the lowest k among the first non-empty input
+   * sketch and the input sketches that have started compacting. If every input sketch is empty,
+   * it takes the k of the first one, and without input sketches the default k (200).
    *
    * @param columnName
    *   The column containing binary KllFloatsSketch representations. A column that evaluates to a
@@ -3276,7 +3294,9 @@ object functions {
   /**
    * Aggregate function: merges binary KllDoublesSketch representations and returns merged sketch.
    * The optional k parameter controls the size and accuracy of the merged sketch (range 8-65535).
-   * If k is not specified, the merged sketch adopts the k value from the first input sketch.
+   * If k is not specified, the merged sketch takes the lowest k among the first non-empty input
+   * sketch and the input sketches that have started compacting. If every input sketch is empty,
+   * it takes the k of the first one, and without input sketches the default k (200).
    *
    * @param e
    *   The column containing binary KllDoublesSketch representations. A column that evaluates to a
@@ -3295,7 +3315,9 @@ object functions {
   /**
    * Aggregate function: merges binary KllDoublesSketch representations and returns merged sketch.
    * The optional k parameter controls the size and accuracy of the merged sketch (range 8-65535).
-   * If k is not specified, the merged sketch adopts the k value from the first input sketch.
+   * If k is not specified, the merged sketch takes the lowest k among the first non-empty input
+   * sketch and the input sketches that have started compacting. If every input sketch is empty,
+   * it takes the k of the first one, and without input sketches the default k (200).
    *
    * @param e
    *   The column containing binary KllDoublesSketch representations. A column that evaluates to a
@@ -3314,7 +3336,9 @@ object functions {
   /**
    * Aggregate function: merges binary KllDoublesSketch representations and returns merged sketch.
    * The optional k parameter controls the size and accuracy of the merged sketch (range 8-65535).
-   * If k is not specified, the merged sketch adopts the k value from the first input sketch.
+   * If k is not specified, the merged sketch takes the lowest k among the first non-empty input
+   * sketch and the input sketches that have started compacting. If every input sketch is empty,
+   * it takes the k of the first one, and without input sketches the default k (200).
    *
    * @param columnName
    *   The column containing binary KllDoublesSketch representations. A column that evaluates to a
@@ -3332,7 +3356,9 @@ object functions {
 
   /**
    * Aggregate function: merges binary KllDoublesSketch representations and returns merged sketch.
-   * If k is not specified, the merged sketch adopts the k value from the first input sketch.
+   * If k is not specified, the merged sketch takes the lowest k among the first non-empty input
+   * sketch and the input sketches that have started compacting. If every input sketch is empty,
+   * it takes the k of the first one, and without input sketches the default k (200).
    *
    * @param e
    *   The column containing binary KllDoublesSketch representations. A column that evaluates to a
@@ -3347,7 +3373,9 @@ object functions {
 
   /**
    * Aggregate function: merges binary KllDoublesSketch representations and returns merged sketch.
-   * If k is not specified, the merged sketch adopts the k value from the first input sketch.
+   * If k is not specified, the merged sketch takes the lowest k among the first non-empty input
+   * sketch and the input sketches that have started compacting. If every input sketch is empty,
+   * it takes the k of the first one, and without input sketches the default k (200).
    *
    * @param columnName
    *   The column containing binary KllDoublesSketch representations. A column that evaluates to a
