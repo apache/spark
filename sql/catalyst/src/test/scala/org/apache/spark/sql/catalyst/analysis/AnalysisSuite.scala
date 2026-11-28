@@ -71,10 +71,16 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val target = AttributeReference("target", renamedType)()
     val expressionId = NamedExpression.newExprId
     var aliasesCreated = 0
-    val projected = InsertionResolution.resolveByNameColumn(input, target, (child, name) => {
-      aliasesCreated += 1
-      Alias(child, name)(exprId = expressionId)
-    })
+    val projected = InsertionResolution.resolveByNameColumn(
+      input,
+      target,
+      (child, name) => {
+        aliasesCreated += 1
+        Alias(child, name)(exprId = expressionId)
+      },
+      "t",
+      caseSensitiveResolution,
+      resolveDifferentArityByPosition = false)
     assert(aliasesCreated == 1)
     assert(projected.exprId == expressionId)
     assert(projected.name == target.name)

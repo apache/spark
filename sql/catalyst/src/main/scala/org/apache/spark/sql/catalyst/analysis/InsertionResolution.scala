@@ -20,13 +20,14 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, Cast, EqualNullSafe, Expression, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertIntoStatement, InsertReplaceWhere, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, Project, V2WriteCommand}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
-import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, StructType}
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.ArrayImplicits._
 
@@ -123,7 +124,8 @@ private[sql] object InsertionResolution {
   def createProjectForByNameQuery(
       tblName: String,
       i: InsertIntoStatement,
-      resolver: => Resolver): LogicalPlan = {
+      resolver: => Resolver,
+      resolveDifferentArityByPosition: => Boolean): LogicalPlan = {
     SchemaUtils.checkColumnNameDuplication(i.userSpecifiedCols, resolver)
 
     if (i.userSpecifiedCols.size != i.query.output.size) {
@@ -142,7 +144,12 @@ private[sql] object InsertionResolution {
             throw QueryCompilationErrors.unresolvedAttributeError(
               "UNRESOLVED_COLUMN", userSpecifiedCol, i.table.output.map(_.name), i.origin))
         resolveByNameColumn(
-          queryOutputCol, resolvedCol, (child, name) => Alias(child, name)())
+          queryOutputCol,
+          resolvedCol,
+          (child, name) => Alias(child, name)(),
+          tblName,
+          resolver,
+          resolveDifferentArityByPosition)
       }
     Project(projectByName, i.query)
   }
@@ -154,40 +161,131 @@ private[sql] object InsertionResolution {
   def resolveByNameColumn(
       queryOutputColumn: Attribute,
       targetColumn: NamedExpression,
-      newAlias: (Expression, String) => Alias): Alias = {
+      newAlias: (Expression, String) => Alias,
+      tableName: String,
+      resolver: => Resolver,
+      resolveDifferentArityByPosition: => Boolean): Alias = {
+    val colPath = Seq(targetColumn.name)
     (queryOutputColumn.dataType, targetColumn.dataType) match {
       case (input: StructType, expected: StructType) =>
-        newAlias(Cast(queryOutputColumn, renameFieldsInStruct(input, expected)), targetColumn.name)
+        val renamedType = renameFieldsInStruct(
+          input,
+          expected,
+          tableName,
+          colPath,
+          resolver,
+          resolveDifferentArityByPosition)
+        newAlias(Cast(queryOutputColumn, renamedType), targetColumn.name)
       case (input: ArrayType, expected: ArrayType) =>
-        newAlias(Cast(queryOutputColumn, renameFieldsInType(input, expected)), targetColumn.name)
+        val renamedType = renameFieldsInType(
+          input,
+          expected,
+          tableName,
+          colPath,
+          resolver,
+          resolveDifferentArityByPosition)
+        newAlias(Cast(queryOutputColumn, renamedType), targetColumn.name)
       case (input: MapType, expected: MapType) =>
-        newAlias(Cast(queryOutputColumn, renameFieldsInType(input, expected)), targetColumn.name)
+        val renamedType = renameFieldsInType(
+          input,
+          expected,
+          tableName,
+          colPath,
+          resolver,
+          resolveDifferentArityByPosition)
+        newAlias(Cast(queryOutputColumn, renamedType), targetColumn.name)
       case _ =>
         newAlias(queryOutputColumn, targetColumn.name)
     }
   }
 
-  private def renameFieldsInStruct(input: StructType, expected: StructType): StructType = {
-    if (input.length == expected.length) {
-      val newFields = input.zip(expected).map { case (f1, f2) =>
-        f1.copy(name = f2.name, dataType = renameFieldsInType(f1.dataType, f2.dataType))
+  private def renameFieldsInStruct(
+      input: StructType,
+      expected: StructType,
+      tableName: String,
+      colPath: Seq[String],
+      resolver: => Resolver,
+      resolveDifferentArityByPosition: => Boolean): StructType = {
+    if (input.length == expected.length || resolveDifferentArityByPosition) {
+      val renamedFields = input.zip(expected).map { case (f1, f2) =>
+        f1.copy(
+          name = f2.name,
+          dataType = renameFieldsInType(
+            f1.dataType,
+            f2.dataType,
+            tableName,
+            colPath :+ f2.name,
+            resolver,
+            resolveDifferentArityByPosition))
       }
-      StructType(newFields)
+      val retainedFields = input.drop(expected.length)
+      findRenameCreatedCollision(input, renamedFields, retainedFields, resolver) match {
+        case Some(collidingField) =>
+          throw QueryCompilationErrors.incompatibleDataToTableAmbiguousColumnNameError(
+            tableName, (colPath :+ collidingField.name).quoted)
+        case None =>
+      }
+      StructType(renamedFields ++ retainedFields)
     } else {
       input
     }
   }
 
+  // Positional renaming can introduce duplicates when the source has surplus fields. For
+  // example, source {y, x, z} and target {x} produces {x, x, z}. Reject these collisions.
+  private def findRenameCreatedCollision(
+      originalFields: Seq[StructField],
+      renamedFields: Seq[StructField],
+      retainedFields: Seq[StructField],
+      resolver: => Resolver): Option[StructField] = {
+    originalFields.zip(renamedFields).collectFirst {
+      case (originalField, renamedField) if retainedFields.exists { retainedField =>
+        !resolver(originalField.name, retainedField.name) &&
+          resolver(renamedField.name, retainedField.name)
+      } => renamedField
+    }
+  }
+
   // Recursively rename fields so that positional INSERT analysis applies at every nesting level,
   // including structs inside arrays and maps.  See SPARK-58816.
-  private def renameFieldsInType(input: DataType, expected: DataType): DataType =
+  private def renameFieldsInType(
+      input: DataType,
+      expected: DataType,
+      tableName: String,
+      colPath: Seq[String],
+      resolver: => Resolver,
+      resolveDifferentArityByPosition: => Boolean): DataType =
     (input, expected) match {
       case (s1: StructType, s2: StructType) =>
-        renameFieldsInStruct(s1, s2)
+        renameFieldsInStruct(
+          s1, s2, tableName, colPath, resolver, resolveDifferentArityByPosition)
       case (ArrayType(e1, n1), ArrayType(e2, _)) =>
-        ArrayType(renameFieldsInType(e1, e2), n1)
+        ArrayType(
+          renameFieldsInType(
+            e1,
+            e2,
+            tableName,
+            colPath :+ "element",
+            resolver,
+            resolveDifferentArityByPosition),
+          n1)
       case (MapType(k1, v1, n1), MapType(k2, v2, _)) =>
-        MapType(renameFieldsInType(k1, k2), renameFieldsInType(v1, v2), n1)
+        MapType(
+          renameFieldsInType(
+            k1,
+            k2,
+            tableName,
+            colPath :+ "key",
+            resolver,
+            resolveDifferentArityByPosition),
+          renameFieldsInType(
+            v1,
+            v2,
+            tableName,
+            colPath :+ "value",
+            resolver,
+            resolveDifferentArityByPosition),
+          n1)
       case _ =>
         input
     }
