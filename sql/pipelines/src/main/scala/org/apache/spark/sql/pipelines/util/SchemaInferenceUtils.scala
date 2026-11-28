@@ -22,14 +22,20 @@ import scala.util.control.NonFatal
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{FIELD_NAME, NEW_VALUE, OLD_VALUE}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{
   caseInsensitiveResolution,
   caseSensitiveResolution,
   Resolver
 }
+import org.apache.spark.sql.catalyst.util.{GeneratedColumn, IdentityColumn, ResolveDefaultColumns}
 import org.apache.spark.sql.catalyst.util.FieldMetadataUtils.FIELD_ID_METADATA_KEY
-import org.apache.spark.sql.connector.catalog.TableChange
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.{
+  CURRENT_DEFAULT_COLUMN_METADATA_KEY,
+  EXISTS_DEFAULT_COLUMN_METADATA_KEY
+}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, DefaultValue, TableChange}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.common.DatasetType
 import org.apache.spark.sql.pipelines.graph.{
@@ -215,11 +221,12 @@ object SchemaInferenceUtils extends Logging {
 
   /**
    * Produces the [[TableChange]] sequence needed to transform `currentSchema` into
-   * `targetSchema`: additions, type updates, deletions, nullability, and comment changes.
+   * `targetSchema`: additions, type updates, deletions, nullability, comment, and default value
+   * changes.
    * Recurses into structs, arrays, and maps so changes are emitted at the leaf level.
    * Similar to [[org.apache.spark.sql.catalyst.analysis.ResolveSchemaEvolution]], but
-   * produces a full bidirectional sync (deletes, nullability, and comment changes) rather
-   * than additive-only evolution.
+   * produces a full bidirectional sync (deletes, nullability, comment, and default value changes)
+   * rather than additive-only evolution.
    *
    * Column identity is keyed on the exact field name, not on a case-normalized one. On the
    * incremental streaming-table path, `targetSchema` is the merge of the current and desired
@@ -230,7 +237,12 @@ object SchemaInferenceUtils extends Logging {
    * Exact keying also avoids silently collapsing two genuinely distinct declared columns that
    * differ only in case (`value` and `Value`) into an arbitrary one of the two.
    *
-   * TODO (SPARK-59269): Support changes to field default value in the target schema.
+   * Column default values are diffed on their current default only. An added column carries both
+   * its current default and, if present in `targetSchema`, its existence default (used to back-fill
+   * rows written before the column existed). For an existing column, only the current default is
+   * updated: its existence default reflects data that has already been written and is left as-is.
+   * A default that table creation would reject (one that does not resolve, is not constant, or is
+   * set on a generated or identity column) fails the diff rather than being stored.
    *
    * @param currentSchema The current schema of the table
    * @param targetSchema The target schema that we want the table to have
@@ -266,13 +278,8 @@ object SchemaInferenceUtils extends Logging {
       .filterNot(fieldInTarget =>
         topLevelFieldsInCurrent.contains(fieldInTarget.name)
       )
-      .map { fieldInTarget =>
-        TableChange.addColumn(
-          (pathToStruct :+ fieldInTarget.name).toArray,
-          fieldInTarget.dataType,
-          fieldInTarget.nullable,
-          fieldInTarget.getComment().orNull
-        )
+      .flatMap { fieldInTarget =>
+        addColumnChanges(fieldInTarget, pathToField = pathToStruct :+ fieldInTarget.name)
       }
 
     // Fields present in current but not in target are columns that need to be removed.
@@ -306,10 +313,58 @@ object SchemaInferenceUtils extends Logging {
   }
 
   /**
-   * Diffs the type, nullability, and comment of one field present in both schemas. Other
-   * StructField.metadata entries (generated-column expressions, connector-specific metadata) are
-   * not diffed: pipeline schema synchronization does not support propagating them, and Spark's
-   * own ResolveSchemaEvolution likewise ignores them.
+   * Adds the column described by `field` at `pathToField`, along with its default value if it has
+   * one.
+   *
+   * A field with both a current and an existence default is added with the full
+   * [[org.apache.spark.sql.connector.catalog.ColumnDefaultValue]], built by the same conversion
+   * table creation uses, so the column gets the same default it would have on a new table and the
+   * catalog can back-fill rows written before the column existed with the existence literal.
+   *
+   * A field with a current default but no existence default has no literal to put on the
+   * `AddColumn`, and `ColumnDefaultValue.getValue` promises connectors that every default Spark
+   * passes to `alterTable` carries one. Such a column is therefore added without a default and its
+   * current default is set by a following [[TableChange.UpdateColumnDefaultValue]], built like the
+   * update for an existing column. `alterTable` applies changes in order, so the update finds the
+   * column the `AddColumn` just created.
+   *
+   * Either way the current default is validated first, like the update for an existing column.
+   */
+  private def addColumnChanges(field: StructField, pathToField: Seq[String]): Seq[TableChange] = {
+    val hasCurrentDefault = field.getCurrentDefaultValue().isDefined
+    val hasExistenceDefault = field.getExistenceDefaultValue().isDefined
+    if (hasCurrentDefault) {
+      validateCurrentDefault(field, columnDefinition = field)
+    }
+    val defaultOnAddColumn = if (hasCurrentDefault && hasExistenceDefault) {
+      CatalogV2Util.structTypeToV2Columns(new StructType(Array(field))).head.defaultValue()
+    } else {
+      null
+    }
+    val addColumn = TableChange.addColumn(
+      pathToField.toArray,
+      field.dataType,
+      field.nullable,
+      field.getComment().orNull,
+      null,
+      defaultOnAddColumn
+    )
+    if (hasCurrentDefault && !hasExistenceDefault) {
+      Seq(
+        addColumn,
+        TableChange.updateColumnDefaultValue(
+          pathToField.toArray,
+          new DefaultValue(field.getCurrentDefaultValue().get)))
+    } else {
+      Seq(addColumn)
+    }
+  }
+
+  /**
+   * Diffs the type, nullability, comment, and current default value of one field present in both
+   * schemas. Other StructField.metadata entries (generated-column expressions, connector-specific
+   * metadata) are not diffed: pipeline schema synchronization does not support propagating them,
+   * and Spark's own ResolveSchemaEvolution likewise ignores them.
    */
   private def diffField(
       currentField: StructField,
@@ -318,15 +373,16 @@ object SchemaInferenceUtils extends Logging {
     warnOnFieldMetadataDrift(currentField, targetField, pathToField)
     diffDataTypes(currentField.dataType, targetField.dataType, pathToField) ++
       diffNullability(currentField.nullable, targetField.nullable, pathToField) ++
-      diffComment(currentField.getComment(), targetField.getComment(), pathToField)
+      diffComment(currentField.getComment(), targetField.getComment(), pathToField) ++
+      diffCurrentDefault(currentField, targetField, pathToField)
   }
 
   /**
    * Logs a warning when two fields' metadata bags differ beyond the keys that are either already
-   * handled (comment) or known-safe to ignore (catalog-assigned field IDs). Pipeline schema
-   * synchronization does not support propagating other metadata entries (defaults,
-   * generated-column expressions, connector-specific metadata), so these differences are left
-   * for the user to reconcile.
+   * handled (comment, current default) or known-safe to ignore (catalog-assigned field IDs, and the
+   * existence default, which is fixed once a column exists). Pipeline schema synchronization does
+   * not support propagating other metadata entries (generated-column expressions,
+   * connector-specific metadata), so these differences are left for the user to reconcile.
    */
   private def warnOnFieldMetadataDrift(
       currentField: StructField,
@@ -346,6 +402,8 @@ object SchemaInferenceUtils extends Logging {
     new MetadataBuilder().withMetadata(m)
       .remove("comment")
       .remove(FIELD_ID_METADATA_KEY) // Catalog-assigned; not present in target schemas
+      .remove(CURRENT_DEFAULT_COLUMN_METADATA_KEY)
+      .remove(EXISTS_DEFAULT_COLUMN_METADATA_KEY)
       .build()
 
   private def diffNullability(
@@ -367,6 +425,64 @@ object SchemaInferenceUtils extends Logging {
       TableChange.updateColumnComment(pathToField.toArray, targetComment.orNull)
     )
   }
+
+  /**
+   * Emits a current default value update when it differs. A null `DefaultValue` drops the default.
+   * A new default is validated first and sent as its SQL text, as written: the catalog re-evaluates
+   * it on each write, so the analyzed value is not what the column should store.
+   */
+  private def diffCurrentDefault(
+      currentField: StructField,
+      targetField: StructField,
+      pathToField: Seq[String]
+  ): Option[TableChange] = {
+    Option.when(currentField.getCurrentDefaultValue() != targetField.getCurrentDefaultValue()) {
+      val newDefault = targetField.getCurrentDefaultValue().map { defaultSql =>
+        validateCurrentDefault(targetField, columnDefinition = currentField)
+        new DefaultValue(defaultSql)
+      }
+      TableChange.updateColumnDefaultValue(pathToField.toArray, newDefault.orNull)
+    }
+  }
+
+  /**
+   * Validates `targetField`'s current default the way table creation validates a declared default,
+   * so that a definition which would fail to create a table also fails to evolve one instead of
+   * being stored and failing the next write to the table. `columnDefinition` is the stored
+   * definition of the column (the target field itself for a column being added): a default on a
+   * generated or identity column is rejected, as creation rejects it. The default's SQL text must
+   * then analyze to a constant using built-in functions only, see
+   * [[ResolveDefaultColumns.analyze]].
+   */
+  private def validateCurrentDefault(
+      targetField: StructField,
+      columnDefinition: StructField): Unit = {
+    val defaultSql = targetField.getCurrentDefaultValue().get
+    GeneratedColumn.getGenerationExpression(columnDefinition).foreach { generationExpression =>
+      throw new AnalysisException(
+        errorClass = "GENERATED_COLUMN_WITH_DEFAULT_VALUE",
+        messageParameters = Map(
+          "colName" -> targetField.name,
+          "defaultValue" -> defaultSql,
+          "genExpr" -> generationExpression))
+    }
+    IdentityColumn.getIdentityInfo(columnDefinition).foreach { identityColumnSpec =>
+      throw new AnalysisException(
+        errorClass = "IDENTITY_COLUMN_WITH_DEFAULT_VALUE",
+        messageParameters = Map(
+          "colName" -> targetField.name,
+          "defaultValue" -> defaultSql,
+          "identityColumnSpec" -> identityColumnSpec.toString))
+    }
+    ResolveDefaultColumns.analyze(targetField, statementType = DEFAULT_VALUE_STATEMENT_TYPE)
+  }
+
+  /**
+   * The statement name in default value errors raised by the schema diff. It is the one
+   * [[CatalogV2Util.structTypeToV2Columns]] uses when table creation analyzes a declared default,
+   * so the same invalid default reports the same error on a new and on an existing table.
+   */
+  private val DEFAULT_VALUE_STATEMENT_TYPE = "Column analysis"
 
   /**
    * Diffs two data types at `path`, descending through matching complex types.
