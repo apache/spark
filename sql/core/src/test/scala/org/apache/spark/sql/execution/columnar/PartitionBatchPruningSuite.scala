@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.columnar
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -172,6 +173,36 @@ class PartitionBatchPruningSuite extends SharedSparkSession with AdaptiveSparkPl
     100 to 200
   )
   checkBatchPruning("SELECT CAST(s AS INT) FROM pruningStringData WHERE '18%' like s", 5, 11)(Seq())
+
+  test("SPARK-61621: StartsWith does not prune batches of a non-binary collation") {
+    // Each value starts with the prefix in its collation, but its leading characters are not
+    // equal to the prefix: a ligature, a decomposed accent, a case mapping that changes the
+    // number of characters, and a trailing space that the collation ignores.
+    // scalastyle:off nonascii
+    val cases = Seq(
+      ("UNICODE_CI_AI", "\u0153uvre", "oe"),
+      ("UNICODE_CI_AI", "oeuvre", "\u0153"),
+      ("UNICODE_CI", "\ufb01nal", "fin"),
+      ("UNICODE", "e\u0301t\u00e9", "\u00e9t"),
+      ("UNICODE", "\u00e9t\u00e9", "e\u0301t"),
+      ("UTF8_LCASE", "\u0130stanbul", "i\u0307s"),
+      ("UTF8_BINARY_RTRIM", "ab", "a "))
+    // scalastyle:on nonascii
+    cases.foreach { case (collation, value, prefix) =>
+      withTempView("pruningCollatedData") {
+        Seq(value).toDF("s").selectExpr(s"CAST(s AS STRING COLLATE $collation) AS s")
+          .createOrReplaceTempView("pruningCollatedData")
+        spark.catalog.cacheTable("pruningCollatedData")
+        try {
+          checkAnswer(
+            sql(s"SELECT s FROM pruningCollatedData WHERE startswith(s, '$prefix')"),
+            Row(value))
+        } finally {
+          spark.catalog.uncacheTable("pruningCollatedData")
+        }
+      }
+    }
+  }
 
   // With disable IN_MEMORY_PARTITION_PRUNING option
   test("disable IN_MEMORY_PARTITION_PRUNING") {
