@@ -47,6 +47,10 @@ each. A NULL operand raises, as the method call would on ``None`` in Python.
 Other methods, and the optional ``start``/``end`` arguments, stay interpreted
 Python.
 
+``p in s`` and ``p not in s`` lower to Catalyst ``contains`` when both operands
+are strings (SPARK-62076). A NULL operand raises, as ``in`` would on ``None`` in
+Python. Membership in a list, tuple, set, or dict stays interpreted Python.
+
 A lambda is lowered only when its source names it directly and alone: bind it
 to a name (``f = lambda x: x + 1``, annotated if you like) and give it a line
 of its own. Passed straight to ``udf(...)``, wrapped in another call, returned
@@ -119,6 +123,7 @@ from pyspark.sql.functions import (
     coalesce,
     col,
     concat,
+    contains,
     endswith,
     isnan,
     length,
@@ -928,6 +933,30 @@ class CatalystTranspiler(AbstractTranspiler):
                         return self._lower_value_compare(
                             params, left, comp, lambda l, r: l >= r, ">="
                         )
+                    case ast.In() | ast.NotIn():
+                        # SPARK-62076: ``p in s`` on strings is Catalyst ``contains(s,
+                        # p)``. Python raises on a ``None`` operand, while ``contains``
+                        # returns NULL, so guard like ``str.startswith``.
+                        if any(self._category(params, n) != "string" for n in (left, comp)):
+                            raise UnsupportedOperationException(
+                                "`in` is only lowered for string operands; other "
+                                "types fall back to interpreted Python"
+                            )
+                        left_col = self._convert_chunk(params, left)
+                        comp_col = self._convert_chunk(params, comp)
+                        found = contains(comp_col, left_col)
+                        if isinstance(ops[0], ast.NotIn):
+                            found = ~found
+                        if all(self._is_nonnull_node(params, n) for n in (left, comp)):
+                            return found
+                        err = lit(
+                            "Python UDF transpiler: cannot evaluate `in` with a NULL "
+                            "operand; Python would raise TypeError here. Add an "
+                            "`is not None` guard or filter NULLs upstream."
+                        )
+                        null_guard = left_col.isNull() | comp_col.isNull()
+                        self._null_guard_emitted = True
+                        return when(null_guard, raise_error(err)).otherwise(found)
                     case _:
                         raise UnsupportedOperationException(
                             f"comparison operator {type(ops[0]).__name__} "
