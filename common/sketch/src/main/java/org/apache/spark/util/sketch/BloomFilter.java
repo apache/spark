@@ -191,7 +191,9 @@ public abstract class BloomFilter {
 
   /**
    * Reads in a {@link BloomFilter} from an input stream. It is the caller's responsibility to close
-   * the stream.
+   * the stream. It reads no further than the filter, and it does not buffer the stream. So wrap a
+   * stream without a buffer of its own, such as a {@code FileInputStream}, in a
+   * {@code BufferedInputStream}, and read on from that.
    */
   public static BloomFilter readFrom(InputStream in) throws IOException {
     // Peek at the version number, and push it back for the version's reader. Unlike a buffered
