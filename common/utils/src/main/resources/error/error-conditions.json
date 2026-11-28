@@ -7497,6 +7497,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "PIPELINE_MISSING_DEFAULT_DATABASE" : {
+    "message" : [
+      "No default database is available for the pipeline in catalog <catalog>. Set `database` in the pipeline specification."
+    ],
+    "sqlState" : "3F000"
+  },
   "PIPELINE_NESTED_COMPLEX_TYPE_COMMENT_CHANGE_UNSUPPORTED" : {
     "message" : [
       "Changing the comment of a struct field nested under consecutive arrays or maps is not supported.",
