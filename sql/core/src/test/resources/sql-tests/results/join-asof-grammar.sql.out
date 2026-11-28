@@ -295,13 +295,68 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "errorClass" : "ASOF_JOIN_MATCH_CONDITION_MISSING",
   "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'ON'",
-    "hint" : ""
-  }
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 24,
+    "stopIndex" : 64,
+    "fragment" : "ASOF JOIN quotes q ON t.symbol = q.symbol"
+  } ]
 }
+
+
+-- !query
+SELECT * FROM trades ASOF JOIN quotes ON trades.symbol = quotes.symbol
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "ASOF_JOIN_MATCH_CONDITION_MISSING",
+  "sqlState" : "42601",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 22,
+    "stopIndex" : 70,
+    "fragment" : "ASOF JOIN quotes ON trades.symbol = quotes.symbol"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM trades ASOF JOIN quotes
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "ASOF_JOIN_MATCH_CONDITION_MISSING",
+  "sqlState" : "42601",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 22,
+    "stopIndex" : 37,
+    "fragment" : "ASOF JOIN quotes"
+  } ]
+}
+
+
+-- !query
+SELECT asof.symbol FROM trades AS asof JOIN quotes ON asof.symbol = quotes.symbol
+-- !query schema
+struct<symbol:string>
+-- !query output
+AAPL
+AAPL
+AAPL
+AAPL
+AAPL
+AAPL
+MSFT
 
 
 -- !query
