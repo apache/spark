@@ -42,6 +42,18 @@ import org.apache.spark.unsafe.types.{BinaryView, CalendarInterval, TimestampNan
 
 class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
+  test("SPARK-62196: floating-point literal equality preserves the sign of zero") {
+    assert(!Literal(0.0f).semanticEquals(Literal(-0.0f)))
+    assert(!Literal(0.0d).semanticEquals(Literal(-0.0d)))
+
+    val floatNaN = Literal(java.lang.Float.intBitsToFloat(0x7fc00001))
+    val doubleNaN = Literal(java.lang.Double.longBitsToDouble(0x7ff8000000000001L))
+    assert(floatNaN == Literal(Float.NaN))
+    assert(floatNaN.hashCode() == Literal(Float.NaN).hashCode())
+    assert(doubleNaN == Literal(Double.NaN))
+    assert(doubleNaN.hashCode() == Literal(Double.NaN).hashCode())
+  }
+
   test("null") {
     checkEvaluation(Literal.create(null, BooleanType), null)
     checkEvaluation(Literal.create(null, ByteType), null)

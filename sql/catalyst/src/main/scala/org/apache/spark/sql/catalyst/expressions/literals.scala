@@ -586,8 +586,9 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
         case (a: Array[Byte], b: Array[Byte]) => util.Arrays.equals(a, b)
         case (a: ArrayBasedMapData, b: ArrayBasedMapData) =>
           a.keyArray == b.keyArray && a.valueArray == b.valueArray
-        case (a: Double, b: Double) if a.isNaN && b.isNaN => true
-        case (a: Float, b: Float) if a.isNaN && b.isNaN => true
+        // Match the boxed hash codes: distinguish signed zeros and canonicalize NaNs.
+        case (a: Double, b: Double) => java.lang.Double.compare(a, b) == 0
+        case (a: Float, b: Float) => java.lang.Float.compare(a, b) == 0
         case (a, b) => a != null && a == b
       }
     case _ => false
