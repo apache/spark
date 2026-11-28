@@ -120,9 +120,21 @@ object Project {
   val hiddenOutputTag: TreeNodeTag[Seq[Attribute]] = TreeNodeTag[Seq[Attribute]]("hidden_output")
 
   def matchSchema(plan: LogicalPlan, schema: StructType, conf: SQLConf): Project = {
+    matchSchema(plan, schema, conf, allowTimePrecisionNarrowing = false)
+  }
+
+  private[sql] def matchSchema(
+      plan: LogicalPlan,
+      schema: StructType,
+      conf: SQLConf,
+      allowTimePrecisionNarrowing: Boolean): Project = {
     assert(plan.resolved)
-    val projectList =
-      reorderFields(plan.output.map(a => (a.name, a)), schema.fields.toImmutableArraySeq, Nil, conf)
+    val projectList = reorderFields(
+      plan.output.map(a => (a.name, a)),
+      schema.fields.toImmutableArraySeq,
+      Nil,
+      conf,
+      allowTimePrecisionNarrowing)
     Project(projectList, plan)
   }
 
@@ -131,7 +143,8 @@ object Project {
       columnPath: Seq[String],
       dt: DataType,
       nullable: Boolean,
-      conf: SQLConf): Expression = {
+      conf: SQLConf,
+      allowTimePrecisionNarrowing: Boolean): Expression = {
     if (col.nullable && !nullable) {
       throw QueryCompilationErrors.nullableColumnOrFieldError(columnPath)
     }
@@ -147,7 +160,8 @@ object Project {
           }.toImmutableArraySeq,
           expected.fields.toImmutableArraySeq,
           columnPath,
-          conf)
+          conf,
+          allowTimePrecisionNarrowing)
         if (col.nullable) {
           If(IsNull(col), Literal(null, dt), CreateStruct(newFields))
         } else {
@@ -160,7 +174,8 @@ object Project {
         }
         val param = NamedLambdaVariable("x", et, containsNull)
         val reconciledElement = reconcileColumnType(
-          param, columnPath :+ "element", expected.elementType, expected.containsNull, conf)
+          param, columnPath :+ "element", expected.elementType,
+          expected.containsNull, conf, allowTimePrecisionNarrowing)
         val func = LambdaFunction(reconciledElement, Seq(param))
         ArrayTransform(col, func)
 
@@ -171,14 +186,19 @@ object Project {
         val keyParam = NamedLambdaVariable("key", kt, nullable = false)
         val valueParam = NamedLambdaVariable("value", vt, valueContainsNull)
         val reconciledKey = reconcileColumnType(
-          keyParam, columnPath :+ "key", expected.keyType, false, conf)
+          keyParam, columnPath :+ "key", expected.keyType, false, conf, allowTimePrecisionNarrowing)
         val reconciledValue = reconcileColumnType(
-          valueParam, columnPath :+ "value", expected.valueType, expected.valueContainsNull, conf)
+          valueParam, columnPath :+ "value", expected.valueType,
+          expected.valueContainsNull, conf, allowTimePrecisionNarrowing)
         val keyFunc = LambdaFunction(reconciledKey, Seq(keyParam))
         val valueFunc = LambdaFunction(reconciledValue, Seq(valueParam))
         val newKeys = ArrayTransform(MapKeys(col), keyFunc)
         val newValues = ArrayTransform(MapValues(col), valueFunc)
         MapFromArrays(newKeys, newValues)
+
+      case (from: TimeType, to: TimeType)
+          if allowTimePrecisionNarrowing && from.precision > to.precision =>
+        storeAssignCast(col, from, to, conf)
 
       case (other, target) =>
         if (other == target) {
@@ -226,7 +246,8 @@ object Project {
       fields: Seq[(String, Expression)],
       expected: Seq[StructField],
       columnPath: Seq[String],
-      conf: SQLConf): Seq[NamedExpression] = {
+      conf: SQLConf,
+      allowTimePrecisionNarrowing: Boolean): Seq[NamedExpression] = {
     expected.map { f =>
       val matched = fields.filter(field => conf.resolver(field._1, f.name))
       if (matched.isEmpty) {
@@ -257,7 +278,7 @@ object Project {
 
         val newColumnPath = columnPath :+ matched.head._1
         val newColumnExpr = reconcileColumnType(
-          columnExpr, newColumnPath, f.dataType, f.nullable, conf)
+          columnExpr, newColumnPath, f.dataType, f.nullable, conf, allowTimePrecisionNarrowing)
         createNewColumn(newColumnExpr, f.name, f.metadata, originalMetadata)
       }
     }
