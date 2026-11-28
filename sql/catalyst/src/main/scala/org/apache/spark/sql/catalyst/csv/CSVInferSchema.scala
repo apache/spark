@@ -52,9 +52,9 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
 
-  private lazy val timeFormatter = TimeFormatter(
-    options.timeFormatInRead,
-    isParsing = true)
+  private lazy val timeFormatter = allCatch opt {
+    TimeFormatter(options.timeFormatInRead, isParsing = true)
+  }
 
   private val isTimeTypeEnabled = SQLConf.get.isTimeTypeEnabled
 
@@ -208,7 +208,7 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
   }
 
   private def tryParseTime(field: String): DataType = {
-    if (isTimeTypeEnabled && (allCatch opt timeFormatter.parse(field)).isDefined) {
+    if (isTimeTypeEnabled && timeFormatter.exists(_.parseOptional(field).isDefined)) {
       TimeType(TimeType.DEFAULT_PRECISION)
     } else {
       tryParseDate(field)
