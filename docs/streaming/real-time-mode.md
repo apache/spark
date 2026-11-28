@@ -352,6 +352,12 @@ The following operations, sources, and sinks are supported:
   + Stream-static joins, where a streaming DataFrame is joined with a static DataFrame. The static
     side must be broadcast (use the `broadcast(...)` hint), because a stream-static join must not
     introduce a shuffle.
+  + [External lookup joins](./apis-on-dataframes-and-datasets.html#external-lookup-joins)
+    (supported since Spark 4.4.0), where Spark looks up the stream's keys in the data source of the
+    static side instead of reading it in full. By default, each lookup request holds one stream
+    row, so a row does not wait for other rows. See
+    [External Lookup Joins in Real-time Mode](./apis-on-dataframes-and-datasets.html#external-lookup-joins-in-real-time-mode)
+    for the request size and the lookup cache.
 
 - *Stateful operations*: support began in Spark 4.3.0. These regroup records by key through a
   pipelined shuffle (see [How Stateful Queries Work](#how-stateful-queries-work)) and keep their

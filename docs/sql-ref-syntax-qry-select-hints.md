@@ -144,6 +144,10 @@ Join hints allow users to suggest the join strategy that Spark should use. Prior
 
     Suggests that Spark use shuffle-and-replicate nested loop join.
 
+* **EXTERNAL_LOOKUP**
+
+    Since Spark 4.4.0. Marks the lookup side of a stream-static join, so that Spark joins that side by looking up the stream's keys in its data source. It takes relation names and cache options of the form `key=value`, such as `EXTERNAL_LOOKUP(c, 'cache_ttl=30s')`. Unlike the hints above, it is not a suggestion: when Spark cannot run the join as an external lookup join, the query fails. See [External Lookup Joins](streaming/apis-on-dataframes-and-datasets.html#external-lookup-joins).
+
 #### Examples
 
 ```sql
