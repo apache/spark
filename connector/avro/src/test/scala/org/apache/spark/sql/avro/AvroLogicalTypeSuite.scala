@@ -441,7 +441,9 @@ abstract class AvroLogicalTypeSuite extends SharedSparkSession {
         exception = ex.getCause.asInstanceOf[SparkArithmeticException],
         condition = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
         parameters = Map(
-          "value" -> "0",
+          // The deserializer truncates the unscaled value to a long for precision <= 18,
+          // so the reported value is that truncated long at scale 2.
+          "value" -> "-43027492919757405.94",
           "precision" -> "4",
           "scale" -> "2",
           "config" -> "\"spark.sql.ansi.enabled\"")

@@ -69,7 +69,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
       exception = intercept[SparkArithmeticException](Decimal(170L, 2, 1)),
       condition = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
       parameters = Map(
-        "value" -> "0",
+        "value" -> "17.0",
         "precision" -> "2",
         "scale" -> "1",
         "config" -> "\"spark.sql.ansi.enabled\""))
@@ -77,7 +77,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
       exception = intercept[SparkArithmeticException](Decimal(170L, 2, 0)),
       condition = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
       parameters = Map(
-        "value" -> "0",
+        "value" -> "170",
         "precision" -> "2",
         "scale" -> "0",
         "config" -> "\"spark.sql.ansi.enabled\""))
@@ -101,7 +101,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
       exception = intercept[SparkArithmeticException](Decimal(1e17.toLong, 17, 0)),
       condition = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
       parameters = Map(
-        "value" -> "0",
+        "value" -> "100000000000000000",
         "precision" -> "17",
         "scale" -> "0",
         "config" -> "\"spark.sql.ansi.enabled\""))
