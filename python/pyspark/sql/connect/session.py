@@ -287,8 +287,8 @@ class SparkSession:
                 assert spark_remote is not None
                 session = SparkSession(connection=spark_remote, hook_factories=self._hook_factories)
 
-            SparkSession._set_default_and_active_session(session)
             self._apply_options(session)
+            SparkSession._set_default_and_active_session(session, overwrite_active=True)
             return session
 
         def getOrCreate(self) -> "SparkSession":
@@ -353,15 +353,18 @@ class SparkSession:
         self.release_session_on_close = True
 
     @classmethod
-    def _set_default_and_active_session(cls, session: "SparkSession") -> None:
+    def _set_default_and_active_session(
+        cls, session: "SparkSession", *, overwrite_active: bool = False
+    ) -> None:
         """
         Set the (global) default :class:`SparkSession`, and (thread-local)
-        active :class:`SparkSession` when they are not set yet.
+        active :class:`SparkSession` when they are not set yet. Explicit session creation
+        also replaces the active session in the current thread.
         """
         with cls._lock:
             if cls._default_session is None:
                 cls._default_session = session
-        if getattr(cls._active_session, "session", None) is None:
+        if overwrite_active or getattr(cls._active_session, "session", None) is None:
             cls._active_session.session = session
 
     @classmethod
