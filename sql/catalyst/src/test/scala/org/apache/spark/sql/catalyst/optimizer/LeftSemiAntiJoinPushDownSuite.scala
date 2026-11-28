@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -26,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.statsEstimation.StatsTestPlan
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{BooleanType, IntegerType, StructField, StructType}
 
 class LeftSemiAntiJoinPushDownSuite extends PlanTest {
 
@@ -46,6 +47,47 @@ class LeftSemiAntiJoinPushDownSuite extends PlanTest {
   val testRelation = LocalRelation($"a".int, $"b".int, $"c".int)
   val testRelation1 = LocalRelation($"d".int)
   val testRelation2 = LocalRelation($"e".int)
+
+  for {
+    evalType <- Seq(PythonEvalType.SQL_TABLE_UDF, PythonEvalType.SQL_ARROW_TABLE_UDF)
+    joinType <- Seq(LeftSemi, LeftAnti)
+    predicate <- Seq("false", "null", "none", "key")
+  } {
+    test(s"SPARK-61734: $joinType stays above Python UDTF $evalType with $predicate") {
+      val key = testRelation.output.head
+      val sorted = Sort(Seq(SortOrder(key, Ascending)), global = false, testRelation)
+      val schema = StructType(Seq(StructField("n", IntegerType)))
+      val function = PythonUDTF(
+        "partition_count", null, schema, None,
+        Seq(CreateNamedStruct(Seq(Literal("a"), key))),
+        evalType, udfDeterministic = true,
+        pythonUDTFPartitionColumnIndexes = Some(PythonUDTFPartitionColumnIndexes(Seq(0))),
+        tableArguments = Some(Seq(true)))
+      val generated = Generate(
+        function, Nil, outer = false, None, Seq(AttributeReference("n", IntegerType)()), sorted)
+      val condition = predicate match {
+        case "false" => Some(Literal.FalseLiteral)
+        case "null" => Some(Literal(null, BooleanType))
+        case "none" => None
+        case "key" => Some(EqualTo(key, testRelation1.output.head))
+      }
+      val original = Join(generated, testRelation1, joinType, condition, JoinHint.NONE)
+      comparePlans(PushDownLeftSemiAntiJoin(original), original)
+    }
+  }
+
+  for (joinType <- Seq(LeftSemi, LeftAnti)) {
+    test(s"SPARK-61734: $joinType still pushes through native Generate") {
+      val generated = Generate(
+        Explode(CreateArray(Seq(Literal(1), Literal(2)))), Nil, outer = false, None,
+        Seq(AttributeReference("value", IntegerType)()), testRelation)
+      val condition = Some(EqualTo(testRelation.output.head, testRelation1.output.head))
+      val original = Join(generated, testRelation1, joinType, condition, JoinHint.NONE)
+      val expected = generated.copy(
+        child = Join(testRelation, testRelation1, joinType, condition, JoinHint.NONE))
+      comparePlans(PushDownLeftSemiAntiJoin(original), expected)
+    }
+  }
 
   test("Project: LeftSemi join pushdown") {
     val originalQuery = testRelation

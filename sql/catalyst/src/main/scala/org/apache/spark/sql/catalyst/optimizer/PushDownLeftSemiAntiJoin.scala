@@ -103,6 +103,11 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
         union.withNewChildren(newGrandChildren)
       }
 
+    // A Python UDTF can require its TABLE argument's ordering for correctness.
+    // A pushed join may remove that ordering before the UDTF is evaluated.
+    case join @ Join(Generate(_: PythonUDTF, _, _, _, _, _), _, LeftSemiOrAnti(_), _, _) =>
+      join
+
     // LeftSemi/LeftAnti over UnaryNode
     case join @ Join(u: UnaryNode, rightOp, LeftSemiOrAnti(_), _, _)
         if PushPredicateThroughNonJoin.canPushThrough(u) && u.expressions.forall(_.deterministic) =>
