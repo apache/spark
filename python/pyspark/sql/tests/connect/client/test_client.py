@@ -19,8 +19,10 @@ import contextlib
 import functools
 import importlib
 import inspect
+import logging
 import os
 import sys
+import sysconfig
 import textwrap
 import threading
 import time
@@ -1057,8 +1059,11 @@ class SparkConnectClientTestCase(unittest.TestCase):
         fake_decorator = types.ModuleType("decorator")
         fake_decorator.__file__ = os.path.join(site_packages, "decorator.py")
         with (
-            # Replace the real standard library directories with the fake one.
-            mock.patch.object(core, "_STDLIB_DIRS", (os.path.join(stdlib, ""),)),
+            # Replace the real standard library directories with the fake one. No package
+            # directory is configured, so a site-packages inside it is recognized by name alone.
+            mock.patch.object(
+                core, "_python_install_dirs", return_value=((os.path.join(stdlib, ""),), ())
+            ),
             # `_is_non_user_source` finds the notebook packages through `sys.modules`.
             mock.patch.dict(sys.modules, {"IPython": fake_ipython, "decorator": fake_decorator}),
         ):
@@ -1152,6 +1157,25 @@ class SparkConnectClientTestCase(unittest.TestCase):
         self.assertEqual(len(records), 1)
         self.assertTrue(records[0].getMessage().startswith("AnalyzePlan(schema) took "))
 
+    def test_analyze_succeeds_when_logging_the_call_fails(self):
+        client = self._analyze_client()
+        with (
+            # The debug call stack extension calls `_retrieve_stack_frames` on its own.
+            mock.patch.dict(os.environ, {"SPARK_CONNECT_DEBUG_CLIENT_CALL_STACK": "false"}),
+            # Make building the record fail, as a broken module `__file__` or a failing source
+            # line lookup could.
+            mock.patch.object(
+                SparkConnectClient, "_retrieve_stack_frames", side_effect=RuntimeError("boom")
+            ) as retrieve,
+            # The Spark Connect logger is disabled unless SPARK_CONNECT_LOG_LEVEL is set.
+            mock.patch.object(connect_logger, "disabled", False),
+            # Sets the level to INFO for the block, so the record is attempted.
+            self.assertNoLogs(connect_logger, level="INFO"),
+        ):
+            result = client._analyze("schema", plan=proto.Plan())
+        retrieve.assert_called_once()
+        self.assertIsNotNone(result)
+
     def test_analyze_logs_real_call_site(self):
         client = self._analyze_client()
         with self._user_code_in_this_file(), self._info_logging() as records:
@@ -1206,6 +1230,37 @@ class SparkConnectClientTestCase(unittest.TestCase):
             records[0].getMessage(),
         )
 
+    def test_analyze_call_site_skips_frozen_standard_library_frames(self):
+        # CPython 3.11+ runs frozen standard library modules such as runpy under a synthetic
+        # `<frozen ...>` filename, e.g. when a process starts with `python -m`.
+        call = self._define_in_file(
+            """
+            def call(client, plan):
+                client._analyze(method="schema", plan=plan)
+            """,
+            "call",
+            "<frozen runpy>",
+        )
+        client = self._analyze_client()
+        with self._user_code_in_this_file(), self._info_logging() as records:
+            expected_line = inspect.currentframe().f_lineno + 1
+            call(client, proto.Plan())
+            # On a thread, every frame before PySpark is standard library code.
+            thread = threading.Thread(target=call, args=(client, proto.Plan()))
+            thread.start()
+            thread.join()
+        self.assertEqual(len(records), 2)
+        self.assertTrue(
+            records[0]
+            .getMessage()
+            .endswith(f"triggered by _analyze at {__file__}:{expected_line}"),
+            records[0].getMessage(),
+        )
+        self.assertTrue(
+            records[1].getMessage().endswith("triggered by unknown call site"),
+            records[1].getMessage(),
+        )
+
     @unittest.skipIf(not have_ipython, "IPython is not installed")
     def test_analyze_call_site_skips_notebook_display_frames(self):
         # A notebook cell that ends in a DataFrame is displayed through IPython's formatters
@@ -1253,9 +1308,34 @@ class SparkConnectClientTestCase(unittest.TestCase):
                 self.assertFalse(is_non_user(os.path.join(site, "mylib", "helpers.py")))
                 self.assertFalse(is_non_user(os.path.join(site, "decorator_extras.py")))
                 self.assertFalse(is_non_user(os.path.join(os.sep, "app", "my_job.py")))
-        # decorator releases before 5.0 compile wrappers under synthetic filenames.
+        # decorator releases before 5.0 compile wrappers under synthetic filenames, and frozen
+        # standard library modules run under one too.
         self.assertTrue(core._is_non_user_source("<decorator-gen-17>"))
+        self.assertTrue(core._is_non_user_source("<frozen runpy>"))
         self.assertFalse(core._is_non_user_source("<stdin>"))
+
+    def test_package_dir_with_other_name_in_stdlib_is_user_code(self):
+        # Some layouts configure a package directory inside the standard library directory
+        # under a name other than site-packages, e.g. vendor-packages.
+        stdlib = os.path.join(os.sep, "fake-python", "lib", "python3")
+        vendor = os.path.join(stdlib, "vendor-packages")
+        with mock.patch.object(
+            core,
+            "_python_install_dirs",
+            # Replace the real directories with a fake layout; only path strings are compared.
+            return_value=((os.path.join(stdlib, ""),), (os.path.join(vendor, ""),)),
+        ):
+            self.assertFalse(core._is_non_user_source(os.path.join(vendor, "mylib", "a.py")))
+            self.assertTrue(core._is_non_user_source(os.path.join(stdlib, "functools.py")))
+
+    def test_python_install_dirs(self):
+        stdlib_dirs, package_dirs = core._python_install_dirs()
+        self.assertIn(os.path.join(os.path.normcase(os.path.dirname(os.__file__)), ""), stdlib_dirs)
+        self.assertIn(os.path.join(os.path.normcase(sysconfig.get_path("stdlib")), ""), stdlib_dirs)
+        self.assertIn(
+            os.path.join(os.path.normcase(sysconfig.get_path("purelib")), ""), package_dirs
+        )
+        self.assertTrue(core._is_non_user_source(functools.__file__))
 
     def test_installed_notebook_display_sources_are_not_user_code(self):
         # IPython versions that wrap their display formatters with the decorator package, such as
@@ -1330,7 +1410,10 @@ class SparkConnectClientTestCase(unittest.TestCase):
         retrieve.assert_not_called()
 
     def test_analyze_does_not_capture_call_site_when_logger_above_info(self):
-        # SPARK_CONNECT_LOG_LEVEL=WARN enables the logger, but not at INFO.
+        # SPARK_CONNECT_LOG_LEVEL=WARN enables the logger, but not at INFO. Pin the level, since
+        # the suite may run with SPARK_CONNECT_LOG_LEVEL set to another level.
+        self.addCleanup(connect_logger.setLevel, connect_logger.level)
+        connect_logger.setLevel(logging.WARNING)
         client = self._analyze_client()
         with (
             # The debug call stack extension calls `_retrieve_stack_frames` on its own.

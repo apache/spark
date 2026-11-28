@@ -24,12 +24,12 @@ __all__ = [
 import atexit
 import concurrent.futures
 import copy
+import functools
 import logging
 import os
 import pickle
 import platform
 import sys
-import sysconfig
 import threading
 import time
 import traceback
@@ -818,40 +818,73 @@ def _is_pyspark_source(filename: str) -> bool:
 # result. Some IPython versions wrap their display formatters with the `decorator` package.
 _NOTEBOOK_DISPLAY_MODULES = ("IPython", "ipykernel", "decorator")
 
-# decorator releases before 5.0 compile each wrapper under a synthetic filename with this prefix.
-_DECORATOR_GENERATED_PREFIX = "<decorator-gen-"
+# Code that runs under a synthetic filename instead of a path, and that is never a line the user
+# wrote: decorator releases before 5.0 compile each wrapper as `<decorator-gen-N>`, and CPython
+# 3.11+ runs frozen standard library modules (runpy, os, codecs, the importlib bootstrap) as
+# `<frozen NAME>`, e.g. when a process starts with `python -m`.
+_SYNTHETIC_NON_USER_PREFIXES = ("<decorator-gen-", "<frozen ")
 
-# Directories of the Python standard library. Frames carry the path that modules were loaded
-# from, which may differ from the configured one when it goes through a symlink.
-_STDLIB_DIRS = tuple(
-    {os.path.join(os.path.dirname(os.__file__), ""), os.path.join(sysconfig.get_path("stdlib"), "")}
-)
+# Names of the third-party package directories that may sit inside the standard library
+# directory, as in conda, pyenv or Docker images without a venv.
+_SITE_PACKAGES_DIR_NAMES = ("site-packages", "dist-packages")
+
+
+def _normalize_dir(path: str) -> str:
+    # `normcase` makes the comparisons case-insensitive where the filesystem is (Windows).
+    return os.path.join(os.path.normcase(path), "")
+
+
+@functools.lru_cache(maxsize=None)
+def _python_install_dirs() -> Tuple[Tuple[str, ...], Tuple[str, ...]]:
+    """
+    Return the standard library directories and the third-party package directories of this
+    interpreter, normalized and with a trailing separator.
+
+    Frames carry the path that modules were loaded from, which may differ from the configured
+    one when it goes through a symlink, so both are listed. They are computed on first use
+    because only the opt-in AnalyzePlan INFO record needs them.
+    """
+    import sysconfig
+
+    stdlib_dirs = {
+        _normalize_dir(os.path.dirname(os.__file__)),
+        _normalize_dir(sysconfig.get_path("stdlib")),
+    }
+    package_dirs = {_normalize_dir(sysconfig.get_path(name)) for name in ("purelib", "platlib")}
+    return tuple(stdlib_dirs), tuple(package_dirs)
 
 
 def _is_non_user_source(filename: str) -> bool:
     """
     Check if the given filename belongs to the Python standard library or to the notebook
     display machinery, i.e. code that may call into PySpark but is not user application code.
+
+    Standard library code is recognized by its directory, except for frozen standard library
+    modules, which carry a synthetic `<frozen ...>` filename instead of a path and are treated
+    as standard library code too.
     """
-    for stdlib_dir in _STDLIB_DIRS:
-        if filename.startswith(stdlib_dir):
+    if filename.startswith(_SYNTHETIC_NON_USER_PREFIXES):
+        return True
+    path = os.path.normcase(filename)
+    stdlib_dirs, package_dirs = _python_install_dirs()
+    for stdlib_dir in stdlib_dirs:
+        if path.startswith(stdlib_dir):
             # Third-party packages may be installed under the standard library directory, as in
             # conda, pyenv or Docker images without a venv. Those are checked below.
-            top_level = filename[len(stdlib_dir) :].split(os.sep, 1)[0]
-            if top_level not in ("site-packages", "dist-packages"):
+            top_level = path[len(stdlib_dir) :].split(os.sep, 1)[0]
+            if top_level not in _SITE_PACKAGES_DIR_NAMES and not path.startswith(package_dirs):
                 return True
             break
-    if filename.startswith(_DECORATOR_GENERATED_PREFIX):
-        return True
     for name in _NOTEBOOK_DISPLAY_MODULES:
         module_file = getattr(sys.modules.get(name), "__file__", None)
         if module_file is None:
             continue
+        module_file = os.path.normcase(module_file)
         if os.path.basename(module_file) == "__init__.py":
             # A package: match every file under its directory.
-            if filename.startswith(os.path.dirname(module_file) + os.sep):
+            if path.startswith(os.path.dirname(module_file) + os.sep):
                 return True
-        elif filename == module_file:
+        elif path == module_file:
             return True
     return False
 
@@ -1735,7 +1768,12 @@ class SparkConnectClient(object):
             self._handle_error(error)
         finally:
             if start_time is not None:
-                self._log_analyze_call(method, time.monotonic() - start_time)
+                try:
+                    self._log_analyze_call(method, time.monotonic() - start_time)
+                except Exception:
+                    # The record is diagnostic only: never let it replace the result or the
+                    # error of the AnalyzePlan call.
+                    logger.debug("Failed to log the AnalyzePlan call", exc_info=True)
 
     @classmethod
     def _log_analyze_call(cls, method: str, duration_s: float) -> None:
