@@ -134,7 +134,8 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
         " 'colelction.delim' = '@'," +
         " 'field.delim' = ','," +
         " 'mapkey.delim' = '#'," +
-        " 'serialization.format' = ',')" +
+        " 'serialization.format' = ','," +
+        " 'serialization.null.format' = 'NaN')" +
         " STORED AS INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat'" +
         " OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'" +
         " TBLPROPERTIES ("
