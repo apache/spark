@@ -15547,6 +15547,7 @@ object functions {
    *
    * @note
    *   Affected by these public SQL configurations:
+   *   - `spark.sql.columnNameOfCorruptRecord`
    *   - `spark.sql.timestampType`
    */
   def schema_of_json(json: String): Column = schema_of_json(lit(json))
@@ -15564,6 +15565,7 @@ object functions {
    *
    * @note
    *   Affected by these public SQL configurations:
+   *   - `spark.sql.columnNameOfCorruptRecord`
    *   - `spark.sql.timestampType`
    */
   def schema_of_json(json: Column): Column = Column.fn("schema_of_json", json)
@@ -15588,6 +15590,7 @@ object functions {
    *
    * @note
    *   Affected by these public SQL configurations:
+   *   - `spark.sql.columnNameOfCorruptRecord`
    *   - `spark.sql.timestampType`
    */
   // scalastyle:on line.size.limit
