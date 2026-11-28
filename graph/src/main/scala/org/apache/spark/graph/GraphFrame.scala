@@ -22,7 +22,7 @@ import org.apache.spark.graph.GraphErrors.{EDGE_PROPERTIES, EDGES, VERTEX_PROPER
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame}
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution, Resolver}
 import org.apache.spark.sql.catalyst.util.QuotingUtils.quoteIdentifier
-import org.apache.spark.sql.functions.{array, col, countDistinct, explode, expr}
+import org.apache.spark.sql.functions.{array, coalesce, col, count, countDistinct, explode, expr, lit, struct}
 import org.apache.spark.sql.graph.GraphConf
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ByteType, DataType, IntegerType, LongType, ShortType, StringType}
@@ -41,6 +41,13 @@ import org.apache.spark.storage.StorageLevel
  * implicitly: an invalid graph silently produces incorrect results instead of an exception. Call
  * `validate()` to check that a graph is valid. `validate()` runs several Spark jobs, so it is not
  * free.
+ *
+ * The `GraphFrame` model also assumes that the degree of every vertex, i.e. the number of its
+ * adjacent edges, is less than `Integer.MAX_VALUE`: degree metrics return INT values. This is not
+ * checked either. A larger degree fails with an overflow error in ANSI mode and silently
+ * overflows otherwise. GraphFrames also use internally integer type for counting or indexing
+ * neighbors. Correctness of algorithms is not guaranteed on graphs with max degree gretater than
+ * 2 billions. Handling graphs with billion-scale hubs require another kind of infrastructure.
  *
  * Required vertex columns:
  *   - "id", the vertex ID. See `GraphFrame.ID`
@@ -74,6 +81,7 @@ import org.apache.spark.storage.StorageLevel
  * undirected graphs; this is controlled at the algorithm level by a corresponding argument.
  *
  * @groupname structure Basic graph structure information
+ * @groupname centrality Centrality metrics
  * @groupname conversions Conversion operations
  * @groupname subgraph Subgraph selection
  * @groupname transformations Graph transformations
@@ -146,6 +154,177 @@ class GraphFrame private (
    * @since 4.5.0
    */
   def edgeColumns: Array[String] = edges.columns
+
+  /**
+   * The out-degree of each vertex in the graph, returned as a DataFrame with two columns:
+   *   - `id` the ID of the vertex
+   *   - "outDegree" (integer) storing the out-degree of the vertex
+   *
+   * Note that vertices with 0 out-edges are not returned in the result.
+   *
+   * @group centrality
+   * @since 4.5.0
+   */
+  def outDegrees: DataFrame =
+    edges.groupBy(col(SRC).as(ID)).agg(count(lit(1)).cast(IntegerType).as("outDegree"))
+
+  /**
+   * The in-degree of each vertex in the graph, returned as a DataFrame with two columns:
+   *   - `id` the ID of the vertex
+   *   - "inDegree" (integer) storing the in-degree of the vertex
+   *
+   * Note that vertices with 0 in-edges are not returned in the result.
+   *
+   * @group centrality
+   * @since 4.5.0
+   */
+  def inDegrees: DataFrame =
+    edges.groupBy(col(DST).as(ID)).agg(count(lit(1)).cast(IntegerType).as("inDegree"))
+
+  /**
+   * The degree of each vertex in the graph, returned as a DataFrame with two columns:
+   *   - `id` the ID of the vertex
+   *   - "degree" (integer) the degree of the vertex
+   *
+   * Note that vertices with 0 edges are not returned in the result.
+   *
+   * @group centrality
+   * @since 4.5.0
+   */
+  def degrees: DataFrame =
+    edges
+      .select(explode(array(col(SRC), col(DST))).as(ID))
+      .groupBy(ID)
+      .agg(count(lit(1)).cast(IntegerType).as("degree"))
+
+  /**
+   * The out-degree of each vertex per edge type, returned as a DataFrame with two columns:
+   *   - `id` the ID of the vertex
+   *   - "outDegrees" a struct with a field for each edge type, storing the out-degree count
+   *
+   * Edge types are discovered automatically.
+   *
+   * @param edgeTypeCol
+   *   Name of the column in edges DataFrame that contains edge types
+   *
+   * @group centrality
+   * @since 4.5.0
+   */
+  @throws[AnalysisException]
+  def typeOutDegree(edgeTypeCol: String): DataFrame =
+    typeDegrees(col(SRC), edgeTypeCol, None, "outDegrees")
+
+  /**
+   * The out-degree of each vertex per edge type, returned as a DataFrame with two columns:
+   *   - `id` the ID of the vertex
+   *   - "outDegrees" a struct with a field for each edge type, storing the out-degree count
+   *
+   * @param edgeTypeCol
+   *   Name of the column in edges DataFrame that contains edge types
+   * @param edgeTypes
+   *   Sequence of edge type values.
+   *
+   * @group centrality
+   * @since 4.5.0
+   */
+  @throws[AnalysisException]
+  def typeOutDegree(edgeTypeCol: String, edgeTypes: Seq[Any]): DataFrame =
+    typeDegrees(col(SRC), edgeTypeCol, Some(edgeTypes), "outDegrees")
+
+  /**
+   * The in-degree of each vertex per edge type, returned as a DataFrame with two columns:
+   *   - `id` the ID of the vertex
+   *   - "inDegrees" a struct with a field for each edge type, storing the in-degree count
+   *
+   * Edge types are discovered automatically.
+   *
+   * @param edgeTypeCol
+   *   Name of the column in edges DataFrame that contains edge types
+   *
+   * @group centrality
+   * @since 4.5.0
+   */
+  @throws[AnalysisException]
+  def typeInDegree(edgeTypeCol: String): DataFrame =
+    typeDegrees(col(DST), edgeTypeCol, None, "inDegrees")
+
+  /**
+   * The in-degree of each vertex per edge type, returned as a DataFrame with two columns:
+   *   - `id` the ID of the vertex
+   *   - "inDegrees" a struct with a field for each edge type, storing the in-degree count
+   *
+   * @param edgeTypeCol
+   *   Name of the column in edges DataFrame that contains edge types
+   * @param edgeTypes
+   *   Sequence of edge type values.
+   *
+   * @group centrality
+   * @since 4.5.0
+   */
+  @throws[AnalysisException]
+  def typeInDegree(edgeTypeCol: String, edgeTypes: Seq[Any]): DataFrame =
+    typeDegrees(col(DST), edgeTypeCol, Some(edgeTypes), "inDegrees")
+
+  /**
+   * The total degree of each vertex per edge type (both in and out), returned as a DataFrame with
+   * two columns:
+   *   - `id` the ID of the vertex
+   *   - "degrees" a struct with a field for each edge type, storing the total degree count
+   *
+   * Edge types are discovered automatically.
+   *
+   * @param edgeTypeCol
+   *   Name of the column in edges DataFrame that contains edge types
+   *
+   * @group centrality
+   * @since 4.5.0
+   */
+  @throws[AnalysisException]
+  def typeDegree(edgeTypeCol: String): DataFrame =
+    typeDegrees(explode(array(col(SRC), col(DST))), edgeTypeCol, None, "degrees")
+
+  /**
+   * The total degree of each vertex per edge type (both in and out), returned as a DataFrame with
+   * two columns:
+   *   - `id` the ID of the vertex
+   *   - "degrees" a struct with a field for each edge type, storing the total degree count
+   *
+   * @param edgeTypeCol
+   *   Name of the column in edges DataFrame that contains edge types
+   * @param edgeTypes
+   *   Sequence of edge type values.
+   *
+   * @group centrality
+   * @since 4.5.0
+   */
+  @throws[AnalysisException]
+  def typeDegree(edgeTypeCol: String, edgeTypes: Seq[Any]): DataFrame =
+    typeDegrees(explode(array(col(SRC), col(DST))), edgeTypeCol, Some(edgeTypes), "degrees")
+
+  private def typeDegrees(
+      endpoint: Column,
+      edgeTypeCol: String,
+      edgeTypes: Option[Seq[Any]],
+      outputCol: String): DataFrame = {
+    val grouped = edges
+      .select(endpoint.as(ID), col(edgeTypeCol).as(EDGE_TYPE))
+      .groupBy(ID)
+    val pivoted = edgeTypes match {
+      case Some(types) => grouped.pivot(EDGE_TYPE, types)
+      case None => grouped.pivot(EDGE_TYPE)
+    }
+    val counts = pivoted.agg(count(lit(1)))
+    // The pivot column names are the edge type values, which can contain special characters or
+    // be equal to "id". Rename the columns by position to refer to them safely.
+    val typeNames = counts.columns.tail.toSeq
+    val tmpNames = typeNames.indices.map(i => s"_$i")
+    val typeCounts = typeNames.zip(tmpNames).map { case (typeName, tmpName) =>
+      coalesce(col(tmpName), lit(0)).cast(IntegerType).as(typeName)
+    }
+    counts
+      .toDF(ID +: tmpNames: _*)
+      .select(col(ID), struct(typeCounts: _*).as(outputCol))
+  }
 
   /**
    * Filters vertices by a condition and drops the edges adjacent to the removed vertices.
@@ -341,9 +520,9 @@ class GraphFrame private (
 
   /**
    * Checks that the graph is valid: vertex IDs are unique and not NULL, and the "src" and "dst"
-   * of every edge are not NULL and are existing vertex IDs. Equivalent to `validate(true, level)`,
-   * where `level` is the "spark.graph.storageLevel" configuration or, if it is not set, the
-   * "spark.sql.defaultCacheStorageLevel" configuration.
+   * of every edge are not NULL and are existing vertex IDs. Equivalent to
+   * `validate(true, level)`, where `level` is the "spark.graph.storageLevel" configuration or, if
+   * it is not set, the "spark.sql.defaultCacheStorageLevel" configuration.
    *
    * This runs several Spark jobs over the vertices and the edges, so it can be expensive on large
    * graphs. See `validate(checkVertices, intermediateStorageLevel)` for the cost of each check.
@@ -469,6 +648,9 @@ object GraphFrame extends Serializable {
    */
   val WEIGHT: String = "weight"
 
+  /** The name of the intermediate edge type column in the type degree metrics. */
+  private val EDGE_TYPE: String = "edge_type"
+
   /**
    * The data types that can be used for the vertex ID and the edge source and destination
    * columns.
@@ -531,7 +713,10 @@ object GraphFrame extends Serializable {
     }
   }
 
-  private def checkRequiredColumn(name: String, columns: Seq[String], resolver: Resolver): Unit = {
+  private def checkRequiredColumn(
+      name: String,
+      columns: Seq[String],
+      resolver: Resolver): Unit = {
     if (!columns.contains(name)) {
       throw GraphErrors.unresolvedColumnError(name, columns)
     }

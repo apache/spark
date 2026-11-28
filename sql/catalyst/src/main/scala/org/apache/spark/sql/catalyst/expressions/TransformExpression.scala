@@ -238,16 +238,29 @@ case class TransformExpression(
    * the failure) the driver resolved while planning.
    */
   @transient private lazy val evaluableFunctionAttempt: Try[Option[Expression]] =
-    try Success(resolveEvaluableFunction()) catch {
+    try Success(resolveEvaluableFunction(quiet = false)) catch {
       case e @ (NonFatal(_) | _: LinkageError) =>
         TransformExpression.logCannotResolve(function, e)
         Failure(e)
     }
 
-  private def resolveEvaluableFunction(): Option[Expression] = scalarFunction match {
+  /**
+   * Whether [[evaluableFunction]] is defined, without logging why not, or what resolving its call
+   * threw. For `KeyedShuffleSpec.createPartitioning`, which fails on a transform it cannot
+   * evaluate rather than shuffle otherwise, so that no line claims a join does not evaluate it,
+   * and which makes what was thrown the cause of its error.
+   */
+  private[sql] def isEvaluableQuietly: Try[Boolean] =
+    try Success(resolveEvaluableFunction(quiet = true).isDefined) catch {
+      case e @ (NonFatal(_) | _: LinkageError) => Failure(e)
+    }
+
+  private def resolveEvaluableFunction(quiet: Boolean): Option[Expression] = scalarFunction match {
     case None =>
       // Reduced keys are the planner's own doing, so only a function Spark cannot call is logged.
-      if (!function.isInstanceOf[ScalarFunction[_]]) TransformExpression.logNotScalar(function)
+      if (!quiet && !function.isInstanceOf[ScalarFunction[_]]) {
+        TransformExpression.logNotScalar(function)
+      }
       None
     case Some(scalarFunc) =>
       val arguments = callArguments
@@ -261,13 +274,17 @@ case class TransformExpression(
           case None => Some(call)
           case failure =>
             // The types the call was resolved over, i.e. after the casts of narrower arguments.
-            TransformExpression.logArgumentsMismatch(scalarFunc, typed.flatten.map(_.dataType),
-              declaredTypes, failure)
+            if (!quiet) {
+              TransformExpression.logArgumentsMismatch(scalarFunc, typed.flatten.map(_.dataType),
+                declaredTypes, failure)
+            }
             None
         }
       } else {
-        TransformExpression.logArgumentsMismatch(scalarFunc, arguments.map(_.dataType),
-          declaredTypes, None)
+        if (!quiet) {
+          TransformExpression.logArgumentsMismatch(scalarFunc, arguments.map(_.dataType),
+            declaredTypes, None)
+        }
         None
       }
   }

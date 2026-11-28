@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{AutoCdcInto, CreateFlowComma
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.execution.command.{CreateViewCommand, SetCatalogCommand, SetCommand, SetNamespaceCommand}
-import org.apache.spark.sql.pipelines.Language
+import org.apache.spark.sql.pipelines.Language.Sql
 import org.apache.spark.sql.pipelines.autocdc.{ChangeArgs, ColumnSelection, ScdType, UnqualifiedColumnName}
 import org.apache.spark.sql.types.StructType
 
@@ -942,7 +942,7 @@ object SqlGraphRegistrationContext {
       SqlQueryPlanWithOrigin(
         plan = logicalPlanFromSqlQuery,
         queryOrigin = QueryOrigin(
-          language = Option(Language.Sql()),
+          language = Some(Sql),
           filePath = Option(sqlFilePath),
           // Raw SQL text, after stripping away preceding whitespace
           sqlText = Option(rawSqlStatementText.substring(sqlStatementStartIdxInString)),

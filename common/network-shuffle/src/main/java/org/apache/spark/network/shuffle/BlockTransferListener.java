@@ -33,7 +33,9 @@ public interface BlockTransferListener extends EventListener {
   void onBlockTransferSuccess(String blockId, ManagedBuffer data);
 
   /**
-   * Called at least once per block transfer failures.
+   * Called at least once per block transfer failures. This can also follow an
+   * {@link #onBlockTransferSuccess} for the same block that threw, so an implementation that
+   * commits the block before that call can throw must tolerate it.
    */
   void onBlockTransferFailure(String blockId, Throwable exception);
 

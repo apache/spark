@@ -408,6 +408,8 @@ When ANSI mode is on, it throws exceptions for invalid operations. You can use t
   - `try_multiply`: identical to the add operator `*`, except that it returns `NULL` result instead of throwing an exception on integral value overflow.
   - `try_divide`: identical to the division operator `/`, except that it returns `NULL` result instead of throwing an exception on dividing 0.
   - `try_mod`: identical to the remainder operator `%`, except that it returns `NULL` result instead of throwing an exception on dividing 0.
+  - `try_abs`: identical to the function `abs`, except that it returns `NULL` result instead of throwing an exception on integral or interval value overflow, or when a string argument cannot be cast to a number.
+  - `try_negative`: identical to the function `negative` and the unary minus operator `-`, except that it returns `NULL` result instead of throwing an exception on integral or interval value overflow, or when a string argument cannot be cast to a number.
   - `try_sum`: identical to the function `sum`, except that it returns `NULL` result instead of throwing an exception on integral/decimal/interval value overflow.
   - `try_avg`: identical to the function `avg`, except that it returns `NULL` result instead of throwing an exception on decimal/interval value overflow.
   - `try_element_at`: identical to the function `element_at`, except that it returns `NULL` result instead of throwing an exception on array's index out of bound.

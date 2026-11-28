@@ -4901,7 +4901,7 @@ where web_cumulative > store_cumulative
 order by item_sk, d_date
 limit 100
 -- !query schema
-struct<item_sk:int,d_date:date,web_sales:decimal(27,2),store_sales:decimal(27,2),web_cumulative:decimal(27,2),store_cumulative:decimal(27,2)>
+struct<item_sk:bigint,d_date:date,web_sales:decimal(27,2),store_sales:decimal(27,2),web_cumulative:decimal(27,2),store_cumulative:decimal(27,2)>
 -- !query output
 
 
@@ -4965,7 +4965,7 @@ table web_v1
 |> order by item_sk, d_date
 |> limit 100
 -- !query schema
-struct<item_sk:int,d_date:date,web_sales:decimal(27,2),store_sales:decimal(27,2),web_cumulative:decimal(27,2),store_cumulative:decimal(27,2)>
+struct<item_sk:bigint,d_date:date,web_sales:decimal(27,2),store_sales:decimal(27,2),web_cumulative:decimal(27,2),store_cumulative:decimal(27,2)>
 -- !query output
 
 
@@ -5039,7 +5039,7 @@ from store_sales ss1
 | order by rank_col desc
 | limit 1000
 -- !query schema
-struct<item_sk:int,rank_col:decimal(11,6)>
+struct<item_sk:bigint,rank_col:decimal(11,6)>
 -- !query output
 
 

@@ -25,6 +25,7 @@ import scala.annotation.tailrec
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
@@ -951,7 +952,11 @@ private[columnar] object ColumnType {
       case map: MapType => MAP(PhysicalMapType(map.keyType, map.valueType, map.valueContainsNull))
       case struct: StructType => STRUCT(PhysicalStructType(struct.fields))
       case udt: UserDefinedType[_] => ColumnType(udt.sqlType)
-      case _ => throw ExecutionErrors.unsupportedDataTypeError(dataType)
+      // A framework type stored as a struct, such as FileType, is cached as its representation.
+      case _ => TypeOps.rowRepresentation(dataType) match {
+        case Some(representation) => ColumnType(representation)
+        case None => throw ExecutionErrors.unsupportedDataTypeError(dataType)
+      }
     }
   }
 }

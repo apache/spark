@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Connection, DriverManager}
+import java.lang.reflect.Proxy
+import java.sql.{Connection, DatabaseMetaData, DriverManager}
 import java.util.{HexFormat, Properties}
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
@@ -1633,6 +1634,53 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
         }
         checkPushedInfo(df6, expectedPlanFragment6)
         checkAnswer(df6, Seq(Row(2, "david", 10000, 1300, true)))
+      }
+    }
+  }
+
+  test("SPARK-58372: fractional to integral cast pushed down to H2 truncates like Spark") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      // Each value is between 1 and 2 (bonus / 800 up to 1.625, salary / 8000 up to 1.5), so
+      // truncation gives 1 everywhere while H2's own cast rounds some of them to 2.
+      Seq("bonus / 800", "salary / 8000").foreach { expr =>
+        val filtered = sql(s"SELECT name FROM h2.test.employee WHERE CAST($expr AS INT) = 1")
+        checkFiltersRemoved(filtered)
+        checkAnswer(filtered,
+          Seq(Row("amy"), Row("alex"), Row("cathy"), Row("david"), Row("jen")))
+
+        val aggregated = sql(s"SELECT SUM(CAST($expr AS INT)) FROM h2.test.employee")
+        checkAggregateRemoved(aggregated)
+        checkAnswer(aggregated, Seq(Row(5L)))
+      }
+    }
+  }
+
+  test("SPARK-58372: tasks compile pushed filters as pushdown did") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val allRows = Seq(Row("amy"), Row("alex"), Row("cathy"), Row("david"), Row("jen"))
+      val df = withSQLConf(SQLConf.LEGACY_JDBC_ROUND_INTEGRAL_CAST_PUSHDOWN.key -> "false") {
+        val df = sql("SELECT name FROM h2.test.employee WHERE CAST(bonus / 800 AS INT) = 1")
+        checkFiltersRemoved(df)
+        checkAnswer(df, allRows)
+        df
+      }
+      // Recompiling in the tasks under the legacy conf would drop TRUNC, so H2 would round.
+      withSQLConf(SQLConf.LEGACY_JDBC_ROUND_INTEGRAL_CAST_PUSHDOWN.key -> "true") {
+        checkAnswer(df, allRows)
+      }
+
+      // `inputFiles` pushes the filter down without planning the scan. Recompiling the filter
+      // without the legacy conf would refuse it, so it would drop out of the WHERE clause.
+      val datetimeDf =
+        withSQLConf(SQLConf.LEGACY_JDBC_ROUND_INTEGRAL_CAST_PUSHDOWN.key -> "true") {
+          val df = sql("SELECT name FROM h2.test.datetime WHERE CAST(time1 AS BIGINT) < 0")
+          df.inputFiles
+          df
+        }
+      withSQLConf(SQLConf.LEGACY_JDBC_ROUND_INTEGRAL_CAST_PUSHDOWN.key -> "false") {
+        // H2 rejects the legacy SQL, so the error shows the filter reached the database.
+        val e = intercept[SparkException](datetimeDf.collect())
+        assert(e.getMessage.contains("TIMESTAMP to BIGINT"))
       }
     }
   }
@@ -3431,6 +3479,63 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
       }
     } finally {
       JdbcDialects.unregisterDialect(countingDialect)
+      JdbcDialects.registerDialect(h2Dialect)
+    }
+  }
+
+  test("SPARK-60507: Per-read connection override reads its own database metadata") {
+    val overrideUrl = s"$url;IFEXISTS=TRUE"
+    val overrideMajorVersion = Int.box(42)
+    val metadataConnectionUrls = new ConcurrentLinkedQueue[String]()
+    val overrideDialect = new H2Dialect() {
+      private def delegatingProxy[T](
+          iface: Class[T],
+          target: T,
+          methodName: String,
+          value: AnyRef): T = {
+        Proxy.newProxyInstance(iface.getClassLoader, Array[Class[_]](iface), (_, method, args) =>
+          if (method.getName == methodName) {
+            value
+          } else {
+            method.invoke(target, Option(args).getOrElse(Array.empty[AnyRef]): _*)
+          }
+        ).asInstanceOf[T]
+      }
+
+      override def createConnectionFactory(options: JDBCOptions): Int => Connection = {
+        val factory = super.createConnectionFactory(options)
+        partitionId => {
+          if (partitionId == -1) metadataConnectionUrls.add(options.url)
+          val conn = factory(partitionId)
+          if (options.url != overrideUrl) {
+            conn
+          } else {
+            val metadata = delegatingProxy(classOf[DatabaseMetaData], conn.getMetaData,
+              "getDatabaseMajorVersion", overrideMajorVersion)
+            delegatingProxy(classOf[Connection], conn, "getMetaData", metadata)
+          }
+        }
+      }
+    }
+    def scanMetadata(df: DataFrame): JDBCDatabaseMetadata = {
+      df.collect()
+      df.queryExecution.executedPlan
+        .collect { case r: RowDataSourceScanExec => r }
+        .head.rdd.asInstanceOf[JDBCRDD].getDatabaseMetadata
+    }
+    JdbcDialects.unregisterDialect(h2Dialect)
+    try {
+      JdbcDialects.registerDialect(overrideDialect)
+      val sameConnection = spark.read.option("fetchsize", "10").table("h2.test.people")
+      assert(scanMetadata(sameConnection).databaseMajorVersion === Some(2))
+      assert(metadataConnectionUrls.asScala.toSeq === Seq(url))
+
+      metadataConnectionUrls.clear()
+      val overridden = spark.read.option("url", overrideUrl).table("h2.test.people")
+      assert(scanMetadata(overridden).databaseMajorVersion === Some(42))
+      assert(metadataConnectionUrls.asScala.toSeq === Seq(url, overrideUrl))
+    } finally {
+      JdbcDialects.unregisterDialect(overrideDialect)
       JdbcDialects.registerDialect(h2Dialect)
     }
   }

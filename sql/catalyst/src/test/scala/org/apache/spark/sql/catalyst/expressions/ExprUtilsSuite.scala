@@ -29,8 +29,8 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjectio
 import org.apache.spark.sql.catalyst.optimizer.NormalizeNaNAndZero
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, CharType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, MapType, ShortType, StringType, StructField, StructType, TestUDT, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType, TimeType, VarcharType, VariantType, YearMonthIntervalType}
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, MapType, ShortType, StringType, StructField, StructType, TestUDT, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType, TimeType, VarcharType, VariantType, YearMonthIntervalType}
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.{SparkErrorUtils, Utils}
 
 class ExprUtilsSuite extends SparkFunSuite with SQLHelper {
@@ -327,6 +327,15 @@ class ExprUtilsSuite extends SparkFunSuite with SQLHelper {
       evalEach(t, values)(UnaryMinus(_, failOnError = true))
       evalEach(t, values)(Abs(_, failOnError = true))
     }
+    // The null-on-overflow forms of try_abs and try_negative.
+    for ((t, values) <- Seq(longs, ints, shorts, bytes,
+        (DayTimeIntervalType(), longs._2), (YearMonthIntervalType(), ints._2))) {
+      evalEach(t, values)(AbsOrNull(_))
+      evalEach(t, values)(NegateOrNull(_))
+    }
+    evalEach(CalendarIntervalType, Seq(new CalendarInterval(1, -2, 3L),
+      new CalendarInterval(Int.MinValue, 0, 0L), new CalendarInterval(0, Int.MinValue, 0L),
+      new CalendarInterval(0, 0, Long.MinValue)))(NegateOrNull(_))
     for ((t, values) <- nonDecimals ++ Seq(decimals, smallDecimals)) {
       Seq(legacy, tryMode).foreach(ctx => evalPairs(t, values)(Remainder(_, _, ctx)))
       evalPairs(t, values)(Pmod(_, _, legacy))
@@ -616,7 +625,7 @@ class ExprUtilsSuite extends SparkFunSuite with SQLHelper {
       DayOfYear(date), DayOfWeek(date), WeekDay(date), WeekOfYear(date), MonthName(date),
       DayName(date), Hour(ts, Some("UTC")), Minute(ts, Some("UTC")), Second(ts, Some("UTC")),
       SecondWithFraction(ts, Some("UTC")), NormalizeNaNAndZero(d), KnownFloatingPointNormalized(d),
-      CollationKey(s))
+      CollationKey(s), AbsOrNull(a), NegateOrNull(a))
     always.foreach { e =>
       assert(e.isInstanceOf[NoThrow], e)
       assert(e.isTotal, e)
@@ -727,14 +736,14 @@ class ExprUtilsSuite extends SparkFunSuite with SQLHelper {
     val (always, others) = classes.partition(classOf[NoThrow].isAssignableFrom)
     always.foreach(c => assert(!Modifier.isAbstract(c.getModifiers), c))
     assert(always.map(_.getSimpleName).sorted === Seq(
-      "And", "Coalesce", "Collate", "CollationKey", "Contains", "CreateArray",
+      "AbsOrNull", "And", "Coalesce", "Collate", "CollationKey", "Contains", "CreateArray",
       "CreateNamedStruct", "DayName", "DayOfMonth", "DayOfWeek", "DayOfYear", "EndsWith",
       "EqualNullSafe", "EqualTo", "GetArrayStructFields", "GetMapValue", "GetStructField",
       "GreaterThan", "GreaterThanOrEqual", "Hour", "In", "InSet", "IsNaN", "IsNotNull", "IsNull",
       "KnownFloatingPointNormalized", "Length", "LessThan", "LessThanOrEqual", "Minute", "Month",
-      "MonthName", "NormalizeNaNAndZero", "Not", "NullIf", "OctetLength", "Or", "Quarter",
-      "Second", "SecondWithFraction", "Size", "StartsWith", "Substring", "WeekDay", "WeekOfYear",
-      "Year", "YearOfWeek"))
+      "MonthName", "NegateOrNull", "NormalizeNaNAndZero", "Not", "NullIf", "OctetLength", "Or",
+      "Quarter", "Second", "SecondWithFraction", "Size", "StartsWith", "Substring", "WeekDay",
+      "WeekOfYear", "Year", "YearOfWeek"))
     // The ones that decide it by their input types or eval mode.
     val conditional = others.filter { c =>
       c != classOf[Expression] && c.getMethod("isTotal").getDeclaringClass != classOf[Expression]

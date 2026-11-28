@@ -33,6 +33,8 @@ public interface MergedBlockMetaResponseCallback extends BaseResponseCallback {
    * call returns. You must therefore either retain() the buffer or copy its contents before
    * returning.
    *
+   * If this throws, {@link #onFailure} is then called with the thrown error.
+   *
    * @param numChunks number of merged chunks in the merged block
    * @param buffer the buffer contains an array of roaring bitmaps. The i-th roaring bitmap
    *               contains the mapIds that were merged to the i-th merged chunk.

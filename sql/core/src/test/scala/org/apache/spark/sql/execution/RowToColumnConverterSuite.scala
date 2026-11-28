@@ -18,11 +18,14 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.types.ops.FileTypeOps
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData}
-import org.apache.spark.sql.execution.vectorized.{OnHeapColumnVector, WritableColumnVector}
+import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector, WritableColumnVector}
 import org.apache.spark.sql.test.ExamplePointUDT
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -234,6 +237,56 @@ class RowToColumnConverterSuite extends SparkFunSuite {
     assert(vectors.head.getLong(0) === 0L)
     assert(vectors.head.isNullAt(1))
     assert(vectors.head.getLong(2) === 86399999999999L)
+  }
+
+  test("FileType columns, with null values, null fields and nested FILEs") {
+    def file(uri: String, size: java.lang.Long, inline: Array[Byte]): InternalRow =
+      InternalRow(UTF8String.fromString(uri), null, size, null, null, inline)
+    val f1 = file("s3://bucket/a.pdf", 10L, Array[Byte](1, 2))
+    val f2 = file("/b.txt", null, null)
+    val fileStruct = new StructType().add("f", FileType())
+    val schema = new StructType()
+      .add("f", FileType.external)
+      .add("fs", ArrayType(FileType(), containsNull = true))
+      .add("s", fileStruct)
+    val rows = Seq(
+      InternalRow(f1, new GenericArrayData(Array[Any](f2, null)), InternalRow(f2)),
+      InternalRow(null, null, InternalRow(null)),
+      InternalRow(f2, new GenericArrayData(Array[Any](f1)), null))
+    def toFileRef(row: InternalRow): FileRef = FileTypeOps.toFileRef(row)
+    Seq(MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP).foreach { mode =>
+      val vectors = schema.map { f =>
+        if (mode == MemoryMode.ON_HEAP) new OnHeapColumnVector(5, f.dataType)
+        else new OffHeapColumnVector(5, f.dataType)
+      }.toArray[WritableColumnVector]
+      try {
+        // A FILE vector has one child vector per field.
+        assert(vectors.head.getChild(FileType.FIELDS.length - 1) != null)
+        val converter = new RowToColumnConverter(schema)
+        rows.foreach(converter.convert(_, vectors))
+        val batch = new ColumnarBatch(vectors.toArray[ColumnVector], rows.length)
+        val numFields = FileType.FIELDS.length
+
+        val r0 = batch.getRow(0)
+        assert(toFileRef(r0.getStruct(0, numFields)) === toFileRef(f1), mode)
+        assert(toFileRef(r0.get(0, FileType.external).asInstanceOf[InternalRow]) === toFileRef(f1))
+        val array = r0.getArray(1)
+        assert(toFileRef(array.getStruct(0, numFields)) === toFileRef(f2), mode)
+        assert(array.isNullAt(1), mode)
+        assert(toFileRef(r0.getStruct(2, 1).getStruct(0, numFields)) === toFileRef(f2), mode)
+
+        val r1 = batch.getRow(1)
+        assert(r1.isNullAt(0) && r1.isNullAt(1), mode)
+        assert(r1.getStruct(2, 1).isNullAt(0), mode)
+
+        val r2 = batch.getRow(2)
+        assert(toFileRef(r2.getStruct(0, numFields)) === toFileRef(f2), mode)
+        assert(toFileRef(r2.getArray(1).getStruct(0, numFields)) === toFileRef(f1), mode)
+        assert(r2.isNullAt(2), mode)
+      } finally {
+        vectors.foreach(_.close())
+      }
+    }
   }
 
   test("SPARK-60325: null type column") {

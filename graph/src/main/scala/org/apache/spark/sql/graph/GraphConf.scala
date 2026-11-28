@@ -84,7 +84,7 @@ private[spark] object GraphConf {
     .version("4.5.0")
     .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
     .enumConf(StaticDataMode)
-    .createWithDefault(StaticDataMode.MEMORY)
+    .createWithDefault(StaticDataMode.DISK)
 
   val CHECKPOINT_INTERVAL = buildConf("spark.graph.checkpointInterval")
     .doc("The default checkpoint interval of iterative graph algorithms, in iterations. " +

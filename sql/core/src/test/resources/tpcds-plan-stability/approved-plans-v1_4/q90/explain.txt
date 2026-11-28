@@ -57,7 +57,7 @@ Output [4]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3, ws_sold_da
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/web_sales]
 PushedFilters: [IsNotNull(ws_ship_hdemo_sk), IsNotNull(ws_sold_time_sk), IsNotNull(ws_web_page_sk)]
-ReadSchema: struct<ws_sold_time_sk:int,ws_ship_hdemo_sk:int,ws_web_page_sk:int>
+ReadSchema: struct<ws_sold_time_sk:bigint,ws_ship_hdemo_sk:bigint,ws_web_page_sk:bigint>
 
 (2) ColumnarToRow [codegen id : 4]
 Input [4]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3, ws_sold_date_sk#4]
@@ -75,7 +75,7 @@ Output [2]: [hd_demo_sk#5, hd_dep_count#6]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/household_demographics]
 PushedFilters: [IsNotNull(hd_dep_count), EqualTo(hd_dep_count,6), IsNotNull(hd_demo_sk)]
-ReadSchema: struct<hd_demo_sk:int,hd_dep_count:int>
+ReadSchema: struct<hd_demo_sk:bigint,hd_dep_count:int>
 
 (6) ColumnarToRow [codegen id : 1]
 Input [2]: [hd_demo_sk#5, hd_dep_count#6]
@@ -90,7 +90,7 @@ Input [2]: [hd_demo_sk#5, hd_dep_count#6]
 
 (9) BroadcastExchange
 Input [1]: [hd_demo_sk#5]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=1]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=1]
 
 (10) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ws_ship_hdemo_sk#2]
@@ -107,7 +107,7 @@ Output [2]: [t_time_sk#7, t_hour#8]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/time_dim]
 PushedFilters: [IsNotNull(t_hour), GreaterThanOrEqual(t_hour,8), LessThanOrEqual(t_hour,9), IsNotNull(t_time_sk)]
-ReadSchema: struct<t_time_sk:int,t_hour:int>
+ReadSchema: struct<t_time_sk:bigint,t_hour:int>
 
 (13) ColumnarToRow [codegen id : 2]
 Input [2]: [t_time_sk#7, t_hour#8]
@@ -122,7 +122,7 @@ Input [2]: [t_time_sk#7, t_hour#8]
 
 (16) BroadcastExchange
 Input [1]: [t_time_sk#7]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=2]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=2]
 
 (17) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ws_sold_time_sk#1]
@@ -139,7 +139,7 @@ Output [2]: [wp_web_page_sk#9, wp_char_count#10]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/web_page]
 PushedFilters: [IsNotNull(wp_char_count), GreaterThanOrEqual(wp_char_count,5000), LessThanOrEqual(wp_char_count,5200), IsNotNull(wp_web_page_sk)]
-ReadSchema: struct<wp_web_page_sk:int,wp_char_count:int>
+ReadSchema: struct<wp_web_page_sk:bigint,wp_char_count:int>
 
 (20) ColumnarToRow [codegen id : 3]
 Input [2]: [wp_web_page_sk#9, wp_char_count#10]
@@ -154,7 +154,7 @@ Input [2]: [wp_web_page_sk#9, wp_char_count#10]
 
 (23) BroadcastExchange
 Input [1]: [wp_web_page_sk#9]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=3]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=3]
 
 (24) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ws_web_page_sk#3]
@@ -189,7 +189,7 @@ Output [4]: [ws_sold_time_sk#15, ws_ship_hdemo_sk#16, ws_web_page_sk#17, ws_sold
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/web_sales]
 PushedFilters: [IsNotNull(ws_ship_hdemo_sk), IsNotNull(ws_sold_time_sk), IsNotNull(ws_web_page_sk)]
-ReadSchema: struct<ws_sold_time_sk:int,ws_ship_hdemo_sk:int,ws_web_page_sk:int>
+ReadSchema: struct<ws_sold_time_sk:bigint,ws_ship_hdemo_sk:bigint,ws_web_page_sk:bigint>
 
 (30) ColumnarToRow [codegen id : 8]
 Input [4]: [ws_sold_time_sk#15, ws_ship_hdemo_sk#16, ws_web_page_sk#17, ws_sold_date_sk#18]
@@ -220,7 +220,7 @@ Output [2]: [t_time_sk#20, t_hour#21]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/time_dim]
 PushedFilters: [IsNotNull(t_hour), GreaterThanOrEqual(t_hour,19), LessThanOrEqual(t_hour,20), IsNotNull(t_time_sk)]
-ReadSchema: struct<t_time_sk:int,t_hour:int>
+ReadSchema: struct<t_time_sk:bigint,t_hour:int>
 
 (37) ColumnarToRow [codegen id : 6]
 Input [2]: [t_time_sk#20, t_hour#21]
@@ -235,7 +235,7 @@ Input [2]: [t_time_sk#20, t_hour#21]
 
 (40) BroadcastExchange
 Input [1]: [t_time_sk#20]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=5]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=5]
 
 (41) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [ws_sold_time_sk#15]

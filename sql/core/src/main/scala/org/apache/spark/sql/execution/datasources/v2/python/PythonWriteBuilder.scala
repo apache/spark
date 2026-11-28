@@ -17,6 +17,7 @@
 package org.apache.spark.sql.execution.datasources.v2.python
 
 import org.apache.spark.sql.connector.write._
+import org.apache.spark.sql.internal.SQLConf
 
 
 class PythonWriteBuilder(
@@ -32,5 +33,21 @@ class PythonWriteBuilder(
     this
   }
 
-  override def build(): Write = new PythonWrite(ds, shortName, info, isTruncate)
+  override def build(): Write = {
+    if (SQLConf.get.pythonWriteDistributionAndOrdering && !isStreamingWrite) {
+      new PythonWriteWithRequirements(ds, shortName, info, isTruncate)
+    } else {
+      new PythonWrite(ds, shortName, info, isTruncate)
+    }
+  }
+
+  /**
+   * Whether a streaming query builds this write. The requirements come from the batch
+   * `DataSourceWriter`, which a streaming sink need not implement. A batch write, even one inside
+   * `foreachBatch`, is not marked.
+   */
+  private def isStreamingWrite: Boolean = info match {
+    case i: LogicalWriteInfoImpl => i.isStreaming
+    case _ => false
+  }
 }

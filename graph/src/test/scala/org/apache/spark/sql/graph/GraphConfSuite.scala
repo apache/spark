@@ -29,7 +29,7 @@ class GraphConfSuite extends QueryTest with SharedSparkSession {
   test("defaults") {
     assert(GraphConf.workDir(spark).isEmpty)
     assert(GraphConf.checkpointMode(spark) == CheckpointMode.LOCAL)
-    assert(GraphConf.staticDataMode(spark) == StaticDataMode.MEMORY)
+    assert(GraphConf.staticDataMode(spark) == StaticDataMode.DISK)
     assert(GraphConf.checkpointInterval(spark) == 2)
     assert(GraphConf.storageLevel(spark) == StorageLevel.MEMORY_AND_DISK)
   }

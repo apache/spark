@@ -212,7 +212,11 @@ abstract class FileTable(
       writeInfo.schema(),
       mergedOptions(writeInfo.options()),
       writeInfo.rowIdSchema(),
-      writeInfo.metadataSchema())
+      writeInfo.metadataSchema(),
+      isStreaming = writeInfo match {
+        case i: LogicalWriteInfoImpl => i.isStreaming
+        case _ => false
+      })
   }
 }
 

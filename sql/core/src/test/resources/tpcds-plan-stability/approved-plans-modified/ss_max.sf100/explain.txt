@@ -13,7 +13,7 @@
 Output [9]: [ss_sold_time_sk#1, ss_item_sk#2, ss_customer_sk#3, ss_cdemo_sk#4, ss_hdemo_sk#5, ss_addr_sk#6, ss_store_sk#7, ss_promo_sk#8, ss_sold_date_sk#9]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
-ReadSchema: struct<ss_sold_time_sk:int,ss_item_sk:int,ss_customer_sk:int,ss_cdemo_sk:int,ss_hdemo_sk:int,ss_addr_sk:int,ss_store_sk:int,ss_promo_sk:int>
+ReadSchema: struct<ss_sold_time_sk:bigint,ss_item_sk:bigint,ss_customer_sk:bigint,ss_cdemo_sk:bigint,ss_hdemo_sk:bigint,ss_addr_sk:bigint,ss_store_sk:bigint,ss_promo_sk:bigint>
 
 (2) ColumnarToRow [codegen id : 1]
 Input [9]: [ss_sold_time_sk#1, ss_item_sk#2, ss_customer_sk#3, ss_cdemo_sk#4, ss_hdemo_sk#5, ss_addr_sk#6, ss_store_sk#7, ss_promo_sk#8, ss_sold_date_sk#9]

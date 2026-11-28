@@ -428,6 +428,27 @@ class LocalConnectServerReuseTests(unittest.TestCase):
         with Discovery() as discovery:
             discovery.clear()
 
+    def test_failed_ps_keeps_a_live_process_unverified(self) -> None:
+        from unittest import mock
+
+        failed = subprocess.CompletedProcess([], 1, stdout="")
+        with mock.patch.object(subprocess, "run", return_value=failed):
+            with mock.patch.object(local_server, "_pid_alive", return_value=True):
+                self.assertIsNone(local_server._process_command(12345))
+            with mock.patch.object(local_server, "_pid_alive", return_value=False):
+                self.assertEqual(local_server._process_command(12345), "")
+
+    def test_non_linux_liveness_does_not_run_ps(self) -> None:
+        from unittest import mock
+
+        with (
+            mock.patch.object(local_server.sys, "platform", "darwin"),
+            mock.patch.object(local_server.os, "kill"),
+            mock.patch.object(subprocess, "run") as ps,
+        ):
+            self.assertTrue(local_server._pid_alive(12345))
+        ps.assert_not_called()
+
     def test_server_launcher_binds_to_loopback(self) -> None:
         from unittest import mock
 

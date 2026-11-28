@@ -570,6 +570,48 @@ class SparkThrowableSuite extends SparkFunSuite {
     }
   }
 
+  test("canRender returns whether getErrorMessage renders the error") {
+    withTempDir { dir =>
+      val json = new File(dir, "errors.json")
+      Files.writeString(json.toPath(),
+        """
+          |{
+          |  "MAIN_WITH_SUBCLASS" : {
+          |    "message" : [
+          |      "abc <a>"
+          |    ],
+          |    "subClass" : {
+          |      "VALID_SUB" : {
+          |        "message" : [
+          |          "def <b>"
+          |        ]
+          |      }
+          |    }
+          |  }
+          |}
+          |""".stripMargin, StandardCharsets.UTF_8)
+      val reader = new ErrorClassesJsonReader(Seq(errorJsonFilePath.toUri.toURL, json.toURI.toURL))
+      assert(reader.canRender("MAIN_WITH_SUBCLASS", Map("a" -> "1")))
+      assert(reader.canRender("MAIN_WITH_SUBCLASS.VALID_SUB", Map("a" -> "1", "b" -> "2")))
+      // A missing main condition or subcondition.
+      assert(!reader.canRender("NON_EXISTENT", Map.empty))
+      assert(!reader.canRender("MAIN_WITH_SUBCLASS.NON_EXISTENT_SUB", Map("a" -> "1")))
+      assert(!reader.canRender("MAIN_WITH_SUBCLASS.VALID_SUB.X", Map("a" -> "1", "b" -> "2")))
+      // A parameter the template uses but the caller did not pass.
+      assert(!reader.canRender("MAIN_WITH_SUBCLASS.VALID_SUB", Map("a" -> "1")))
+      // A parameter the template does not use, which getErrorMessage rejects in tests unless the
+      // condition allows extra parameters.
+      assert(!reader.canRender("MAIN_WITH_SUBCLASS", Map("a" -> "1", "unused" -> "2")))
+      assert(reader.canRender(
+        "CAST_INVALID_INPUT",
+        Map(
+          "expression" -> "'a'",
+          "sourceType" -> "\"STRING\"",
+          "targetType" -> "\"INT\"",
+          "unused" -> "x")))
+    }
+  }
+
   test("getMessageTemplate and getMessageParameters allow a bare main class with sub-classes") {
     withTempDir { dir =>
       val json = new File(dir, "errors.json")

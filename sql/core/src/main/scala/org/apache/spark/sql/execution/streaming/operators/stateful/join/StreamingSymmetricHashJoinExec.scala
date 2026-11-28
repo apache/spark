@@ -26,7 +26,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.StreamingJoinHelper
 import org.apache.spark.sql.catalyst.analysis.WidenStatefulOpNullability
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, GenericInternalRow, JoinedRow, Literal, Predicate, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, GenericInternalRow, JoinedRow, Literal, Predicate, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -751,9 +751,23 @@ case class StreamingSymmetricHashJoinExec(
     private[this] val allowMultipleStatefulOperators: Boolean =
       conf.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)
 
-    // V4 range scan for time-interval joins (SPARK-55147). Extracts constant interval
-    // offsets from the join condition using getStateValueWatermark(eventWatermark=0).
-    // The -1 eviction adjustment widens range by ~1ms/side; postJoinFilter handles exact bounds.
+    // For the right side of a left semi join: whether a cutoff at the late-events watermark that
+    // is exact today shows that no left row passing late filtering can match a key and row.
+    private[this] lazy val noLeftRowCanMatch: (UnsafeRow, UnsafeRow) => Boolean =
+      if (joinType == LeftSemi && joinSide == RightSide) {
+        val (keyCutoff, valueCutoff) = getLeftSemiExactRightCutoffs(left.output, right.output,
+          leftKeys, rightKeys, condition.full, eventTimeWatermarkForLateEvents,
+          useFirstEventTimeColumn = !allowMultipleStatefulOperators)
+        val keyFunc = keyCutoff.map(Predicate.create(_, Seq.empty).eval _)
+        val valueFunc = valueCutoff.map(Predicate.create(_, inputAttributes).eval _)
+        (key, row) => keyFunc.exists(_(key)) || valueFunc.exists(_(row))
+      } else {
+        (_, _) => false
+      }
+
+    // V4 range scan for time-interval joins (SPARK-55147). Takes the offsets of the other side's
+    // event time from the comparisons of the join condition that give them exactly; see
+    // StreamingJoinHelper.getRangeScanOffsets. postJoinFilter handles exact bounds.
     private[this] val scanRangeOffsets: Option[(Long, Long)] = {
       val isV4TimeIntervalJoin = stateFormatVersion >= 4 && (stateWatermarkPredicate match {
         case Some(_: JoinStateValueWatermarkPredicate) => true
@@ -772,19 +786,14 @@ case class StreamingSymmetricHashJoinExec(
         // Bounds on other columns cannot limit this scan. If either event-time bound is
         // missing, scan all rows for the join key.
         val thisEventTime = WatermarkSupport.findEventTimeColumn(
-          thisSideAttrs, !allowMultipleStatefulOperators).toSeq
+          thisSideAttrs, !allowMultipleStatefulOperators)
         val otherEventTime = WatermarkSupport.findEventTimeColumn(
-          otherSideAttrs, !allowMultipleStatefulOperators).toSeq
-        val lowerBoundMs = StreamingJoinHelper.getStateValueWatermark(
-          AttributeSet(otherEventTime), AttributeSet(thisEventTime), condition.full, Some(0L))
-        val upperBoundMs = StreamingJoinHelper.getStateValueWatermark(
-          AttributeSet(thisEventTime), AttributeSet(otherEventTime), condition.full, Some(0L))
-
-        (lowerBoundMs, upperBoundMs) match {
-          case (Some(lower), Some(upper)) =>
-            Some((lower * 1000L, -upper * 1000L)) // ms -> us
-          case _ => None
-        }
+          otherSideAttrs, !allowMultipleStatefulOperators)
+        for {
+          thisTime <- thisEventTime
+          otherTime <- otherEventTime
+          offsets <- StreamingJoinHelper.getRangeScanOffsets(condition.full, thisTime, otherTime)
+        } yield offsets
       }
     }
 
@@ -876,8 +885,13 @@ case class StreamingSymmetricHashJoinExec(
         // condition no matter what other side row it's matched with. This allows us to avoid
         // adding it to the state, and generate an outer join row immediately (or do nothing in
         // the case of inner join).
-        if (preJoinFilter(thisRow)) {
-          val key = keyGenerator(thisRow)
+        val key = if (preJoinFilter(thisRow)) keyGenerator(thisRow) else null
+        // A row whose watermarked join key is NULL can never match, and eviction by that key may
+        // never reach it, so it is handled as a row that fails the pre join filter.
+        // TODO(SPARK-61382): NULLs in the other equality keys still reach the state and can match
+        //   each other. Rows with a NULL watermarked key that a checkpoint already holds are not
+        //   drained: state formats V2 and V3 never evict them.
+        if (key != null && !joinKeyOrdinalForWatermark.exists(key.isNullAt)) {
           // If the join type is Left Semi and this is the right side, we can remove the matched
           // row from the other (left) side's state, since the row won't be produced anymore for
           // the following input rows.
@@ -925,7 +939,15 @@ case class StreamingSymmetricHashJoinExec(
         //   is done at this point. That said, input can be skipped to be added to the state store
         //   if input is going to be evicted in this batch. Though, input should be added to the
         //   state store if it's right outer join or full outer join, as unmatched output is
-        //   handled during state eviction.
+        //   handled during state eviction. A left semi join processes the right side first, so
+        //   the left input of this batch has not probed it yet: an input this batch evicts is
+        //   added, and the eviction at the end of the batch removes it, unless a cutoff at the
+        //   late-events watermark that is exact today shows no left row passing late filtering
+        //   can match it (see getLeftSemiExactRightCutoffs). The cutoff derivation gives no exact
+        //   cutoff otherwise: it can apply a bound on another right column to the right event
+        //   time, it counts a day as 24 hours, which is wrong in a time zone with daylight saving
+        //   time, and it reads truncating casts as exact.
+        //   TODO(SPARK-61344, SPARK-61381): skip such inputs too once the cutoff is exact.
         val isLeftSemiWithMatch = joinType == LeftSemi && joinSide == LeftSide && iteratorNotEmpty
         val shouldAddToState = if (isLeftSemiWithMatch) {
           false
@@ -939,6 +961,8 @@ case class StreamingSymmetricHashJoinExec(
             !stateKeyWatermarkPredicateFunc(key) && !stateValueWatermarkPredicateFunc(thisRow)
 
           isNotEvictingInThisBatch ||
+            // if a left row of this batch, which probes after this side, can still match it
+            (joinType == LeftSemi && !noLeftRowCanMatch(key, thisRow)) ||
             // if the input is producing "unmatched row" in this batch
             (
               (joinType == RightOuter && !iteratorNotEmpty) ||

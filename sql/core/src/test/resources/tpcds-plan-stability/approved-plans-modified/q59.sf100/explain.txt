@@ -61,7 +61,7 @@ Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(ss_sold_date_sk#3)]
 PushedFilters: [IsNotNull(ss_store_sk)]
-ReadSchema: struct<ss_store_sk:int,ss_sales_price:decimal(7,2)>
+ReadSchema: struct<ss_store_sk:bigint,ss_sales_price:decimal(7,2)>
 
 (2) ColumnarToRow [codegen id : 2]
 Input [3]: [ss_store_sk#1, ss_sales_price#2, ss_sold_date_sk#3]
@@ -75,7 +75,7 @@ Output [3]: [d_date_sk#4, d_week_seq#5, d_day_name#6]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_date_sk), IsNotNull(d_week_seq)]
-ReadSchema: struct<d_date_sk:int,d_week_seq:int,d_day_name:string>
+ReadSchema: struct<d_date_sk:bigint,d_week_seq:int,d_day_name:string>
 
 (5) ColumnarToRow [codegen id : 1]
 Input [3]: [d_date_sk#4, d_week_seq#5, d_day_name#6]
@@ -86,7 +86,7 @@ Condition : ((isnotnull(d_date_sk#4) AND isnotnull(d_week_seq#5)) AND might_cont
 
 (7) BroadcastExchange
 Input [3]: [d_date_sk#4, d_week_seq#5, d_day_name#6]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=2]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=2]
 
 (8) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [ss_sold_date_sk#3]
@@ -121,7 +121,7 @@ Output [3]: [s_store_sk#36, s_store_id#37, s_store_name#38]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
 PushedFilters: [IsNotNull(s_store_sk), IsNotNull(s_store_id)]
-ReadSchema: struct<s_store_sk:int,s_store_id:string,s_store_name:string>
+ReadSchema: struct<s_store_sk:bigint,s_store_id:string,s_store_name:string>
 
 (14) ColumnarToRow [codegen id : 3]
 Input [3]: [s_store_sk#36, s_store_id#37, s_store_name#38]
@@ -132,7 +132,7 @@ Condition : (isnotnull(s_store_sk#36) AND isnotnull(s_store_id#37))
 
 (16) BroadcastExchange
 Input [3]: [s_store_sk#36, s_store_id#37, s_store_name#38]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=4]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=4]
 
 (17) BroadcastHashJoin [codegen id : 10]
 Left keys [1]: [ss_store_sk#1]
@@ -182,7 +182,7 @@ Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(ss_sold_date_sk#53)]
 PushedFilters: [IsNotNull(ss_store_sk)]
-ReadSchema: struct<ss_store_sk:int,ss_sales_price:decimal(7,2)>
+ReadSchema: struct<ss_store_sk:bigint,ss_sales_price:decimal(7,2)>
 
 (27) ColumnarToRow [codegen id : 6]
 Input [3]: [ss_store_sk#51, ss_sales_price#52, ss_sold_date_sk#53]
@@ -196,7 +196,7 @@ Output [3]: [d_date_sk#54, d_week_seq#55, d_day_name#56]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_date_sk), IsNotNull(d_week_seq)]
-ReadSchema: struct<d_date_sk:int,d_week_seq:int,d_day_name:string>
+ReadSchema: struct<d_date_sk:bigint,d_week_seq:int,d_day_name:string>
 
 (30) ColumnarToRow [codegen id : 5]
 Input [3]: [d_date_sk#54, d_week_seq#55, d_day_name#56]
@@ -207,7 +207,7 @@ Condition : ((isnotnull(d_date_sk#54) AND isnotnull(d_week_seq#55)) AND might_co
 
 (32) BroadcastExchange
 Input [3]: [d_date_sk#54, d_week_seq#55, d_day_name#56]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=7]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=7]
 
 (33) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [ss_sold_date_sk#53]
@@ -242,7 +242,7 @@ Output [2]: [s_store_sk#76, s_store_id#77]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
 PushedFilters: [IsNotNull(s_store_sk), IsNotNull(s_store_id)]
-ReadSchema: struct<s_store_sk:int,s_store_id:string>
+ReadSchema: struct<s_store_sk:bigint,s_store_id:string>
 
 (39) ColumnarToRow [codegen id : 7]
 Input [2]: [s_store_sk#76, s_store_id#77]
@@ -253,7 +253,7 @@ Condition : (isnotnull(s_store_sk#76) AND isnotnull(s_store_id#77))
 
 (41) BroadcastExchange
 Input [2]: [s_store_sk#76, s_store_id#77]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=9]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=9]
 
 (42) BroadcastHashJoin [codegen id : 9]
 Left keys [1]: [ss_store_sk#51]

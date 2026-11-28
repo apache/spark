@@ -111,3 +111,36 @@ SELECT try_multiply(interval 2 year, 0);
 SELECT try_multiply(interval 2 second, 0);
 SELECT try_multiply(interval 2147483647 month, 2);
 SELECT try_multiply(interval 106751991 day, 2);
+
+-- Absolute value and negation of numerics
+SELECT try_abs(-1), try_negative(1);
+SELECT try_abs(-128Y), try_negative(-128Y);
+SELECT try_abs(-32768S), try_negative(-32768S);
+SELECT try_abs(-2147483648), try_negative(-2147483648);
+SELECT try_abs(-9223372036854775808L), try_negative(-9223372036854775808L);
+SELECT try_abs(-2147483647), try_negative(2147483647);
+SELECT try_abs(-1.5D), try_negative(1.5D);
+SELECT try_abs(-12.34BD), try_negative(-12.34BD);
+SELECT try_abs(-99999999999999999999999999999999999999BD), try_negative(99999999999999999999999999999999999999BD);
+SELECT try_abs(NULL), try_negative(NULL);
+SELECT try_abs("-1"), try_negative("1");
+SELECT try_abs(c), try_negative(c) FROM VALUES ('-1.5'), ('abc'), (NULL) AS t(c);
+SELECT try_abs(c), try_negative(c) FROM VALUES (-2147483648), (-1), (2147483647), (NULL) AS t(c);
+SELECT try_abs(c), try_negative(c) FROM VALUES (-9223372036854775808L), (1L) AS t(c);
+SELECT try_abs(2147483647 + 1);
+SELECT try_negative(2147483647 + 1);
+
+-- Absolute value and negation of intervals
+SELECT try_abs(interval -2 year), try_negative(interval 2 second);
+SELECT try_abs(INTERVAL '-178956970-8' YEAR TO MONTH);
+SELECT try_negative(INTERVAL '-178956970-8' YEAR TO MONTH);
+SELECT try_abs(INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND);
+SELECT try_negative(INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND);
+SELECT try_abs(c), try_negative(c)
+FROM VALUES (INTERVAL '-178956970-8' YEAR TO MONTH), (INTERVAL '-1-1' YEAR TO MONTH) AS t(c);
+SELECT try_negative(make_interval(0, 1, 0, 2)), try_negative(make_interval(-178956970, -8));
+
+-- Invalid input types
+SELECT try_abs(true);
+SELECT try_negative(true);
+SELECT try_abs(make_interval(0, 1));

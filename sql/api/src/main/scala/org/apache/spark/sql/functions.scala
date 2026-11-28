@@ -4727,6 +4727,20 @@ object functions {
   def sqrt(colName: String): Column = sqrt(Column(colName))
 
   /**
+   * Returns the absolute value of `e` and the result is null on overflow or when a string
+   * argument cannot be cast to a number. The acceptable input types are the same as for `abs`.
+   *
+   * @param e
+   *   a column that evaluates to a numeric or interval.
+   * @group math_funcs
+   * @since 4.5.0
+   * @return
+   *   Returns a column of the same type as `abs` returns: the type of a numeric or interval
+   *   input, and DOUBLE for a string or NULL input.
+   */
+  def try_abs(e: Column): Column = Column.fn("try_abs", e)
+
+  /**
    * Returns the sum of `left` and `right` and the result is null on overflow. The acceptable
    * input types are the same with the `+` operator.
    *
@@ -4796,6 +4810,20 @@ object functions {
    *   Returns a column of the same type as the input.
    */
   def try_multiply(left: Column, right: Column): Column = Column.fn("try_multiply", left, right)
+
+  /**
+   * Returns the negated value of `e` and the result is null on overflow or when a string argument
+   * cannot be cast to a number. The acceptable input types are the same as for `negative`.
+   *
+   * @param e
+   *   a column that evaluates to a numeric or interval.
+   * @group math_funcs
+   * @since 4.5.0
+   * @return
+   *   Returns a column of the same type as `negative` returns: the type of a numeric or interval
+   *   input, and DOUBLE for a string or NULL input.
+   */
+  def try_negative(e: Column): Column = Column.fn("try_negative", e)
 
   /**
    * Returns `left``-``right` and the result is null on overflow. The acceptable input types are

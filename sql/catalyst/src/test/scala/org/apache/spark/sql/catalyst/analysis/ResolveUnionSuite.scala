@@ -22,6 +22,10 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.types._
 
 class ResolveUnionSuite extends AnalysisTest {
+  private val analyzer = new RuleExecutor[LogicalPlan] {
+    override val batches = Seq(Batch("Resolution", Once, ResolveUnion))
+  }
+
   test("Resolve Union") {
     val table1 = LocalRelation(
       AttributeReference("i", IntegerType)(),
@@ -40,11 +44,6 @@ class ResolveUnionSuite extends AnalysisTest {
     val table4 = LocalRelation(
       AttributeReference("u", DecimalType.SYSTEM_DEFAULT)(),
       AttributeReference("i", IntegerType)())
-
-    val rules = Seq(ResolveUnion)
-    val analyzer = new RuleExecutor[LogicalPlan] {
-      override val batches = Seq(Batch("Resolution", Once, rules: _*))
-    }
 
     // By name resolution
     val union1 = Union(table1 :: table2 :: Nil, true, false)
@@ -71,5 +70,23 @@ class ResolveUnionSuite extends AnalysisTest {
       Project(Seq(table2.output(3), table2.output(0), nullAttr1, nullAttr2), table4)
     val expected3 = Union(Union(table1 :: projected2 :: Nil) :: projected3 :: Nil)
     comparePlans(analyzed3, expected3)
+  }
+
+  test("Lambda variables for nested arrays of structs are named by nesting depth") {
+    val leftElement = new StructType().add("a", IntegerType).add("b", StringType)
+    val rightElement = new StructType().add("b", StringType).add("a", IntegerType)
+    val left = LocalRelation(
+      AttributeReference("arr", ArrayType(new StructType().add("s", ArrayType(leftElement))))())
+    val right = LocalRelation(
+      AttributeReference("arr", ArrayType(new StructType().add("s", ArrayType(rightElement))))())
+    val union = Union(left :: right :: Nil, byName = true, allowMissingCol = false)
+
+    val analyzed = analyzer.execute(union)
+
+    comparePlans(analyzed, analyzer.execute(union))
+    val lambdaVariableNames = analyzed.flatMap(_.expressions).flatMap(_.collect {
+      case lambdaFunction: LambdaFunction => lambdaFunction.arguments.map(_.name)
+    }).flatten
+    assert(lambdaVariableNames == Seq("x_0", "x_1"))
   }
 }

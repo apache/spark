@@ -608,3 +608,241 @@ SELECT try_multiply(interval 106751991 day, 2)
 -- !query analysis
 Project [try_multiply(INTERVAL '106751991' DAY, 2) AS try_multiply(INTERVAL '106751991' DAY, 2)#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT try_abs(-1), try_negative(1)
+-- !query analysis
+Project [try_abs(-1) AS try_abs(-1)#x, try_negative(1) AS try_negative(1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_abs(-128Y), try_negative(-128Y)
+-- !query analysis
+Project [try_abs(-128) AS try_abs(-128)#x, try_negative(-128) AS try_negative(-128)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_abs(-32768S), try_negative(-32768S)
+-- !query analysis
+Project [try_abs(-32768) AS try_abs(-32768)#x, try_negative(-32768) AS try_negative(-32768)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_abs(-2147483648), try_negative(-2147483648)
+-- !query analysis
+Project [try_abs(-2147483648) AS try_abs(-2147483648)#x, try_negative(-2147483648) AS try_negative(-2147483648)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_abs(-9223372036854775808L), try_negative(-9223372036854775808L)
+-- !query analysis
+Project [try_abs(-9223372036854775808) AS try_abs(-9223372036854775808)#xL, try_negative(-9223372036854775808) AS try_negative(-9223372036854775808)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT try_abs(-2147483647), try_negative(2147483647)
+-- !query analysis
+Project [try_abs(-2147483647) AS try_abs(-2147483647)#x, try_negative(2147483647) AS try_negative(2147483647)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_abs(-1.5D), try_negative(1.5D)
+-- !query analysis
+Project [try_abs(-1.5) AS try_abs(-1.5)#x, try_negative(1.5) AS try_negative(1.5)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_abs(-12.34BD), try_negative(-12.34BD)
+-- !query analysis
+Project [try_abs(-12.34) AS try_abs(-12.34)#x, try_negative(-12.34) AS try_negative(-12.34)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_abs(-99999999999999999999999999999999999999BD), try_negative(99999999999999999999999999999999999999BD)
+-- !query analysis
+Project [try_abs(-99999999999999999999999999999999999999) AS try_abs(-99999999999999999999999999999999999999)#x, try_negative(99999999999999999999999999999999999999) AS try_negative(99999999999999999999999999999999999999)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_abs(NULL), try_negative(NULL)
+-- !query analysis
+Project [try_abs(null) AS try_abs(NULL)#x, try_negative(null) AS try_negative(NULL)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_abs("-1"), try_negative("1")
+-- !query analysis
+Project [try_abs(-1) AS try_abs(-1)#x, try_negative(1) AS try_negative(1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_abs(c), try_negative(c) FROM VALUES ('-1.5'), ('abc'), (NULL) AS t(c)
+-- !query analysis
+Project [try_abs(c#x) AS try_abs(c)#x, try_negative(c#x) AS try_negative(c)#x]
++- SubqueryAlias t
+   +- LocalRelation [c#x]
+
+
+-- !query
+SELECT try_abs(c), try_negative(c) FROM VALUES (-2147483648), (-1), (2147483647), (NULL) AS t(c)
+-- !query analysis
+Project [try_abs(c#x) AS try_abs(c)#x, try_negative(c#x) AS try_negative(c)#x]
++- SubqueryAlias t
+   +- LocalRelation [c#x]
+
+
+-- !query
+SELECT try_abs(c), try_negative(c) FROM VALUES (-9223372036854775808L), (1L) AS t(c)
+-- !query analysis
+Project [try_abs(c#xL) AS try_abs(c)#xL, try_negative(c#xL) AS try_negative(c)#xL]
++- SubqueryAlias t
+   +- LocalRelation [c#xL]
+
+
+-- !query
+SELECT try_abs(2147483647 + 1)
+-- !query analysis
+Project [try_abs((2147483647 + 1)) AS try_abs((2147483647 + 1))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_negative(2147483647 + 1)
+-- !query analysis
+Project [try_negative((2147483647 + 1)) AS try_negative((2147483647 + 1))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_abs(interval -2 year), try_negative(interval 2 second)
+-- !query analysis
+Project [try_abs(INTERVAL '-2' YEAR) AS try_abs(INTERVAL '-2' YEAR)#x, try_negative(INTERVAL '02' SECOND) AS try_negative(INTERVAL '02' SECOND)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_abs(INTERVAL '-178956970-8' YEAR TO MONTH)
+-- !query analysis
+Project [try_abs(INTERVAL '-178956970-8' YEAR TO MONTH) AS try_abs(INTERVAL '-178956970-8' YEAR TO MONTH)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_negative(INTERVAL '-178956970-8' YEAR TO MONTH)
+-- !query analysis
+Project [try_negative(INTERVAL '-178956970-8' YEAR TO MONTH) AS try_negative(INTERVAL '-178956970-8' YEAR TO MONTH)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_abs(INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND)
+-- !query analysis
+Project [try_abs(INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) AS try_abs(INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_negative(INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND)
+-- !query analysis
+Project [try_negative(INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) AS try_negative(INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_abs(c), try_negative(c)
+FROM VALUES (INTERVAL '-178956970-8' YEAR TO MONTH), (INTERVAL '-1-1' YEAR TO MONTH) AS t(c)
+-- !query analysis
+Project [try_abs(c#x) AS try_abs(c)#x, try_negative(c#x) AS try_negative(c)#x]
++- SubqueryAlias t
+   +- LocalRelation [c#x]
+
+
+-- !query
+SELECT try_negative(make_interval(0, 1, 0, 2)), try_negative(make_interval(-178956970, -8))
+-- !query analysis
+Project [try_negative(make_interval(0, 1, 0, 2, 0, 0, 0.000000, true)) AS try_negative(make_interval(0, 1, 0, 2, 0, 0, 0.000000))#x, try_negative(make_interval(-178956970, -8, 0, 0, 0, 0, 0.000000, true)) AS try_negative(make_interval(-178956970, -8, 0, 0, 0, 0, 0.000000))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_abs(true)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"true\"",
+    "inputType" : "\"BOOLEAN\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\")",
+    "sqlExpr" : "\"abs(true)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 20,
+    "fragment" : "try_abs(true)"
+  } ]
+}
+
+
+-- !query
+SELECT try_negative(true)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"true\"",
+    "inputType" : "\"BOOLEAN\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
+    "sqlExpr" : "\"(- true)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "try_negative(true)"
+  } ]
+}
+
+
+-- !query
+SELECT try_abs(make_interval(0, 1))
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"make_interval(0, 1, 0, 0, 0, 0, 0.000000)\"",
+    "inputType" : "\"INTERVAL\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\")",
+    "sqlExpr" : "\"abs(make_interval(0, 1, 0, 0, 0, 0, 0.000000))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 35,
+    "fragment" : "try_abs(make_interval(0, 1))"
+  } ]
+}

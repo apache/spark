@@ -109,7 +109,11 @@ private[sql] object AsOfJoinMatchConditionResolution {
 
     AsOfJoinValidation.validateTolerance(join)
 
-    val useSortMerge = SQLConf.get.sortMergeAsOfJoinEnabled
+    // On a streaming left side, the decorrelation of the correlated subquery of `RewriteAsOfJoin`
+    // adds a streaming aggregation and a stream-stream join, which fail the query or hold back and
+    // drop rows.
+    val useSortMerge = SQLConf.get.sortMergeAsOfJoinEnabled || (join.left.isStreaming &&
+      !SQLConf.get.getConf(SQLConf.LEGACY_AS_OF_JOIN_REWRITE_STREAMING_LEFT_TO_SUBQUERY))
     if (useSortMerge) {
       AsOfJoinValidation.validateMatchConditionTableReferences(
         join = join,

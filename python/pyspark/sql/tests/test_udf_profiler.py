@@ -33,6 +33,7 @@ from pyspark.errors import PySparkValueError
 from pyspark.profiler import SamplingResultParam, UDFBasicProfiler
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import arrow_udf, col, pandas_udf, udf
+from pyspark.sql.profiler import WorkerSamplingProfiler
 from pyspark.sql.window import Window
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import (
@@ -786,6 +787,7 @@ class UDFProfiler2TestsMixin:
             {
                 "spark.sql.pyspark.udf.profiler": "sampling",
                 "spark.sql.pyspark.udf.profiler.samplingInterval": "10",
+                "spark.sql.pyspark.udf.profiler.samplingAggregation": "task",
             }
         ):
             self.spark.range(10, numPartitions=2).select(busy_add1("id")).collect()
@@ -826,6 +828,61 @@ class UDFProfiler2TestsMixin:
         self.assertEqual(0, len(self.sampling_profile_results))
         self.assertEqual(0, len(self.spark._profiler_collector._profile_results))
 
+    def test_sampling_profiler_aggregation(self):
+        for use_arrow in [True, False]:
+            add1 = udf(lambda x: x + 1, "long", useArrow=use_arrow)
+            for level, num_results, key_pattern in [
+                ("task", 4, r"^sampling_task_\d+_[01]$"),
+                ("stage", 2, r"^sampling_stage_\d+$"),
+                ("query", 1, r"^sampling_query_\d+$"),
+                (None, 2, r"^sampling_stage_\d+$"),  # The default level is "stage".
+            ]:
+                conf = {"spark.sql.pyspark.udf.profiler": "sampling"}
+                if level is not None:
+                    conf["spark.sql.pyspark.udf.profiler.samplingAggregation"] = level
+                with self.subTest(use_arrow=use_arrow, level=level), self.sql_conf(conf):
+                    # Clear first, so that a failed subtest does not affect the next ones.
+                    self.spark.profile.clear()
+                    # One query with two stages, split by the shuffle, of two tasks each. Build
+                    # a new DataFrame each time: running the same one again in classic PySpark
+                    # skips the map stage if its shuffle files are still there.
+                    df = (
+                        self.spark.range(10, numPartitions=2)
+                        .select(add1("id").alias("id"))
+                        .repartition(2, "id")
+                        .select(add1("id"))
+                    )
+                    df.collect()
+
+                    keys = list(self.sampling_profile_results)
+                    self.assertEqual(num_results, len(keys), keys)
+                    for key in keys:
+                        self.assertRegex(key, key_pattern)
+
+    def test_sampling_profiler_merge_threads_by_name(self):
+        import time
+
+        @udf("long")
+        def add1_in_thread(x):
+            t = threading.Thread(target=time.sleep, args=(0.05,), name="helper")
+            t.start()
+            t.join()
+            return x + 1
+
+        with self.sql_conf(
+            {
+                "spark.sql.pyspark.udf.profiler": "sampling",
+                "spark.sql.pyspark.udf.profiler.samplingInterval": "10",
+                "spark.sql.pyspark.udf.profiler.samplingAggregation": "stage",
+            }
+        ):
+            self.spark.range(10, numPartitions=2).select(add1_in_thread("id")).collect()
+
+        results = list(self.sampling_profile_results.values())
+        self.assertEqual(1, len(results))
+        # The threads of both tasks are merged by name into one call tree per name.
+        self.assertEqual({"MainThread", "helper"}, set(results[0]["callstack"]))
+
 
 class UDFProfiler2Tests(UDFProfiler2TestsMixin, ReusedSQLTestCase):
     def setUp(self) -> None:
@@ -861,6 +918,19 @@ class UDFProfiler2Tests(UDFProfiler2TestsMixin, ReusedSQLTestCase):
         self.assertFalse(thread.is_alive())
         self.assertEqual({}, self.spark._profiler_collector._profile_results)
 
+    def test_sampling_profile_results_are_copies(self):
+        # Merges change the stored call trees in place, so readers get copies.
+        accumulator = self.spark._profiler_collector._accumulator
+        accumulator += {"id": {"sampling": {"callstack": {"MainThread": {"f": {"count": 1}}}}}}
+        results = self.sampling_profile_results
+        accumulator += {"id": {"sampling": {"callstack": {"MainThread": {"f": {"count": 1}}}}}}
+
+        self.assertEqual({"id": {"callstack": {"MainThread": {"f": {"count": 1}}}}}, results)
+        self.assertEqual(
+            {"id": {"callstack": {"MainThread": {"f": {"count": 2}}}}},
+            self.sampling_profile_results,
+        )
+
     def test_show_perf_during_accumulator_merge(self):
         # Merges mutate the stats in place. Merge a new function midway through show().
         accumulator = self.spark._profiler_collector._accumulator
@@ -887,6 +957,141 @@ class UDFProfiler2Tests(UDFProfiler2TestsMixin, ReusedSQLTestCase):
                 self.spark.profile.show(type="perf")
         self.assertIn("Profile of id", io.getvalue())
         self.assertEqual(2, len(self.profile_results["id"].stats))
+
+    def test_sampling_profiler_aggregation_query_unknown(self):
+        @udf("long")
+        def add1(x):
+            return x + 1
+
+        # Under `df.rdd` the UDF does not run in a SQL query, so there is no query id.
+        with self.sql_conf(
+            {
+                "spark.sql.pyspark.udf.profiler": "sampling",
+                "spark.sql.pyspark.udf.profiler.samplingAggregation": "query",
+            }
+        ):
+            self.spark.range(10, numPartitions=2).select(add1("id")).rdd.collect()
+
+        self.assertEqual(["sampling_query_unknown"], list(self.sampling_profile_results))
+
+    def test_sampling_profiler_aggregation_streaming_query(self):
+        @udf("long")
+        def add1(x):
+            return x + 1
+
+        with tempfile.TemporaryDirectory() as d:
+            for i in range(3):
+                self.spark.range(i, i + 1, numPartitions=1).write.mode("append").parquet(d)
+
+            with self.sql_conf(
+                {
+                    "spark.sql.pyspark.udf.profiler": "sampling",
+                    "spark.sql.pyspark.udf.profiler.samplingAggregation": "query",
+                }
+            ):
+                # One file per micro-batch, so the query runs in three micro-batches.
+                q = (
+                    self.spark.readStream.schema("id long")
+                    .option("maxFilesPerTrigger", 1)
+                    .parquet(d)
+                    .select(add1("id"))
+                    .writeStream.format("noop")
+                    .trigger(availableNow=True)
+                    .start()
+                )
+                try:
+                    self.assertTrue(q.awaitTermination(60))
+                finally:
+                    q.stop()
+
+        self.assertEqual(3, len(q.recentProgress))
+        # All micro-batches are merged under the streaming query id.
+        self.assertEqual([f"sampling_query_{q.id}"], list(self.sampling_profile_results))
+
+    def test_sampling_profiler_aggregation_not_allowed(self):
+        # An unknown level fails when the profiler is created, before the UDF runs.
+        with self.assertRaises(PySparkValueError) as pe:
+            WorkerSamplingProfiler(task_context=mock.Mock(), aggregation="job")
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="VALUE_NOT_ALLOWED",
+            messageParameters={
+                "arg_name": "spark.sql.pyspark.udf.profiler.samplingAggregation",
+                "allowed_values": "['query', 'stage', 'task']",
+            },
+        )
+
+    def test_sampling_profiler_unknown_thread(self):
+        import _thread
+        import time
+
+        done = threading.Event()
+
+        def run():
+            time.sleep(0.2)
+            done.set()
+
+        profiler = WorkerSamplingProfiler(task_context=mock.Mock(), sampling_interval=10)
+        with profiler:
+            # A thread started without the threading module has no name.
+            _thread.start_new_thread(run, ())
+            self.assertTrue(done.wait(10))
+
+        # It is kept under one shared name, not under its thread id.
+        roots = profiler._callstack_data["<unknown thread>"]
+        self.assertTrue(any(".<locals>.run " in ident for ident in roots), list(roots))
+        self.assertFalse([name for name in profiler._callstack_data if name.isdigit()])
+
+    def test_sampling_profiler_truncate_deep_stack(self):
+        profiler = WorkerSamplingProfiler(task_context=mock.Mock())
+        max_depth = WorkerSamplingProfiler._MAX_STACK_DEPTH
+        stack = []
+
+        def recurse(depth):
+            if depth > 0:
+                return recurse(depth - 1)
+            frame = f = sys._getframe()
+            while f is not None:
+                stack.insert(0, profiler._get_ident_from_frame(f))
+                f = f.f_back
+            profiler._add_sample("MainThread", frame)
+
+        recurse(max_depth)
+
+        idents = []
+        node = profiler._callstack_data["MainThread"]
+        while children := [key for key in node if key != "count"]:
+            idents.extend(children)
+            node = node[children[0]]
+        # The outermost frames are kept, and the deeper ones are counted as truncated.
+        self.assertGreater(len(stack), max_depth)
+        self.assertEqual(stack[:max_depth] + ["<truncated>"], idents)
+        self.assertEqual({"count": 1}, node)
+
+    def test_sampling_result_param_merge(self):
+        tree1 = {"MainThread": {"f": {"count": 2, "g": {"count": 1}}}}
+        tree2 = {"MainThread": {"f": {"count": 3, "h": {"count": 3}}}}
+        # Call trees with the same key are summed node by node.
+        self.assertEqual(
+            {"MainThread": {"f": {"count": 5, "g": {"count": 1}, "h": {"count": 3}}}},
+            SamplingResultParam.addInPlace(tree1, tree2),
+        )
+
+    def test_sampling_result_param_merge_deep_tree(self):
+        def chain(depth):
+            root = node = {}
+            for i in range(depth):
+                node[f"f{i}"] = {"count": 1}
+                node = node[f"f{i}"]
+            return root
+
+        # A call tree deeper than the recursion limit can still be merged.
+        depth = sys.getrecursionlimit() + 100
+        node = SamplingResultParam.addInPlace(chain(depth), chain(depth))
+        for i in range(depth):
+            node = node[f"f{i}"]
+            self.assertEqual(2, node["count"])
 
 
 if __name__ == "__main__":

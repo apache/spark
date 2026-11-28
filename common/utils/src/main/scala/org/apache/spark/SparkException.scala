@@ -175,6 +175,20 @@ private[spark] case class ExecutorDeadException(message: String)
   extends SparkException(errorClass = "INTERNAL_ERROR_NETWORK",
     messageParameters = Map("message" -> message), cause = null)
 
+private[spark] object SparkUpgradeException {
+  /**
+   * Creates the exception with a message rendered elsewhere, such as by a Spark Connect server
+   * whose error condition this process does not define.
+   */
+  private[spark] def withRenderedMessage(
+      message: String,
+      errorClass: String,
+      messageParameters: Map[String, String],
+      cause: Option[Throwable],
+      sqlState: Option[String]): SparkUpgradeException =
+    new SparkUpgradeException(message, cause, Some(errorClass), messageParameters, sqlState)
+}
+
 /**
  * Exception thrown when Spark returns different result after upgrading to a new version.
  */
@@ -217,6 +231,20 @@ private[spark] class SparkUpgradeException private(
   override def getCondition: String = errorClass.orNull
 
   override def getSqlState: String = sqlState.getOrElse(super.getSqlState)
+}
+
+private[spark] object SparkArithmeticException {
+  /**
+   * Creates the exception with a message rendered elsewhere, such as by a Spark Connect server
+   * whose error condition this process does not define.
+   */
+  private[spark] def withRenderedMessage(
+      message: String,
+      errorClass: String,
+      messageParameters: Map[String, String],
+      context: Array[QueryContext],
+      sqlState: Option[String]): SparkArithmeticException =
+    new SparkArithmeticException(message, Some(errorClass), messageParameters, context, sqlState)
 }
 
 /**
@@ -325,6 +353,17 @@ private[spark] class SparkUnsupportedOperationException private(
 }
 
 private[spark] object SparkUnsupportedOperationException {
+  /**
+   * Creates the exception with a message rendered elsewhere, such as by a Spark Connect server
+   * whose error condition this process does not define.
+   */
+  private[spark] def withRenderedMessage(
+      message: String,
+      errorClass: String,
+      messageParameters: Map[String, String],
+      sqlState: Option[String]): SparkUnsupportedOperationException =
+    new SparkUnsupportedOperationException(message, Some(errorClass), messageParameters, sqlState)
+
   def apply(): SparkUnsupportedOperationException = {
     val stackTrace = Thread.currentThread().getStackTrace
     val messageParameters = if (stackTrace.length >= 4) {
@@ -374,6 +413,22 @@ private[spark] class SparkConcurrentModificationException(
   override def getCondition: String = errorClass
 
   override def getSqlState: String = sqlState.getOrElse(super.getSqlState)
+}
+
+private[spark] object SparkDateTimeException {
+  /**
+   * Creates the exception with a message rendered elsewhere, such as by a Spark Connect server
+   * whose error condition this process does not define.
+   */
+  private[spark] def withRenderedMessage(
+      message: String,
+      errorClass: String,
+      messageParameters: Map[String, String],
+      context: Array[QueryContext],
+      cause: Option[Throwable],
+      sqlState: Option[String]): SparkDateTimeException =
+    new SparkDateTimeException(
+      message, Some(errorClass), messageParameters, context, cause, sqlState)
 }
 
 /**
@@ -466,6 +521,20 @@ private[spark] class SparkFileNotFoundException(
   override def getSqlState: String = sqlState.getOrElse(super.getSqlState)
 }
 
+private[spark] object SparkNumberFormatException {
+  /**
+   * Creates the exception with a message rendered elsewhere, such as by a Spark Connect server
+   * whose error condition this process does not define.
+   */
+  private[spark] def withRenderedMessage(
+      message: String,
+      errorClass: String,
+      messageParameters: Map[String, String],
+      context: Array[QueryContext],
+      sqlState: Option[String]): SparkNumberFormatException =
+    new SparkNumberFormatException(message, Some(errorClass), messageParameters, context, sqlState)
+}
+
 /**
  * Number format exception thrown from Spark with an error class.
  */
@@ -517,6 +586,22 @@ private[spark] class SparkNumberFormatException private(
   override def getSqlState: String = sqlState.getOrElse(super.getSqlState)
 
   override def getQueryContext: Array[QueryContext] = context
+}
+
+private[spark] object SparkIllegalArgumentException {
+  /**
+   * Creates the exception with a message rendered elsewhere, such as by a Spark Connect server
+   * whose error condition this process does not define.
+   */
+  private[spark] def withRenderedMessage(
+      message: String,
+      errorClass: String,
+      messageParameters: Map[String, String],
+      context: Array[QueryContext],
+      cause: Option[Throwable],
+      sqlState: Option[String]): SparkIllegalArgumentException =
+    new SparkIllegalArgumentException(
+      message, cause, Some(errorClass), messageParameters, context, sqlState)
 }
 
 /**
@@ -612,6 +697,22 @@ private[spark] class SparkIllegalStateException(
   override def getSqlState: String = sqlState.getOrElse(super.getSqlState)
 
   override def getQueryContext: Array[QueryContext] = context
+}
+
+private[spark] object SparkRuntimeException {
+  /**
+   * Creates the exception with a message rendered elsewhere, such as by a Spark Connect server
+   * whose error condition this process does not define.
+   */
+  private[spark] def withRenderedMessage(
+      message: String,
+      errorClass: String,
+      messageParameters: Map[String, String],
+      context: Array[QueryContext],
+      cause: Option[Throwable],
+      sqlState: Option[String]): SparkRuntimeException =
+    new SparkRuntimeException(
+      message, cause, Some(errorClass), messageParameters, context, sqlState)
 }
 
 private[spark] class SparkRuntimeException private(
@@ -736,6 +837,21 @@ private[spark] class SparkSecurityException(
   override def getCondition: String = errorClass
 
   override def getSqlState: String = sqlState.getOrElse(super.getSqlState)
+}
+
+private[spark] object SparkArrayIndexOutOfBoundsException {
+  /**
+   * Creates the exception with a message rendered elsewhere, such as by a Spark Connect server
+   * whose error condition this process does not define.
+   */
+  private[spark] def withRenderedMessage(
+      message: String,
+      errorClass: String,
+      messageParameters: Map[String, String],
+      context: Array[QueryContext],
+      sqlState: Option[String]): SparkArrayIndexOutOfBoundsException =
+    new SparkArrayIndexOutOfBoundsException(
+      message, Some(errorClass), messageParameters, context, sqlState)
 }
 
 /**

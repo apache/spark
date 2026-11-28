@@ -87,7 +87,7 @@ Output [3]: [d_date_sk#9, d_week_seq#10, d_day_name#11]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_date_sk), IsNotNull(d_week_seq)]
-ReadSchema: struct<d_date_sk:int,d_week_seq:int,d_day_name:string>
+ReadSchema: struct<d_date_sk:bigint,d_week_seq:int,d_day_name:string>
 
 (9) ColumnarToRow [codegen id : 1]
 Input [3]: [d_date_sk#9, d_week_seq#10, d_day_name#11]
@@ -98,7 +98,7 @@ Condition : ((isnotnull(d_date_sk#9) AND isnotnull(d_week_seq#10)) AND might_con
 
 (11) BroadcastExchange
 Input [3]: [d_date_sk#9, d_week_seq#10, d_day_name#11]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=2]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=2]
 
 (12) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [sold_date_sk#3]
@@ -195,7 +195,7 @@ Output [3]: [d_date_sk#59, d_week_seq#60, d_day_name#61]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_date_sk), IsNotNull(d_week_seq)]
-ReadSchema: struct<d_date_sk:int,d_week_seq:int,d_day_name:string>
+ReadSchema: struct<d_date_sk:bigint,d_week_seq:int,d_day_name:string>
 
 (32) ColumnarToRow [codegen id : 4]
 Input [3]: [d_date_sk#59, d_week_seq#60, d_day_name#61]
@@ -206,7 +206,7 @@ Condition : ((isnotnull(d_date_sk#59) AND isnotnull(d_week_seq#60)) AND might_co
 
 (34) BroadcastExchange
 Input [3]: [d_date_sk#59, d_week_seq#60, d_day_name#61]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=6]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=6]
 
 (35) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [sold_date_sk#53]

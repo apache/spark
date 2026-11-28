@@ -2967,6 +2967,90 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+CREATE TEMPORARY FUNCTION foo3_1h(x INT) RETURNS INT RETURN x + 1
+-- !query analysis
+CreateSQLFunctionCommand foo3_1h, x INT, INT, x + 1, false, true, false, false
+
+
+-- !query
+SELECT * FROM t1 JOIN t2 ON foo3_1h(t1.c1) = t2.c2
+-- !query analysis
+Project [c1#x, c2#x, c1#x, c2#x]
++- Join Inner, (foo3_1h(x#x) = c2#x)
+   :- SubqueryAlias spark_catalog.default.t1
+   :  +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+   :     +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+   :        +- LocalRelation [col1#x, col2#x]
+   +- SubqueryAlias spark_catalog.default.t2
+      +- View (`spark_catalog`.`default`.`t2`, [c1#x, c2#x])
+         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+DROP TEMPORARY FUNCTION foo3_1h
+-- !query analysis
+DropFunctionCommand foo3_1h, false, true
+
+
+-- !query
+SELECT * FROM t1 LEFT OUTER JOIN t2 ON foo3_1b(t1.c2) = t2.c2
+-- !query analysis
+Project [c1#x, c2#x, c1#x, c2#x]
++- Join LeftOuter, (spark_catalog.default.foo3_1b(x#x) = c2#x)
+   :- SubqueryAlias spark_catalog.default.t1
+   :  +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+   :     +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+   :        +- LocalRelation [col1#x, col2#x]
+   +- SubqueryAlias spark_catalog.default.t2
+      +- View (`spark_catalog`.`default`.`t2`, [c1#x, c2#x])
+         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT * FROM t1 LEFT SEMI JOIN t2 ON foo3_1a(t1.c1, t2.c2) >= 2
+-- !query analysis
+Project [c1#x, c2#x]
++- Join LeftSemi, (spark_catalog.default.foo3_1a(a#x, b#x) >= cast(2 as double))
+   :- SubqueryAlias spark_catalog.default.t1
+   :  +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+   :     +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+   :        +- LocalRelation [col1#x, col2#x]
+   +- SubqueryAlias spark_catalog.default.t2
+      +- View (`spark_catalog`.`default`.`t2`, [c1#x, c2#x])
+         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+CREATE FUNCTION foo3_1i(x INT, y INT DEFAULT 1) RETURNS INT RETURN x + y
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.foo3_1i, x INT, y INT DEFAULT 1, INT, x + y, false, false, false, false
+
+
+-- !query
+SELECT * FROM t1 JOIN t2 ON foo3_1i(t1.c2) = t2.c2
+-- !query analysis
+Project [c1#x, c2#x, c1#x, c2#x]
++- Join Inner, (spark_catalog.default.foo3_1i(x#x, y#x) = c2#x)
+   :- SubqueryAlias spark_catalog.default.t1
+   :  +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+   :     +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+   :        +- LocalRelation [col1#x, col2#x]
+   +- SubqueryAlias spark_catalog.default.t2
+      +- View (`spark_catalog`.`default`.`t2`, [c1#x, c2#x])
+         +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+            +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+DROP FUNCTION foo3_1i
+-- !query analysis
+DropFunctionCommand spark_catalog.default.foo3_1i, false, false
+
+
+-- !query
 SELECT * FROM t1 ORDER BY foo3_1b(c1)
 -- !query analysis
 org.apache.spark.sql.AnalysisException

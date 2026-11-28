@@ -283,6 +283,39 @@ private[client] object GrpcExceptionConverter {
     (className, throwableCtr)
   }
 
+  /** A server error as the server rendered it, kept when this client cannot render it. */
+  private case class ServerRenderedError(
+      message: String,
+      errorClass: String,
+      messageParameters: Map[String, String],
+      queryContext: Array[QueryContext],
+      cause: Option[Throwable],
+      sqlState: Option[String])
+
+  /**
+   * Builds the exception with `render`, which renders the message from this client's error
+   * definitions, when the client can render the server's error, and with `keepServerMessage`
+   * otherwise. When the client and server versions differ, the client may lack the server's
+   * condition or subcondition, or its template may use a parameter the server did not send.
+   */
+  private def renderOrKeepServerMessage[T <: Throwable](params: ErrorParams)(render: => T)(
+      keepServerMessage: ServerRenderedError => T): T = {
+    val errorClass = getErrorClassOrFallback(params)
+    val messageParameters = errorParamsToMessageParameters(params)
+    if (errorClass == null || SparkThrowableHelper.canRender(errorClass, messageParameters)) {
+      render
+    } else {
+      keepServerMessage(
+        ServerRenderedError(
+          params.message,
+          errorClass,
+          messageParameters,
+          params.queryContext,
+          params.cause,
+          getSqlStateOrFallback(params)))
+    }
+  }
+
   private[client] val errorFactory = Map(
     errorConstructor(params =>
       new StreamingQueryException(
@@ -292,113 +325,243 @@ private[client] object GrpcExceptionConverter {
         errorParamsToMessageParameters(params),
         getSqlStateOrFallback(params))),
     errorConstructor(params =>
-      new ParseException(
-        None,
-        Origin(),
-        errorClass = getErrorClassOrFallback(params),
-        messageParameters = errorParamsToMessageParameters(params),
-        queryContext = params.queryContext)),
+      renderOrKeepServerMessage(params)(
+        new ParseException(
+          None,
+          Origin(),
+          errorClass = getErrorClassOrFallback(params),
+          messageParameters = errorParamsToMessageParameters(params),
+          queryContext = params.queryContext)) { e =>
+        ParseException.withRenderedMessage(
+          e.message,
+          e.errorClass,
+          e.messageParameters,
+          e.queryContext,
+          e.sqlState)
+      }),
     errorConstructor(params => {
       val updatedParams = getParamsWithLegacyErrorClass(params, "_LEGACY_ERROR_TEMP_3100")
-      new AnalysisException(
-        errorClass = updatedParams.errorClass.get,
-        messageParameters = updatedParams.messageParameters,
-        cause = updatedParams.cause,
-        context = updatedParams.queryContext,
-        sqlState = getSqlStateOrFallback(updatedParams))
+      renderOrKeepServerMessage(updatedParams)(
+        new AnalysisException(
+          errorClass = updatedParams.errorClass.get,
+          messageParameters = updatedParams.messageParameters,
+          cause = updatedParams.cause,
+          context = updatedParams.queryContext,
+          sqlState = getSqlStateOrFallback(updatedParams))) { e =>
+        new AnalysisException(
+          errorClass = e.errorClass,
+          sqlState = e.sqlState.orNull,
+          messageTemplate = null,
+          messageParameters = e.messageParameters,
+          cause = e.cause,
+          message = Some(e.message)).copy(context = e.queryContext)
+      }
     }),
     errorConstructor(params =>
-      new NamespaceAlreadyExistsException(
-        getErrorClassOrFallback(params),
-        errorParamsToMessageParameters(params))),
+      renderOrKeepServerMessage(params)(
+        new NamespaceAlreadyExistsException(
+          getErrorClassOrFallback(params),
+          errorParamsToMessageParameters(params))) { e =>
+        NamespaceAlreadyExistsException.withRenderedMessage(
+          e.message,
+          e.errorClass,
+          e.messageParameters,
+          e.sqlState)
+      }),
     errorConstructor(params =>
-      new TableAlreadyExistsException(
-        getErrorClassOrFallback(params),
-        errorParamsToMessageParameters(params),
-        params.cause)),
+      renderOrKeepServerMessage(params)(
+        new TableAlreadyExistsException(
+          getErrorClassOrFallback(params),
+          errorParamsToMessageParameters(params),
+          params.cause)) { e =>
+        TableAlreadyExistsException.withRenderedMessage(
+          e.message,
+          e.errorClass,
+          e.messageParameters,
+          e.cause,
+          e.sqlState)
+      }),
     errorConstructor(params =>
-      new TempTableAlreadyExistsException(
-        getErrorClassOrFallback(params),
-        errorParamsToMessageParameters(params),
-        params.cause)),
+      renderOrKeepServerMessage(params)(
+        new TempTableAlreadyExistsException(
+          getErrorClassOrFallback(params),
+          errorParamsToMessageParameters(params),
+          params.cause)) { e =>
+        TempTableAlreadyExistsException.withRenderedMessage(
+          e.message,
+          e.errorClass,
+          e.messageParameters,
+          e.cause,
+          e.sqlState)
+      }),
     errorConstructor(params =>
-      new NoSuchDatabaseException(
-        getErrorClassOrFallback(params),
-        errorParamsToMessageParameters(params),
-        params.cause)),
+      renderOrKeepServerMessage(params)(
+        new NoSuchDatabaseException(
+          getErrorClassOrFallback(params),
+          errorParamsToMessageParameters(params),
+          params.cause)) { e =>
+        NoSuchDatabaseException.withRenderedMessage(
+          e.message,
+          e.errorClass,
+          e.messageParameters,
+          e.cause,
+          e.sqlState)
+      }),
     errorConstructor(params =>
-      new NoSuchNamespaceException(
-        getErrorClassOrFallback(params),
-        errorParamsToMessageParameters(params))),
+      renderOrKeepServerMessage(params)(
+        new NoSuchNamespaceException(
+          getErrorClassOrFallback(params),
+          errorParamsToMessageParameters(params))) { e =>
+        NoSuchNamespaceException.withRenderedMessage(
+          e.message,
+          e.errorClass,
+          e.messageParameters,
+          cause = None,
+          e.sqlState)
+      }),
     errorConstructor(params =>
-      new NoSuchTableException(
-        getErrorClassOrFallback(params),
-        errorParamsToMessageParameters(params),
-        params.cause)),
+      renderOrKeepServerMessage(params)(
+        new NoSuchTableException(
+          getErrorClassOrFallback(params),
+          errorParamsToMessageParameters(params),
+          params.cause)) { e =>
+        NoSuchTableException.withRenderedMessage(
+          e.message,
+          e.errorClass,
+          e.messageParameters,
+          e.cause,
+          e.sqlState)
+      }),
     errorConstructor[NumberFormatException](params => {
       val updatedParams = getParamsWithLegacyErrorClass(params, "_LEGACY_ERROR_TEMP_3104")
-      new SparkNumberFormatException(
-        errorClass = updatedParams.errorClass.get,
-        messageParameters = updatedParams.messageParameters,
-        updatedParams.queryContext,
-        getSqlStateOrFallback(updatedParams))
+      renderOrKeepServerMessage(updatedParams)(
+        new SparkNumberFormatException(
+          errorClass = updatedParams.errorClass.get,
+          messageParameters = updatedParams.messageParameters,
+          updatedParams.queryContext,
+          getSqlStateOrFallback(updatedParams))) { e =>
+        SparkNumberFormatException.withRenderedMessage(
+          e.message,
+          e.errorClass,
+          e.messageParameters,
+          e.queryContext,
+          e.sqlState)
+      }
     }),
     errorConstructor[IllegalArgumentException](params => {
       val updatedParams = getParamsWithLegacyErrorClass(params, "_LEGACY_ERROR_TEMP_3105")
-      new SparkIllegalArgumentException(
-        errorClass = updatedParams.errorClass.get,
-        messageParameters = updatedParams.messageParameters,
-        updatedParams.queryContext,
-        summary = "",
-        cause = updatedParams.cause.orNull,
-        getSqlStateOrFallback(updatedParams))
+      renderOrKeepServerMessage(updatedParams)(
+        new SparkIllegalArgumentException(
+          errorClass = updatedParams.errorClass.get,
+          messageParameters = updatedParams.messageParameters,
+          updatedParams.queryContext,
+          summary = "",
+          cause = updatedParams.cause.orNull,
+          getSqlStateOrFallback(updatedParams))) { e =>
+        SparkIllegalArgumentException.withRenderedMessage(
+          e.message,
+          e.errorClass,
+          e.messageParameters,
+          e.queryContext,
+          e.cause,
+          e.sqlState)
+      }
     }),
     errorConstructor[ArithmeticException](params => {
       val updatedParams = getParamsWithLegacyErrorClass(params, "_LEGACY_ERROR_TEMP_3106")
-      new SparkArithmeticException(
-        errorClass = updatedParams.errorClass.get,
-        messageParameters = updatedParams.messageParameters,
-        updatedParams.queryContext,
-        getSqlStateOrFallback(updatedParams))
+      renderOrKeepServerMessage(updatedParams)(
+        new SparkArithmeticException(
+          errorClass = updatedParams.errorClass.get,
+          messageParameters = updatedParams.messageParameters,
+          updatedParams.queryContext,
+          getSqlStateOrFallback(updatedParams))) { e =>
+        SparkArithmeticException.withRenderedMessage(
+          e.message,
+          e.errorClass,
+          e.messageParameters,
+          e.queryContext,
+          e.sqlState)
+      }
     }),
     errorConstructor[UnsupportedOperationException](params => {
       val updatedParams = getParamsWithLegacyErrorClass(params, "_LEGACY_ERROR_TEMP_3107")
-      new SparkUnsupportedOperationException(
-        errorClass = updatedParams.errorClass.get,
-        messageParameters = updatedParams.messageParameters,
-        getSqlStateOrFallback(updatedParams))
+      renderOrKeepServerMessage(updatedParams)(
+        new SparkUnsupportedOperationException(
+          errorClass = updatedParams.errorClass.get,
+          messageParameters = updatedParams.messageParameters,
+          getSqlStateOrFallback(updatedParams))) { e =>
+        SparkUnsupportedOperationException.withRenderedMessage(
+          e.message,
+          e.errorClass,
+          e.messageParameters,
+          e.sqlState)
+      }
     }),
     errorConstructor[ArrayIndexOutOfBoundsException](params => {
       val updatedParams = getParamsWithLegacyErrorClass(params, "_LEGACY_ERROR_TEMP_3108")
-      new SparkArrayIndexOutOfBoundsException(
-        errorClass = updatedParams.errorClass.get,
-        messageParameters = updatedParams.messageParameters,
-        updatedParams.queryContext,
-        getSqlStateOrFallback(updatedParams))
+      renderOrKeepServerMessage(updatedParams)(
+        new SparkArrayIndexOutOfBoundsException(
+          errorClass = updatedParams.errorClass.get,
+          messageParameters = updatedParams.messageParameters,
+          updatedParams.queryContext,
+          getSqlStateOrFallback(updatedParams))) { e =>
+        SparkArrayIndexOutOfBoundsException.withRenderedMessage(
+          e.message,
+          e.errorClass,
+          e.messageParameters,
+          e.queryContext,
+          e.sqlState)
+      }
     }),
     errorConstructor[DateTimeException](params => {
       val updatedParams = getParamsWithLegacyErrorClass(params, "_LEGACY_ERROR_TEMP_3109")
-      new SparkDateTimeException(
-        errorClass = updatedParams.errorClass.get,
-        messageParameters = updatedParams.messageParameters,
-        updatedParams.queryContext,
-        summary = "",
-        cause = None,
-        getSqlStateOrFallback(updatedParams))
+      renderOrKeepServerMessage(updatedParams)(
+        new SparkDateTimeException(
+          errorClass = updatedParams.errorClass.get,
+          messageParameters = updatedParams.messageParameters,
+          updatedParams.queryContext,
+          summary = "",
+          cause = None,
+          getSqlStateOrFallback(updatedParams))) { e =>
+        SparkDateTimeException.withRenderedMessage(
+          e.message,
+          e.errorClass,
+          e.messageParameters,
+          e.queryContext,
+          cause = None,
+          e.sqlState)
+      }
     }),
     errorConstructor(params =>
-      new SparkRuntimeException(
-        getErrorClassOrFallback(params),
-        errorParamsToMessageParameters(params),
-        params.cause.orNull,
-        params.queryContext,
-        getSqlStateOrFallback(params))),
+      renderOrKeepServerMessage(params)(
+        new SparkRuntimeException(
+          getErrorClassOrFallback(params),
+          errorParamsToMessageParameters(params),
+          params.cause.orNull,
+          params.queryContext,
+          getSqlStateOrFallback(params))) { e =>
+        SparkRuntimeException.withRenderedMessage(
+          e.message,
+          e.errorClass,
+          e.messageParameters,
+          e.queryContext,
+          e.cause,
+          e.sqlState)
+      }),
     errorConstructor(params =>
-      new SparkUpgradeException(
-        getErrorClassOrFallback(params),
-        errorParamsToMessageParameters(params),
-        params.cause.orNull,
-        getSqlStateOrFallback(params))),
+      renderOrKeepServerMessage(params)(
+        new SparkUpgradeException(
+          getErrorClassOrFallback(params),
+          errorParamsToMessageParameters(params),
+          params.cause.orNull,
+          getSqlStateOrFallback(params))) { e =>
+        SparkUpgradeException.withRenderedMessage(
+          e.message,
+          e.errorClass,
+          e.messageParameters,
+          e.cause,
+          e.sqlState)
+      }),
     errorConstructor(params =>
       new SparkException(
         message = params.message,

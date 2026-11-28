@@ -143,6 +143,8 @@ trait SQLQueryTestHelper extends SQLConfHelper with Logging {
    */
   protected def isSemanticallySorted(plan: LogicalPlan): Boolean = plan match {
     case _: Join | _: Aggregate | _: Generate | _: Sample | _: Distinct => false
+    // EXECUTE IMMEDIATE holds its command payload outside the normal child-plan list.
+    case ExecuteImmediateCommand(sourceStatement) => isSemanticallySorted(sourceStatement)
     case _: DescribeCommandBase
          | _: DescribeColumnCommand
          | _: DescribeRelation

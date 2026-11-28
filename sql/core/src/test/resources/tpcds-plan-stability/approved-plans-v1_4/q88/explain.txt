@@ -188,7 +188,7 @@ Output [4]: [ss_sold_time_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_sold_date_sk#4]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_hdemo_sk), IsNotNull(ss_sold_time_sk), IsNotNull(ss_store_sk)]
-ReadSchema: struct<ss_sold_time_sk:int,ss_hdemo_sk:int,ss_store_sk:int>
+ReadSchema: struct<ss_sold_time_sk:bigint,ss_hdemo_sk:bigint,ss_store_sk:bigint>
 
 (2) ColumnarToRow [codegen id : 4]
 Input [4]: [ss_sold_time_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_sold_date_sk#4]
@@ -206,7 +206,7 @@ Output [3]: [hd_demo_sk#5, hd_dep_count#6, hd_vehicle_count#7]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/household_demographics]
 PushedFilters: [Or(Or(And(EqualTo(hd_dep_count,4),LessThanOrEqual(hd_vehicle_count,6)),And(EqualTo(hd_dep_count,2),LessThanOrEqual(hd_vehicle_count,4))),And(EqualTo(hd_dep_count,0),LessThanOrEqual(hd_vehicle_count,2))), IsNotNull(hd_demo_sk)]
-ReadSchema: struct<hd_demo_sk:int,hd_dep_count:int,hd_vehicle_count:int>
+ReadSchema: struct<hd_demo_sk:bigint,hd_dep_count:int,hd_vehicle_count:int>
 
 (6) ColumnarToRow [codegen id : 1]
 Input [3]: [hd_demo_sk#5, hd_dep_count#6, hd_vehicle_count#7]
@@ -221,7 +221,7 @@ Input [3]: [hd_demo_sk#5, hd_dep_count#6, hd_vehicle_count#7]
 
 (9) BroadcastExchange
 Input [1]: [hd_demo_sk#5]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=1]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=1]
 
 (10) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_hdemo_sk#2]
@@ -238,7 +238,7 @@ Output [3]: [t_time_sk#8, t_hour#9, t_minute#10]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/time_dim]
 PushedFilters: [IsNotNull(t_hour), IsNotNull(t_minute), EqualTo(t_hour,8), GreaterThanOrEqual(t_minute,30), IsNotNull(t_time_sk)]
-ReadSchema: struct<t_time_sk:int,t_hour:int,t_minute:int>
+ReadSchema: struct<t_time_sk:bigint,t_hour:int,t_minute:int>
 
 (13) ColumnarToRow [codegen id : 2]
 Input [3]: [t_time_sk#8, t_hour#9, t_minute#10]
@@ -253,7 +253,7 @@ Input [3]: [t_time_sk#8, t_hour#9, t_minute#10]
 
 (16) BroadcastExchange
 Input [1]: [t_time_sk#8]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=2]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=2]
 
 (17) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_sold_time_sk#1]
@@ -270,7 +270,7 @@ Output [2]: [s_store_sk#11, s_store_name#12]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
 PushedFilters: [IsNotNull(s_store_name), EqualTo(s_store_name,ese), IsNotNull(s_store_sk)]
-ReadSchema: struct<s_store_sk:int,s_store_name:string>
+ReadSchema: struct<s_store_sk:bigint,s_store_name:string>
 
 (20) ColumnarToRow [codegen id : 3]
 Input [2]: [s_store_sk#11, s_store_name#12]
@@ -285,7 +285,7 @@ Input [2]: [s_store_sk#11, s_store_name#12]
 
 (23) BroadcastExchange
 Input [1]: [s_store_sk#11]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=3]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=3]
 
 (24) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_store_sk#3]
@@ -320,7 +320,7 @@ Output [4]: [ss_sold_time_sk#17, ss_hdemo_sk#18, ss_store_sk#19, ss_sold_date_sk
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_hdemo_sk), IsNotNull(ss_sold_time_sk), IsNotNull(ss_store_sk)]
-ReadSchema: struct<ss_sold_time_sk:int,ss_hdemo_sk:int,ss_store_sk:int>
+ReadSchema: struct<ss_sold_time_sk:bigint,ss_hdemo_sk:bigint,ss_store_sk:bigint>
 
 (30) ColumnarToRow [codegen id : 8]
 Input [4]: [ss_sold_time_sk#17, ss_hdemo_sk#18, ss_store_sk#19, ss_sold_date_sk#20]
@@ -351,7 +351,7 @@ Output [3]: [t_time_sk#22, t_hour#23, t_minute#24]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/time_dim]
 PushedFilters: [IsNotNull(t_hour), IsNotNull(t_minute), EqualTo(t_hour,9), LessThan(t_minute,30), IsNotNull(t_time_sk)]
-ReadSchema: struct<t_time_sk:int,t_hour:int,t_minute:int>
+ReadSchema: struct<t_time_sk:bigint,t_hour:int,t_minute:int>
 
 (37) ColumnarToRow [codegen id : 6]
 Input [3]: [t_time_sk#22, t_hour#23, t_minute#24]
@@ -366,7 +366,7 @@ Input [3]: [t_time_sk#22, t_hour#23, t_minute#24]
 
 (40) BroadcastExchange
 Input [1]: [t_time_sk#22]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=5]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=5]
 
 (41) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [ss_sold_time_sk#17]
@@ -422,7 +422,7 @@ Output [4]: [ss_sold_time_sk#30, ss_hdemo_sk#31, ss_store_sk#32, ss_sold_date_sk
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_hdemo_sk), IsNotNull(ss_sold_time_sk), IsNotNull(ss_store_sk)]
-ReadSchema: struct<ss_sold_time_sk:int,ss_hdemo_sk:int,ss_store_sk:int>
+ReadSchema: struct<ss_sold_time_sk:bigint,ss_hdemo_sk:bigint,ss_store_sk:bigint>
 
 (52) ColumnarToRow [codegen id : 13]
 Input [4]: [ss_sold_time_sk#30, ss_hdemo_sk#31, ss_store_sk#32, ss_sold_date_sk#33]
@@ -453,7 +453,7 @@ Output [3]: [t_time_sk#35, t_hour#36, t_minute#37]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/time_dim]
 PushedFilters: [IsNotNull(t_hour), IsNotNull(t_minute), EqualTo(t_hour,9), GreaterThanOrEqual(t_minute,30), IsNotNull(t_time_sk)]
-ReadSchema: struct<t_time_sk:int,t_hour:int,t_minute:int>
+ReadSchema: struct<t_time_sk:bigint,t_hour:int,t_minute:int>
 
 (59) ColumnarToRow [codegen id : 11]
 Input [3]: [t_time_sk#35, t_hour#36, t_minute#37]
@@ -468,7 +468,7 @@ Input [3]: [t_time_sk#35, t_hour#36, t_minute#37]
 
 (62) BroadcastExchange
 Input [1]: [t_time_sk#35]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=8]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=8]
 
 (63) BroadcastHashJoin [codegen id : 13]
 Left keys [1]: [ss_sold_time_sk#30]
@@ -524,7 +524,7 @@ Output [4]: [ss_sold_time_sk#43, ss_hdemo_sk#44, ss_store_sk#45, ss_sold_date_sk
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_hdemo_sk), IsNotNull(ss_sold_time_sk), IsNotNull(ss_store_sk)]
-ReadSchema: struct<ss_sold_time_sk:int,ss_hdemo_sk:int,ss_store_sk:int>
+ReadSchema: struct<ss_sold_time_sk:bigint,ss_hdemo_sk:bigint,ss_store_sk:bigint>
 
 (74) ColumnarToRow [codegen id : 18]
 Input [4]: [ss_sold_time_sk#43, ss_hdemo_sk#44, ss_store_sk#45, ss_sold_date_sk#46]
@@ -555,7 +555,7 @@ Output [3]: [t_time_sk#48, t_hour#49, t_minute#50]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/time_dim]
 PushedFilters: [IsNotNull(t_hour), IsNotNull(t_minute), EqualTo(t_hour,10), LessThan(t_minute,30), IsNotNull(t_time_sk)]
-ReadSchema: struct<t_time_sk:int,t_hour:int,t_minute:int>
+ReadSchema: struct<t_time_sk:bigint,t_hour:int,t_minute:int>
 
 (81) ColumnarToRow [codegen id : 16]
 Input [3]: [t_time_sk#48, t_hour#49, t_minute#50]
@@ -570,7 +570,7 @@ Input [3]: [t_time_sk#48, t_hour#49, t_minute#50]
 
 (84) BroadcastExchange
 Input [1]: [t_time_sk#48]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=11]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=11]
 
 (85) BroadcastHashJoin [codegen id : 18]
 Left keys [1]: [ss_sold_time_sk#43]
@@ -626,7 +626,7 @@ Output [4]: [ss_sold_time_sk#56, ss_hdemo_sk#57, ss_store_sk#58, ss_sold_date_sk
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_hdemo_sk), IsNotNull(ss_sold_time_sk), IsNotNull(ss_store_sk)]
-ReadSchema: struct<ss_sold_time_sk:int,ss_hdemo_sk:int,ss_store_sk:int>
+ReadSchema: struct<ss_sold_time_sk:bigint,ss_hdemo_sk:bigint,ss_store_sk:bigint>
 
 (96) ColumnarToRow [codegen id : 23]
 Input [4]: [ss_sold_time_sk#56, ss_hdemo_sk#57, ss_store_sk#58, ss_sold_date_sk#59]
@@ -657,7 +657,7 @@ Output [3]: [t_time_sk#61, t_hour#62, t_minute#63]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/time_dim]
 PushedFilters: [IsNotNull(t_hour), IsNotNull(t_minute), EqualTo(t_hour,10), GreaterThanOrEqual(t_minute,30), IsNotNull(t_time_sk)]
-ReadSchema: struct<t_time_sk:int,t_hour:int,t_minute:int>
+ReadSchema: struct<t_time_sk:bigint,t_hour:int,t_minute:int>
 
 (103) ColumnarToRow [codegen id : 21]
 Input [3]: [t_time_sk#61, t_hour#62, t_minute#63]
@@ -672,7 +672,7 @@ Input [3]: [t_time_sk#61, t_hour#62, t_minute#63]
 
 (106) BroadcastExchange
 Input [1]: [t_time_sk#61]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=14]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=14]
 
 (107) BroadcastHashJoin [codegen id : 23]
 Left keys [1]: [ss_sold_time_sk#56]
@@ -728,7 +728,7 @@ Output [4]: [ss_sold_time_sk#69, ss_hdemo_sk#70, ss_store_sk#71, ss_sold_date_sk
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_hdemo_sk), IsNotNull(ss_sold_time_sk), IsNotNull(ss_store_sk)]
-ReadSchema: struct<ss_sold_time_sk:int,ss_hdemo_sk:int,ss_store_sk:int>
+ReadSchema: struct<ss_sold_time_sk:bigint,ss_hdemo_sk:bigint,ss_store_sk:bigint>
 
 (118) ColumnarToRow [codegen id : 28]
 Input [4]: [ss_sold_time_sk#69, ss_hdemo_sk#70, ss_store_sk#71, ss_sold_date_sk#72]
@@ -759,7 +759,7 @@ Output [3]: [t_time_sk#74, t_hour#75, t_minute#76]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/time_dim]
 PushedFilters: [IsNotNull(t_hour), IsNotNull(t_minute), EqualTo(t_hour,11), LessThan(t_minute,30), IsNotNull(t_time_sk)]
-ReadSchema: struct<t_time_sk:int,t_hour:int,t_minute:int>
+ReadSchema: struct<t_time_sk:bigint,t_hour:int,t_minute:int>
 
 (125) ColumnarToRow [codegen id : 26]
 Input [3]: [t_time_sk#74, t_hour#75, t_minute#76]
@@ -774,7 +774,7 @@ Input [3]: [t_time_sk#74, t_hour#75, t_minute#76]
 
 (128) BroadcastExchange
 Input [1]: [t_time_sk#74]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=17]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=17]
 
 (129) BroadcastHashJoin [codegen id : 28]
 Left keys [1]: [ss_sold_time_sk#69]
@@ -830,7 +830,7 @@ Output [4]: [ss_sold_time_sk#82, ss_hdemo_sk#83, ss_store_sk#84, ss_sold_date_sk
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_hdemo_sk), IsNotNull(ss_sold_time_sk), IsNotNull(ss_store_sk)]
-ReadSchema: struct<ss_sold_time_sk:int,ss_hdemo_sk:int,ss_store_sk:int>
+ReadSchema: struct<ss_sold_time_sk:bigint,ss_hdemo_sk:bigint,ss_store_sk:bigint>
 
 (140) ColumnarToRow [codegen id : 33]
 Input [4]: [ss_sold_time_sk#82, ss_hdemo_sk#83, ss_store_sk#84, ss_sold_date_sk#85]
@@ -861,7 +861,7 @@ Output [3]: [t_time_sk#87, t_hour#88, t_minute#89]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/time_dim]
 PushedFilters: [IsNotNull(t_hour), IsNotNull(t_minute), EqualTo(t_hour,11), GreaterThanOrEqual(t_minute,30), IsNotNull(t_time_sk)]
-ReadSchema: struct<t_time_sk:int,t_hour:int,t_minute:int>
+ReadSchema: struct<t_time_sk:bigint,t_hour:int,t_minute:int>
 
 (147) ColumnarToRow [codegen id : 31]
 Input [3]: [t_time_sk#87, t_hour#88, t_minute#89]
@@ -876,7 +876,7 @@ Input [3]: [t_time_sk#87, t_hour#88, t_minute#89]
 
 (150) BroadcastExchange
 Input [1]: [t_time_sk#87]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=20]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=20]
 
 (151) BroadcastHashJoin [codegen id : 33]
 Left keys [1]: [ss_sold_time_sk#82]
@@ -932,7 +932,7 @@ Output [4]: [ss_sold_time_sk#95, ss_hdemo_sk#96, ss_store_sk#97, ss_sold_date_sk
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_hdemo_sk), IsNotNull(ss_sold_time_sk), IsNotNull(ss_store_sk)]
-ReadSchema: struct<ss_sold_time_sk:int,ss_hdemo_sk:int,ss_store_sk:int>
+ReadSchema: struct<ss_sold_time_sk:bigint,ss_hdemo_sk:bigint,ss_store_sk:bigint>
 
 (162) ColumnarToRow [codegen id : 38]
 Input [4]: [ss_sold_time_sk#95, ss_hdemo_sk#96, ss_store_sk#97, ss_sold_date_sk#98]
@@ -963,7 +963,7 @@ Output [3]: [t_time_sk#100, t_hour#101, t_minute#102]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/time_dim]
 PushedFilters: [IsNotNull(t_hour), IsNotNull(t_minute), EqualTo(t_hour,12), LessThan(t_minute,30), IsNotNull(t_time_sk)]
-ReadSchema: struct<t_time_sk:int,t_hour:int,t_minute:int>
+ReadSchema: struct<t_time_sk:bigint,t_hour:int,t_minute:int>
 
 (169) ColumnarToRow [codegen id : 36]
 Input [3]: [t_time_sk#100, t_hour#101, t_minute#102]
@@ -978,7 +978,7 @@ Input [3]: [t_time_sk#100, t_hour#101, t_minute#102]
 
 (172) BroadcastExchange
 Input [1]: [t_time_sk#100]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=23]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=23]
 
 (173) BroadcastHashJoin [codegen id : 38]
 Left keys [1]: [ss_sold_time_sk#95]

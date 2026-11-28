@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.xml
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -214,6 +215,23 @@ class XmlInferSchemaTypeCastingSuite extends SparkFunSuite with SQLHelper {
       // Incremental temporal re-entry (typeSoFar == TimeType, enters via tryParseTime).
       assert(inferSchema.inferFrom("10:00:00", time) == time,
         s"expected TimeType with preferDate=$preferDate")
+    }
+  }
+
+  test("SPARK-59546: TimeType inference handles custom and unusable formats") {
+    Seq("true", "false").foreach { enabled =>
+      withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> enabled) {
+        val inferSchema = newInferSchema(Map("timeFormat" -> "EEE HH:mm"))
+        assert(inferSchema.inferFrom("plain", NullType) == StringType)
+        // An unusable format skips TIME rather than falling back to the default formatter.
+        assert(inferSchema.inferFrom("12:13:14", NullType) == TimestampType)
+      }
+    }
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      val inferSchema = newInferSchema(Map("timeFormat" -> "hh:mm:ss"))
+      val time = TimeType(TimeType.DEFAULT_PRECISION)
+      assert(inferSchema.inferFrom("11:30:01", NullType) == time)
+      assert(inferSchema.inferFrom("17:30:01", time) == StringType)
     }
   }
 }

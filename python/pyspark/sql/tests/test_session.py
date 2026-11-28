@@ -16,6 +16,7 @@
 #
 
 import os
+import tempfile
 import unittest
 import unittest.mock
 from io import StringIO
@@ -260,6 +261,38 @@ class SparkSessionTests4(ReusedSQLTestCase):
         finally:
             if session2 is not None:
                 session2.stop()
+
+
+class SparkSessionGetOrCreateDataFrameTests(ReusedSQLTestCase):
+    def test_computes_and_stores_the_dataset_on_the_first_call(self):
+        with tempfile.TemporaryDirectory(prefix="get_or_create") as d:
+            path = os.path.join(d, "ids")
+            df = self.spark.getOrCreateDataFrame(path, lambda: self.spark.range(3))
+
+            self.assertEqual(df.count(), 3)
+            self.assertTrue(self.spark._jsparkSession.isDataFrameMaterialized(path))
+            self.assertEqual(self.spark.read.parquet(path).count(), 3)
+
+    def test_loads_existing_dataset_instead_of_recomputing(self):
+        with tempfile.TemporaryDirectory(prefix="get_or_create") as d:
+            path = os.path.join(d, "ids")
+            calls = []
+
+            def create():
+                calls.append(1)
+                return self.spark.range(3)
+
+            self.assertEqual(self.spark.getOrCreateDataFrame(path, create).count(), 3)
+            self.assertEqual(self.spark.getOrCreateDataFrame(path, create).count(), 3)
+            self.assertEqual(len(calls), 1)
+
+    def test_recomputes_when_the_stored_dataset_has_no_marker(self):
+        with tempfile.TemporaryDirectory(prefix="get_or_create") as d:
+            path = os.path.join(d, "ids")
+            self.spark.range(2).write.parquet(path)
+
+            df = self.spark.getOrCreateDataFrame(path, lambda: self.spark.range(3))
+            self.assertEqual(df.count(), 3)
 
 
 class SparkSessionTests5(unittest.TestCase):
