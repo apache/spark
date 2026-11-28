@@ -24,6 +24,7 @@ import java.util.zip.{CheckedInputStream, CheckedOutputStream, CRC32C}
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future}
 import scala.concurrent.duration.Duration
 import scala.io.Source
+import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.annotation.JsonInclude.Include
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
@@ -214,12 +215,23 @@ class ChecksumCheckpointFileManager(
       createFunc(getChecksumPath(path))
     }(executionContext)
 
-    new ChecksumCancellableFSDataOutputStream(
-      awaitResult(mainFileFuture, Duration.Inf),
-      path,
-      awaitResult(checksumFileFuture, Duration.Inf),
-      executionContext
-    )
+    try {
+      new ChecksumCancellableFSDataOutputStream(
+        awaitResult(mainFileFuture, Duration.Inf),
+        path,
+        awaitResult(checksumFileFuture, Duration.Inf),
+        executionContext)
+    } catch {
+      case e @ (_: InterruptedException | NonFatal(_)) =>
+        // Cancel successful creates even if they finish after the caller stops waiting.
+        // Run the callbacks inline so closing the file manager cannot reject cleanup work.
+        Seq(mainFileFuture, checksumFileFuture).foreach { future =>
+          future.foreach { stream =>
+            Utils.tryLogNonFatalError(stream.cancel())
+          }(ExecutionContext.parasitic)
+        }
+        throw e
+    }
   }
 
   override def open(path: Path): FSDataInputStream = {
