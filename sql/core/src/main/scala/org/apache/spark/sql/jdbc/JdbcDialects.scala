@@ -459,7 +459,6 @@ abstract class JdbcDialect extends Serializable with Logging {
     }
 
     override def visitCast(expr: String, exprDataType: DataType, dataType: DataType): String = {
-      val mappedType = getJDBCType(dataType).map(_.databaseTypeDefinition)
       val legacyIntegralCastPushdown = JdbcUtils.legacyIntegralCastPushdown
       val (fromElement, toElement) = elementTypes(exprDataType, dataType)
       if (!legacyIntegralCastPushdown && fromElement.isInstanceOf[DatetimeType] &&
@@ -467,15 +466,23 @@ abstract class JdbcDialect extends Serializable with Logging {
         cannotPushCast(exprDataType, dataType, "the dialect doesn't declare that the database " +
           "converts datetimes to numbers like Spark (JdbcDialect.castsDatetimeToNumericLikeSpark)")
       }
+      if (!legacyIntegralCastPushdown && fromElement.isInstanceOf[StringType] &&
+          toElement.isInstanceOf[IntegralType]) {
+        cannotPushCast(exprDataType, dataType, "the database may parse strings differently")
+      }
+      val databaseTypeDefinition = getJDBCType(dataType).map(_.databaseTypeDefinition).getOrElse {
+        if (!legacyIntegralCastPushdown && exprDataType.isInstanceOf[NumericType]) {
+          dataType match {
+            case ShortType => "SMALLINT"
+            case IntegerType => "INTEGER"
+            case LongType => "BIGINT"
+            case _ => dataType.typeName
+          }
+        } else {
+          dataType.typeName
+        }
+      }
       if (!legacyIntegralCastPushdown && isFractionalToIntegral(exprDataType, dataType)) {
-        val databaseTypeDefinition = mappedType.getOrElse(dataType match {
-          // Spark's names `short` and `long` aren't valid SQL types. TINYINT isn't portable either,
-          // so ByteType keeps Spark's name.
-          case ShortType => "SMALLINT"
-          case IntegerType => "INTEGER"
-          case LongType => "BIGINT"
-          case _ => dataType.typeName
-        })
         val value = exprDataType match {
           case d: DecimalType if d.scale == 0 => expr
           case f: FractionalType =>
@@ -497,9 +504,7 @@ abstract class JdbcDialect extends Serializable with Logging {
           cannotPushCast(exprDataType, dataType, "the database's cast doesn't truncate the " +
             "elements like Spark (JdbcDialect.truncateFractionalValue)")
         }
-        // TODO(SPARK-62090): casts from other types still spell unmapped targets with Spark's
-        // `short` and `long`, which most databases reject.
-        s"CAST($expr AS ${mappedType.getOrElse(dataType.typeName)})"
+        s"CAST($expr AS $databaseTypeDefinition)"
       }
     }
 

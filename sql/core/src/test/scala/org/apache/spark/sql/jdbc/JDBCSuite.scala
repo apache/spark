@@ -1446,6 +1446,30 @@ class JDBCSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-62090: render integral widening casts with database type names") {
+    withSQLConf(SQLConf.LEGACY_JDBC_ROUND_INTEGRAL_CAST_PUSHDOWN.key -> "false") {
+      val toLong = new V2Cast(FieldReference("a"), IntegerType, LongType)
+      val toShort = new V2Cast(FieldReference("a"), ByteType, ShortType)
+      for (url <- Seq("jdbc:", "jdbc:postgresql://127.0.0.1/db", "jdbc:sqlserver://127.0.0.1/db",
+          "jdbc:db2://127.0.0.1/db")) {
+        val dialect = JdbcDialects.get(url)
+        val a = dialect.quoteIdentifier("a")
+        assert(dialect.compileExpression(toLong).contains(s"CAST($a AS BIGINT)"))
+        assert(dialect.compileExpression(toShort).contains(s"CAST($a AS SMALLINT)"))
+        val fromString = new V2Cast(FieldReference("a"), StringType, LongType)
+        assert(dialect.compileExpression(fromString).isEmpty)
+      }
+
+      val mysql = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
+      assert(mysql.compileExpression(toLong).contains("CAST(`a` AS SIGNED)"))
+      assert(mysql.compileExpression(toShort).contains("CAST(`a` AS SIGNED)"))
+      val toInt = new V2Cast(FieldReference("a"), LongType, IntegerType)
+      assert(mysql.compileExpression(toInt).isEmpty)
+      val fromString = new V2Cast(FieldReference("a"), StringType, LongType)
+      assert(mysql.compileExpression(fromString).isEmpty)
+    }
+  }
+
   test("SPARK-58372: fractional to integral casts truncate through AggregatedDialect") {
     val custom = new JdbcDialect {
       override def canHandle(url: String): Boolean = url.startsWith("jdbc:postgresql")
@@ -1568,11 +1592,6 @@ class JDBCSuite extends SharedSparkSession {
       assert(
         JdbcDialects.get(url).compileExpression(toSmallint).get === """CAST("a" AS SMALLINT)""")
     }
-    // Casts from other types keep the previous SQL.
-    Seq(IntegerType, StringType).foreach { from =>
-      val cast = new V2Cast(FieldReference("a"), from, LongType)
-      assert(JdbcDialects.get("jdbc:").compileExpression(cast).get === """CAST("a" AS long)""")
-    }
   }
 
   test("SPARK-58372: MySQL pushes fractional casts only from DECIMALs that fit the target") {
@@ -1600,11 +1619,8 @@ class JDBCSuite extends SharedSparkSession {
       assert(compile(from, to).isEmpty)
     }
     Seq(IntegerType, LongType).foreach(to => assert(compile(TimestampType, to).isEmpty))
-    // Casts from other types keep the previous SQL.
-    Seq(StringType, IntegerType, BooleanType).foreach { from =>
-      assert(compile(from, IntegerType).get === "CAST(`a` AS INTEGER)")
-      assert(compile(from, LongType).get === "CAST(`a` AS BIGINT)")
-    }
+    assert(compile(BooleanType, IntegerType).get === "CAST(`a` AS INTEGER)")
+    assert(compile(BooleanType, LongType).get === "CAST(`a` AS BIGINT)")
   }
 
   test("SPARK-57988: IS [NOT] NULL parenthesizes IN and other non-comparison predicate operands") {
