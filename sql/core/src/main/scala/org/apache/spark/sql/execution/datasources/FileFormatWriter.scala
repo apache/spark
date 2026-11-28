@@ -148,7 +148,8 @@ object FileFormatWriter extends Logging {
 
     // We should first sort by dynamic partition columns, then bucket id, and finally sorting
     // columns.
-    val requiredOrdering = partitionColumns.drop(numStaticPartitionCols) ++
+    val dynamicPartitionColumns = partitionColumns.drop(numStaticPartitionCols)
+    val requiredOrdering = dynamicPartitionColumns ++
         writerBucketSpec.map(_.bucketIdExpression) ++ sortColumns
     val writeFilesOpt = V1WritesUtils.getWriteFilesOpt(plan)
 
@@ -213,7 +214,7 @@ object FileFormatWriter extends Logging {
         executeWrite(sparkSession, plan, writeSpec, job)
       } else {
         executeWrite(sparkSession, plan, job, description, committer, outputSpec,
-          requiredOrdering, partitionColumns, sortColumns, orderingMatched)
+          requiredOrdering, partitionColumns, dynamicPartitionColumns, sortColumns, orderingMatched)
       }
     } catch {
       case cause: Throwable =>
@@ -224,6 +225,7 @@ object FileFormatWriter extends Logging {
   }
   // scalastyle:on argcount
 
+  // scalastyle:off argcount
   private def executeWrite(
       sparkSession: SparkSession,
       plan: SparkPlan,
@@ -233,20 +235,22 @@ object FileFormatWriter extends Logging {
       outputSpec: OutputSpec,
       requiredOrdering: Seq[Expression],
       partitionColumns: Seq[Attribute],
+      dynamicPartitionColumns: Seq[Attribute],
       sortColumns: Seq[Attribute],
       orderingMatched: Boolean): Set[String] = {
-    val projectList = V1WritesUtils.convertEmptyToNull(plan.output, partitionColumns)
-    val empty2NullPlan = if (projectList.nonEmpty) ProjectExec(projectList, plan) else plan
+    val projectList = V1WritesUtils.normalizePartitionValues(
+      plan.output, partitionColumns, dynamicPartitionColumns)
+    val normalizedPlan = if (projectList.nonEmpty) ProjectExec(projectList, plan) else plan
 
     writeAndCommit(job, description, committer) {
       val (planToExecute, concurrentOutputWriterSpec) = if (orderingMatched) {
-        (empty2NullPlan, None)
+        (normalizedPlan, None)
       } else {
-        val sortPlan = createSortPlan(empty2NullPlan, requiredOrdering, outputSpec)
+        val sortPlan = createSortPlan(normalizedPlan, requiredOrdering, outputSpec)
         val concurrentOutputWriterSpec = createConcurrentOutputWriterSpec(
           sparkSession, sortPlan, sortColumns)
         if (concurrentOutputWriterSpec.isDefined) {
-          (empty2NullPlan, concurrentOutputWriterSpec)
+          (normalizedPlan, concurrentOutputWriterSpec)
         } else {
           (sortPlan, concurrentOutputWriterSpec)
         }
@@ -309,6 +313,7 @@ object FileFormatWriter extends Logging {
     // return a set of all the partition paths that were updated during this job
     ret.map(_.summary.updatedPartitions).reduceOption(_ ++ _).getOrElse(Set.empty)
   }
+  // scalastyle:on argcount
 
   /**
    * Write files using [[SparkPlan.executeWrite]]
