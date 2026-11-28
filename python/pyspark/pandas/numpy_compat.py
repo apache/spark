@@ -114,21 +114,23 @@ unary_np_spark_mappings = {
     ),
     "rint": lambda c: F.rint(c.cast("double")),
     "sign": F.signum,
-    "signbit": lambda c: F.when(
-        # A genuine <NA> from a nullable dtype (e.g. Int64) arrives as a non-floating null
-        # and must propagate. A NaN from a default (numpy-backed) dtype arrives as a floating
-        # null and must map to False (np.signbit(nan) is False); it falls through to
-        # otherwise(False) below. Two cases this expression cannot match, seeing only the Spark
-        # value and not the pandas dtype: a nullable float dtype's <NA> (Float32 or Float64) is
-        # also a floating null, indistinguishable from a NaN after from_pandas, so it reads False
-        # instead of propagating; and the sign of a NaN never reaches here (from_pandas nulls a
-        # NaN, and a NaN computed in Spark arrives as +NaN), so a negative NaN reads False where
-        # np.signbit reports True.
-        c.isNull() & ~F.typeof(c).isin("float", "double"),
-        F.lit(None).cast("boolean"),
-    )
-    .when((c < 0) | (c.cast("string") == "-0.0"), True)
-    .otherwise(False),
+    "signbit": lambda c: (
+        F.when(
+            # A genuine <NA> from a nullable dtype (e.g. Int64) arrives as a non-floating null
+            # and must propagate. A NaN from a default (numpy-backed) dtype arrives as a floating
+            # null and must map to False (np.signbit(nan) is False); it falls through to
+            # otherwise(False) below. Two cases this expression cannot match, seeing only the Spark
+            # value and not the pandas dtype: a nullable float dtype's <NA> (Float32 or Float64) is
+            # also a floating null, indistinguishable from a NaN after from_pandas, so it reads False
+            # instead of propagating; and the sign of a NaN never reaches here (from_pandas nulls a
+            # NaN, and a NaN computed in Spark arrives as +NaN), so a negative NaN reads False where
+            # np.signbit reports True.
+            c.isNull() & ~F.typeof(c).isin("float", "double"),
+            F.lit(None).cast("boolean"),
+        )
+        .when((c < 0) | (c.cast("string") == "-0.0"), True)
+        .otherwise(False)
+    ),
     "sin": F.sin,
     "sinh": F.sinh,
     "spacing": pandas_udf(lambda s: np.spacing(s), DoubleType()),  # type: ignore[call-overload]
@@ -268,13 +270,15 @@ binary_np_spark_mappings = {
     "fmin": _fmin_func,
     "fmod": _fmod_func,
     "gcd": pandas_udf(lambda s1, s2: np.gcd(s1, s2), DoubleType()),  # type: ignore[call-overload]
-    "heaviside": lambda c1, c2: F.when(
-        c1.isNull() | F.isnan(c1.cast("double")),
-        c1.cast("double"),
-    )
-    .when(c1 < 0, F.lit(0.0))
-    .when(c1 == 0, c2.cast("double"))
-    .otherwise(F.lit(1.0)),
+    "heaviside": lambda c1, c2: (
+        F.when(
+            c1.isNull() | F.isnan(c1.cast("double")),
+            c1.cast("double"),
+        )
+        .when(c1 < 0, F.lit(0.0))
+        .when(c1 == 0, c2.cast("double"))
+        .otherwise(F.lit(1.0))
+    ),
     "hypot": F.hypot,
     "lcm": pandas_udf(lambda s1, s2: np.lcm(s1, s2), DoubleType()),  # type: ignore[call-overload]
     "ldexp": lambda c1, c2: F.when(
@@ -620,6 +624,22 @@ def maybe_dispatch_ufunc_to_spark_func(
         np_spark_map_func = unary_np_spark_mappings.get(op_name) or binary_np_spark_mappings.get(
             op_name
         )
+
+        if op_name == "floor" and isinstance(ser_or_index.spark.data_type, (FloatType, DoubleType)):
+
+            def floating_floor(c: Column) -> Column:
+                # Preserve non-finite values, signed zero, and large floating-point
+                # values that are already integral at double precision.
+                return (
+                    F.when(c == 0.0, c.cast("double"))
+                    .when(
+                        F.isnan(c) | (F.abs(c) >= float(2**52)),
+                        c.cast("double"),
+                    )
+                    .otherwise(F.floor(c).cast("double"))
+                )
+
+            np_spark_map_func = floating_floor
 
         @no_type_check
         def convert_arguments(*args):
