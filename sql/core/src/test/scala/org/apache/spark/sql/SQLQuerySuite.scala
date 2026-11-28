@@ -5090,21 +5090,13 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
         SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED.key -> "true",
         SQLConf.PRESERVE_ALIAS_METADATA_WHEN_COLLAPSING_PROJECTS.key -> "false"
       ) {
-        // With the flag set to false, __is_duplicate metadata will not be preserved in Project
-        // nodes under Union. This will cause RemoveRedundantAliases to remove aliases of duplicate
-        // columns and leave Union unresolved.
-        val e = intercept[SparkException] {
-          val basePlan = sql(query)
-          val finalPlan =
-            basePlan.toDF("col_0", "col_1").select("col_0", "col_1").toDF("col1", "col1")
-          finalPlan.queryExecution.assertOptimized()
-        }
-        assert(e.getCondition.contains("PLAN_VALIDATION_FAILED_RULE_IN_BATCH"))
-        assert(
-          e.getMessage.contains(
-            "org.apache.spark.sql.catalyst.optimizer.RemoveRedundantAliases"
-          )
-        )
+        // SPARK-61379: With RemoveRedundantAliases fixed to avoid stripping aliases that introduce
+        // duplicates under Union, the query succeeds even when __is_duplicate metadata is not
+        // preserved by CollapseProject.
+        val basePlan = sql(query)
+        val finalPlan =
+          basePlan.toDF("col_0", "col_1").select("col_0", "col_1").toDF("col1", "col1")
+        finalPlan.queryExecution.assertOptimized()
       }
     }
   }
@@ -5184,6 +5176,54 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     val df = sql("SELECT col1 FROM values(1) WHERE 1 IN (SELECT col1 UNION SELECT col1);")
 
     checkAnswer(df, Row(1))
+  }
+
+  test("SPARK-61379: Don't remove aliases under Union when multiple aliases share same attribute") {
+    val a = spark.range(10).selectExpr("id % 7 AS k", "id % 10 AS v").repartition($"v")
+    val b = spark.range(5).selectExpr("id % 10 AS x").repartition($"x")
+      .selectExpr("x AS x", "x AS x")
+    val c = spark.range(5).selectExpr("id % 5 AS y").repartition($"y")
+      .selectExpr("y AS y", "y AS y")
+
+    // Second branch has duplicate aliases
+    checkAnswer(a.union(b),
+      (0L until 10L).map(id => Row(id % 7, id % 10)) ++
+        (0L until 5L).map(id => Row(id % 10, id % 10))
+    )
+
+    // First branch has duplicate aliases
+    checkAnswer(b.union(a),
+      (0L until 5L).map(id => Row(id % 10, id % 10)) ++
+        (0L until 10L).map(id => Row(id % 7, id % 10))
+    )
+
+    // Both branches have duplicate aliases
+    checkAnswer(b.union(c),
+      (0L until 5L).map(id => Row(id % 10, id % 10)) ++
+        (0L until 5L).map(id => Row(id % 5, id % 5))
+    )
+
+    // 3-way union
+    checkAnswer(a.union(b).union(c),
+      (0L until 10L).map(id => Row(id % 7, id % 10)) ++
+        (0L until 5L).map(id => Row(id % 10, id % 10)) ++
+        (0L until 5L).map(id => Row(id % 5, id % 5))
+    )
+
+    // Distinct union
+    checkAnswer(b.distinct().union(b.distinct()).distinct(),
+      (0L until 5L).map(id => Row(id % 10, id % 10))
+    )
+
+    // Pure SQL syntax
+    val sqlDf = sql(
+      """SELECT id AS k, id AS v FROM range(5)
+        |UNION ALL
+        |SELECT x AS x, x AS x FROM (SELECT id AS x FROM range(3))""".stripMargin)
+    checkAnswer(sqlDf,
+      (0L until 5L).map(id => Row(id, id)) ++
+        (0L until 3L).map(id => Row(id, id))
+    )
   }
 
   test("SPARK-53734: Prefer table column over LCA when resolving array index") {
