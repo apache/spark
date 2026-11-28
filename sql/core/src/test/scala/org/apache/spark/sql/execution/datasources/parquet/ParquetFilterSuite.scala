@@ -916,6 +916,85 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-61738: timestamp filter bounds must match the stored precision") {
+    for {
+      (outputType, pushSubMillis) <- Seq(TIMESTAMP_MILLIS -> false, TIMESTAMP_MICROS -> true)
+      date <- Seq("1900-01-01", "2020-01-01")
+      java8Api <- Seq(true, false)
+      threshold <- Seq(1, 10)
+    } {
+      withSQLConf(
+        SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> outputType.toString,
+        SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> threshold.toString) {
+        val schema = StructType(Seq(StructField("ts", TimestampType)))
+        val parquetSchema = new SparkToParquetSchemaConverter(conf).convert(schema)
+        val parquetFilters = createParquetFilters(parquetSchema)
+        val instant = Instant.parse(date + "T00:00:00.001Z")
+        def literal(value: Instant): Any = if (java8Api) value else Timestamp.from(value)
+        val aligned = literal(instant)
+        val subMillis = literal(instant.plusNanos(1000))
+
+        def predicates(value: Any): Seq[sources.Filter] = Seq(
+          sources.LessThan("ts", value),
+          sources.LessThanOrEqual("ts", value),
+          sources.GreaterThan("ts", value),
+          sources.GreaterThanOrEqual("ts", value),
+          sources.EqualTo("ts", value),
+          sources.EqualNullSafe("ts", value),
+          sources.Not(sources.EqualTo("ts", value)),
+          sources.In("ts", Array[Any](aligned, value)),
+          sources.Not(sources.In("ts", Array[Any](value))))
+
+        predicates(aligned).foreach { predicate =>
+          assert(parquetFilters.createFilter(predicate).isDefined, predicate.toString)
+        }
+        predicates(subMillis).foreach { predicate =>
+          assert(parquetFilters.createFilter(predicate).isDefined == pushSubMillis,
+            s"$outputType, $predicate")
+        }
+      }
+    }
+  }
+
+  for {
+    java8Api <- Seq(true, false)
+    vectorized <- Seq(true, false)
+  } {
+    test(s"SPARK-61738: sub-millisecond filters, java8=$java8Api, vectorized=$vectorized") {
+      withSQLConf(
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC",
+        SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> TIMESTAMP_MILLIS.toString,
+        SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString,
+        SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized.toString,
+        SQLConf.PARQUET_RECORD_FILTER_ENABLED.key -> "false") {
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          val timestamps = Seq("1900-01-01 00:00:00", "2020-01-01 00:00:00")
+          timestamps.foreach { timestamp =>
+            sql(s"SELECT TIMESTAMP '$timestamp' AS ts").coalesce(1)
+              .write.mode("append").parquet(path)
+          }
+          val predicates = Seq(
+            "ts < TIMESTAMP '1900-01-01 00:00:00.000001'" -> timestamps.take(1),
+            "ts <> TIMESTAMP '2020-01-01 00:00:00.000001'" -> timestamps,
+            "ts NOT IN (TIMESTAMP '2020-01-01 00:00:00.000001')" -> timestamps)
+          for {
+            pushDown <- Seq(false, true)
+            (predicate, expected) <- predicates
+          } {
+            withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> pushDown.toString) {
+              val result = spark.read.parquet(path).where(predicate)
+                .selectExpr("CAST(ts AS STRING)")
+              withClue(s"pushDown=$pushDown, $predicate") {
+                checkAnswer(result, expected.map(Row(_)))
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
   test("don't push down sub-microsecond timestamp bounds on a micros column read as nanos") {
     // A micros timestamp column may be read under a nanosecond timestamp type (the read side of
     // widening TIMESTAMP(6) to nanosecond precision). Pushing a sub-microsecond bound through the
