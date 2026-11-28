@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.classic.{DataFrame, Dataset}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
+import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.pipelines.common.{FlowStatus, RunState}
 import org.apache.spark.sql.pipelines.graph.TriggeredGraphExecution.StreamState
 import org.apache.spark.sql.pipelines.logging.{EventLevel, FlowProgress}
@@ -175,6 +176,39 @@ class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession
       spark.read.table(fullyQualifiedIdentifier("a").toString),
       Seq(Row(1), Row(2))
     )
+  }
+
+  test("pipeline-level confs that cannot be modified at runtime do not fail flows") {
+    val session = spark
+    import session.implicits._
+
+    // The spark-pipelines CLI applies the spec's `configuration` both when it creates the
+    // session and as the graph's default SQL conf, so static SQL confs and Spark core confs
+    // reach every flow.
+    val sqlConf = Map(
+      StaticSQLConf.CATALOG_IMPLEMENTATION.key ->
+        spark.conf.get(StaticSQLConf.CATALOG_IMPLEMENTATION.key),
+      "spark.driver.memory" -> "2g")
+    val pipelineDef = new TestGraphRegistrationContext(spark, sqlConf = sqlConf) {
+      registerMaterializedView("a", query = dfFlowFunc(Seq(1, 2).toDF("x")))
+      registerView("b", query = readStreamFlowFunc("a"))
+      registerTable("c", query = Option(readStreamFlowFunc("b")))
+    }
+
+    val updateContext =
+      TestPipelineUpdateContext(spark, pipelineDef.toDataflowGraph, storageRoot)
+    updateContext.pipelineExecution.runPipeline()
+    updateContext.pipelineExecution.awaitCompletion()
+
+    Seq("a", "c").foreach { name =>
+      assertFlowProgressEvent(
+        eventBuffer = updateContext.eventBuffer,
+        identifier = fullyQualifiedIdentifier(name),
+        expectedFlowStatus = FlowStatus.COMPLETED,
+        expectedEventLevel = EventLevel.INFO
+      )
+    }
+    checkAnswer(spark.read.table(fullyQualifiedIdentifier("c").toString), Seq(Row(1), Row(2)))
   }
 
   test("three hop pipeline") {
